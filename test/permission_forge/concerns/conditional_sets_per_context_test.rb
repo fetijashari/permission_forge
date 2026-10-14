@@ -706,7 +706,11 @@ module PermissionForge
         stale = [person.permission_cache_key, PermissionForge.permissions_cache_version, nil, sentinel_entry(read_access: true)]
         person.instance_variable_set(:@_pf_permissions_memo, stale.freeze)
         format = ActiveRecord.marshalling_format_version
-        ActiveRecord.marshalling_format_version = 6.1
+        begin
+          ActiveRecord.marshalling_format_version = 6.1
+        rescue ArgumentError
+          skip 'Rails 8.2 removed the 6.1 format; the 7.1 format carries no instance variables, so no such memo arrives'
+        end
         copy = Marshal.load(Marshal.dump(person))
         ActiveRecord.marshalling_format_version = format
         assert_kind_of Array, copy.instance_variable_get(:@_pf_permissions_memo), 'the 6.1 format carries the variable'
