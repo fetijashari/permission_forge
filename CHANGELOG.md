@@ -6,6 +6,14 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+### Security
+
+- **The admin screens and the API keep checking the CSRF token on Rails 8.2.** Rails 8.2 can verify a request by the
+  browser's `Sec-Fetch-Site` header, and `config.load_defaults 8.2` selects `:header_only`, under which a plain-HTTP
+  request without that header is not checked at all. The engine's controllers now always use
+  `:header_or_legacy_token`: the header decides when the browser sends it (a cross-site request is refused), and
+  without it the token is required, as before. Rails 7.1 to 8.1 are unaffected.
+
 ## [0.14.0] - 2026-10-14
 
 This release closes the findings of a pre-release security review. Several defaults change: each is listed under

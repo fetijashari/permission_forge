@@ -1,0 +1,29 @@
+module PermissionForge
+  # How the admin screens and the admin API verify a mutating request. Rails
+  # 8.2 checks the browser's Sec-Fetch-Site header, and `load_defaults 8.2`
+  # selects `:header_only`, which lets a plain-HTTP request that carries no
+  # such header through without any check — a forged request from a browser
+  # that does not send it, or to an app served over HTTP. The engine's
+  # controllers use `:header_or_legacy_token` whatever the host chose: the
+  # header decides when the browser sends it (same-origin and same-site pass,
+  # cross-site is refused unless its origin is in
+  # `forgery_protection_trusted_origins`), and without it the authenticity
+  # token is required, as on every earlier Rails. Rails before 8.2 has no
+  # such choice and always checks the token.
+  #
+  # @api private
+  module ForgeryProtection
+    extend ActiveSupport::Concern
+
+    STRATEGY = :header_or_legacy_token
+
+    class_methods do
+      # protect_from_forgery with the engine's verification strategy where
+      # Rails offers one.
+      def pf_protect_from_forgery(**options)
+        options[:using] = STRATEGY if respond_to?(:forgery_protection_verification_strategy)
+        protect_from_forgery(options)
+      end
+    end
+  end
+end

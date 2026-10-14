@@ -30,7 +30,9 @@ module PermissionForge
     # ever runs unprotected. The cross-origin <script> check is skipped: this
     # controller exists to serve pf_admin.js to <script src> tags, and the
     # file is the same public, static script for every visitor.
-    protect_from_forgery with: :exception
+    include PermissionForge::ForgeryProtection
+
+    pf_protect_from_forgery with: :exception
     skip_after_action :verify_same_origin_request
 
     def show
