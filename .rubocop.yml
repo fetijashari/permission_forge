@@ -1,6 +1,14 @@
+# Include below adds to RuboCop's default list instead of replacing it.
+inherit_mode:
+  merge:
+    - Include
+
 AllCops:
   TargetRubyVersion: 3.2
   NewCops: enable
+  # RuboCop skips dot-directories unless a pattern names them.
+  Include:
+    - ".github/scripts/**/*.rb"
   Exclude:
     - "test/dummy/**/*"
     - "test/benchmarks/**/*"
