@@ -17,6 +17,7 @@ module PermissionForge
       'PermissionForge::InvalidationBatch::THREAD_KEY' => :pf_open_invalidation_batch,
       'PermissionForge::Cache::Failure::COLLECT_KEY' => :pf_cache_failure_collectors,
       'PermissionForge::Cache::Failure::COUNT_KEY' => :pf_cache_failures,
+      'PermissionForge::Cache::HandledErrors::KEY' => :pf_store_errors,
       'PermissionForge::Audit::RuntimeEmission::EMITTING_KEY' => :pf_audit_emitting,
       'PermissionForge::Audit::FieldAccess::KEY' => :pf_audit_field_access,
       'PermissionForge::Concerns::MaskedAttributes::INSPECT_KEY' => :pf_inspecting,

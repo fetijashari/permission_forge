@@ -91,7 +91,7 @@ module PermissionForge
       isolated_execution_state_context: 'ActiveSupport::IsolatedExecutionState.context',
       executor_register_hook: 'app.executor.register_hook(RunHook)',
       write_multi_entries: 'instance_method(:write_multi_entries).owner',
-      redis_write_multi_answer: 'cache_store.write_multi(',
+      redis_write_multi_answer: Regexp.union('instance_variable_get(:@error_handler)', 'HandledErrors.during('),
       counter_updates: 'def update_counters(*, **)',
       local_cache: 'store.with_local_cache',
       key_matcher_anchor: Regexp.union("regexp = /^\#{lead}", "/^\#{Regexp.escape(prefix)}:/"),
@@ -144,7 +144,7 @@ module PermissionForge
       isolated_execution_state_context: 'adapt ExecutionState::RunHook (how it tells that a run ends where it started)',
       executor_register_hook: 'adapt ExecutionState.install! / RunHook (a snapshot when a run starts, put back when it completes)',
       write_multi_entries: 'adapt RailsCache.multi_write?',
-      redis_write_multi_answer: 'adapt RailsCache#write_multi (do not trust the batch answer)',
+      redis_write_multi_answer: 'adapt Cache::HandledErrors (how RailsCache#write_multi learns that the store did not write a batch)',
       local_cache: 'adapt RailsCache#read_fresh / #read_many',
       key_matcher_anchor: 'adapt UserKeys.entry_patterns and RailsCache#prefix_matcher',
       redis_store_kind: 'adapt RailsCache#redis_store? / #entry_matchers',
@@ -1079,14 +1079,35 @@ module PermissionForge
         )
     end
 
-    canary_test :redis_write_multi_answer, 'RedisCacheStore#write_multi: answers falsy when Redis cannot be reached' do
-      answer = redis_store.write_multi('pf:canary:a' => 1, 'pf:canary:b' => 2)
+    # What RailsCache#write_multi relies on to tell a written batch from one
+    # Redis never got: the store hands the error to the handler it keeps in
+    # @error_handler, in the thread that called write_multi, and does not
+    # raise. Its answer is not relied on (Rails 8.2's is the same either way).
+    canary_test :redis_write_multi_answer,
+                'RedisCacheStore#write_multi: a batch Redis did not take is handed to the store\'s @error_handler, not raised' do
+      calls = []
+      handler = ->(**details) { calls << details }
+      store = ActiveSupport::Cache::RedisCacheStore.new(url: 'redis://127.0.0.1:1/15', pool: false, error_handler: handler)
 
-      assert_not answer, canary(
-        :redis_write_multi_answer, "write_multi against a Redis that cannot be reached answered a truthy #{answer.class}",
-        'RailsCache#write_multi takes its answer as the answer for every key (write_many / expunge_many / delete_many): ' \
-        'a failed invalidation would be reported as done, never retried, never reported. Answer false for a Redis store ' \
-        '(or write key by key) until the store says plainly whether the batch was written'
+      assert_same handler, store.instance_variable_get(:@error_handler), canary(
+        :redis_write_multi_answer, 'the store no longer keeps its error_handler: in @error_handler',
+        'Cache::HandledErrors wraps @error_handler to see the errors the store rescues: find where the handler is kept'
+      )
+      written, handled = PermissionForge::Cache::HandledErrors.during(store) do
+        store.write_multi('pf:canary:a' => 1, 'pf:canary:b' => 2)
+      end
+
+      assert_not_empty handled, canary(
+        :redis_write_multi_answer, "write_multi against a Redis that cannot be reached called no error handler (answered #{written.inspect})",
+        'RailsCache#write_multi would take the batch for written (write_many / expunge_many / delete_many): a failed ' \
+        'invalidation reported as done, never retried. Find the sign this Rails gives (or write key by key: #write answers)'
+      )
+      assert_kind_of Exception, handled.first, canary(
+        :redis_write_multi_answer, 'the error handler is no longer given the exception:', 'adapt Cache::HandledErrors::Handler'
+      )
+      assert_equal handled, calls.pluck(:exception), canary(
+        :redis_write_multi_answer, 'the handler the store was given was not called with the same error',
+        'adapt Cache::HandledErrors::Handler (it must hand every call on unchanged)'
       )
     end
 

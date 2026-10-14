@@ -6,6 +6,17 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+### Fixed
+
+- **On Rails 8.2 (main), a Redis that cannot be reached no longer counts as a done invalidation.** Rails 8.2's
+  `RedisCacheStore#write_multi` answers the same value whether Redis took the entries or not, so an edit to a Permission
+  Set whose holders are invalidated in bulk (one `write_multi` per 500 holders) was taken as confirmed while Redis was
+  down: nothing was retried, owed or reported through `on_cache_failure`, and the holders kept their cached permissions
+  until `cache_ttl`. A batch now counts as written only when the store also handed no error to its `error_handler`
+  meanwhile; Rails 7.1 to 8.1 already answered `nil` for it. PermissionForge puts a wrapper in front of the
+  `error_handler` of a store it writes a batch to: your handler is still called for every error, with the same
+  arguments. The number of Redis round trips does not change.
+
 ## [0.14.0] - 2026-10-14
 
 This release closes the findings of a pre-release security review. Several defaults change: each is listed under
