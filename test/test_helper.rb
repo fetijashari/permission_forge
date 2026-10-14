@@ -66,6 +66,7 @@ PermissionForge::TestModels.apply_tenant_scoping!
 require_relative 'support/install_templates'
 require_relative 'support/method_stubs'
 require_relative 'support/text_key_models'
+require_relative 'support/local_redis'
 
 # Set default test tenant (acts_as_tenant test_tenant persists across request threads)
 DEFAULT_TEST_ACCOUNT = Account.find_or_create_by!(name: 'Default Test Account')
