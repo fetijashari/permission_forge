@@ -8,8 +8,12 @@ name: Release
 #
 # The `build` job checks the tag and builds and checks the gem with no
 # credentials; `publish` then waits for the `rubygems` environment's approval,
-# signs the very file that was checked (Sigstore) and pushes it. Nothing here
-# creates or pushes a tag or a branch.
+# signs the very file that was checked (Sigstore) and pushes it. Once the gem
+# is on RubyGems.org, `provenance` records a GitHub build provenance
+# attestation for it, and `github-release` creates the GitHub Release for the
+# tag with the gem, its Sigstore bundle and the attestation attached. Nothing
+# here creates or pushes a tag or a branch, and no job after `build` checks
+# out or runs code from the repository.
 #
 # The checks catch mistakes, they are not a security boundary: a tag push runs
 # this file as it is in the tagged commit, so a tag on another commit can carry
@@ -63,6 +67,16 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "gem=permission_forge-$version.gem" >> "$GITHUB_OUTPUT"
 
+      # The GitHub Release's notes, taken here, before the approval: once the
+      # gem is pushed, a missing or mistyped heading could not be fixed (the
+      # tag cannot move). The github-release job only adds the checksum line.
+      - name: CHANGELOG.md has a section for this version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-notes"
+          .github/scripts/release_notes.sh "$VERSION" CHANGELOG.md > "$RUNNER_TEMP/release-notes/release-notes.md"
+
       # checkout v7 fetches the tag object itself; fetching it again by name
       # keeps this check independent of how a checkout version stores tags
       # (older ones kept a plain ref to the commit, which looks lightweight).
@@ -112,6 +126,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30 # as long as GitHub allows a re-run
 
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes/release-notes.md
+          if-no-files-found: error
+          retention-days: 30
+
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -151,9 +172,170 @@ jobs:
       - name: Sign the gem (Sigstore attestation)
         run: gem exec sigstore-cli:0.2.3 sign "$GEM" --bundle "$GEM.sigstore.json"
 
+      # For the GitHub Release (github-release job). Uploaded before the push:
+      # once the push went through, nothing in this job is left to fail.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sigstore-bundle
+          path: ${{ needs.build.outputs.gem }}.sigstore.json
+          if-no-files-found: error
+          retention-days: 30
+
       # Exports the push key (GEM_HOST_API_KEY) to the steps below.
       - name: Configure RubyGems.org credentials (Trusted Publishing)
         uses: rubygems/configure-rubygems-credentials@dc5a8d8553e6ee01fc26761a49e99e733d17954a # v2.1.0
 
       - name: Push to RubyGems.org
         run: gem push "$GEM" --attestation "$GEM.sigstore.json"
+
+  # GitHub's build provenance attestation (SLSA provenance v1, signed through
+  # Sigstore) for the gem that was pushed: it names this repository, this
+  # workflow, the tag and the commit. Stored with the repository's attestations
+  # (`gh attestation verify`) and attached to the GitHub Release. Not in the
+  # `rubygems` environment, so its OIDC token is not one RubyGems.org accepts.
+  provenance:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      id-token: write # the Sigstore certificate that signs the attestation
+      attestations: write # store the attestation with the repository
+
+    env:
+      GEM: ${{ needs.build.outputs.gem }}
+      SHA256: ${{ needs.build.outputs.sha256 }}
+
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: gem
+
+      - name: Gem is the one the build job checked
+        run: echo "$SHA256  $GEM" | sha256sum --check --strict
+
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ needs.build.outputs.gem }}
+
+      # The bundle is one JSON line (a Sigstore bundle around the in-toto
+      # statement); `.intoto.jsonl` is the name Scorecard's Signed-Releases
+      # check reads as provenance, and `gh attestation verify --bundle` takes it.
+      - name: Name the attestation for the release
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: cp "$BUNDLE" "$GEM.intoto.jsonl"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: provenance
+          path: ${{ needs.build.outputs.gem }}.intoto.jsonl
+          if-no-files-found: error
+          retention-days: 30
+
+  # The GitHub Release for the tag, with the gem pushed to RubyGems.org, its
+  # Sigstore bundle (the one RubyGems.org verified) and the provenance
+  # attestation. Release notes: this version's CHANGELOG.md section, taken by
+  # the build job (release_notes.sh). No approval: it runs only after `publish` succeeded, and
+  # its token can write releases but cannot create a v* tag (ruleset).
+  github-release:
+    needs: [build, publish, provenance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: write # create the release and upload its files
+
+    env:
+      GEM: ${{ needs.build.outputs.gem }}
+      SHA256: ${{ needs.build.outputs.sha256 }}
+      VERSION: ${{ needs.build.outputs.version }}
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: gem
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: sigstore-bundle
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: provenance
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-notes
+
+      - name: Gem is the one the build job checked
+        run: echo "$SHA256  $GEM" | sha256sum --check --strict
+
+      - name: Signature and provenance are for this gem
+        run: |
+          digest=$(jq -r '.messageSignature.messageDigest | select(.algorithm == "SHA2_256") | .digest' \
+            "$GEM.sigstore.json" | base64 -d | od -An -v -tx1 | tr -d ' \n')
+          if [ "$digest" != "$SHA256" ]; then
+            echo "::error::$GEM.sigstore.json does not sign $GEM"
+            exit 1
+          fi
+          gh attestation verify "$GEM" --bundle "$GEM.intoto.jsonl" --repo "$GH_REPO" \
+            --signer-workflow "$GH_REPO/.github/workflows/release.yml" --source-ref "refs/tags/$TAG"
+
+      # The CHANGELOG.md section the build job took (release_notes.sh), and
+      # the gem's checksum.
+      - name: Release notes
+        run: |
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::release-notes.md (from the build job) is empty"
+            exit 1
+          fi
+          {
+            cat release-notes.md
+            echo
+            echo '---'
+            echo
+            echo "\`$GEM\` SHA-256 \`$SHA256\`, as on RubyGems.org. Attached: its Sigstore signature" \
+              "(\`$GEM.sigstore.json\`) and its build provenance (\`$GEM.intoto.jsonl\`);" \
+              "[how to verify them](https://github.com/$GH_REPO/blob/$TAG/RELEASING.md#verifying-a-release)."
+          } >> notes.md
+
+      # Latest only for the highest version (a fix release for an older minor
+      # leaves Latest alone); a version with letters (1.0.0.rc1) is a
+      # prerelease. A re-run finds the release it created and replaces its files.
+      - name: Create the GitHub Release
+        run: |
+          set -o pipefail
+          case "$VERSION" in
+            *[!0-9.]*) prerelease=true ;;
+            *) prerelease=false ;;
+          esac
+          latest=false
+          if [ "$prerelease" = false ]; then
+            # On its own line, so a failed listing fails the step (a pipeline
+            # would see only this tag and call it the newest).
+            released=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1000 \
+              --json tagName --jq '.[].tagName')
+            newest=$(
+              { printf '%s\n' "$released"; echo "$TAG"; } |
+                grep -E '^v[0-9]+(\.[0-9]+)*$' | sed 's/^v//' | sort -V | tail -n 1
+            )
+            if [ "$newest" = "$VERSION" ]; then latest=true; fi
+          fi
+
+          assets=("$GEM" "$GEM.sigstore.json" "$GEM.intoto.jsonl")
+          if gh release view "$TAG" --json tagName > /dev/null 2>&1; then
+            echo "::notice::The release $TAG exists (a re-run): replacing its files"
+            gh release upload "$TAG" "${assets[@]}" --clobber
+            gh release edit "$TAG" --draft=false --prerelease="$prerelease" --latest="$latest"
+          else
+            gh release create "$TAG" "${assets[@]}" --verify-tag --title "$TAG" --notes-file notes.md \
+              --prerelease="$prerelease" --latest="$latest"
+          fi
+          echo "GitHub Release: https://github.com/$GH_REPO/releases/tag/$TAG (latest: $latest)" >> "$GITHUB_STEP_SUMMARY"
