@@ -1,7 +1,7 @@
 ---
 name: hipaa-compliance
 description: Review PermissionForge configurations against the HIPAA technical safeguards — ePHI access controls, the audit event log, minimum necessary access, and what the host must add
-argument-hint: [scope] — scopes: full, access-controls, audit-trail, minimum-necessary, ephi-fields, transmission
+argument-hint: "[scope] — scopes: full, access-controls, audit-trail, minimum-necessary, ephi-fields, transmission"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent
 ---
 

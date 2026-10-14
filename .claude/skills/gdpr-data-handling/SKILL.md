@@ -1,7 +1,7 @@
 ---
 name: gdpr-data-handling
 description: Review and improve personal-data handling in PermissionForge — field masking, consent-aware permissions, data subject rights support, audit-log retention and erasure, and privacy by design
-argument-hint: [scope] — scopes: full, masking, rights, retention, privacy-design, consent
+argument-hint: "[scope] — scopes: full, masking, rights, retention, privacy-design, consent"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent
 ---
 
