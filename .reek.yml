@@ -186,11 +186,26 @@ detectors:
       # One small SQL-builder method per operator/branch (strategy registry)
       - PermissionForge::Services::RlsPolicyGenerator
 
-  # Tuned: Operator methods in Registry inherently share (query, col) as co-travelling params
+  # Tuned: a clump is reported once more than 4 methods share it (Reek's
+  # default is 2). Keep max_copies low: Reek tries every combination of
+  # max_copies + 1 methods of a class, C(methods, max_copies + 1), so each
+  # step up multiplies the run time (at 7: 18 million combinations and 80 s
+  # for the 34-method AssignmentsController, 98% of the whole Reek run).
+  # Classes whose methods share their parameters by contract are excluded
+  # instead of raising the threshold for everyone.
   DataClump:
-    max_copies: 7
+    max_copies: 4
     exclude:
+      # Operator strategies take (query, col, rule, val) by contract
       - PermissionForge::Operators::Registry
+      # Each step of building a rule's query takes the relation so far and the rule
+      - PermissionForge::Services::PermissionRuleApplier
+      # One normalizer per setting type, looked up in NORMALIZERS: (definition, value)
+      - PermissionForge::Admin::SettingsValues
+      # The chain's public functions: a user's entries along a class's names
+      - PermissionForge::ResourceChain
+      # Rule sentence helpers called from the views with (rule, model_name)
+      - PermissionForge::SentencesHelper
 
   # Tuned: Operator strategies require (query, col, rule, val) by design
   LongParameterList:
