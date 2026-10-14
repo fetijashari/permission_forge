@@ -6,6 +6,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-14
+
 ### Security
 
 - **The admin screens and the API keep checking the CSRF token on Rails 8.2.** Rails 8.2 can verify a request by the
@@ -1131,5 +1133,6 @@ Security & correctness hardening release. **Contains behavior changes** (all pre
 - Install generator (migration + initializer)
 - Admin API generator (controllers, serializers, routes)
 
-[Unreleased]: https://github.com/fetijashari/permission_forge/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/fetijashari/permission_forge/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/fetijashari/permission_forge/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/fetijashari/permission_forge/releases/tag/v0.14.0
