@@ -448,6 +448,9 @@ All new code must respect SOLID principles. Apply this checklist before finalizi
 
 ## Gem Publishing
 
-- Public on GitHub: `https://github.com/fetijashari/permission_forge`; to be released to RubyGems as `permission_forge` with 0.14.0 (the Release commit bumps `version.rb`)
+- Public on GitHub: `https://github.com/fetijashari/permission_forge`; published on RubyGems as `permission_forge` since 0.14.1
+- Releases follow `RELEASING.md`: a "Release vX.Y.Z" pull request (bumps `version.rb`, dates the CHANGELOG heading) is squash-merged, then an annotated `vX.Y.Z` tag on the squash commit runs `.github/workflows/release.yml`, which publishes by RubyGems Trusted Publishing (OIDC, no API key) after a reviewer approves the `rubygems` environment. Never `rake release` (it tags and pushes the branch)
+- `v*` tags are immutable (rulesets: no deletion/update/force-push, creation by repository admins only); `main` takes pull requests only, squash or rebase (linear history), with the CI checks required
+- The gem is built and checked by `.github/scripts/build_gem.sh` (umask 022, `gem build --strict`, `verify_gem.rb`: modes, version, file list = gemspec); CI's `lint` job runs it on every pull request
 - Version in `lib/permission_forge/version.rb`
 - Changelog in `CHANGELOG.md`

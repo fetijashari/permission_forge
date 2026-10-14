@@ -96,11 +96,10 @@ jobs:
       - name: i18n-tasks
         run: bundle exec i18n-tasks health
 
-      - name: Build the gem
-        run: |
-          umask 022
-          gem build permission_forge.gemspec
-          tar -xOf permission_forge-*.gem data.tar.gz | tar -tzf - | grep -q '^lib/permission_forge.rb$'
+      # The release workflow's build and checks, so a pull request goes red
+      # before a (permanent) release tag exists.
+      - name: Build and check the gem
+        run: .github/scripts/build_gem.sh
 
   security:
     runs-on: ubuntu-latest

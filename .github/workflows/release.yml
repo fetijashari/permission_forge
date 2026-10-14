@@ -2,14 +2,19 @@ name: Release
 
 # Publishes the gem to RubyGems.org when a release tag (vX.Y.Z) is pushed,
 # by Trusted Publishing: RubyGems.org trusts this workflow file in the
-# `rubygems` environment and swaps the job's OIDC token for a short-lived push
-# key, so no API key is stored anywhere. The steps and the one-time setup are
-# in RELEASING.md.
+# `rubygems` environment and swaps the job's OIDC token for a push key valid
+# for 15 minutes, so no API key is stored anywhere. Release steps and the
+# one-time setup: RELEASING.md.
 #
 # The `build` job checks the tag and builds and checks the gem with no
-# credentials. Only then does `publish` wait for the `rubygems` environment's
-# approval, sign the very file that was checked (Sigstore) and push it.
-# Nothing here creates or pushes a tag or a branch.
+# credentials; `publish` then waits for the `rubygems` environment's approval,
+# signs the very file that was checked (Sigstore) and pushes it. Nothing here
+# creates or pushes a tag or a branch.
+#
+# The checks catch mistakes, they are not a security boundary: a tag push runs
+# this file as it is in the tagged commit, so a tag on another commit can carry
+# a copy without them. What protects a release is who may create v* tags and
+# who may approve the `rubygems` environment (RELEASING.md, "Approving").
 
 on:
   push:
@@ -28,7 +33,7 @@ jobs:
     timeout-minutes: 10
 
     outputs:
-      gem: ${{ steps.build.outputs.gem }}
+      gem: ${{ steps.version.outputs.gem }}
       sha256: ${{ steps.build.outputs.sha256 }}
       version: ${{ steps.version.outputs.version }}
 
@@ -36,6 +41,7 @@ jobs:
       TAG: ${{ github.ref_name }}
 
     steps:
+      # The repository is public, so the git fetches below need no credentials.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -55,11 +61,11 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          echo "GEM=permission_forge-$version.gem" >> "$GITHUB_ENV"
+          echo "gem=permission_forge-$version.gem" >> "$GITHUB_OUTPUT"
 
-      # Fetched again by name: the checkout may hold the tag as a plain ref to
-      # the commit, which would make every tag look lightweight.
+      # checkout v7 fetches the tag object itself; fetching it again by name
+      # keeps this check independent of how a checkout version stores tags
+      # (older ones kept a plain ref to the commit, which looks lightweight).
       - name: Tag is annotated and names this commit
         run: |
           git fetch --no-tags origin "+refs/tags/$TAG:refs/tags/$TAG"
@@ -80,28 +86,31 @@ jobs:
             exit 1
           fi
 
-      # The gem keeps each file's mode on disk, so the tracked files are
-      # written again under umask 022 first (0644, 0755 for executables).
-      - name: Build the gem (umask 022)
+      - name: Build and check the gem (umask 022)
         id: build
+        env:
+          GEM: pkg/${{ steps.version.outputs.gem }}
         run: |
-          umask 022
-          git ls-files -z | xargs -0 rm -f
-          git checkout-index --all --force
-          mkdir -p pkg
-          gem build --strict permission_forge.gemspec --output "pkg/$GEM"
-          echo "gem=$GEM" >> "$GITHUB_OUTPUT"
-          echo "sha256=$(sha256sum "pkg/$GEM" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - name: Check the gem (version, file modes, file list)
-        run: ruby .github/scripts/verify_gem.rb "pkg/$GEM" "$VERSION"
+          .github/scripts/build_gem.sh
+          sha256=$(sha256sum "$GEM" | cut -d' ' -f1)
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+          {
+            echo "### permission_forge $TAG"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Tag | \`$TAG\` |"
+            echo "| Commit | \`$(git rev-parse HEAD)\` $(git log -1 --format=%s HEAD) |"
+            echo "| Gem | \`${GEM#pkg/}\` |"
+            echo "| SHA-256 | \`$sha256\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: gem
-          path: pkg/${{ steps.build.outputs.gem }}
+          path: pkg/${{ steps.version.outputs.gem }}
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30 # as long as GitHub allows a re-run
 
   publish:
     needs: build
@@ -135,12 +144,14 @@ jobs:
         with:
           ruby-version: '3.4'
 
-      # The same signer, pinned to the same version, that rubygems/release-gem
-      # uses. RubyGems.org checks the signature against this trusted publisher.
+      # The signer rubygems/release-gem uses, at the same version. `gem exec`
+      # resolves sigstore-cli's dependencies at run time, in this job that may
+      # request OIDC tokens: the same exposure as release-gem. RubyGems.org
+      # checks the signature against this trusted publisher.
       - name: Sign the gem (Sigstore attestation)
         run: gem exec sigstore-cli:0.2.3 sign "$GEM" --bundle "$GEM.sigstore.json"
 
-      # Exports the short-lived push key (GEM_HOST_API_KEY) to the steps below.
+      # Exports the push key (GEM_HOST_API_KEY) to the steps below.
       - name: Configure RubyGems.org credentials (Trusted Publishing)
         uses: rubygems/configure-rubygems-credentials@dc5a8d8553e6ee01fc26761a49e99e733d17954a # v2.1.0
 
