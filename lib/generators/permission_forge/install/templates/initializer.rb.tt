@@ -1,0 +1,148 @@
+# PermissionForge — the options you are most likely to set. Every option, its
+# default and what it does:
+#   https://github.com/fetijashari/permission_forge/blob/main/docs/configuration.md
+# Before production, go through the Production hardening checklist
+# (https://github.com/fetijashari/permission_forge#production-hardening-checklist);
+# `bin/rails permission_forge:audit` reports what is still open.
+PermissionForge.configure do |config|
+  # ---------------------------------------------------------------------------
+  # Closed for new installs (the library defaults stay open for existing apps)
+  # ---------------------------------------------------------------------------
+  # A guarded controller action (ControllerActionGuard) with nobody signed in is refused.
+  config.action_guard_nil_user_strategy = :deny
+  # Conditional Permission Sets fail closed without a request context (see below).
+  config.conditional_sets_strict_mode = true
+  # The cache is Rails.cache: use a shared store in production (Redis, Solid Cache, Memcached).
+  config.cache_backend = :rails_cache
+
+  # config.preset = :strict closes every fail-open default at once
+  # (docs/configuration.md#presets; a setting you make here still wins):
+  #   nil_user_strategy = :deny, auto_query_scoping = :filter_only,
+  #   response_filter_nil_user_strategy = :block, unconfigured_action_strategy = :block,
+  #   mask_virtual_attributes = :auto, extra_fields_default_access = :unconfigured,
+  #   and the three settings above.
+  # What it costs: with nil_user_strategy :deny and auto_query_scoping :filter_only,
+  # code that runs with no current user (jobs, mailers, seeds, webhooks, the
+  # console, sign-in lookups on a user model that includes PermissionScopedFindable)
+  # sees no protected rows, and a belongs_to presence check on a protected parent
+  # fails ("must exist"). Run such code with a user, or inside
+  # PermissionForge.without_permission_scope { }, where nobody signed in gets no rules:
+  # never around code an anonymous request reaches. Never include PermissionScopedFindable in the user model.
+  # config.preset = :strict
+
+  # ---------------------------------------------------------------------------
+  # Who is signed in
+  # ---------------------------------------------------------------------------
+  # The class name of your User model (string, lazily constantized), and the
+  # class that created_by / updated_by point to.
+  config.user_class = 'User'
+  config.audit_user_class = 'User'
+
+  # Returns the signed-in user, or nil. As generated it reads Current.user when
+  # the app has a Current class that answers `user` (Rails 8's authentication
+  # generator creates one) and nil otherwise: until you wire it, nobody is
+  # signed in.
+  config.current_user_resolver = -> { ::Current.user if defined?(::Current) && ::Current.respond_to?(:user) }
+
+  # Whether a user is active. It does not remove access: the audit task
+  # reports the assignments still held by users it calls inactive.
+  config.user_active_check = ->(user) { user.respond_to?(:active_for_authentication?) ? user.active_for_authentication? : true }
+
+  # The profile cached with each user's permissions (uuid: nil when users have none).
+  config.profile_builder = ->(user) {
+    { id: user.id, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email) }
+  }
+
+  # Prefix of the PermissionForge tables ('' for none).
+  config.table_name_prefix = '<%= table_prefix %>'
+
+  # ---------------------------------------------------------------------------
+  # Multi-tenancy (optional, requires the acts_as_tenant gem)
+  # ---------------------------------------------------------------------------
+  # Every PermissionForge table needs the tenant column (the install migration
+  # adds it with --tenant=Account). Boot fails if this is set while
+  # acts_as_tenant is not loaded.
+<% if tenant_model %>  config.tenant_model = '<%= tenant_model %>'
+<% else %>  # config.tenant_model = 'Account'
+<% end %>
+  # The admin screens and the admin API serve one tenant at a time: a request
+  # with no current tenant is refused (403). Set the tenant in
+  # base_controller_class / api_base_controller_class (or in middleware).
+  # config.admin_tenantless_access = :deny
+
+  # ---------------------------------------------------------------------------
+  # Activation conditions (session flag / allowed IPs / login hours)
+  # ---------------------------------------------------------------------------
+  # With conditional_sets_strict_mode (set above), where the request context is
+  # blank (no resolver, a job, the console) a conditional GRANTING set does not
+  # apply and a conditional MUTING set (a lockdown) does. Trade-off: an MFA- or
+  # IP-gated grant never applies in jobs or the console, nor in requests until
+  # this resolver returns the request's IP and session flags:
+  # config.request_context_resolver = -> {
+  #   { ip: Current.ip, session_flags: Current.session_flags, time: Time.current }
+  # }
+  # It runs on every permission read of a user who holds a conditional set:
+  # keep it cheap, never read permissions inside it, return {} with no request.
+
+  # ---------------------------------------------------------------------------
+  # Masked attributes with nobody signed in (not part of the preset)
+  # ---------------------------------------------------------------------------
+  # :bypass (default) returns the stored values; :hide hides every guarded
+  # attribute. Trade-off: jobs, mailers and console code that read masked
+  # models with no user then see hidden values: set the current user there.
+  # The user model (user_class and its subclasses) stays readable for sign-in,
+  # and validations always read the stored values.
+  # config.masked_attributes_nil_user_strategy = :hide
+
+  # ---------------------------------------------------------------------------
+  # Admin screens
+  # ---------------------------------------------------------------------------
+  # HTTP Basic auth is on and answers 401 until credentials are set. Never turn
+  # it off without the second option: the admin can grant anything to anyone.
+  #
+  # Option A — Basic auth credentials (from ENV or credentials, never literals):
+  # config.http_basic_auth_user     = ENV['PF_ADMIN_USER']
+  # config.http_basic_auth_password = ENV['PF_ADMIN_PASSWORD']
+  #
+  # Option B — your own authenticated admin controller:
+  # config.http_basic_auth_enabled = false
+  # config.base_controller_class   = '::Admin::BaseController'  # must authenticate admins
+  #
+  # Who may grant, revoke, extend or review an assignment, or change a group's
+  # members (admin screens and API). Example: no self-assignment.
+  # config.admin_assignment_authorization = ->(controller, target, user_ids, action) {
+  #   admin = controller.current_user
+  #   admin&.admin? && !user_ids.include?(admin.id)
+  # }
+  #
+  # Who may read the audit log pages, exports and API (nil: anyone with admin access).
+  # config.audit_log_authorization = ->(controller) { controller.current_user&.auditor? }
+
+  # ---------------------------------------------------------------------------
+  # Audit log (docs/audit-log.md)
+  # ---------------------------------------------------------------------------
+  # Every permission change is recorded in the audit_events table, inside the
+  # change's own transaction. Each option with its default (an example where that is nil):
+  # config.audit_events = :auto                    # true: always; false: never (events are still published)
+  # config.audit_actor_resolver = ->(controller) { controller.current_user }  # nil: current_user_resolver
+  # config.audit_request_context = ->(controller) { { request_id: controller.request.request_id, ip: controller.request.remote_ip } }
+  # config.audit_change_failure_strategy = :raise  # the change rolls back; or :report, :log
+  # config.audit_hook_failure_strategy = :report   # or :log, :raise
+  # config.audit_runtime_events = %i[denied]       # also: bypass field_read params_filtered cache
+  # config.audit_log_subscriber = false            # true: also write every event to Rails.logger
+  # config.audit_retention_period = 2.years        # nil keeps events forever; purge: bin/rails permission_forge:audit_events:purge
+  # In jobs and rake tasks: PermissionForge.with_audit_actor(user: admin, source: 'job') { ... }
+
+  # ---------------------------------------------------------------------------
+  # JSON admin API (off by default)
+  # ---------------------------------------------------------------------------
+  # config.api_enabled = true
+  # config.api_base_controller_class = '::Api::BaseController'  # your auth chain
+  # config.api_auth = ->(controller) { controller.current_user&.admin? }
+  # config.api_action_authorization = ->(controller, action, record) { controller.current_user&.admin? }
+  # config.api_assignment_authorization = ->(controller, permission_set, user_ids) { controller.current_user&.admin? }
+  #
+  # api_auth proves identity only: until both authorization lambdas are set,
+  # every API change and assignment is refused (403).
+  # config.api_require_authorization = true  # default
+end

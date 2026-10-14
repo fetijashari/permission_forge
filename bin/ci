@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Ensure a version-managed Ruby (not macOS system Ruby 2.6) even when the
+# invoking shell hasn't initialized rbenv — the repo's .ruby-version picks
+# the release. An inherited RBENV_VERSION (e.g. "system") would override
+# the version file, so drop it and let the project pin govern.
+if [ -d "$HOME/.rbenv/shims" ]; then
+  unset RBENV_VERSION
+  case ":$PATH:" in
+    *":$HOME/.rbenv/shims:"*) ;;
+    *) export PATH="$HOME/.rbenv/shims:$PATH" ;;
+  esac
+fi
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+CHECK='\xE2\x9C\x94'
+CROSS='\xE2\x9C\x98'
+
+STEPS=6
+CURRENT=0
+START_TIME=$SECONDS
+
+step() {
+  CURRENT=$((CURRENT + 1))
+  echo ""
+  echo -e "${BLUE}${BOLD}  [$CURRENT/$STEPS]${RESET} ${BOLD}$1${RESET}"
+  echo -e "  ${DIM}$(printf '%.0s─' {1..56})${RESET}"
+}
+
+pass() {
+  echo -e "  ${GREEN}${CHECK} $1${RESET}"
+}
+
+fail_step() {
+  echo -e "  ${RED}${CROSS} $1${RESET}"
+}
+
+# ── Header ──────────────────────────────────────────────
+echo ""
+echo -e "  ${BLUE}${BOLD}PermissionForge CI${RESET}"
+echo -e "  ${DIM}Running all checks before you ship...${RESET}"
+echo -e "  ${DIM}$(printf '%.0s─' {1..56})${RESET}"
+
+# ── 1. RuboCop ──────────────────────────────────────────
+step "Code Style — RuboCop"
+if bundle exec rubocop --parallel; then
+  pass "Clean code, clean mind"
+else
+  fail_step "Style issues found — run: bundle exec rubocop -A"
+  exit 1
+fi
+
+# ── 2. Reek ────────────────────────────────────────────
+step "Code Smells — Reek"
+if bundle exec reek app lib; then
+  pass "No code smells detected"
+else
+  fail_step "Code smells found — run: bundle exec reek app lib"
+  exit 1
+fi
+
+# ── 3. Tests ────────────────────────────────────────────
+step "Test Suite"
+# The assignment inside `if` keeps `set -e` from aborting on a failing
+# suite before its output is printed.
+if TEST_OUTPUT=$(bundle exec rake test 2>&1 < /dev/null); then
+  # Match the summary line ("1073 runs, 3408 assertions, ..."), not the
+  # "213.8593 runs/s" timing fraction that precedes it.
+  TEST_COUNT=$(echo "$TEST_OUTPUT" | grep -oE '[0-9]+ runs,' | head -1 | tr -d ',' || true)
+  # SimpleCov prints "Line coverage: 11578 / 11876 (97.49%)".
+  COVERAGE=$(echo "$TEST_OUTPUT" | grep -iE 'line coverage' | grep -oE '[0-9.]+%' | tail -1 || true)
+  pass "All tests green — ${TEST_COUNT:-tests passed}, ${COVERAGE:-n/a} coverage"
+else
+  fail_step "Some tests failed"
+  echo "$TEST_OUTPUT" | tail -20
+  exit 1
+fi
+
+# ── 4. Gem Audit ────────────────────────────────────────
+step "Security — Gem Audit"
+if bin/bundler-audit check --update --quiet; then
+  pass "Dependencies are safe and sound"
+else
+  fail_step "Vulnerable gems detected — run: bundle update"
+  exit 1
+fi
+
+# ── 5. Brakeman ─────────────────────────────────────────
+step "Security — Brakeman"
+if bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error; then
+  pass "No security warnings"
+else
+  fail_step "Brakeman found warnings — check the report above"
+  exit 1
+fi
+
+# ── 6. i18n-tasks ───────────────────────────────────────
+step "Translations — i18n-tasks"
+if bundle exec i18n-tasks health; then
+  pass "All translations healthy"
+else
+  fail_step "Translation issues found — run: bundle exec i18n-tasks health"
+  exit 1
+fi
+
+# ── Summary ─────────────────────────────────────────────
+ELAPSED=$(( SECONDS - START_TIME ))
+
+echo ""
+echo -e "  ${DIM}$(printf '%.0s─' {1..56})${RESET}"
+echo ""
+echo -e "  ${GREEN}${CHECK}${RESET} ${DIM}RuboCop${RESET}"
+echo -e "  ${GREEN}${CHECK}${RESET} ${DIM}Reek${RESET}"
+echo -e "  ${GREEN}${CHECK}${RESET} ${DIM}i18n-tasks${RESET}"
+echo -e "  ${GREEN}${CHECK}${RESET} ${DIM}Gem Audit${RESET}"
+echo -e "  ${GREEN}${CHECK}${RESET} ${DIM}Brakeman${RESET}"
+echo -e "  ${GREEN}${CHECK}${RESET} ${DIM}Tests — ${TEST_COUNT:-n/a}, ${COVERAGE:-n/a} coverage${RESET}"
+echo ""
+echo -e "  \xF0\x9F\x8E\x89 ${GREEN}${BOLD}All $STEPS checks passed in ${ELAPSED}s${RESET}"
+echo ""

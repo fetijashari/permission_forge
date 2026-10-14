@@ -1,0 +1,83 @@
+<% errors = @condition_errors || {} %>
+<% form = @conditions_form %>
+<% hours_on = set.allowed_hours_start.present? && set.allowed_hours_end.present? %>
+<% hours_on = form.hours_enabled? if form %>
+<% from = form&.submitted_hour(:allowed_hours_start) || set.allowed_hours_start || 8 %>
+<% to = form&.submitted_hour(:allowed_hours_end) || set.allowed_hours_end || 18 %>
+<% flag = params.key?(:requires_session_flag) ? params[:requires_session_flag].to_s : set.requires_session_flag.to_s %>
+<div class="pf-card">
+  <%= form_with url: permission_forge.conditions_permission_set_path(set), method: :patch, class: 'pf-card__body pf-stack pf-stack--xl' do %>
+    <div class="pf-stack pf-stack--tight">
+      <div class="pf-row">
+        <strong><%= pf_condition_sentence(set) %></strong>
+        <%= pf_fail_open_badge(long: true) if set.conditional? && pf_fail_open? %>
+      </div>
+      <p class="pf-fs-13 pf-text-2"><%= t('.intro') %></p>
+    </div>
+
+    <div class="pf-field">
+      <label class="pf-label" for="pf-ips"><%= t('.ips') %> <span class="pf-fs-12 pf-text-3 pf-fw-500"><%= t('.one_per_line') %></span></label>
+      <textarea id="pf-ips" name="allowed_ips" rows="4" class="pf-textarea pf-textarea--mono" placeholder="10.0.0.0/8"
+                <%= 'readonly' if locked %> <%= pf_attrs_when(errors[:ips], aria: { invalid: true }) %>><%= @ip_text %></textarea>
+      <% Array(errors[:ips]).each do |msg| %><p class="pf-error" role="alert"><%= msg %></p><% end %>
+      <span class="pf-hint"><%= t('.ips_hint') %></span>
+    </div>
+
+    <fieldset class="pf-stack">
+      <legend class="pf-label"><%= t('.hours') %></legend>
+      <label class="pf-checkbox">
+        <input type="hidden" name="hours_enabled" value="0">
+        <input type="checkbox" name="hours_enabled" value="1" <%= 'checked' if hours_on %> <%= 'disabled' if locked %>>
+        <span><%= t('.hours_only') %></span>
+      </label>
+      <div class="pf-row" data-pf-show-when="hours_enabled=1">
+        <label for="pf-hours-from"><%= t('.from') %></label>
+        <select id="pf-hours-from" name="allowed_hours_start" class="pf-select pf-select--sm pf-select--auto" <%= 'disabled' if locked %>>
+          <% (0..23).each do |h| %><option value="<%= h %>" <%= 'selected' if h == from %>><%= pf_hour(h) %></option><% end %>
+        </select>
+        <label for="pf-hours-to"><%= t('.to') %></label>
+        <select id="pf-hours-to" name="allowed_hours_end" class="pf-select pf-select--sm pf-select--auto" <%= 'disabled' if locked %>>
+          <% (0..23).each do |h| %><option value="<%= h %>" <%= 'selected' if h == to %>><%= pf_hour(h) %></option><% end %>
+        </select>
+        <span class="pf-fs-12 pf-text-3"><%= t('.server_time', zone: Time.zone.name) %></span>
+      </div>
+      <% if hours_on && to <= from %>
+        <span class="pf-fs-13 pf-text-2">☾ <%= t('.overnight', from: pf_hour(from), to: pf_hour(to)) %></span>
+      <% end %>
+    </fieldset>
+
+    <fieldset class="pf-stack">
+      <legend class="pf-label"><%= t('.flag') %></legend>
+      <p class="pf-fs-13 pf-text-2"><%= t('.flag_intro') %></p>
+      <div class="pf-stack pf-stack--tight" role="radiogroup">
+        <label class="pf-checkbox">
+          <input type="radio" name="requires_session_flag" value="" <%= 'checked' if flag.blank? %> <%= 'disabled' if locked %>>
+          <span><%= t('.no_flag') %></span>
+        </label>
+        <% @flag_options.each do |option| %>
+          <label class="pf-checkbox">
+            <input type="radio" name="requires_session_flag" value="<%= option %>" <%= 'checked' if flag == option %> <%= 'disabled' if locked %>>
+            <span><%= pf_flag_label(option) %> <code class="pf-mono-key"><%= option %></code></span>
+          </label>
+        <% end %>
+      </div>
+      <% unless locked %>
+        <div class="pf-field">
+          <label class="pf-fs-13 pf-text-2" for="pf-flag-custom"><%= t('.flag_custom') %></label>
+          <input id="pf-flag-custom" class="pf-input pf-input--sm pf-input--auto pf-mono" type="text" name="requires_session_flag_custom"
+                 pattern="[A-Za-z0-9_.:-]*" placeholder="mfa_verified">
+          <% if errors[:flag] %><p class="pf-error" role="alert"><%= errors[:flag] %></p><% end %>
+          <span class="pf-hint"><%= t('.flag_hint_html', setting: pf_setting_link('admin_session_flags', 'admin_session_flags')) %></span>
+        </div>
+      <% end %>
+    </fieldset>
+
+    <% unless locked %>
+      <%= render 'permission_forge/shared/reason_field', id: 'pf-conditions-reason', value: params[:reason] %>
+      <div class="pf-actions">
+        <button type="submit" class="pf-btn pf-btn--primary"><%= t('.save', people: pf_people_text(@people_count)) %></button>
+        <%= link_to t('.reset'), permission_forge.permission_set_path(set, tab: 'conditions'), class: 'pf-btn' %>
+      </div>
+    <% end %>
+  <% end %>
+</div>

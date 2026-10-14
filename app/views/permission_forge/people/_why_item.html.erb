@@ -1,0 +1,19 @@
+<div class="pf-why pf-why-item" id="pf-why-<%= key %>" <%= pf_attrs_when(@why == key, data: { pf_active: true }) %>>
+  <span class="pf-eyebrow"><%= t('permission_forge.people.effective_tab.why') %></span>
+  <h2 class="pf-h3"><%= title %></h2>
+  <div><%= badge %></div>
+  <ul class="pf-stack">
+    <% reasons.each do |glyph, text, set| %>
+      <li class="pf-why__reason">
+        <span aria-hidden="true"><%= glyph %></span>
+        <span class="pf-stack pf-stack--tight">
+          <span><%= text %></span>
+          <% if set %>
+            <%= link_to t('.open_set', set: set.name), permission_forge.permission_set_path(set), class: 'pf-fs-12' %>
+          <% end %>
+        </span>
+      </li>
+    <% end %>
+  </ul>
+  <% if note %><p class="pf-fs-12 pf-text-3"><%= note %></p><% end %>
+</div>

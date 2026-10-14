@@ -1,0 +1,10 @@
+--markup markdown
+--plugin activesupport-concern
+--no-cache
+--output-dir tmp/yard
+lib/**/*.rb
+app/**/*.rb
+-
+README.md
+CHANGELOG.md
+docs/*.md

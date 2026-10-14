@@ -1,0 +1,18 @@
+<% items = @attention.tidy %>
+<section class="pf-card" aria-labelledby="pf-card-tidy">
+  <div class="pf-card__header">
+    <div class="pf-row pf-grow">
+      <h2 class="pf-h2" id="pf-card-tidy"><%= t('.title') %></h2>
+      <span class="pf-count-pill"><%= items.size %></span>
+    </div>
+  </div>
+  <% items.each do |item| %>
+    <div class="pf-card__row">
+      <div class="pf-stack pf-stack--tight pf-grow">
+        <strong><%= t(".#{item.kind}", name: item.permission_set.name, count: item.people_count) %></strong>
+        <span class="pf-fs-13 pf-text-2"><%= t(".#{item.kind}_hint") %></span>
+      </div>
+      <%= link_to t('.open'), permission_forge.permission_set_path(item.permission_set), class: 'pf-btn pf-btn--sm' %>
+    </div>
+  <% end %>
+</section>

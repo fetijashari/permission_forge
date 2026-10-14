@@ -1,0 +1,11 @@
+<%# What "managed" means — shown before an action is added to a Permission Set. %>
+<div class="pf-banner" role="note">
+  <div class="pf-banner__body">
+    <span class="pf-banner__title"><%= t('.title') %></span>
+    <span><%= t('.body') %></span>
+    <span>
+      <%= PermissionForge.configuration.allow_unconfigured_actions? ? t('.unmanaged_allowed') : t('.unmanaged_blocked') %>
+      <%= pf_setting_link('unconfigured_action_strategy') %>
+    </span>
+  </div>
+</div>

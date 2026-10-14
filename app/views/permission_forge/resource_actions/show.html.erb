@@ -1,0 +1,39 @@
+<% set = @permission_set %>
+<% back = permission_forge.permission_set_resource_path(set, @resource.name, tab: 'actions') %>
+<% locked = pf_locked_record?(set) || pf_locked_record?(@resource) %>
+<% name = @action_record.display_name %>
+<% content_for :pf_title, name %>
+<%= form_with url: permission_forge.permission_set_resource_action_path(set, @resource.name, @action_record), method: :patch do %>
+  <% footer = capture do %>
+    <span class="pf-sheet__footer-note"><%= t('permission_forge.resource_fields.show.impact', people: pf_people_text(@people_count)) %></span>
+    <% unless locked %>
+      <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.delete_permission_set_resource_action_path(set, @resource.name, @action_record), class: 'pf-btn pf-btn--ghost-danger' %>
+    <% end %>
+    <%= link_to t('permission_forge.ui.close'), back, class: 'pf-btn', data: { pf_close: true } %>
+    <% unless locked %><button type="submit" class="pf-btn pf-btn--primary"><%= t('permission_forge.resource_fields.show.save') %></button><% end %>
+  <% end %>
+  <%= pf_sheet_frame({ title: name, subtitle: "#{set.name} › #{@resource.name}", close_path: back, footer: footer }) do %>
+    <fieldset class="pf-stack" <%= 'disabled' if locked %>>
+      <%= render 'form', action: @action_record %>
+    </fieldset>
+    <% unless locked %><%= render 'permission_forge/shared/reason_field', id: 'pf-action-reason', value: params[:reason] %><% end %>
+    <% if @action_rows.discovery? %>
+      <%# Where the action runs, and what the saved row means right now. %>
+      <section class="pf-stack" aria-labelledby="pf-ad-where">
+        <%= pf_section_heading(t('.where'), id: 'pf-ad-where') %>
+        <% if @row.unlinked %>
+          <p class="pf-fs-13 pf-text-2">– <%= t('.unlinked') %></p>
+        <% else %>
+          <%= render 'endpoints', endpoints: @row.endpoints %>
+        <% end %>
+        <%= render 'effect', row: @row, muting: set.is_muting %>
+      </section>
+    <% end %>
+    <section class="pf-stack">
+      <%= pf_section_heading(t('permission_forge.resource_fields.show.across')) %>
+      <%= render 'across_sets', rows: @across %>
+    </section>
+    <%= pf_tech_details(@action_record, extras: { name: @action_record.name, is_permitted: @action_record.is_permitted }) %>
+    <%= pf_audit_footer(@action_record) %>
+  <% end %>
+<% end %>

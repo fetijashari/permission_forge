@@ -1,0 +1,57 @@
+<% fresh = @rows.new_columns %>
+<% missing = @rows.missing_fields %>
+<% ignored = @rows.ignored_columns %>
+<% sensitive = PermissionForge::Admin::SensitiveColumns.new %>
+<details class="pf-sync" <%= 'open' if params[:sync] %>>
+  <summary>
+    <span>⚠ <%= t('.title') %></span>
+    <span class="pf-fw-500"><%= [(t('.new_count', count: fresh.size) if fresh.any?), (t('.missing_count', count: missing.size) if missing.any?),
+                                 (t('.ignored_count', count: ignored.size) if ignored.any?)].compact.join(' · ') %></span>
+    <span class="pf-btn pf-btn--xs pf-ml-auto"><%= t('.review') %></span>
+  </summary>
+  <div class="pf-sync__body pf-grid-3">
+    <div class="pf-panel pf-stack">
+      <span class="pf-fw-600 pf-fs-13"><%= t('.new_title') %></span>
+      <% if fresh.empty? %><span class="pf-fs-13 pf-text-3"><%= t('.none') %></span><% end %>
+      <ul class="pf-stack pf-stack--tight">
+        <% fresh.each do |col| %>
+          <% match = sensitive.match(col) %>
+          <li class="pf-row pf-row--tight pf-fs-13">
+            <span><%= @rows.model.klass.human_attribute_name(col) %></span><code class="pf-mono-key"><%= col %></code>
+            <%= pf_badge(t('permission_forge.ui.badges.virtual')) if @rows.row(col)&.virtual %>
+            <% if match && !muting %><%= pf_badge(t('.sensitive_rec', strategy: pf_mask_strategy_label(match.strategy)), variant: :sensitive) %><% end %>
+          </li>
+        <% end %>
+      </ul>
+      <% if fresh.any? %>
+        <%= form_with url: permission_forge.sync_permission_set_resource_path(set, resource.name), method: :post, class: 'pf-reason-form' do %>
+          <input type="hidden" name="op" value="add_new">
+          <% (muting ? %w[hide] : %w[hidden read edit]).each do |level| %>
+            <button type="submit" name="level" value="<%= level %>" class="pf-btn pf-btn--xs"><%= t(".add_as.#{level}") %></button>
+          <% end %>
+          <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-sync-add-reason' %>
+        <% end %>
+        <% unless muting %>
+          <span class="pf-hint"><%= PermissionForge.configuration.gdpr_defaults ? t('.gdpr_on') : t('.gdpr_off') %> <%= pf_setting_link('gdpr_defaults') %></span>
+        <% end %>
+      <% end %>
+    </div>
+    <div class="pf-panel pf-stack">
+      <span class="pf-fw-600 pf-fs-13"><%= t('.missing_title') %></span>
+      <% if missing.empty? %><span class="pf-fs-13 pf-text-3"><%= t('.none') %></span><% end %>
+      <div class="pf-row pf-row--tight"><% missing.each do |row| %><code class="pf-mono-key pf-strike"><%= row.name %></code><% end %></div>
+      <% if missing.any? %>
+        <%= form_with url: permission_forge.sync_permission_set_resource_path(set, resource.name), method: :post, class: 'pf-reason-form' do %>
+          <input type="hidden" name="op" value="remove_missing">
+          <button type="submit" class="pf-btn pf-btn--xs pf-btn--danger"><%= t('.remove_missing') %></button>
+          <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-sync-remove-reason' %>
+        <% end %>
+      <% end %>
+    </div>
+    <div class="pf-panel pf-stack">
+      <span class="pf-fw-600 pf-fs-13"><%= t('.ignored_title') %></span>
+      <div class="pf-row pf-row--tight"><% ignored.each do |col| %><code class="pf-mono-key"><%= col %></code><% end %></div>
+      <%= pf_setting_link('ignored_fields', t('.ignored_link')) %>
+    </div>
+  </div>
+</details>

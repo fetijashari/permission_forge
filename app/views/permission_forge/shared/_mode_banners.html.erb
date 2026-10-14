@@ -1,0 +1,22 @@
+<%# Muting / Locked notices for set, resource and field pages. %>
+<% if muting %>
+  <div class="pf-banner pf-banner--muting" role="note">
+    <span class="pf-banner__glyph" aria-hidden="true">⊘</span>
+    <div class="pf-banner__body">
+      <span class="pf-banner__title"><%= t('.muting_title') %></span>
+      <span><%= t('.muting_body') %></span>
+    </div>
+  </div>
+<% end %>
+<% if pf_locked_record?(record) %>
+  <div class="pf-banner" role="note">
+    <span class="pf-banner__glyph" aria-hidden="true"><%= pf_lock_icon %></span>
+    <div class="pf-banner__body">
+      <span class="pf-banner__title"><%= t('permission_forge.ui.locked.title') %></span>
+      <span><%= t('.locked_body_html', flag: content_tag(:code, 'is_editable: false')) %></span>
+    </div>
+    <% if local_assigns[:duplicate_path] %>
+      <%= button_to t('.duplicate_to_edit'), duplicate_path, method: :post, class: 'pf-btn pf-btn--sm', form_class: 'pf-inline-form' %>
+    <% end %>
+  </div>
+<% end %>

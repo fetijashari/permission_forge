@@ -1,0 +1,271 @@
+# frozen_string_literal: true
+
+require 'securerandom'
+
+module PermissionForge
+  # Carries auto-applied masking (MaskedModels) to every process. The
+  # concern is mixed into a model class in the process that loads it: at
+  # boot, and in the process that commits the first Resource row for a new
+  # model. Every other process would serve that model unmasked until it
+  # restarts — unless it hears of it (docs/masked-attributes.md).
+  #
+  # When a setting takes its models from the Resource rows
+  # (MaskedModels.row_driven?):
+  #   - Writer: the process that commits a row naming a model for the first
+  #     time (no other row in any tenant has the name, or this process had
+  #     not masked it: two rows committed together) applies the concern and
+  #     writes a new random token under KEY in the shared store, no expiry.
+  #   - Reader: each executor run (request or job) reads KEY once (check!);
+  #     a token it has not synced with makes it apply to every named model.
+  #   - A process that reads no token (evicted, flushed) writes one and
+  #     syncs; every other process then syncs once too. Losing the token
+  #     costs one `pluck` per process, never a model left unmasked.
+  #   - A store that does not answer is left alone for RETRY_PAUSE seconds,
+  #     then one request or job per process probes it; logged once per
+  #     outage. An announcement the store did not take is owed and written
+  #     once it answers.
+  # When every setting that is on is a list, the models are fixed by the
+  # configuration: no token is read or written, and a process that has
+  # synced does nothing per request. When both are off, check! returns
+  # before reading anything (the hook stays: a setting may be switched on
+  # after the boot step).
+  #
+  # Either way a process that has not synced (its boot could not reach the
+  # database, a model could not be masked) applies at its next executor
+  # run, and a development code reload applies again (`to_prepare`).
+  # The store must be shared (not :memory or :null).
+  #
+  # @api private
+  module MaskingSync
+    KEY = 'masked_models_version'
+
+    # The token of a process that has not synced yet (no token can equal it).
+    UNSYNCED = Object.new.freeze
+
+    # Seconds the store is left alone after it did not answer.
+    RETRY_PAUSE = 30
+
+    # One sync (or apply) at a time; one probe of a failing store at a time.
+    SYNC_LOCK = Mutex.new
+    PROBE_LOCK = Mutex.new
+
+    # The token this process synced with (UNSYNCED, or nil for "synced
+    # without one"), whether it owes the store an announcement, and until
+    # when (monotonic seconds) which store is left alone. A failure while
+    # @failing_until is set belongs to the outage already logged.
+    @token = UNSYNCED
+    @announcement_owed = false
+    @failing_until = nil
+    @failing_store = nil
+
+    class << self
+      # Executor `to_run`. Row-driven: one store read; applies when another
+      # process named a model since this one last synced. The store is not
+      # read while it is failing (RETRY_PAUSE), nor at all for lists: the
+      # token is then unknown (nil), and only a process that has not synced
+      # applies (from the database). Never raises.
+      def check!
+        return unless MaskedModels.enabled?
+
+        token = MaskedModels.row_driven? ? answered_token : nil
+        sync(token) if changed?(token)
+      rescue StandardError => e
+        Rails.logger&.error("[PermissionForge] auto-applied masking could not be synced — #{e.class}: #{e.message}")
+      end
+
+      # After a Resource row naming `name` has been created or renamed and
+      # committed: tells the other processes (a new token) when the name is
+      # new to them — no other row has it — or when this process had not
+      # masked the model before: rows committed together each see the
+      # others, and the first to get here announces. Otherwise, and when
+      # the settings are lists, applies the concern here only.
+      #
+      # @param name [String] the model the row names
+      # @yieldreturn [Boolean] whether another Resource row has the name
+      #   (asked only when it decides something)
+      def named!(name)
+        return unless MaskedModels.enabled?
+        return apply!(name) unless MaskedModels.row_driven?
+
+        masked_here?(name) && yield ? apply!(name) : announce!(name)
+      end
+
+      # The boot step: applies to every selected model and syncs with the
+      # current token (read first, so a name committed meanwhile is seen
+      # again by the next check). When a model could not be masked (or the
+      # rows could not be read) the process stays unsynced and the next
+      # request or job tries again.
+      #
+      # @return [Boolean] whether every selected model is masked
+      def boot!
+        done = sync(MaskedModels.row_driven? ? current_token : nil, always: true)
+        unless done
+          Rails.logger&.warn('[PermissionForge] Auto-applied masking is not complete at boot (see the warnings ' \
+                             'above, or the Resource table cannot be read): it is tried again at each request or job.')
+        end
+        done
+      end
+
+      # `to_prepare`: after a code reload in development the model classes
+      # are new and unmasked. At boot it runs before the boot step: nothing
+      # to re-apply yet.
+      def reloaded!
+        return unless Rails.application&.initialized?
+
+        reset!
+        check!
+      end
+
+      # Forgets the token (the next check applies whatever the token says)
+      # and that the store failed. Also what a boot that could not reach the
+      # database leaves (BootChecks).
+      def reset!
+        SYNC_LOCK.synchronize { @token = UNSYNCED }
+        @announcement_owed = false
+        @failing_until = nil
+        MaskedModels.reset_warnings!
+      end
+
+      # @return [Boolean] whether this process has synced once
+      def synced?
+        !@token.equal?(UNSYNCED)
+      end
+
+      # @return [Boolean] whether the store recently did not answer (the
+      #   store in use: one that replaced it has not failed yet)
+      def store_failing?
+        until_time = @failing_until
+        !until_time.nil? && now < until_time && PermissionForge.cache.equal?(@failing_store)
+      end
+
+      private
+
+      # Applies the concern to one model in this process.
+      def apply!(name)
+        SYNC_LOCK.synchronize { MaskedModels.apply(only: name) }
+      end
+
+      # Applies the concern here, then tells the other processes. The token
+      # it writes is not taken as this process's own: another process may
+      # have written one since this one last checked, so the next check
+      # syncs once more.
+      #
+      # A token the store does not take (it is down, or raises) is owed:
+      # this process writes a new one at its first request or job after the
+      # store answers again (after RETRY_PAUSE). Never raises for the store.
+      def announce!(name)
+        apply!(name)
+        return if publish_token
+
+        Rails.logger&.warn('[PermissionForge] The cache store did not take the masking token: other processes ' \
+                           "mask #{name} once the store answers again and this process has written it.")
+      end
+
+      # The token to check against — nil while the store is failing. A
+      # token this process owes the store (an announcement it did not take)
+      # is written first, once the store answers.
+      #
+      # @return [String, nil]
+      def answered_token
+        return if store_failing?
+        return owed_or_current_token unless @failing_until
+
+        probe_store
+      end
+
+      # The pause after a failure is over: one thread asks the store again;
+      # the others keep the pause (nil) instead of each waiting for a store
+      # that may still be gone.
+      def probe_store
+        return unless PROBE_LOCK.try_lock
+
+        begin
+          owed_or_current_token
+        ensure
+          PROBE_LOCK.unlock
+        end
+      end
+
+      def owed_or_current_token
+        token = current_token
+        token && @announcement_owed ? (publish_token || token) : token
+      end
+
+      # Writes a new token (no expiry). Remembers it as owed when the store
+      # does not take it, and starts the back-off.
+      #
+      # @return [String, nil] the token written
+      def publish_token
+        token = SecureRandom.uuid
+        written = PermissionForge.cache.write_permanent(KEY, token)
+        store_failed! unless written
+        @announcement_owed = !written
+        token if written
+      rescue StandardError => e
+        @announcement_owed = true
+        store_failed!(e)
+        nil
+      end
+
+      # The token in the store — or, when there is none, a new one written
+      # (with no expiry) and read back: whatever token is there then, also
+      # one another process wrote meanwhile. nil when the store did not
+      # answer: it is left alone for RETRY_PAUSE. A read that raised is not
+      # followed by a write.
+      #
+      # @return [String, nil]
+      def current_token
+        cache = PermissionForge.cache
+        token = cache.read_fresh(KEY) || (cache.read_fresh(KEY) if cache.write_permanent(KEY, SecureRandom.uuid))
+        token ? store_answered! : store_failed!
+        token
+      rescue StandardError => e
+        store_failed!(e)
+        nil
+      end
+
+      def store_answered!
+        @failing_until = nil
+      end
+
+      # Logged once per outage: the first failure after the store answered.
+      def store_failed!(error = nil)
+        first = @failing_until.nil?
+        @failing_until = now + RETRY_PAUSE
+        @failing_store = PermissionForge.cache
+        return unless first
+
+        why = error ? " (#{error.class}: #{error.message})" : ''
+        Rails.logger&.warn("[PermissionForge] The cache store did not give or keep the masking token#{why}: auto-applied " \
+                           "masking is not synced with other processes for the next #{RETRY_PAUSE} seconds.")
+      end
+
+      def now
+        Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      end
+
+      # Whether `token` is one this process has not synced with. An unknown
+      # one (nil: the store did not answer) only for a process that never
+      # synced.
+      def changed?(token)
+        token.nil? ? !synced? : token != @token
+      end
+
+      # Whether this process has the concern on the model (false for a name
+      # that resolves to no model here: not known to be masked).
+      def masked_here?(name)
+        MaskedModels.masked?(name)
+      end
+
+      def sync(token, always: false)
+        SYNC_LOCK.synchronize do
+          return true if !always && synced? && token == @token
+
+          applied = MaskedModels.apply
+          @token = token if applied
+          applied
+        end
+      end
+    end
+  end
+end

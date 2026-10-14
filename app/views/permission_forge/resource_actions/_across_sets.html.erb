@@ -1,0 +1,24 @@
+<%# One action in every Permission Set containing the resource.
+    Locals: rows ([{ resource:, set:, action:, in_effect: }] from Admin::ActionAcrossSets#rows) %>
+<div class="pf-listbox">
+  <% rows.each do |row| %>
+    <% action = row[:action] %>
+    <% set = row[:set] %>
+    <div class="pf-option">
+      <span class="pf-option__main"><span class="pf-row pf-row--tight">
+        <% if set.is_muting %><span class="pf-text-restrict" aria-hidden="true">⊘</span><% end %>
+        <span class="pf-fw-600"><%= set.name %></span>
+        <%= pf_off_badge unless row[:in_effect] %>
+      </span></span>
+      <% if action.nil? %>
+        <%= pf_level_badge('none', label: t('permission_forge.ui.badges.not_configured')) %>
+      <% elsif set.is_muting %>
+        <%= pf_level_badge(action.is_permitted ? 'muted' : 'leave',
+                           label: action.is_permitted ? "⊘ #{t('permission_forge.resource_actions.states.blocked')}" : t('permission_forge.resource_actions.states.unchanged')) %>
+      <% else %>
+        <%= pf_level_badge(action.is_permitted ? 'edit' : 'none',
+                           label: action.is_permitted ? "✓ #{t('permission_forge.resource_actions.states.permitted')}" : t('permission_forge.resource_actions.states.not_permitted')) %>
+      <% end %>
+    </div>
+  <% end %>
+</div>

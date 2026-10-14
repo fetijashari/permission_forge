@@ -1,0 +1,18 @@
+<%# CRUD toggle cell: a checkbox styled as a cell (hidden "0" so unchecking is submitted).
+    Locals: name, flag, checked, muting, locked, aria, requires (opt), size (opt), form (opt) %>
+<% form_attr = local_assigns[:form] ? { form: form } : {} %>
+<% requires = local_assigns[:requires] %>
+<label class="pf-cell<%= ' pf-cell--muting' if muting %><%= ' pf-cell--lg' if local_assigns[:size] == :lg %>"
+       title="<%= t('.needs_read') if requires && !muting %>">
+  <%= tag.input(type: 'hidden', name: name, value: '0', **form_attr) %>
+  <%= tag.input(type: 'checkbox', name: name, value: '1', checked: checked, disabled: locked,
+                'aria-label': aria, data: { pf_flag: flag, pf_requires: (muting ? nil : requires), pf_locked: (locked || nil) }, **form_attr) %>
+  <% if muting %>
+    <span class="pf-cell__on"><span class="pf-cell__glyph" aria-hidden="true">⊘</span><%= t('.muted') %></span>
+    <span class="pf-cell__off"><span class="pf-cell__glyph" aria-hidden="true">–</span><%= t('.unchanged') %></span>
+  <% else %>
+    <span class="pf-cell__on"><span class="pf-cell__glyph" aria-hidden="true">✓</span><%= t('.allowed') %></span>
+    <span class="pf-cell__off"><span class="pf-cell__glyph" aria-hidden="true">–</span><%= t('.no') %></span>
+    <span class="pf-cell__needs"><span class="pf-cell__glyph" aria-hidden="true">–</span><%= t('.needs_read_short') %></span>
+  <% end %>
+</label>

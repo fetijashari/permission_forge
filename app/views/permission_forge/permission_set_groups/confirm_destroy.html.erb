@@ -1,0 +1,12 @@
+<% content_for :pf_title, t('.title', name: @group.name) %>
+<%= pf_dialog_frame({ title: t('.title', name: @group.name), danger: true,
+                     breadcrumb: pf_breadcrumb([t('permission_forge.nav.groups'), permission_forge.groups_path], [@group.name, permission_forge.group_path(@group)], t('.crumb')) }) do %>
+  <p class="pf-text-2"><%= t('.body', count: @group.permission_sets.count) %></p>
+  <%= form_with url: permission_forge.group_path(@group), method: :delete, class: 'pf-confirm-form' do %>
+    <%= render 'permission_forge/shared/reason_field' %>
+    <div class="pf-actions pf-row--right">
+      <%= link_to t('permission_forge.ui.cancel'), permission_forge.group_path(@group), class: 'pf-btn', data: { pf_close: true } %>
+      <button type="submit" class="pf-btn pf-btn--danger-solid"><%= t('.confirm') %></button>
+    </div>
+  <% end %>
+<% end %>

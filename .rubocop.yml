@@ -1,0 +1,50 @@
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: enable
+  Exclude:
+    - "test/dummy/**/*"
+    - "test/benchmarks/**/*"
+    - "vendor/**/*"
+    - "bin/**/*"
+    - "tmp/**/*"
+    - "coverage/**/*"
+    - "log/**/*"
+
+Layout/LineLength:
+  Max: 150
+
+Metrics/MethodLength:
+  Max: 25
+
+Metrics/ClassLength:
+  Max: 200
+  Exclude:
+    - "test/**/*"
+
+Metrics/BlockLength:
+  CountAsOne:
+    - "array"
+    - "hash"
+    - "heredoc"
+  Exclude:
+    - "test/**/*"
+    - "config/routes.rb"
+    - "lib/tasks/**/*"
+    - "*.gemspec"
+  AllowedMethods:
+    - "class_methods"
+    - "included"
+    - "concern"
+
+Metrics/ModuleLength:
+  Max: 150
+
+Style/Documentation:
+  Enabled: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Naming/PredicatePrefix:
+  Exclude:
+    - "lib/permission_forge/concerns/**/*"

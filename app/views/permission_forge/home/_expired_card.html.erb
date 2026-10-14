@@ -1,0 +1,34 @@
+<% items = @attention.expired %>
+<section class="pf-card" aria-labelledby="pf-card-expired" id="pf-cleanup">
+  <div class="pf-card__header">
+    <div class="pf-stack pf-stack--tight pf-grow">
+      <div class="pf-row">
+        <h2 class="pf-h2" id="pf-card-expired"><%= t('.title') %></h2>
+        <span class="pf-count-pill"><%= items.size %></span>
+      </div>
+      <p class="pf-card__desc"><%= t('.description', count: items.size) %></p>
+    </div>
+  </div>
+  <div class="pf-card__body">
+    <% if @cleanup_preview %>
+      <div class="pf-dryrun" role="region" aria-label="<%= t('.dry_run') %>">
+        <span class="pf-eyebrow"><%= t('.dry_run') %></span>
+        <ul class="pf-stack pf-stack--tight pf-fs-13">
+          <% items.each do |a| %>
+            <li><%= t('.item', person: pf_person_name(a.user), set: a.permission_set.name) %>
+              <span class="pf-text-3">· <%= pf_expiry(a.expires_at).first %></span></li>
+          <% end %>
+        </ul>
+        <div class="pf-actions">
+          <%= form_with url: permission_forge.maintenance_cleanup_path, method: :delete, class: 'pf-reason-form' do %>
+            <button type="submit" class="pf-btn pf-btn--danger-solid pf-btn--sm"><%= t('.remove', count: items.size) %></button>
+            <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-cleanup-reason' %>
+          <% end %>
+          <%= link_to t('permission_forge.ui.cancel'), permission_forge.root_path, class: 'pf-btn pf-btn--sm' %>
+        </div>
+      </div>
+    <% else %>
+      <%= link_to t('.preview'), permission_forge.root_path(cleanup: 1, anchor: 'pf-cleanup'), class: 'pf-btn pf-btn--sm' %>
+    <% end %>
+  </div>
+</section>

@@ -1,0 +1,31 @@
+<%# "Who can see this field?" — one row per Permission Set containing the resource.
+    Locals: rows ([{ resource:, set:, field:, people:, in_effect: }] from Admin::FieldAcrossSets), key, current_set (opt) %>
+<% if rows.empty? %>
+  <p class="pf-fs-13 pf-text-3"><%= t('.none') %></p>
+<% else %>
+  <div class="pf-listbox">
+    <% rows.each do |row| %>
+      <% set = row[:set] %>
+      <% field = row[:field] %>
+      <% level = field && PermissionForge::Admin::FieldLevel.level_of(field, muting: set.is_muting) %>
+      <%= link_to permission_forge.permission_set_resource_field_path(set, row[:resource].name, key),
+                  class: 'pf-option', 'aria-current': (local_assigns[:current_set] == set ? 'true' : nil) do %>
+        <span class="pf-option__main">
+          <span class="pf-row pf-row--tight">
+            <% if set.is_muting %><span class="pf-text-restrict" aria-hidden="true">⊘</span><% end %>
+            <span class="pf-fw-600"><%= set.name %></span>
+            <%= pf_off_badge unless row[:in_effect] %>
+          </span>
+        </span>
+        <% if level.nil? %>
+          <%= pf_level_badge('none', label: t('permission_forge.ui.badges.not_configured')) %>
+        <% elsif set.is_muting %>
+          <%= pf_level_badge(level == 'hide' ? 'muted' : level, label: (t('.muted_hidden') if level == 'hide')) %>
+        <% else %>
+          <%= pf_level_badge(level, strategy: (field.mask_strategy if level == 'masked')) %>
+        <% end %>
+        <span class="pf-option__aside"><%= pf_people_text(row[:people]) %></span>
+      <% end %>
+    <% end %>
+  </div>
+<% end %>

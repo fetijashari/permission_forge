@@ -1,0 +1,69 @@
+<% set = @permission_set %>
+<% content_for :pf_title, t('.title', set: set.name) %>
+<% close_path = permission_forge.permission_set_path(set, tab: 'assignments') %>
+<%= form_with url: permission_forge.permission_set_bulk_assignment_path(set), method: :post do %>
+  <% footer = capture do %>
+    <span class="pf-sheet__footer-note">
+      <% if @nobody %><span class="pf-error" role="alert"><%= t('.errors.nobody') %></span>
+      <% elsif @expiry_error %><span class="pf-error" role="alert"><%= @expiry_error %></span>
+      <% else %><%= t('permission_forge.assignments.new.applies_now') %>
+      <% end %>
+    </span>
+    <%= link_to t('permission_forge.ui.cancel'), close_path, class: 'pf-btn', data: { pf_close: true } %>
+    <button type="submit" class="pf-btn" formaction="<%= permission_forge.preview_permission_set_bulk_assignment_path(set) %>" data-pf-stay><%= t('.check') %></button>
+    <button type="submit" class="pf-btn pf-btn--primary">
+      <%= @result ? t('.assign_count', count: @result.to_assign.size) : t('.assign') %>
+    </button>
+  <% end %>
+  <%= pf_sheet_frame({ title: t('.title', set: set.name), close_path: close_path, footer: footer,
+                       breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path], [set.name, close_path], t('.crumb')) }) do %>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-bulk-text"><%= t('.paste') %></label>
+      <textarea id="pf-bulk-text" name="identifiers" rows="5" class="pf-textarea pf-textarea--mono" placeholder="<%= t('.paste_placeholder') %>"><%= @text %></textarea>
+      <span class="pf-hint"><%= t('.paste_hint') %></span>
+    </div>
+
+    <section class="pf-stack" aria-labelledby="pf-bulk-pick">
+      <%= pf_section_heading(t('.pick'), id: 'pf-bulk-pick') %>
+      <div class="pf-row pf-row--nowrap">
+        <label class="pf-sr-only" for="pf-bulk-q"><%= t('permission_forge.ui.search_people') %></label>
+        <input id="pf-bulk-q" class="pf-input" type="search" name="q" value="<%= @query %>" autocomplete="off"
+               placeholder="<%= t('permission_forge.ui.search_people') %>"
+               data-pf-live="pf-bulk-people" data-pf-live-url="<%= permission_forge.new_permission_set_bulk_assignment_path(set) %>">
+        <button type="submit" class="pf-btn pf-btn--sm" formmethod="get" formaction="<%= permission_forge.new_permission_set_bulk_assignment_path(set) %>"><%= t('permission_forge.ui.search') %></button>
+      </div>
+      <% @picked_ids.each do |id| %>
+        <% next if @people.people.any? { |p| p.id.to_s == id } %>
+        <input type="hidden" name="user_ids[]" value="<%= id %>">
+      <% end %>
+      <div id="pf-bulk-people">
+        <%= render 'permission_forge/assignments/person_options', page: @people, query: @query, field: 'user_ids', type: 'checkbox', selected: @picked_ids %>
+      </div>
+    </section>
+
+    <% if @result %>
+      <div class="pf-grid-3">
+        <div class="pf-panel pf-panel--grant pf-fs-13">
+          ✓ <%= t('.will_assign', count: @result.to_assign.size) %>
+          <% if @result.already.any? %> · <%= t('.already', count: @result.already.size) %><% end %>
+          <% if @result.to_assign.any? %>
+            <ul class="pf-stack pf-stack--tight pf-mt-8"><% @result.to_assign.each do |u| %><li><%= pf_person_name(u) %></li><% end %></ul>
+          <% end %>
+        </div>
+        <% if @result.not_found.any? %>
+          <div class="pf-panel pf-panel--block pf-fs-13">
+            ✕ <%= t('.not_found', count: @result.not_found.size) %>
+            <ul class="pf-stack pf-stack--tight pf-mt-8 pf-mono"><% @result.not_found.each do |token| %><li><%= token %></li><% end %></ul>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+
+    <section class="pf-stack" aria-labelledby="pf-bulk-expiry">
+      <%= pf_section_heading(t('permission_forge.assignments.new.expires'), id: 'pf-bulk-expiry') %>
+      <%= render 'permission_forge/shared/expiry_picker', selected: @expiry, custom_date: @custom_date, error: @expiry_error %>
+    </section>
+
+    <%= render 'permission_forge/shared/reason_field', value: params[:reason] %>
+  <% end %>
+<% end %>

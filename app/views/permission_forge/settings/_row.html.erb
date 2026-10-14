@@ -1,0 +1,38 @@
+<% key = row.key %>
+<% name = t("permission_forge.settings.items.#{key}.name") %>
+<% desc = t("permission_forge.settings.items.#{key}.desc") %>
+<div class="pf-setting" id="set-<%= key %>" data-pf-setting-row="<%= "#{key} #{name} #{desc}".downcase %>" <%= pf_attrs_when(focused, data: { pf_focus: true }) %>>
+  <div class="pf-setting__about">
+    <div class="pf-row pf-row--tight">
+      <b><%= name %></b>
+      <%= pf_badge(t('.changed'), variant: :changed) if row.changed? %>
+      <%= pf_badge("⚠ #{t('.risk')}", variant: :warn) if row.warn? %>
+      <%= pf_badge("✓ #{t('.secure')}", variant: :secure) if row.ok? %>
+    </div>
+    <span class="pf-fs-13 pf-text-2"><%= desc %></span>
+    <code class="pf-mono-key"><%= key %></code>
+    <% if row.warn? %><span class="pf-fs-13 pf-text-warn"><%= t("permission_forge.settings.risks.#{key}") %></span><% end %>
+    <% if row.ok? %><span class="pf-fs-12 pf-text-grant"><%= t("permission_forge.settings.oks.#{key}") %></span><% end %>
+  </div>
+  <div class="pf-setting__value">
+    <%= pf_setting_value(row) %>
+    <span class="pf-fs-12 pf-text-3"><%= t('.default', value: pf_setting_default(row)) %></span>
+  </div>
+  <details class="pf-setting__how" <%= 'open' if focused %>>
+    <summary class="pf-btn pf-btn--sm"><%= t('.how_to_change') %></summary>
+    <div class="pf-setting__panel">
+      <% snippet = "# config/initializers/permission_forge.rb\nPermissionForge.configure do |config|\n  config.#{key} = #{@catalog.snippet_value(row)}\nend" %>
+      <div class="pf-row pf-row--between">
+        <span class="pf-fs-12 pf-text-3"><%= row.warn? && @catalog.recommended_value(key) ? t('.snippet_recommended') : t('.snippet_current') %></span>
+        <button type="button" class="pf-btn pf-btn--xs" data-pf-copy="<%= snippet %>" data-pf-copied="<%= t('permission_forge.shared.tech_details.copied') %>" hidden data-pf-js-show><%= t('permission_forge.shared.tech_details.copy') %></button>
+      </div>
+      <pre class="pf-code"><%= snippet %></pre>
+      <ol class="pf-stack pf-stack--tight pf-fs-13">
+        <li>1. <%= t('.step_edit') %></li>
+        <li>2. <%= t('.step_deploy') %></li>
+        <li>3. <%= t('.step_reload') %></li>
+      </ol>
+      <%= link_to t('.docs', key: key), "#{PermissionForge.configuration.admin_docs_url}##{key}", class: 'pf-fs-12', target: '_blank', rel: 'noopener noreferrer' %>
+    </div>
+  </details>
+</div>

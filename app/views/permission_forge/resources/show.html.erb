@@ -1,0 +1,117 @@
+<% set = @permission_set %>
+<% resource = @resource %>
+<% pf_audit_preload_last_changes([resource, *(@tab == 'rules' ? @rules : [])]) %>
+<% muting = set.is_muting %>
+<% locked = pf_locked_record?(set) || pf_locked_record?(resource) %>
+<% label = pf_resource_label(resource) %>
+<% plural = pf_resource_plural(resource.name) %>
+<% base = "pf[resources][#{resource.id}]" %>
+<% content_for :pf_title, "#{label} · #{set.name}" %>
+<%= pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
+                  [set.name, permission_forge.permission_set_path(set)], label) %>
+
+<% if muting %>
+  <div class="pf-banner pf-banner--muting" role="note">
+    <span class="pf-banner__glyph" aria-hidden="true">⊘</span>
+    <div class="pf-banner__body"><span><b><%= t('permission_forge.ui.badges.muting') %>.</b> <%= t('.muting_note', set: set.name) %></span></div>
+  </div>
+<% end %>
+<%= render 'permission_forge/shared/mode_banners', record: (pf_locked_record?(resource) ? resource : set), muting: false,
+           duplicate_path: permission_forge.duplicate_permission_set_path(set) %>
+<%= pf_help_banner('resource', term: t('.help_term'), text: t('.help_text', model: resource.name)) %>
+
+<%= form_with url: permission_forge.review_permission_set_resource_path(set, resource.name), method: :post, id: 'pf-res-form',
+              data: { pf_track: 'pf-res-savebar', pf_review: true } do %>
+  <input type="hidden" name="return_to" value="<%= request.fullpath %>">
+  <%# The form's default button. Without it, Enter in a text input submits through the first
+      submit button on the page — a bulk "Set to" button, proposing that level for the ticked rows.
+      Out of sight but rendered, not `hidden`: Safari before 16.4 skips a display:none button
+      when it picks the default button (webkit.org/b/247545) and would press a bulk button. %>
+  <button type="submit" class="pf-sr-only" tabindex="-1" aria-hidden="true"><%= t('permission_forge.shared.savebar.review') %></button>
+<% end %>
+
+<div class="pf-page-header">
+  <div class="pf-page-header__text">
+    <div class="pf-row">
+      <h1 class="pf-h1"><%= label %></h1>
+      <code class="pf-mono-key"><%= resource.name %></code>
+    </div>
+    <label class="pf-sr-only" for="pf-res-desc"><%= t('.description') %></label>
+    <input id="pf-res-desc" class="pf-desc-input" type="text" name="<%= base %>[description]" value="<%= resource.description %>"
+           form="pf-res-form" placeholder="<%= t('.description_placeholder') %>" <%= 'readonly' if locked %>>
+    <span class="pf-impact"><span class="pf-dot" aria-hidden="true"></span><%= t('.impact', people: pf_people_text(@people_count)) %></span>
+  </div>
+  <label class="pf-switch">
+    <input type="hidden" name="<%= base %>[is_active]" value="0" form="pf-res-form">
+    <input type="checkbox" role="switch" name="<%= base %>[is_active]" value="1" form="pf-res-form" <%= 'checked' if resource.is_active %> <%= 'disabled' if locked %>>
+    <span class="pf-switch__track" aria-hidden="true"></span>
+    <span class="pf-switch__on"><%= t('permission_forge.shared.active') %></span>
+    <span class="pf-switch__off"><%= t('permission_forge.ui.badges.off') %></span>
+  </label>
+</div>
+
+<div class="pf-grid-2" data-pf-crud="r<%= resource.id %>">
+  <section class="pf-card" aria-labelledby="pf-res-crud">
+    <div class="pf-card__body pf-stack">
+      <h2 class="pf-h2" id="pf-res-crud"><%= t('.what_can_do') %></h2>
+      <div class="pf-crud-grid">
+        <% PermissionForge::Admin::EffectiveAccess::CRUD.each do |flag| %>
+          <div class="pf-crud-grid__col">
+            <span class="pf-fs-12 pf-text-3"><%= t("permission_forge.ui.flags_short.#{flag}") %></span>
+            <%= render 'permission_forge/shared/crud_cell', name: "#{base}[#{flag}]", flag: flag, checked: resource.public_send(flag),
+                       muting: muting, locked: locked, size: :lg, form: 'pf-res-form',
+                       requires: (%w[edit_access delete_access].include?(flag.to_s) ? 'read_access' : nil),
+                       aria: "#{t("permission_forge.ui.flags_short.#{flag}")} #{plural}" %>
+          </div>
+        <% end %>
+      </div>
+      <span class="pf-hint"><%= muting ? t('.muting_hint') : t('.needs_read_hint') %></span>
+    </div>
+  </section>
+
+  <% unless muting %>
+    <section class="pf-card" aria-labelledby="pf-res-scope">
+      <div class="pf-card__body pf-stack">
+        <h2 class="pf-h2" id="pf-res-scope"><%= t('.record_scope') %></h2>
+        <% { 'view_all' => 'read_access', 'modify_all' => 'view_all edit_access' }.each do |flag, requires| %>
+          <label class="pf-scope-option">
+            <input type="hidden" name="<%= base %>[<%= flag %>]" value="0" form="pf-res-form">
+            <input type="checkbox" name="<%= base %>[<%= flag %>]" value="1" form="pf-res-form" <%= 'checked' if resource.public_send(flag) %>
+                   <%= 'disabled' if locked %> data-pf-flag="<%= flag %>" data-pf-requires="<%= requires %>" <%= 'data-pf-locked' if locked %>>
+            <span class="pf-fs-13"><%= t(".#{flag}_html", resource: label) %>
+              <span class="pf-text-3"><%= t(".#{flag}_needs") %></span></span>
+          </label>
+        <% end %>
+        <% active_rules = @rules.count(&:is_active) %>
+        <% if resource.view_all && active_rules.positive? %>
+          <span class="pf-fs-13 pf-text-warn">⚠ <%= t('.rules_ignored', count: active_rules) %></span>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
+</div>
+
+<% if @rows.sync_needed? && !locked %>
+  <%= render 'sync', set: set, resource: resource, muting: muting %>
+<% end %>
+
+<nav class="pf-tabs" role="tablist" aria-label="<%= t('.tabs_label') %>">
+  <%= pf_tab t('permission_forge.ui.fields'), permission_forge.permission_set_resource_path(set, resource.name), selected: @tab == 'fields', count: @rows.rows.size %>
+  <%= pf_tab t('permission_forge.ui.actions'), permission_forge.permission_set_resource_path(set, resource.name, tab: 'actions'), selected: @tab == 'actions', count: @action_rows.rows.size %>
+  <%= pf_tab t('permission_forge.ui.rules_tab'), permission_forge.permission_set_resource_path(set, resource.name, tab: 'rules'), selected: @tab == 'rules', count: @rules.size %>
+</nav>
+
+<div role="tabpanel">
+  <%= render "#{@tab}_tab", set: set, resource: resource, muting: muting, locked: locked, base: base %>
+</div>
+
+<% unless locked %>
+  <%= render 'permission_forge/shared/savebar', id: 'pf-res-savebar', form: 'pf-res-form', people: @people_count %>
+<% end %>
+
+<%= pf_tech_details(resource, extras: { model: resource.name }) do %>
+  <% unless locked %>
+    <div><%= pf_modal_link t('.remove', resource: label), permission_forge.delete_permission_set_resource_path(set, resource.name), class: 'pf-btn pf-btn--danger pf-btn--xs' %></div>
+  <% end %>
+<% end %>
+<%= pf_audit_footer(resource) %>

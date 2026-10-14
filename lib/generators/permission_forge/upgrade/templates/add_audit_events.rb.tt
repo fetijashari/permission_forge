@@ -1,0 +1,98 @@
+class PermissionForgeAddAuditEvents < ActiveRecord::Migration<%= migration_version %>
+  # Creates the insert-only audit log and the columns the access review and the
+  # "This is intended" acknowledgement record. Every step is guarded, so running
+  # it against an install that already has them changes nothing. Existing
+  # assignments are not backfilled: a blank reviewed_at means "never reviewed".
+  def up
+    create_audit_events unless table_exists?(:<%= table_prefix %>audit_events)
+    add_tenant_column
+    add_audit_indexes
+
+    add_column_once :<%= table_prefix %>permission_set_users, :reviewed_at, :datetime
+    add_column_once :<%= table_prefix %>permission_set_users, :reviewed_by_id, user_key_type
+    add_column_once :<%= table_prefix %>permission_set_users, :reason, :string
+    add_column_once :<%= table_prefix %>permission_set_group_users, :reason, :string
+    add_column_once :<%= table_prefix %>resource_fields, :sensitive_acknowledged_by_id, user_key_type
+  end
+
+  # The audit log is evidence, and `up` may have changed nothing because the
+  # install already owned these objects, so a rollback must never delete it.
+  def down
+    raise ActiveRecord::IrreversibleMigration,
+          'The audit log is evidence: permission_forge_add_audit_events does not drop the audit_events table ' \
+          'or its columns on rollback. Remove them deliberately, by hand, if you really mean to.'
+  end
+
+  private
+
+  # No foreign keys: events outlive the records they describe.
+  def create_audit_events
+    create_table :<%= table_prefix %>audit_events do |t|
+      t.string   :uuid, null: false
+      t.datetime :occurred_at, null: false, precision: 6
+      t.string   :event, null: false
+      t.string   :category, null: false
+      t.string   :actor_type, null: false
+      t.string   :actor_id
+      t.string   :actor_label
+      t.string   :source, null: false
+      t.string   :record_type
+      t.string   :record_id
+      t.string   :record_uuid
+      t.string   :record_label
+      t.bigint   :permission_set_id
+      t.string   :permission_set_uuid
+      t.string   :subject_user_id
+      t.text     :data
+      t.string   :reason
+      t.string   :request_id
+      t.string   :ip
+      t.string   :correlation_id
+<% if tenant_column %>      t.column   :<%= tenant_column %>, tenant_key_type
+<% end %>      t.datetime :created_at, null: false
+    end
+  end
+
+  # A table made by an earlier run without tenancy gets the column before its index.
+  def add_tenant_column
+<% if tenant_column %>    add_column_once :<%= table_prefix %>audit_events, :<%= tenant_column %>, tenant_key_type
+<% end %>  end
+
+  def add_audit_indexes
+    table = :<%= table_prefix %>audit_events
+    add_index_once table, :uuid, unique: true, name: 'idx_pf_audit_uuid'
+    add_index_once table, :occurred_at, name: 'idx_pf_audit_occurred'
+    add_index_once table, %i[event occurred_at], name: 'idx_pf_audit_event'
+    add_index_once table, %i[subject_user_id occurred_at], name: 'idx_pf_audit_subject'
+    add_index_once table, %i[permission_set_id occurred_at], name: 'idx_pf_audit_pset'
+    add_index_once table, %i[permission_set_uuid occurred_at], name: 'idx_pf_audit_pset_uuid'
+    add_index_once table, %i[record_type record_id occurred_at], name: 'idx_pf_audit_record'
+    add_index_once table, %i[actor_id occurred_at], name: 'idx_pf_audit_actor'
+    add_index_once table, :correlation_id, name: 'idx_pf_audit_correlation'
+<% if tenant_column %>    add_index_once table, :<%= tenant_column %>, name: 'idx_pf_audit_tenant'
+<% end %>  end
+
+  # User and tenant ids keep the type the install already uses (a UUID or
+  # string key must not be truncated by a bigint column); bigint when unknown.
+  def user_key_type
+    key_type_of(:<%= table_prefix %>permission_set_users, :user_id)
+  end
+
+  def tenant_key_type
+<% if tenant_column %>    key_type_of(:<%= table_prefix %>permission_sets, :<%= tenant_column %>)
+<% else %>    :bigint
+<% end %>  end
+
+  def key_type_of(table, column)
+    existing = table_exists?(table) && connection.columns(table).find { |c| c.name == column.to_s }
+    existing ? existing.sql_type : :bigint
+  end
+
+  def add_column_once(table, column, type)
+    add_column table, column, type unless column_exists?(table, column)
+  end
+
+  def add_index_once(table, columns, **options)
+    add_index table, columns, **options unless index_name_exists?(table, options[:name])
+  end
+end

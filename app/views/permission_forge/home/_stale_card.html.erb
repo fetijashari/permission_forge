@@ -1,0 +1,39 @@
+<% items = @attention.stale %>
+<% granters = pf_granters(items) %>
+<section class="pf-card" aria-labelledby="pf-card-stale">
+  <div class="pf-card__header">
+    <div class="pf-stack pf-stack--tight pf-grow">
+      <div class="pf-row">
+        <h2 class="pf-h2" id="pf-card-stale"><%= t('.title') %></h2>
+        <span class="pf-count-pill pf-count-pill--warn"><%= items.size %></span>
+      </div>
+      <p class="pf-card__desc"><%= t('.description', days: @attention.stale_days) %></p>
+    </div>
+  </div>
+  <div class="pf-scroll-y">
+    <% items.each do |assignment| %>
+      <div class="pf-card__row pf-card__row--top">
+        <div class="pf-stack pf-stack--tight pf-grow">
+          <div class="pf-row pf-row--tight">
+            <%= link_to pf_person_name(assignment.user), permission_forge.person_path(assignment.user_id), class: 'pf-fw-600' %>
+            <%= pf_set_chip(assignment.permission_set) %>
+          </div>
+          <span class="pf-row pf-row--tight pf-fs-13">
+            <%= pf_reviewed(assignment) %>
+            <span class="pf-text-3">· <%= t('.assigned', date: pf_date(assignment.created_at), by: pf_granted_by(assignment, granters)) %></span>
+          </span>
+        </div>
+        <div class="pf-actions">
+          <%= form_with url: permission_forge.keep_assignment_path(assignment), method: :post, class: 'pf-reason-form' do %>
+            <input type="hidden" name="return_to" value="<%= permission_forge.root_path %>">
+            <button type="submit" class="pf-btn pf-btn--sm"><%= t('permission_forge.ui.keep') %></button>
+            <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-keep-reason-#{assignment.id}" %>
+          <% end %>
+          <%= pf_lock_badge if pf_locked_record?(assignment.permission_set) %>
+          <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.remove_assignment_path(assignment, return_to: permission_forge.root_path),
+                            class: 'pf-btn pf-btn--ghost-danger' %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</section>

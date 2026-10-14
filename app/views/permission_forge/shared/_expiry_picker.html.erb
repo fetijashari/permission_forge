@@ -1,0 +1,27 @@
+<%# Expiry presets as radio cards. Locals: selected, custom_date, error, name (default 'expiry'). %>
+<% name = local_assigns.fetch(:name, 'expiry') %>
+<% tomorrow = (Time.zone.today + 1).iso8601 %>
+<div class="pf-expiry pf-stack">
+  <div class="pf-choices pf-choices--expiry" role="radiogroup" aria-label="<%= t('.label') %>">
+    <% PermissionForge::Admin::ExpiryPresets::KEYS.each do |key| %>
+      <label class="pf-choice">
+        <input type="radio" name="<%= name %>" value="<%= key %>" <%= 'checked' if selected == key %>>
+        <span class="pf-choice__box">
+          <span class="pf-choice__title"><%= t(".presets.#{key}") %></span>
+          <span class="pf-choice__sub">
+            <% if key == 'custom' %><%= t('.pick_date') %>
+            <% elsif key == 'never' %><%= t('.default') %>
+            <% else %><%= pf_expiry_preset_date(key) %>
+            <% end %>
+          </span>
+        </span>
+      </label>
+    <% end %>
+  </div>
+  <div class="pf-custom-date pf-field">
+    <label class="pf-label" for="pf-custom-date"><%= t('.custom_label') %></label>
+    <input id="pf-custom-date" class="pf-input pf-input--auto" type="date" name="custom_date" min="<%= tomorrow %>" value="<%= custom_date %>"
+           <%= pf_attrs_when(error, aria: { invalid: true }) %>>
+  </div>
+  <% if error %><p class="pf-error" role="alert"><%= error %></p><% end %>
+</div>

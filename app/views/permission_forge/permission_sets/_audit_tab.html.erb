@@ -1,0 +1,80 @@
+<% if @audit_refused %>
+  <%= render 'permission_forge/shared/audit_refused_note' %>
+<% else %>
+<div class="pf-stack pf-stack--loose">
+  <%= render 'permission_forge/shared/audit_timeline',
+             title: t('.timeline'), description: t('.timeline_desc'),
+             page: @timeline, lookups: @timeline_lookups,
+             path: ->(number) { permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: params[:views].presence, page: number) },
+             views_path: (permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: 1) unless @timeline_log.include_views?),
+             links: [[t('.open_log'), pf_audit_log_path(permission_set: set.id)]] %>
+
+  <h2 class="pf-h2"><%= t('.records') %></h2>
+  <% if PermissionForge.configuration.audit_trail_enabled %>
+    <%= form_with url: permission_forge.permission_set_path(set), method: :get, class: 'pf-row' do %>
+      <input type="hidden" name="tab" value="audit">
+      <label class="pf-sr-only" for="pf-audit-who"><%= t('.who') %></label>
+      <select id="pf-audit-who" name="who" class="pf-select pf-select--sm pf-select--auto" data-pf-autosubmit>
+        <option value=""><%= t('.anyone') %></option>
+        <% @editors.each do |u| %><option value="<%= u.id %>" <%= 'selected' if @who == u.id.to_s %>><%= pf_person_name(u) %></option><% end %>
+      </select>
+      <label class="pf-sr-only" for="pf-audit-type"><%= t('.type') %></label>
+      <select id="pf-audit-type" name="type" class="pf-select pf-select--sm pf-select--auto" data-pf-autosubmit>
+        <option value=""><%= t('.all_types') %></option>
+        <% %w[permission_set resource field action rule assignment].each do |type| %>
+          <option value="<%= type %>" <%= 'selected' if @type == type %>><%= pf_audit_type_label(type) %></option>
+        <% end %>
+      </select>
+      <label class="pf-sr-only" for="pf-audit-days"><%= t('.days') %></label>
+      <select id="pf-audit-days" name="days" class="pf-select pf-select--sm pf-select--auto" data-pf-autosubmit>
+        <option value=""><%= t('.any_time') %></option>
+        <% PermissionForge::Admin::AuditTrail::DAY_FILTERS.each do |d| %>
+          <option value="<%= d %>" <%= 'selected' if @days.to_s == d.to_s %>><%= t('.last_days', count: d) %></option>
+        <% end %>
+      </select>
+      <button type="submit" name="sort" value="<%= @sort == 'asc' ? 'desc' : 'asc' %>" class="pf-btn pf-btn--sm">
+        <%= @sort == 'asc' ? t('.oldest_first') : t('.newest_first') %>
+      </button>
+      <button type="submit" class="pf-btn pf-btn--sm" data-pf-js-hide><%= t('permission_forge.ui.apply') %></button>
+      <span class="pf-fs-13 pf-text-3 pf-ml-auto"><%= t('.count', count: @entries.size) %></span>
+      <%= link_to t('permission_forge.ui.export_csv'),
+                  permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, format: :csv),
+                  class: 'pf-btn pf-btn--sm' %>
+    <% end %>
+
+    <div class="pf-card pf-scroll-x">
+      <div class="pf-table pf-table--audit" role="table" aria-label="<%= t('.label') %>">
+        <div class="pf-table__head" role="row">
+          <span role="columnheader"><%= t('.columns.type') %></span>
+          <span role="columnheader"><%= t('.columns.record') %></span>
+          <span role="columnheader"><%= t('.columns.created') %></span>
+          <span role="columnheader"><%= t('.columns.edited') %></span>
+        </div>
+        <% @entries.each do |entry| %>
+          <% type_label, label, where = pf_audit_describe(entry) %>
+          <div class="pf-table__row pf-table__row--link" role="row">
+            <span role="cell" class="pf-fs-12 pf-text-3"><%= type_label %></span>
+            <span role="cell" class="pf-stack pf-stack--tight">
+              <% if (entry_path = pf_audit_path(entry)) %>
+                <%= link_to label, entry_path, class: 'pf-table__link pf-fw-600' %>
+              <% else %>
+                <span class="pf-fw-600"><%= label %></span>
+              <% end %>
+              <% if where %><span class="pf-fs-12 pf-text-3"><%= where %></span><% end %>
+            </span>
+            <span role="cell" class="pf-fs-13 pf-text-2"><%= pf_audit_who_when(entry.created_by, entry.created_at) %></span>
+            <span role="cell" class="pf-fs-13 pf-text-2"><%= pf_audit_edited(entry) %></span>
+          </div>
+        <% end %>
+      </div>
+      <% if @entries.empty? %><p class="pf-empty"><%= t('.empty') %></p><% end %>
+    </div>
+  <% else %>
+    <div class="pf-banner pf-banner--warn" role="note">
+      <span class="pf-banner__glyph" aria-hidden="true">⚠</span>
+      <div class="pf-banner__body"><span><%= t('permission_forge.people.audit_tab.disabled') %></span></div>
+      <%= link_to t('permission_forge.ui.open_setting'), pf_setting_path('audit_trail_enabled'), class: 'pf-btn pf-btn--xs' %>
+    </div>
+  <% end %>
+</div>
+<% end %>

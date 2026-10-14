@@ -1,0 +1,27 @@
+# DB=postgres switches the whole suite to PostgreSQL (required for the RLS
+# enforcement tests in test/rls — run via `DB=postgres bundle exec rake test:rls`).
+# DB=mysql switches it to MySQL (run with BUNDLE_GEMFILE=gemfiles/mysql.gemfile,
+# which adds the trilogy driver). Default remains in-memory SQLite.
+test:
+<% if ENV['DB'] == 'postgres' %>
+  adapter: postgresql
+  database: permission_forge_test
+  host: <%= ENV.fetch('PGHOST', 'localhost') %>
+  port: <%= ENV.fetch('PGPORT', 5432) %>
+  username: <%= ENV['PGUSER'] %>
+  password: <%= ENV['PGPASSWORD'] %>
+<% elsif ENV['DB'] == 'mysql' %>
+  adapter: trilogy
+  database: permission_forge_test
+  host: <%= ENV.fetch('MYSQL_HOST', '127.0.0.1') %>
+  port: <%= ENV.fetch('MYSQL_PORT', 3306) %>
+  username: <%= ENV.fetch('MYSQL_USER', 'root') %>
+  password: <%= ENV['MYSQL_PASSWORD'] %>
+<% else %>
+  adapter: sqlite3
+  database: ':memory:'
+<% end %>
+
+development:
+  adapter: sqlite3
+  database: db/development.sqlite3

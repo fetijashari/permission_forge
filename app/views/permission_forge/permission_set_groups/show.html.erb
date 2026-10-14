@@ -1,0 +1,100 @@
+<% group = @group %>
+<% locked = pf_locked_record?(group) %>
+<% content_for :pf_title, group.name %>
+<%= pf_breadcrumb([t('permission_forge.nav.groups'), permission_forge.groups_path], group.name) %>
+<%= render 'permission_forge/shared/mode_banners', record: group, muting: false %>
+
+<%= form_with url: permission_forge.group_path(group), method: :patch, scope: :group, class: 'pf-page-header' do %>
+  <div class="pf-page-header__text">
+    <h1 class="pf-sr-only"><%= group.name %></h1>
+    <label class="pf-sr-only" for="pf-group-title"><%= t('.name') %></label>
+    <input id="pf-group-title" class="pf-title-input" type="text" name="group[name]" value="<%= group.name %>" required maxlength="255" <%= 'readonly' if locked %>>
+    <label class="pf-sr-only" for="pf-group-desc"><%= t('.description') %></label>
+    <input id="pf-group-desc" class="pf-desc-input" type="text" name="group[description]" value="<%= group.description %>"
+           placeholder="<%= t('.description_placeholder') %>" <%= 'readonly' if locked %>>
+    <span class="pf-fs-12 pf-text-3"><%= t('.organisational') %></span>
+  </div>
+  <div class="pf-actions">
+    <label class="pf-switch">
+      <input type="hidden" name="group[is_active]" value="0">
+      <input type="checkbox" role="switch" name="group[is_active]" value="1" <%= 'checked' if group.is_active %> <%= 'disabled' if locked %> data-pf-autosubmit>
+      <span class="pf-switch__track" aria-hidden="true"></span>
+      <span class="pf-switch__on"><%= t('permission_forge.shared.active') %></span>
+      <span class="pf-switch__off"><%= t('permission_forge.ui.badges.off') %></span>
+    </label>
+    <% unless locked %><button type="submit" class="pf-btn pf-btn--sm"><%= t('.save') %></button><% end %>
+    <%# Duplicate posts this form (and its reason) to the duplicate action, which reads nothing else from it. %>
+    <button type="submit" formaction="<%= permission_forge.duplicate_group_path(group) %>" formmethod="post" name="_method" value="post"
+            formnovalidate class="pf-btn pf-btn--sm" title="<%= t('.duplicate_title', count: @sets.size) %>"><%= t('.duplicate') %></button>
+    <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-group-reason' %>
+    <% unless locked %>
+      <%= pf_modal_link t('permission_forge.ui.delete'), permission_forge.delete_group_path(group), class: 'pf-btn pf-btn--sm pf-btn--danger' %>
+    <% end %>
+  </div>
+<% end %>
+
+<section class="pf-card" aria-labelledby="pf-group-sets">
+  <div class="pf-card__header">
+    <h2 class="pf-h2" id="pf-group-sets"><%= t('.sets') %></h2>
+    <% unless locked || @other_sets.empty? %>
+      <%= form_with url: permission_forge.add_set_group_path(group), method: :post, class: 'pf-row pf-row--tight pf-reason-form' do %>
+        <label class="pf-sr-only" for="pf-group-add-set"><%= t('.add_set') %></label>
+        <select id="pf-group-add-set" name="permission_set_id" class="pf-select pf-select--sm pf-select--auto" data-pf-autosubmit required>
+          <option value=""><%= t('.add_set') %>…</option>
+          <% @other_sets.each do |ps| %>
+            <option value="<%= ps.id %>"><%= ps.name %><%= " (#{t('.in_group', group: ps.permission_set_group.name)})" if ps.permission_set_group %></option>
+          <% end %>
+        </select>
+        <button type="submit" class="pf-btn pf-btn--xs" data-pf-js-hide><%= t('permission_forge.ui.apply') %></button>
+        <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-add-set-reason-#{group.id}" %>
+      <% end %>
+    <% end %>
+  </div>
+  <% @sets.each do |ps| %>
+    <div class="pf-card__row">
+      <span class="pf-stack pf-stack--tight pf-grow">
+        <span><%= pf_set_chip(ps) %></span>
+        <% if ps.description.present? %><span class="pf-fs-13 pf-text-2"><%= ps.description %></span><% end %>
+      </span>
+      <span class="pf-fs-13 pf-text-3"><%= pf_people_text(@people_counts.fetch(ps.id, 0)) %></span>
+      <% unless locked %>
+        <%= form_with url: permission_forge.remove_set_group_path(group), method: :delete, class: 'pf-reason-form' do %>
+          <input type="hidden" name="permission_set_id" value="<%= ps.id %>">
+          <button type="submit" class="pf-btn pf-btn--ghost pf-btn--xs"><%= t('.remove_set') %></button>
+          <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-remove-set-reason-#{ps.id}" %>
+        <% end %>
+      <% end %>
+    </div>
+  <% end %>
+  <% if @sets.empty? %><p class="pf-card__row pf-text-3"><%= t('.no_sets') %></p><% end %>
+</section>
+
+<section class="pf-card" aria-labelledby="pf-group-members">
+  <div class="pf-card__header">
+    <h2 class="pf-h2" id="pf-group-members"><%= t('.members') %></h2>
+    <%= form_with url: permission_forge.group_members_path(group), method: :post, class: 'pf-row pf-row--tight pf-reason-form' do %>
+      <%= render 'permission_forge/shared/user_select', users: @candidates, id_suffix: "group-#{group.id}" %>
+      <button type="submit" class="pf-btn pf-btn--xs"><%= t('.add_member') %></button>
+      <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-member-reason-#{group.id}" %>
+    <% end %>
+  </div>
+  <div class="pf-card__body">
+    <div class="pf-banner pf-banner--warn" role="note">
+      <span class="pf-banner__glyph" aria-hidden="true">!</span>
+      <div class="pf-banner__body"><span><%= t('.members_note_html') %></span></div>
+    </div>
+  </div>
+  <% @members.each do |m| %>
+    <div class="pf-card__row">
+      <span class="pf-grow"><%= pf_person_cell(m.user, href: permission_forge.person_path(m.user_id)) %></span>
+      <%= form_with url: permission_forge.group_member_path(group, m), method: :delete, class: 'pf-reason-form' do %>
+        <button type="submit" class="pf-btn pf-btn--ghost-danger"><%= t('permission_forge.ui.remove') %></button>
+        <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-member-remove-reason-#{m.id}" %>
+      <% end %>
+    </div>
+  <% end %>
+  <% if @members.empty? %><p class="pf-card__row pf-text-3"><%= t('.no_members') %></p><% end %>
+</section>
+
+<%= pf_tech_details(group) %>
+<%= pf_audit_footer(group) %>

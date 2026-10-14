@@ -1,0 +1,93 @@
+<% if @audit_refused %>
+  <%= render 'permission_forge/shared/audit_refused_note' %>
+<% else %>
+<% first_name = pf_person(@person).first_name %>
+<% total = @changes.values.sum(&:size) %>
+<% granters = pf_granters(@assignments) %>
+<div class="pf-stack pf-stack--loose">
+  <% unless PermissionForge.configuration.audit_trail_enabled %>
+    <div class="pf-banner pf-banner--warn" role="note">
+      <span class="pf-banner__glyph" aria-hidden="true">⚠</span>
+      <div class="pf-banner__body"><span><%= t('.disabled') %></span></div>
+      <%= link_to t('permission_forge.ui.open_setting'), pf_setting_path('audit_trail_enabled'), class: 'pf-btn pf-btn--xs' %>
+    </div>
+  <% end %>
+
+  <%= render 'permission_forge/shared/audit_timeline',
+             title: t('.timeline', name: first_name), description: t('.timeline_desc', name: first_name),
+             page: @timeline, lookups: @timeline_lookups,
+             path: ->(number) { permission_forge.person_path(@person, tab: 'audit', views: params[:views].presence, page: number) },
+             views_path: (permission_forge.person_path(@person, tab: 'audit', views: 1) unless @timeline_log.include_views?),
+             links: [[t('.events_about', name: first_name), pf_audit_log_path(subject_user_id: @person.id)],
+                     [t('.events_by', name: first_name), pf_audit_log_path(actor_type: 'user', actor_id: @person.id)]] %>
+
+  <section class="pf-card" aria-labelledby="pf-received">
+    <div class="pf-card__header"><h2 class="pf-h2" id="pf-received"><%= t('.received') %></h2></div>
+    <% if @assignments.empty? && @groups.empty? %>
+      <p class="pf-card__row pf-text-3"><%= t('.no_assignments') %></p>
+    <% end %>
+    <% @assignments.each do |a| %>
+      <div class="pf-card__row pf-card__row--top">
+        <span class="pf-stack pf-stack--tight pf-grow">
+          <span><b><%= a.permission_set.name %></b> <span class="pf-fs-12 pf-text-3"><%= t(a.permission_set.is_muting ? '.kind_muting' : '.kind_set') %></span></span>
+          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_granted_by(a, granters), date: pf_date(a.created_at)) %></span>
+          <% if a.try(:reason).present? %><span class="pf-fs-12 pf-text-3"><%= t('permission_forge.audit_log.reason_inline', reason: a.reason) %></span><% end %>
+        </span>
+        <span class="pf-stack pf-stack--tight pf-fs-12">
+          <%= pf_expiry_tag(a.expires_at) %>
+          <%= pf_reviewed(a) %>
+        </span>
+      </div>
+    <% end %>
+    <% @groups.each do |m| %>
+      <div class="pf-card__row">
+        <span class="pf-stack pf-stack--tight pf-grow">
+          <span><b><%= m.permission_set_group.name %></b> <span class="pf-fs-12 pf-text-3"><%= t('.kind_group') %></span></span>
+          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_person_name(m.try(:created_by)), date: pf_date(m.created_at)) %></span>
+        </span>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="pf-card" aria-labelledby="pf-made">
+    <div class="pf-card__header">
+      <div class="pf-stack pf-stack--tight pf-grow">
+        <h2 class="pf-h2" id="pf-made"><%= t('.made_by', name: first_name) %></h2>
+        <span class="pf-card__desc"><%= t('.made_by_desc', name: first_name, count: total) %></span>
+      </div>
+      <% if total.positive? %>
+        <%= link_to t('permission_forge.ui.export_csv'), permission_forge.person_path(@person, tab: 'audit', format: :csv), class: 'pf-btn pf-btn--sm' %>
+      <% end %>
+    </div>
+    <% if total.zero? %>
+      <p class="pf-card__row pf-text-3"><%= t('.made_none', name: first_name) %></p>
+    <% end %>
+    <% if @changes_capped %>
+      <p class="pf-card__row pf-fs-13 pf-text-2"><%= t('.made_capped', count: PermissionForge::PeopleController::CHANGES_SHOWN) %></p>
+    <% end %>
+    <div class="pf-card__body pf-stack">
+      <% @changes.each do |type, entries| %>
+        <div class="pf-listbox">
+          <div class="pf-listbox__footer pf-fw-600"><%= pf_audit_type_label(type) %> · <%= entries.size %></div>
+          <div class="pf-listbox__scroll pf-scroll-y">
+            <% entries.each do |entry| %>
+              <% _type_label, label, where = pf_audit_describe(entry) %>
+              <% path = pf_audit_path(entry) %>
+              <%= link_to (path || '#'), class: 'pf-option' do %>
+                <span class="pf-option__main">
+                  <span class="pf-fw-600"><%= label %></span>
+                  <% if where %><span class="pf-fs-12 pf-text-3"><%= where %></span><% end %>
+                </span>
+                <span class="pf-stack pf-stack--tight pf-option__aside">
+                  <span><%= t('.created', value: pf_audit_who_when(entry.created_by, entry.created_at)) %></span>
+                  <span><%= t('.edited', value: pf_audit_edited(entry)) %></span>
+                </span>
+              <% end %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </section>
+</div>
+<% end %>

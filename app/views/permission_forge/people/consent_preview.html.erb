@@ -1,0 +1,39 @@
+<% label = pf_person(@person) %>
+<% content_for :pf_title, t('.title') %>
+<%= pf_dialog_frame({ title: t('.title'), danger: true,
+                     breadcrumb: pf_breadcrumb([t('permission_forge.nav.people'), permission_forge.people_path], [label.name, permission_forge.person_path(@person)], t('.title')) }) do %>
+  <p class="pf-text-2"><%= t('.intro', name: label.first_name) %></p>
+  <% if @flags.empty? %>
+    <p class="pf-text-2"><%= t('.no_flags', name: label.first_name) %></p>
+    <div class="pf-actions pf-row--right">
+      <%= link_to t('permission_forge.ui.close'), permission_forge.person_path(@person), class: 'pf-btn', data: { pf_close: true } %>
+    </div>
+  <% else %>
+    <%= form_with url: permission_forge.consent_person_path(@person), method: :get, class: 'pf-row', data: { pf_modal_refresh: true } do %>
+      <label class="pf-label" for="pf-consent-flag"><%= t('.flag') %></label>
+      <select id="pf-consent-flag" name="flag" class="pf-select pf-select--auto" data-pf-autosubmit>
+        <% @flags.each do |flag| %>
+          <option value="<%= flag %>" <%= 'selected' if flag == @flag %>><%= pf_flag_label(flag) %> (<%= flag %>)</option>
+        <% end %>
+      </select>
+      <button type="submit" class="pf-btn pf-btn--sm" data-pf-js-hide><%= t('.preview') %></button>
+    <% end %>
+    <div class="pf-dryrun">
+      <span class="pf-eyebrow"><%= t('permission_forge.ui.dry_run') %></span>
+      <% if @affected.any? %>
+        <span class="pf-fs-13"><%= t('.would_remove', count: @affected.size) %></span>
+        <ul class="pf-stack pf-stack--tight"><% @affected.each do |a| %><li><%= pf_set_chip(a.permission_set, href: nil) %></li><% end %></ul>
+      <% else %>
+        <span class="pf-fs-13"><%= t('.nothing', name: label.first_name, flag: @flag) %></span>
+      <% end %>
+    </div>
+    <%= form_with url: permission_forge.consent_person_path(@person), method: :post, class: 'pf-stack' do %>
+      <input type="hidden" name="flag" value="<%= @flag %>">
+      <%= render 'permission_forge/shared/reason_field', id: 'pf-consent-reason', value: params[:reason] %>
+      <div class="pf-actions pf-row--right">
+      <%= link_to t('permission_forge.ui.cancel'), permission_forge.person_path(@person), class: 'pf-btn', data: { pf_close: true } %>
+      <button type="submit" class="pf-btn pf-btn--danger-solid" <%= 'disabled' if @affected.empty? %>><%= t('.confirm', count: @affected.size) %></button>
+      </div>
+    <% end %>
+  <% end %>
+<% end %>

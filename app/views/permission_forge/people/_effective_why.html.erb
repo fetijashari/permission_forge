@@ -1,0 +1,48 @@
+<%# Every explanation is rendered; JS reveals one on click, the server marks ?why= active. %>
+<% resources.each do |res| %>
+  <% plural = pf_resource_plural(res.name) %>
+  <% PermissionForge::Admin::EffectiveAccess::CRUD.each do |flag| %>
+    <% outcome = res.op(flag) %>
+    <% flag_label = t("permission_forge.ui.flags_short.#{flag}") %>
+    <%= render 'why_item', key: "#{res.name}.#{flag}", title: "#{flag_label} #{plural}",
+               badge: pf_state_cell(outcome.state, aria: "#{flag_label} #{plural}"),
+               reasons: outcome.granted_by.map { |ps| ['✓', t('.flag_granted', set: ps.name, flag: flag_label), ps] } +
+                        outcome.blocked_by.map { |ps| ['⊘', t('.flag_muted', set: ps.name, flag: flag_label), ps] } +
+                        (outcome.granted_by.empty? ? [['–', t('.flag_none', flag: flag_label), nil]] : []),
+               note: outcome.blocked? ? t('.note_muting') : t('.note_add_up') %>
+  <% end %>
+
+  <% records_reasons = case res.records
+                       when :all then res.op(:view_all).granted_by.map { |ps| ['✓', t('.view_all_from', set: ps.name), ps] }
+                       when :rules then res.rules.map { |src| ['◷', pf_rule_text(src.rule, res.name), src.permission_set] }.presence || [['✓', t('.no_rules'), nil]]
+                       else [['–', t('.records_none'), nil]]
+                       end %>
+  <%= render 'why_item', key: "#{res.name}.records", title: t('.records_title', resource: plural),
+             badge: content_tag(:span, res.records == :all ? t('permission_forge.ui.view_all') : t('permission_forge.ui.rules_count', count: res.rules.size), class: 'pf-pill'),
+             reasons: records_reasons,
+             note: res.records == :rules ? t('.note_rules') : nil %>
+
+  <% res.fields.each do |field| %>
+    <% field_label = res.name.safe_constantize&.human_attribute_name(field.name) || field.name.humanize %>
+    <% reasons = field.granted_by.map { |ps| ['✓', t('.field_from', set: ps.name), ps] } %>
+    <% reasons += field.blocked_by.map { |ps| ['⊘', t('.field_muted', set: ps.name), ps] } %>
+    <% reasons << ['⚠', t('.field_unconfigured', behaviour: t("permission_forge.ui.unconfigured.#{PermissionForge.configuration.unconfigured_field_strategy}", default: t('permission_forge.ui.unconfigured.block'))), nil] if field.unconfigured %>
+    <% reasons << ['–', t('.field_capped'), nil] if field.capped %>
+    <% reasons << ['◇', t('.field_virtual'), nil] if field.implicit %>
+    <% reasons << ['↳', t('.field_variant', base: field.variant_of), nil] if field.variant_of %>
+    <% reasons << ['–', t('.field_none'), nil] if reasons.empty? %>
+    <%= render 'why_item', key: "#{res.name}.field.#{field.name}", title: "#{pf_resource_label(res.name)} › #{field_label}",
+               badge: pf_level_badge(field.level, strategy: (field.mask_strategy if field.level == 'masked'), sample_for: (field.name if field.level == 'masked')),
+               reasons: reasons,
+               note: field.blocked_by.any? ? t('.note_muting') : t('.note_fields') %>
+  <% end %>
+
+  <% res.actions.each do |name, outcome| %>
+    <%= render 'why_item', key: "#{res.name}.action.#{name}", title: "#{name.humanize} · #{plural}",
+               badge: pf_state_cell(outcome.state, aria: name.humanize),
+               reasons: outcome.granted_by.map { |ps| ['✓', t('.action_granted', set: ps.name), ps] } +
+                        outcome.blocked_by.map { |ps| ['⊘', t('.action_muted', set: ps.name), ps] } +
+                        (outcome.granted_by.empty? ? [['–', t('.action_none'), nil]] : []),
+               note: outcome.blocked? ? t('.note_muting') : t('.note_add_up') %>
+  <% end %>
+<% end %>

@@ -1,0 +1,54 @@
+<% label = pf_person(@person) %>
+<% content_for :pf_title, label.name %>
+<%= pf_breadcrumb([t('permission_forge.nav.people'), permission_forge.people_path], label.name) %>
+
+<div class="pf-page-header">
+  <div class="pf-person-header">
+    <%= pf_avatar(@person, size: 'lg') %>
+    <div class="pf-stack pf-stack--tight">
+      <h1 class="pf-h1"><%= label.name %></h1>
+      <% if label.secondary %><span class="pf-text-2"><%= label.secondary %></span><% end %>
+    </div>
+  </div>
+  <div class="pf-actions">
+    <%= pf_modal_link t('.add_set'), permission_forge.new_assignment_path(user_id: @person.id), kind: 'drawer', class: 'pf-btn pf-btn--primary' %>
+    <details class="pf-menu">
+      <summary class="pf-btn" aria-haspopup="menu"><%= t('.actions') %> ▾</summary>
+      <div class="pf-menu__panel" role="menu" aria-label="<%= t('.actions_label') %>">
+        <%= pf_modal_link permission_forge.new_assignment_path(user_id: @person.id), kind: 'drawer', class: 'pf-menu__item', role: 'menuitem' do %>
+          <span class="pf-menu__title"><%= t('.menu.add.title') %></span>
+          <span class="pf-menu__desc"><%= t('.menu.add.desc') %></span>
+        <% end %>
+        <%= pf_modal_link permission_forge.remove_all_person_path(@person), class: 'pf-menu__item pf-menu__item--danger', role: 'menuitem' do %>
+          <span class="pf-menu__title"><%= t('.menu.remove_all.title') %></span>
+          <span class="pf-menu__desc"><%= t('.menu.remove_all.desc') %></span>
+        <% end %>
+        <%= pf_modal_link permission_forge.consent_person_path(@person), class: 'pf-menu__item', role: 'menuitem' do %>
+          <span class="pf-menu__title"><%= t('.menu.consent.title') %></span>
+          <span class="pf-menu__desc"><%= t('.menu.consent.desc') %></span>
+        <% end %>
+        <%= pf_modal_link permission_forge.erasure_person_path(@person), class: 'pf-menu__item pf-menu__item--danger', role: 'menuitem' do %>
+          <span class="pf-menu__title"><%= t('.menu.erasure.title') %></span>
+          <span class="pf-menu__desc"><%= t('.menu.erasure.desc') %></span>
+        <% end %>
+        <div class="pf-menu__sep" role="separator"></div>
+        <div class="pf-menu__label"><%= t('.menu.troubleshooting') %></div>
+        <%= button_to permission_forge.refresh_cache_person_path(@person), method: :post, params: { tab: @tab },
+                      class: 'pf-menu__item', form_class: 'pf-inline-form', role: 'menuitem' do %>
+          <span class="pf-menu__title"><%= t('.menu.refresh.title') %></span>
+          <span class="pf-menu__desc"><%= t('.menu.refresh.desc') %></span>
+        <% end %>
+      </div>
+    </details>
+  </div>
+</div>
+
+<nav class="pf-tabs" role="tablist" aria-label="<%= t('.tabs_label') %>">
+  <%= pf_tab t('.tabs.access'), permission_forge.person_path(@person), selected: @tab == 'access', count: @assignments.size %>
+  <%= pf_tab t('.tabs.effective'), permission_forge.person_path(@person, tab: 'effective'), selected: @tab == 'effective' %>
+  <%= pf_tab t('.tabs.audit'), permission_forge.person_path(@person, tab: 'audit'), selected: @tab == 'audit' %>
+</nav>
+
+<div role="tabpanel">
+  <%= render "#{@tab}_tab" %>
+</div>

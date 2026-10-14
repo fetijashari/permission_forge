@@ -1,0 +1,186 @@
+<% d = @detail %>
+<% set = d.permission_set %>
+<% resource = d.resource %>
+<% field = d.field %>
+<% row = d.row %>
+<% locked = d.locked? %>
+<% res_label = pf_resource_label(resource) %>
+<% resource_path = permission_forge.permission_set_resource_path(set, resource.name) %>
+<% content_for :pf_title, "#{d.label} · #{res_label}" %>
+<%= form_with url: permission_forge.permission_set_resource_field_path(set, resource.name, d.key), method: :patch, scope: :field do |f| %>
+  <input type="hidden" name="return_to" value="<%= params[:return_to].presence || resource_path %>">
+  <%# The form's default button. Without it, Enter in a text input submits through the first submit
+      button in the drawer — "Apply recommendation" or "Explain" — instead of saving.
+      Out of sight but rendered, not `hidden`: Safari before 16.4 skips a display:none button
+      when it picks the default button (webkit.org/b/247545) and would apply the recommendation. %>
+  <% unless locked %><button type="submit" class="pf-sr-only" tabindex="-1" aria-hidden="true"><%= t('.save') %></button><% end %>
+  <% footer = capture do %>
+    <span class="pf-sheet__footer-note"><%= t('.impact', people: pf_people_text(d.people_count)) %></span>
+    <%= link_to t('permission_forge.ui.close'), resource_path, class: 'pf-btn', data: { pf_close: true } %>
+    <% unless locked %><button type="submit" class="pf-btn pf-btn--primary"><%= t('.save') %></button><% end %>
+  <% end %>
+  <% after = capture do %>
+    <span class="pf-row pf-row--tight">
+      <code class="pf-mono-key"><%= d.key %></code>
+      <%= pf_badge(t('permission_forge.ui.badges.virtual')) if d.virtual? %>
+      <%= pf_badge(t('permission_forge.ui.badges.sensitive'), variant: :sensitive) if row.sensitive? %>
+      <%= pf_badge(t('permission_forge.ui.badges.column_missing'), variant: :column_missing) if row.missing %>
+    </span>
+  <% end %>
+  <%= pf_sheet_frame({ title: d.label, subtitle: "#{set.name} › #{resource.name}", after_title: after,
+                       close_path: resource_path, footer: footer,
+                       breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
+                                                 [set.name, permission_forge.permission_set_path(set)], [res_label, resource_path], d.label) }) do %>
+    <% if locked %>
+      <div class="pf-banner" role="note"><span class="pf-banner__glyph" aria-hidden="true"><%= pf_lock_icon %></span>
+        <div class="pf-banner__body"><span><%= t('permission_forge.ui.locked.title') %></span></div></div>
+    <% end %>
+    <% if d.muting? %>
+      <div class="pf-banner pf-banner--muting" role="note"><span class="pf-banner__glyph" aria-hidden="true">⊘</span>
+        <div class="pf-banner__body"><span><%= t('.muting_note') %></span></div></div>
+    <% end %>
+
+    <%# 2. Access level %>
+    <section class="pf-stack" aria-labelledby="pf-fd-level" data-pf-mask-scope>
+      <%= pf_section_heading(t('.access_level'), id: 'pf-fd-level') %>
+      <%= render 'permission_forge/shared/level_control', name: 'field[level]', checked: d.level, muting: d.muting?, large: true,
+                 aria: t('.access_level'), locked: locked, edit_disabled: d.edit_disabled?,
+                 id_prefix: 'pf-fd-lv', resource_label: res_label %>
+      <%# No setting in force (none, or one that is turned off): say what applies right now. %>
+      <% if (note = d.unconfigured_note) %>
+        <% behaviour = t("permission_forge.ui.unconfigured.#{d.unconfigured_behaviour}", default: t('permission_forge.ui.unconfigured.block')) %>
+        <p class="pf-fs-13 pf-text-warn">
+          <%= t(".#{note}", set: set.name, behaviour: behaviour) %>
+          <%= pf_setting_link(d.unconfigured_setting) %>
+        </p>
+      <% end %>
+
+      <div class="pf-panel pf-panel--mask pf-stack" data-pf-show-when="field[level]=masked,mask">
+        <label class="pf-label" for="pf-fd-strategy"><%= t('.mask_strategy') %></label>
+        <select id="pf-fd-strategy" name="field[mask_strategy]" class="pf-select pf-select--auto" data-pf-mask-select <%= 'disabled' if locked %>>
+          <% pf_mask_strategies.each do |s| %>
+            <option value="<%= s %>" <%= 'selected' if s == d.strategy %>><%= pf_mask_strategy_label(s) %><%= " #{t('.custom')}" if pf_custom_mask_strategy?(s) %></option>
+          <% end %>
+        </select>
+        <% pf_mask_strategies.each do |s| %>
+          <p class="pf-fs-13 pf-mono" data-pf-mask-preview="<%= s %>" <%= 'hidden' unless s == d.strategy %>>
+            <%= pf_mask_sample(d.key) %> → <span class="pf-text-mask"><%= pf_mask_preview(d.key, s) %></span>
+          </p>
+        <% end %>
+        <%= pf_setting_link('custom_mask_strategies', t('.custom_link')) %>
+      </div>
+
+      <% if d.recommendation_banner? %>
+        <div class="pf-banner pf-banner--warn">
+          <div class="pf-banner__body">
+            <span>⚠ <%= t('.sensitive', pattern: row.match.pattern, strategy: pf_mask_strategy_label(row.match.strategy)) %></span>
+          </div>
+          <% case d.recommendation %>
+          <% when :applied %>
+            <span class="pf-fs-13 pf-text-grant">✓ <%= t('.applied') %></span>
+          <% when :apply %>
+            <button type="submit" formaction="<%= permission_forge.apply_recommendation_permission_set_resource_field_path(set, resource.name, d.key) %>"
+                    formmethod="post" name="_method" value="post" class="pf-btn pf-btn--primary pf-btn--xs"><%= t('.apply_recommendation') %></button>
+          <% end %>
+        </div>
+      <% end %>
+
+      <% if d.variants.any? %>
+        <p class="pf-fs-13 pf-text-2">
+          <%= d.muting? ? t('.variants_muting') : t('.variants') %>
+          <% d.variants.each do |v| %><code class="pf-mono-key"><%= v %></code> <% end %>
+          <%= pf_setting_link('field_variant_mappings') %>
+        </p>
+      <% end %>
+      <% if d.virtual? %>
+        <% extra_method = content_tag(:code, d.extra_fields_method) %>
+        <% if d.declared? %>
+          <p class="pf-fs-13 pf-text-2"><%= t('.virtual_html', method: extra_method) %> <%= pf_setting_link('extra_fields_method') %></p>
+        <% else %>
+          <p class="pf-fs-13 pf-text-2"><%= t('.virtual_discovered_html', method: extra_method) %> <%= pf_setting_link('virtual_field_discovery') %></p>
+        <% end %>
+        <p class="pf-fs-13 pf-text-2">
+          <%= d.model_masks_virtual? ? t('.virtual_model_masking_on') : t('.virtual_model_masking_off') %>
+          <%= pf_setting_link('mask_virtual_attributes') %>
+        </p>
+      <% end %>
+    </section>
+
+    <%# 3. Details %>
+    <section class="pf-stack" aria-labelledby="pf-fd-details">
+      <%= pf_section_heading(t('.details'), id: 'pf-fd-details') %>
+      <div class="pf-field">
+        <span class="pf-label"><%= t('.column') %></span>
+        <code class="pf-mono"><%= d.key %></code>
+      </div>
+      <div class="pf-field">
+        <label class="pf-label" for="pf-fd-label"><%= t('.label') %></label>
+        <input id="pf-fd-label" class="pf-input" type="text" name="field[label]" value="<%= field&.label %>" placeholder="<%= d.label %>" <%= 'readonly' if locked %>>
+      </div>
+      <div class="pf-field">
+        <label class="pf-label" for="pf-fd-desc"><%= t('.description') %></label>
+        <textarea id="pf-fd-desc" class="pf-textarea" name="field[description]" rows="2" <%= 'readonly' if locked %>><%= field&.description %></textarea>
+      </div>
+      <% if field %>
+        <label class="pf-switch pf-switch--bare">
+          <input type="hidden" name="field[is_active]" value="0">
+          <input type="checkbox" role="switch" name="field[is_active]" value="1" <%= 'checked' if field.is_active %> <%= 'disabled' if locked %>>
+          <span class="pf-switch__track" aria-hidden="true"></span>
+          <span class="pf-switch__on"><%= t('permission_forge.shared.active') %></span>
+          <span class="pf-switch__off"><%= t('permission_forge.ui.badges.off') %></span>
+        </label>
+      <% end %>
+      <% unless locked %><%= render 'permission_forge/shared/reason_field', id: 'pf-field-reason', value: params[:reason] %><% end %>
+    </section>
+
+    <%# 4. Used by rules %>
+    <section class="pf-stack" aria-labelledby="pf-fd-rules">
+      <%= pf_section_heading(t('.used_by_rules'), id: 'pf-fd-rules') %>
+      <% if d.rules.empty? %>
+        <p class="pf-fs-13 pf-text-3"><%= t('.no_rules') %></p>
+      <% else %>
+        <% d.rules.each do |rule| %>
+          <%= link_to permission_forge.edit_permission_set_resource_rule_path(set, resource.name, rule), class: 'pf-panel pf-stack pf-stack--tight' do %>
+            <b><%= rule.name %></b><%= pf_rule_sentence(rule, resource.name) %>
+          <% end %>
+        <% end %>
+      <% end %>
+    </section>
+
+    <%# 5. Across all Permission Sets %>
+    <section class="pf-stack" aria-labelledby="pf-fd-across">
+      <%= pf_section_heading(t('.across'), id: 'pf-fd-across') %>
+      <%= render 'permission_forge/shared/across_sets', rows: d.across, key: d.key, current_set: set %>
+    </section>
+
+    <%# 6. Explain for a person %>
+    <section class="pf-stack" aria-labelledby="pf-fd-explain">
+      <%= pf_section_heading(t('.explain'), id: 'pf-fd-explain') %>
+      <% if d.explain_people.empty? %>
+        <p class="pf-fs-13 pf-text-3"><%= t('.explain_nobody') %></p>
+      <% else %>
+        <div class="pf-row">
+          <label class="pf-sr-only" for="pf-fd-explain-user"><%= t('.explain') %></label>
+          <select id="pf-fd-explain-user" name="explain_user_id" class="pf-select pf-select--sm pf-select--auto" data-pf-untracked>
+            <option value=""><%= t('.pick_person') %></option>
+            <% d.explain_people.each do |u| %>
+              <option value="<%= u.id %>" <%= 'selected' if d.explain_selected?(u) %>><%= pf_person_name(u) %></option>
+            <% end %>
+          </select>
+          <button type="submit" class="pf-btn pf-btn--xs" formmethod="get"
+                  formaction="<%= permission_forge.permission_set_resource_field_path(set, resource.name, d.key) %>"><%= t('.explain_button') %></button>
+        </div>
+        <% if d.explain %>
+          <%= render 'explain', explain: d.explain, resource: resource %>
+        <% end %>
+      <% end %>
+    </section>
+
+    <% if field %>
+      <%= pf_tech_details(field, extras: { read_access: field.read_access, edit_access: field.edit_access, mask_access: field.mask_access }) do %>
+        <% if d.muting? %><span class="pf-fs-12 pf-text-3"><%= t('.flags_muting_note') %></span><% end %>
+      <% end %>
+      <%= pf_audit_footer(field) %>
+    <% end %>
+  <% end %>
+<% end %>

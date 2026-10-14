@@ -1,0 +1,49 @@
+<% muting = set.is_muting %>
+<% flags = PermissionForge::Admin::EffectiveAccess::CRUD %>
+<% requires = { 'edit_access' => 'read_access', 'delete_access' => 'read_access' } %>
+<div class="pf-card pf-scroll-x">
+  <div class="pf-matrix" role="table" aria-label="<%= t('.label') %>">
+    <div class="pf-matrix__head" role="row">
+      <span role="columnheader"><%= t('permission_forge.ui.resource') %></span>
+      <% flags.each do |flag| %><span role="columnheader"><%= t("permission_forge.ui.flags_short.#{flag}") %></span><% end %>
+      <span role="columnheader"><%= t('permission_forge.ui.records') %></span>
+      <span role="columnheader"><span class="pf-sr-only"><%= t('.open') %></span></span>
+    </div>
+    <% @resources.each do |resource| %>
+      <% res_locked = locked || pf_locked_record?(resource) %>
+      <% path = permission_forge.permission_set_resource_path(set, resource.name) %>
+      <% label = pf_resource_label(resource) %>
+      <% plural = pf_resource_plural(resource.name) %>
+      <% base = "pf[resources][#{resource.id}]" %>
+      <div class="pf-matrix__row" role="row" data-pf-crud="r<%= resource.id %>">
+        <span role="rowheader" class="pf-matrix__resource">
+          <span class="pf-row pf-row--tight">
+            <%= link_to label, path %>
+            <%= pf_off_badge unless resource.is_active %>
+            <%= pf_lock_badge if pf_locked_record?(resource) %>
+          </span>
+          <span class="pf-fs-12 pf-text-3"><%= render 'resource_summary', resource: resource, muting: muting %></span>
+        </span>
+        <% flags.each do |flag| %>
+          <span role="cell">
+            <%= render 'permission_forge/shared/crud_cell', name: "#{base}[#{flag}]", flag: flag, checked: resource.public_send(flag),
+                       muting: muting, locked: res_locked, requires: requires[flag], form: 'pf-set-form',
+                       aria: "#{t("permission_forge.ui.flags_short.#{flag}")} #{plural}" %>
+          </span>
+        <% end %>
+        <span role="cell" class="pf-stack pf-stack--tight pf-fs-13">
+          <%= render 'records_summary', resource: resource, muting: muting %>
+        </span>
+        <span role="cell"><%= link_to '›', path, class: 'pf-matrix__chev', 'aria-label': t('.open_resource', resource: label) %></span>
+      </div>
+    <% end %>
+  </div>
+  <% if @resources.empty? %>
+    <p class="pf-empty"><%= t('.empty') %></p>
+  <% end %>
+  <% unless locked %>
+    <div class="pf-card__footer">
+      <%= pf_modal_link "+ #{t('.add')}", permission_forge.new_permission_set_resource_path(set), class: 'pf-btn pf-btn--sm' %>
+    </div>
+  <% end %>
+</div>

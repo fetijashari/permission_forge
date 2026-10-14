@@ -1,0 +1,15 @@
+<%# Phone layout: the sidebar collapses into a disclosure menu. %>
+<details class="pf-topbar">
+  <summary>
+    <img class="pf-brand__logo pf-brand__logo--light" src="<%= pf_asset_url('logo-light.svg') %>" alt="<%= t('permission_forge.shared.sidebar.brand') %>" width="122" height="20">
+    <img class="pf-brand__logo pf-brand__logo--dark" src="<%= pf_asset_url('logo-dark.svg') %>" alt="<%= t('permission_forge.shared.sidebar.brand') %>" width="122" height="20">
+    <span class="pf-btn pf-btn--xs"><%= t('.menu') %></span>
+  </summary>
+  <div class="pf-topbar__menu">
+    <%= link_to pf_back_to_app_url, class: 'pf-back-link' do %>
+      <span aria-hidden="true">←</span> <span><%= pf_back_to_app_label %></span>
+    <% end %>
+    <%= render 'permission_forge/shared/nav' %>
+    <%= render 'permission_forge/shared/preferences' %>
+  </div>
+</details>

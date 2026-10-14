@@ -1,0 +1,23 @@
+<% items = @attention.unenforced_rules %>
+<% mode = @attention.auto_query_scoping? ? 'join_rules' : 'scoping_off' %>
+<section class="pf-card" aria-labelledby="pf-card-rules">
+  <div class="pf-card__header">
+    <div class="pf-stack pf-stack--tight pf-grow">
+      <div class="pf-row">
+        <h2 class="pf-h2" id="pf-card-rules"><%= t('.title') %></h2>
+        <span class="pf-count-pill pf-count-pill--warn"><%= items.size %></span>
+      </div>
+      <p class="pf-card__desc"><%= t(".#{mode}") %> <%= pf_setting_link('auto_query_scoping') %></p>
+    </div>
+  </div>
+  <% items.each do |item| %>
+    <div class="pf-card__row">
+      <div class="pf-stack pf-stack--tight pf-grow">
+        <strong><%= t('.rules', count: item.rule_count, resource: pf_resource_label(item.resource), name: item.permission_set.name) %></strong>
+        <span class="pf-fs-13 pf-text-2"><%= t('.people', count: item.people_count) %></span>
+      </div>
+      <%= link_to t('.open'), permission_forge.permission_set_resource_path(item.permission_set, item.resource.name, tab: 'rules'),
+                  class: 'pf-btn pf-btn--sm' %>
+    </div>
+  <% end %>
+</section>

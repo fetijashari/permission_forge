@@ -1,0 +1,2115 @@
+---
+en:
+  permission_forge:
+    api:
+      errors:
+        action_not_authorized: Action not authorized
+        assignment_not_authorized: Assignment not authorized
+        field_generation_failed: Could not generate fields for this resource
+        forbidden: Forbidden
+        not_editable: This record is not editable
+        not_found: Record not found
+        tenant_required: No tenant is set for this request. The admin API serves one
+          tenant at a time.
+    assignments:
+      confirm_destroy:
+        body: "%{name} will lose access to %{resources}, unless another Permission
+          Set grants it. This applies immediately."
+        body_muting: "%{name} will no longer be restricted by %{set}. Their other
+          Permission Sets apply in full. This applies immediately."
+        body_nothing: This set doesn't give %{name} any resources, so nothing they
+          can see changes.
+        crumb: Remove access
+        title: Remove “%{set}” from %{name}?
+      new:
+        already: Already has it
+        applies_now: Assigning applies immediately.
+        assign: Assign
+        assign_many:
+          one: Assign %{count} set
+          other: Assign %{count} sets
+        change: Change
+        expires: Expires
+        filter_sets: Filter Permission Sets
+        forever: with no end date
+        muting_notice: "⊘ Muting. %{sets} takes access away from %{name}, whatever
+          their other sets allow."
+        no_sets: No Permission Sets match.
+        person: Person
+        summary: "%{name} gets %{sets}, %{until}. This applies immediately."
+        this_person: this person
+        title: Assign a Permission Set
+        title_person: Assign a Permission Set to %{name}
+        title_set: Assign “%{set}”
+        until: until %{date}
+      person_options:
+        capped: Showing %{shown} of %{total} matches. Keep typing to narrow it down.
+        label: People
+        no_match: No one matches “%{query}”. Check the spelling, or search by email.
+        nobody: No people to show.
+    audit_events:
+      index:
+        empty_filtered: No events match these filters.
+        export: Export
+        export_title: Download every event that matches these filters as %{kind}
+        filters:
+          actor_id: Actor (person id)
+          actor_type: Kind of actor
+          any_actor_type: Any kind
+          any_category: Any category
+          any_event: Any event
+          any_set: Any Permission Set
+          apply: Apply filters
+          category: Category
+          clear: Clear filters
+          correlation_id: Action (correlation id)
+          deleted_set: 'Deleted Permission Set #%{id}'
+          event: Event
+          from: From
+          id_placeholder: Id
+          label: Filter the audit log
+          permission_set: Permission Set
+          record_id: Record id
+          record_type: Record type
+          record_uuid: Record uuid
+          subject_user_id: Person (id)
+          time_zone: Dates are days in %{zone}.
+          to: To
+          views: Include views of the log (audit.viewed)
+        holdings: Who holds what (CSV)
+        holdings_title: Every assignment as it stands, with who granted it, when it
+          ends and its last review
+        invalid:
+          blank: "%{field} is needed for this filter."
+          invalid: "%{field}: this value is not valid."
+          invalid_value: "%{field}: “%{value}” is not valid."
+          title: Check the filters
+        newest_first: Newest first
+        results:
+          one: "%{count} event"
+          other: "%{count} events"
+        subtitle: Changes to permissions, assignments and reviews recorded while the
+          log is on, and who viewed or exported it. These pages never edit or delete
+          an event (erasure clears name labels only).
+        title: Audit log
+        views_hidden: Views of the audit log are hidden here, so they do not bury
+          the changes. Exports always include them.
+        views_show: Include views of the log
+      show:
+        actor: Actor
+        after: After
+        all_by_actor: All events by this actor
+        all_for_person: All events about this person
+        all_for_record: All events of this record
+        all_for_set: All events of this Permission Set
+        all_in_action: All events of this action
+        attribute: Attribute
+        before: Before
+        changes: Before and after
+        changes_desc:
+          one: "%{count} attribute changed"
+          other: "%{count} attributes changed"
+        correlation: Action
+        data: More details
+        id: id %{id}
+        ip: IP address
+        key: Key
+        no_data: No further details were recorded.
+        no_reason: No reason given
+        open_person: Open person
+        permission_set: Permission Set
+        person: Person
+        reason: Reason
+        record: Record
+        request_id: Request id
+        snapshot: Snapshot
+        snapshot_desc: The record as it was created.
+        snapshot_destroyed: The record as it was when it was removed.
+        source: Where
+        title: Audit event %{event}
+        uuid: Event id
+        value: Value
+        what: What
+        who: Who, where and why
+    audit_log:
+      actor_named:
+        api: "%{name} (API)"
+        basic_auth: "%{name} (password prompt)"
+      actor_types:
+        api: API client
+        basic_auth: Password prompt
+        system: System
+        unknown: Unknown
+        user: Person
+      boolean:
+        'false': 'No'
+        'true': 'Yes'
+      categories:
+        access: Access
+        admin: Admin
+        change: Change
+        system: System
+      deleted_group: 'Permission Set Group #%{id}'
+      deleted_set: 'Permission Set #%{id}'
+      details: Details
+      empty: No events recorded yet.
+      empty_text: "(empty text)"
+      filter_actor: Show every event by this actor
+      filter_event: Show every %{event} event
+      first_page: First
+      last_page: Last
+      list_label: Audit events, newest first
+      no_value: none
+      'off':
+        disabled: Recording is switched off (audit_events = false). Changes made now
+          are not in the log.
+        failing: audit_events is true but the audit table does not exist, so every
+          permission change fails. Run bin/rails generate permission_forge:upgrade
+          and migrate.
+        missing_table: The audit table does not exist yet, so nothing is recorded.
+          Run bin/rails generate permission_forge:upgrade and migrate.
+        title: The audit log is not recording
+      page_of: Page %{page} of %{pages}
+      pages_label: Pages
+      person_id: 'Person #%{id}'
+      reason_inline: 'Reason: %{reason}'
+      refused:
+        body: Reading the audit log is limited by the audit_log_authorization setting,
+          and this request was not allowed. The refusal is recorded in the audit log
+          while recording is on.
+        title: You can't read the audit log
+      sentence_variants:
+        assignment_revoked_expired: "%{actor} removed %{set} from %{person} after
+          it expired on %{date}."
+        field_access_limited: "%{actor} read %{record} with these fields hidden or
+          masked: %{fields}."
+      sentences:
+        access:
+          denied: "%{actor} was denied access to %{record}."
+        action:
+          denied: "%{actor} was denied an action on %{record}."
+        admin:
+          auth_failed: A request by %{actor} to the admin screens was refused.
+          effective_access_viewed: "%{actor} looked at the effective access of %{person}."
+          lock_refused: "%{actor} tried to change the locked record %{record}."
+        api:
+          auth_failed: An API request by %{actor} was refused.
+        assignment:
+          changed: "%{actor} changed %{person}'s assignment to %{set}."
+          granted: "%{actor} gave %{person} the Permission Set %{set}."
+          reviewed: "%{actor} reviewed %{person}'s access to %{set}."
+          revoked: "%{actor} removed %{set} from %{person}."
+        audit:
+          exported: "%{actor} exported audit records."
+          purged: "%{actor} deleted audit events older than the retention period."
+          settings_observed: The audit settings in force were recorded.
+          viewed: "%{actor} viewed audit records."
+        cache:
+          cleared: "%{actor} cleared the cached permissions of every user."
+        cleanup:
+          expired_assignments: "%{actor} removed expired assignments."
+        consent:
+          withdrawn: "%{actor} recorded that %{person} withdrew consent; the access
+            that needed it was removed."
+        erasure:
+          performed: "%{actor} erased the permission data of %{person}."
+        fallback: "%{actor}: %{event}"
+        field:
+          access: "%{actor} read %{record}."
+          sensitive_acknowledged: "%{actor} confirmed that the field %{record} in
+            %{set} is meant to be readable unmasked."
+        group_membership:
+          added: "%{actor} added %{person} to %{group}."
+          changed: "%{actor} changed %{person}'s membership of %{group}."
+          removed: "%{actor} removed %{person} from %{group}."
+        params:
+          filtered: Fields of %{model} that %{actor} may not edit were dropped from
+            a request.
+        permission_set:
+          cloned: "%{actor} created the Permission Set %{record} as a copy."
+          created: "%{actor} created the Permission Set %{record}."
+          destroyed: "%{actor} deleted the Permission Set %{record}."
+          updated: "%{actor} changed the Permission Set %{record}."
+        permission_set_group:
+          cloned: "%{actor} created the Permission Set Group %{record} as a copy."
+          created: "%{actor} created the Permission Set Group %{record}."
+          destroyed: "%{actor} deleted the Permission Set Group %{record}."
+          updated: "%{actor} changed the Permission Set Group %{record}."
+        permission_set_rule:
+          created: "%{actor} added the record rule %{record} in %{set}."
+          destroyed: "%{actor} removed the record rule %{record} from %{set}."
+          updated: "%{actor} changed the record rule %{record} in %{set}."
+        permissions:
+          invalidated: The cached permissions of %{person} were cleared.
+          rebuilt: The permissions of %{person} were rebuilt.
+        query:
+          unscoped: A query on %{model} for %{actor} ran without record rules.
+        report:
+          generated: "%{actor} generated a report."
+        resource:
+          created: "%{actor} added the resource %{record} to %{set}."
+          destroyed: "%{actor} removed the resource %{record} from %{set}."
+          updated: "%{actor} changed the resource %{record} in %{set}."
+        resource_action:
+          created: "%{actor} added the action %{record} in %{set}."
+          destroyed: "%{actor} removed the action %{record} from %{set}."
+          updated: "%{actor} changed the action %{record} in %{set}."
+        resource_field:
+          created: "%{actor} added the field %{record} in %{set}."
+          destroyed: "%{actor} removed the field %{record} from %{set}."
+          updated: "%{actor} changed the field %{record} in %{set}."
+        rule:
+          bypassed: Record rules on %{model} were skipped for %{actor}.
+        write:
+          masked_skipped: A masked value of %{model} was not written back for %{actor}.
+      showing:
+        one: "%{from}–%{to} of %{count} event"
+        other: "%{from}–%{to} of %{count} events"
+      sources:
+        admin_ui: Admin screens
+        api: API
+        console: Console
+        job: Background job
+        rake: Rake task
+        runtime: The app (runtime)
+        service: Code
+      unknown: unknown
+      unknown_group: a Permission Set Group
+    bulk_assignments:
+      confirm_revoke:
+        body: They lose what this set gives them, unless another set grants it. This
+          applies immediately.
+        confirm:
+          one: Revoke from %{count} person
+          other: Revoke from %{count} people
+        crumb: Revoke
+        none: Select at least one person first.
+        title:
+          one: Revoke “%{set}” from %{count} person?
+          other: Revoke “%{set}” from %{count} people?
+      new:
+        already:
+          one: "%{count} already has it"
+          other: "%{count} already have it"
+        assign: Assign
+        assign_count:
+          one: Assign to %{count} person
+          other: Assign to %{count} people
+        check: Check names
+        crumb: Bulk assign
+        errors:
+          nobody: Nobody to assign. Paste emails or names, or pick people.
+        not_found:
+          one: "%{count} not found"
+          other: "%{count} not found"
+        paste: Paste emails or names
+        paste_hint: One per line, or separated by commas. Only exact matches are used.
+        paste_placeholder: |-
+          ana@acme.com
+          Mark Peterson
+        pick: Or pick people
+        title: Bulk assign “%{set}”
+        will_assign:
+          one: "%{count} will be assigned"
+          other: "%{count} will be assigned"
+    errors:
+      admin:
+        action_format: Use lowercase letters, numbers and underscores, starting with
+          a letter (for example export).
+        action_taken: This resource already has an action with that name.
+        expiry_missing: Pick an end date, or choose “No expiry”.
+        expiry_not_future: The end date must be after today.
+        flag: Session flags can only contain letters, numbers, dots, colons, dashes
+          and underscores.
+        group_blank: Give the group a name.
+        ip: 'Line %{line}: “%{ip}” isn''t a valid IP address or CIDR range.'
+        person: Choose a person first.
+        resource_model: Pick a model from the list.
+        resource_taken: This model is already in this Permission Set.
+        set_name_blank: Give the Permission Set a name.
+        set_name_taken: A Permission Set with this name already exists.
+        sets: Choose at least one Permission Set.
+      no_authenticated_user: No authenticated user
+      rls_requires_postgres: PermissionForge RLS requires PostgreSQL — the current
+        database adapter does not support row-level security policies.
+      tenant_required: 'No tenant is set for this request. These screens show and
+        change one tenant''s permissions at a time: set the tenant in the controller
+        they inherit from (base_controller_class), or allow it with config.admin_tenantless_access
+        = :allow.'
+      unscoped_query: Unscoped query on protected table '%{table}'. Use permission_scoped
+        / find_by, enable auto_query_scoping, or wrap intentional access in PermissionForge.without_permission_scope
+        { }.
+    field_lookups:
+      show:
+        field: Field
+        hint: Only sets that include this resource are listed. Select a row to open
+          the field in that set.
+        intro: Pick a resource and a field to see its access level in every Permission
+          Set.
+        no_resources: No Permission Set has any resources yet.
+        pick_field: Pick a field…
+        pick_resource: Pick a resource…
+        who_can_see: Who can see %{field}?
+    flash:
+      actions:
+        created: Added the action “%{action}”.
+        deleted: Removed the action “%{action}”.
+        updated: Saved “%{action}”. It applies immediately.
+      assignment_not_authorized: You are not allowed to make this assignment change.
+        Nothing was changed.
+      assignments:
+        assigned: "%{name} now has %{sets}."
+        assigned_until: "%{name} now has %{sets}, until %{date}."
+        end_changed: "%{name}'s access to %{set}: %{when}."
+        kept: Marked %{name}'s access to %{set} as reviewed today.
+        removed: Removed %{set} from %{name}.
+        restored: Restored %{set} for %{name}.
+        undone: Undone. The assignment was removed.
+      bulk_assignments:
+        assigned:
+          one: Assigned %{set} to %{count} person.
+          other: Assigned %{set} to %{count} people.
+        revoked:
+          one: Revoked %{set} from %{count} person.
+          other: Revoked %{set} from %{count} people.
+      fields:
+        acknowledged: Got it. “%{field}” won't be flagged in the privacy audit again.
+        recommendation_applied: Applied the recommended mask to “%{field}”.
+      groups:
+        created: Created the group “%{name}”.
+        deleted: Deleted the group “%{name}”. Its Permission Sets are now not in a
+          group.
+        duplicated: Duplicated “%{name}” with all its Permission Sets.
+        member_added: "%{name} added as a member. This does not give them any Permission
+          Sets."
+        set_added: Moved “%{set}” into this group.
+        set_removed: Removed “%{set}” from this group.
+        updated: Group saved. No one's access changed.
+      locked_widening: 'This Permission Set is locked: access can be removed or shortened,
+        not given or extended.'
+      locked_widening_muting: 'This Muting Permission Set is locked: holders can be
+        added or kept longer, not removed or given an earlier end date.'
+      maintenance:
+        cleaned:
+          one: Removed %{count} expired assignment.
+          other: Removed %{count} expired assignments.
+      not_editable: This record is not editable.
+      people:
+        cache_refresh_failed: Could not refresh %{name}'s cached permissions. The
+          cache store did not confirm it, so the old permissions may stay in use until
+          the cache lifetime ends. Try again.
+        cache_refreshed: Refreshed %{name}'s cached permissions.
+        consent_withdrawn:
+          one: Removed %{count} Permission Set that needs %{flag}.
+          other: Removed %{count} Permission Sets that need %{flag}.
+        consent_withdrawn_cache_kept:
+          one: Removed %{count} Permission Set that needs %{flag}, but the cache store
+            did not confirm that the cached permissions were cleared. The old permissions
+            may stay in use until the cache lifetime ends.
+          other: Removed %{count} Permission Sets that need %{flag}, but the cache
+            store did not confirm that the cached permissions were cleared. The old
+            permissions may stay in use until the cache lifetime ends.
+        erased: Erased %{name}'s assignments and cached permissions.
+        erased_cache_kept: Erased %{name}'s assignments, but the cache store did not
+          confirm that their cached permissions were cleared. The old permissions
+          may stay in use until the cache lifetime ends.
+        removed_all:
+          one: Removed %{count} assignment. %{name} has no access through PermissionForge
+            now.
+          other: Removed %{count} assignments. %{name} has no access through PermissionForge
+            now.
+        removed_all_cache_kept:
+          one: Removed %{count} assignment, but the cache store did not confirm that
+            %{name}'s cached permissions were cleared. The old permissions may stay
+            in use until the cache lifetime ends.
+          other: Removed %{count} assignments, but the cache store did not confirm
+            that %{name}'s cached permissions were cleared. The old permissions may
+            stay in use until the cache lifetime ends.
+      permission_set_group_users:
+        add_failed: Could not add user.
+        removed: User removed from group.
+        user_not_found: User not found.
+      permission_sets:
+        conditions_saved: Activation conditions saved. They apply immediately.
+        created: Created “%{name}”. Nobody has it yet.
+        deleted: Deleted “%{name}”.
+        duplicated: 'Duplicated “%{name}”: resources, fields, actions and rules were
+          copied. Assignments were not.'
+        duplicated_outside_group: 'Duplicated “%{name}”: resources, fields, actions
+          and rules were copied. Assignments were not. The copy is not in “%{group}”,
+          which is locked.'
+        no_changes: No changes to save.
+        save_failed: 'Nothing was saved: %{errors}'
+        saved:
+          one: Saved %{count} change. It applies to %{people} now.
+          other: Saved %{count} changes. They apply to %{people} now.
+        switched_granting: "“%{name}” now grants access."
+        switched_muting: "“%{name}” is now a Muting Permission Set."
+      resources:
+        added:
+          one: Added %{resource} with %{count} field.
+          other: Added %{resource} with %{count} fields.
+        columns_added:
+          one: Added %{count} column.
+          other: Added %{count} columns.
+        missing_removed:
+          one: Removed %{count} field whose column no longer exists.
+          other: Removed %{count} fields whose columns no longer exist.
+        removed: Removed %{resource} from “%{set}”.
+      rules:
+        created: Added the rule “%{rule}”.
+        deleted: Removed the rule “%{rule}”.
+        turned_off: Turned off “%{rule}”.
+        turned_on: Turned on “%{rule}”.
+        updated: Saved the rule “%{rule}”.
+    home:
+      audit_card:
+        failing: The audit table is missing and audit_events is true, so every permission
+          change fails. Run the upgrade generator and migrate.
+        missing_table: The audit table is missing, so no change is recorded. Run the
+          upgrade generator and migrate.
+        'off': Recording is switched off in the initializer (audit_events = false).
+          No change is recorded.
+        title: The audit log is not recording
+      ending_card:
+        description: Assignments that end in the next 7 days.
+        extend: Extend 30 days
+        title: Access ending this week
+      expired_card:
+        description:
+          one: "%{count} expired assignment no longer gives access. Removing it keeps
+            lists and audits tidy."
+          other: "%{count} expired assignments no longer give access. Removing them
+            keeps lists and audits tidy."
+        dry_run: Dry run · nothing has changed yet
+        item: "%{person} · %{set}"
+        preview: Preview cleanup
+        remove:
+          one: Remove %{count}
+          other: Remove %{count}
+        title: Clean up expired assignments
+      index:
+        all_good:
+          body: No access is ending this week, there are no expired assignments to
+            clean up, every permanent assignment was reviewed in the last %{days}
+            days, and the privacy audit found nothing.
+          title: Nothing needs your attention
+        field_lookup_title: Who can see a field? Pick a resource and a field.
+        first_run:
+          body: PermissionForge decides who can see and change data in this app. Nobody
+            has access through it yet.
+          cta: Create your first Permission Set
+          steps:
+            add:
+              body: Pick models from the app, then choose Read, Create, Edit, Delete
+                and which fields people see.
+              title: Add resources
+            assign:
+              body: Give the set to people, with an end date if the access is temporary.
+              title: Assign it
+            create:
+              body: A bundle of access you assign to people, like “Sales rep”.
+              title: Create a Permission Set
+          title: Set up access in 3 steps
+        lookup: 'Look up a person: what can they access, and why?'
+        people:
+          one: "%{count} person has"
+          other: "%{count} people have"
+        search_placeholder: Look up a person by name or email to see what they can
+          access, and why
+        sets:
+          one: "%{count} active Permission Set"
+          other: "%{count} active Permission Sets"
+        subtitle: "%{things} · %{people} access through %{sets}."
+        things:
+          one: "%{count} thing to review"
+          other: "%{count} things to review"
+        title: Needs attention
+      privacy_card:
+        description: "%{unmasked}, %{unconfigured}."
+        fix: Fix
+        intended: This is intended
+        per_set_note: Each line looks at one Permission Set on its own. A person who
+          also holds another set that configures the field follows that set.
+        show_all: Show all %{count}
+        title: Privacy audit
+        turned_off:
+          one: "%{count} sensitive field has its setting turned off."
+          other: "%{count} sensitive fields have their setting turned off."
+        unconfigured:
+          one: "%{count} sensitive column not configured at all"
+          other: "%{count} sensitive columns not configured at all"
+        unmasked:
+          one: "%{count} sensitive field shown unmasked"
+          other: "%{count} sensitive fields shown unmasked"
+        where: "%{resource} · Readable unmasked in “%{set}” · %{people}"
+        where_turned_off: "%{resource} · Its setting in “%{set}” is turned off, so
+          it passes through unmasked · %{people}"
+        where_turned_off_virtual: "%{resource} · Its setting in “%{set}” is turned
+          off, so it is readable and editable by default (virtual field) · %{people}"
+        where_unconfigured: "%{resource} · Not configured in “%{set}”, so it passes
+          through unmasked · %{people}"
+        where_virtual: "%{resource} · Not configured in “%{set}”, so it is readable
+          and editable by default (virtual field) · %{people}"
+      rules_card:
+        join_rules: Automatic query scoping is on, but these rules follow a relationship,
+          so it skips them. They only apply where the app uses find_by or permission_scoped.
+        open: Open rules
+        people:
+          one: "%{count} person has this set."
+          other: "%{count} people have this set."
+        rules:
+          one: "%{count} rule on %{resource} in “%{name}”"
+          other: "%{count} rules on %{resource} in “%{name}”"
+        scoping_off: Automatic query scoping is off, so these rules only apply where
+          the app uses find_by or permission_scoped. Other queries (where, all, associations)
+          return every record.
+        title: Record rules not applied everywhere
+      stale_card:
+        assigned: Assigned %{date} by %{by}
+        description: Not reviewed in over %{days} days. Confirm these people still
+          need this access.
+        title: Stale assignments
+      tidy_card:
+        inactive_with_people:
+          one: "“%{name}” is turned off, but %{count} person still has it."
+          other: "“%{name}” is turned off, but %{count} people still have it."
+        inactive_with_people_hint: It gives them nothing while it's off. Turn it back
+          on, or remove the assignments.
+        no_people: "“%{name}” has no people."
+        no_people_hint: Assign it, or delete it if it's no longer needed.
+        open: Open set
+        title: Permission Sets to tidy up
+    layouts:
+      application:
+        skip_to_content: Skip to content
+        title: PermissionForge
+    nav:
+      audit_log: Audit log
+      badge_aria:
+        one: "%{count} item needs attention"
+        other: "%{count} items need attention"
+      groups: Permission Set Groups
+      home: Home
+      people: People
+      permission_sets: Permission Sets
+      settings: Settings
+    people:
+      access_tab:
+        assigned: Assigned %{date} by %{by}
+        change_end: Change end date
+        empty: "%{name} can't see anything through PermissionForge right now."
+        groups_html: Also a member of %{groups}. Group membership does not give any
+          Permission Sets.
+        set_off: This set is turned off, so it currently gives nothing.
+      audit_tab:
+        assigned_by: Assigned by %{who} · %{date}
+        created: 'Created: %{value}'
+        disabled: Created-by and edited-by aren't being recorded (audit_trail_enabled
+          is off in Settings).
+        edited: 'Edited: %{value}'
+        events_about: Events about %{name}
+        events_by: Actions by %{name}
+        kind_group: Group membership (no access)
+        kind_muting: Muting Permission Set
+        kind_set: Permission Set
+        made_by: Changes made by %{name}
+        made_by_desc:
+          one: Records %{name} created or last edited, newest first. %{count} record.
+          other: Records %{name} created or last edited, newest first. %{count} records.
+        made_capped: Showing the %{count} most recently edited records of each type.
+          The CSV export lists them all.
+        made_none: "%{name} hasn't created or edited any PermissionForge records."
+        no_assignments: No assignments.
+        received: Access received
+        timeline: "%{name}'s timeline"
+        timeline_desc: Every recorded event that names %{name}, and the changes %{name}
+          made while signed in.
+      confirm_remove_all:
+        body: "%{name} will lose access to %{resources}. This applies immediately."
+        body_no_resources: "%{name} will lose every Permission Set below. This applies
+          immediately."
+        confirm:
+          one: Remove %{count} assignment
+          other: Remove all %{count} assignments
+        crumb: Remove all access
+        kept: "%{sets} stay: a locked Muting Permission Set keeps its holders, because
+          removing them would give access back."
+        nothing: "%{name} has no assignments to remove."
+        title: Remove all access for %{name}?
+      consent_preview:
+        confirm:
+          one: Remove %{count}
+          other: Remove %{count}
+        flag: Consent or session flag
+        intro: Removes %{name} from every Permission Set that needs the flag you pick.
+        no_flags: "%{name} has no Permission Sets that need a consent or session flag."
+        nothing: "%{name} has no Permission Sets that require %{flag}. Nothing would
+          change."
+        preview: Preview
+        title: Withdraw consent
+        would_remove:
+          one: 'Dry run: %{count} Permission Set would be removed. Nothing has changed
+            yet.'
+          other: 'Dry run: %{count} Permission Sets would be removed. Nothing has
+            changed yet.'
+      effective_field_source:
+        and_more:
+          one: " and %{count} more"
+          other: " and %{count} more"
+        from: from %{set}
+        muted_by: Hidden by %{set}
+        none: No set shows it
+        unconfigured: Not configured · %{behaviour}
+        virtual: Virtual field, readable by default
+      effective_tab:
+        conditional: "%{sets} only count while their activation conditions are true.
+          They're included here."
+        fields_visible: "%{visible} of %{total} fields visible"
+        grid_label: Effective access
+        hidden_by_muting: Hidden by muting
+        intro: What %{name} can do right now, with all sets combined. Select any cell
+          to see why.
+        legend: Legend
+        legend_muted: Muted
+        legend_none: Not given
+        why: Why
+        why_empty: Select a cell, field or action to see which Permission Set caused
+          it.
+        why_label: Explanation
+      effective_why:
+        action_granted: "%{set} permits this action."
+        action_muted: "%{set} blocks this action."
+        action_none: No Permission Set permits this action.
+        field_capped: Shown as Read-only because Edit isn't allowed on this resource.
+        field_from: "%{set} shows this field."
+        field_muted: "%{set} hides or masks this field."
+        field_none: No Permission Set shows this field.
+        field_unconfigured: 'No set configures this column: %{behaviour}.'
+        field_variant: Follows the setting of %{base}.
+        field_virtual: Virtual field from the model, readable unless a set configures
+          it.
+        flag_granted: "%{set} gives %{flag}."
+        flag_muted: "%{set} mutes %{flag}."
+        flag_none: No Permission Set gives %{flag}.
+        no_rules: No record rules, so every record is shown.
+        note_add_up: 'Permission Sets add up: one grant is enough.'
+        note_fields: If several sets show a field, the most open setting wins.
+        note_muting: Muting Permission Sets always win over sets that grant access.
+        note_rules: Rules from every set apply together.
+        records_none: Read isn't allowed, so no records are shown.
+        records_title: Which %{resource}
+        view_all_from: "%{set} gives View All: every record, record rules skipped."
+      erasure_preview:
+        assignments:
+          one: "%{count} assignment"
+          other: "%{count} assignments"
+        confirm: Erase permanently
+        counts: "%{assignments} · %{groups} · cached permissions"
+        eyebrow: GDPR Art. 17 · Irreversible
+        groups:
+          one: "%{count} group membership"
+          other: "%{count} group memberships"
+        intro: Deletes this person's assignments and group memberships in this tenant
+          and clears their name from the audit log. Audit events (ids, times, IPs,
+          reasons) are kept.
+        mismatch: The name doesn't match. Nothing was erased.
+        title: Data subject erasure
+        title_for: Erase %{name}'s access data?
+        type_to_confirm_html: Type %{name} to confirm
+        untouched: The person's account in the app is not touched. Created-by and
+          edited-by fields that point to them are kept.
+      index:
+        columns:
+          ends: Access ends
+          person: Person
+          sets: Permission Sets
+        empty_filter: No one in this view.
+        empty_query: No one matches “%{query}”.
+        export_holdings: Who holds what (CSV)
+        filter_label: Filter people
+        filters:
+          all: Everyone
+          ending: Ending within 7 days
+          expired: Expired
+          muting: Has a muting set
+          no_access: No access
+        no_sets: No Permission Sets
+        showing: Showing %{from}–%{to} of %{total}. Search by name or email to narrow
+          it down.
+        subtitle: Everyone in the app, and the Permission Sets assigned to them.
+      show:
+        actions: Actions
+        actions_label: Person actions
+        add_set: "+ Add Permission Set"
+        menu:
+          add:
+            desc: Give more access, with an optional end date.
+            title: Add a Permission Set
+          consent:
+            desc: Remove sets that need a consent or session flag.
+            title: Withdraw consent…
+          erasure:
+            desc: GDPR Art. 17. Deletes assignments and group memberships in this
+              tenant and clears their name from the audit log.
+            title: Data subject erasure…
+          refresh:
+            desc: 'Rarely needed: changes already apply immediately.'
+            title: Refresh cached permissions
+          remove_all:
+            desc: 'Offboarding: removes every assignment.'
+            title: Remove all access
+          troubleshooting: Troubleshooting
+        tabs:
+          access: Access
+          audit: Audit
+          effective: Effective access
+        tabs_label: Person sections
+      why_item:
+        open_set: Open %{set} →
+    permission_set_groups:
+      confirm_destroy:
+        body:
+          one: Its %{count} Permission Set stays and moves to “Not in a group”. No
+            one's access changes.
+          other: Its %{count} Permission Sets stay and move to “Not in a group”. No
+            one's access changes.
+        confirm: Delete group
+        crumb: Delete
+        title: Delete “%{name}”?
+      index:
+        create: Create group
+        empty: No groups yet. Groups organise Permission Sets. Adding someone to a
+          group does not give them its sets.
+        help_term: Permission Set Group
+        help_text: Organises permission sets. Adding someone to a group does not give
+          them its sets.
+        members_warning:
+          one: "%{count} member (doesn't receive these sets)"
+          other: "%{count} members (don't receive these sets)"
+        name: Group name
+        new: New group
+        sets_count:
+          one: "%{count} Permission Set"
+          other: "%{count} Permission Sets"
+        subtitle: Organises Permission Sets.
+        ungrouped: Not in a group
+      show:
+        add_member: Add member
+        add_set: Add or move a set here
+        description: Group description
+        description_placeholder: Add a description
+        duplicate: Deep duplicate
+        duplicate_title:
+          one: Copies the group and its %{count} Permission Set with all resources,
+            fields, actions and rules.
+          other: Copies the group and its %{count} Permission Sets with all resources,
+            fields, actions and rules.
+        in_group: in %{group}
+        members: Members
+        members_note_html: Members do <b>not</b> receive this group's Permission Sets.
+          To give someone access, assign a Permission Set from their page in People.
+        name: Group name
+        no_members: No members.
+        no_sets: No Permission Sets in this group.
+        organisational: Group changes are organisational. They never change anyone's
+          access.
+        remove_set: Remove from group
+        save: Save
+        sets: Permission Sets in this group
+    permission_set_rules:
+      builder:
+        active: Rule is active
+        advanced: Advanced
+        advanced_hint: Join type, active
+        condition: Condition
+        errors:
+          field: Pick the field to check.
+          list: Add at least one value to the list.
+          name_blank: Give the rule a name.
+          range: Enter both ends of the range.
+          value: Enter a value, or pick “the current user”.
+        field: Field to check
+        follow: Follow a relationship
+        ignored_warning: View All is on for this resource, so record rules are ignored
+          until it's turned off.
+        include_nulls: Also show records where %{field} is empty
+        join: Join type
+        join_note: Only matters when the rule follows a relationship.
+        joins:
+          auto:
+            desc: Uses “%{choice}” for this rule.
+            title: Automatic (recommended)
+          joins:
+            desc: Records without the related record are left out.
+            title: Only records that have the related record
+          left_joins:
+            desc: Records without the related record are kept.
+            title: Also records without it
+        message: Blocked message
+        message_placeholder: Shown when someone opens a record this rule hides.
+        model_missing: This model or relationship no longer exists in the app.
+        name: Rule name
+        name_placeholder: e.g. Own customers
+        operator: Condition
+        optional: optional
+        pick_field: Pick a field…
+        preview: Preview
+        preview_empty: Pick a field to see the rule as a sentence.
+        relationship: Relationship
+        remove_step: Remove this relationship step
+        save: Save rule
+        this_field: this field
+        update_form: Update
+      confirm_destroy:
+        body: People with “%{set}” will see records this rule used to hide. This applies
+          immediately.
+        title: Remove the rule “%{rule}”?
+      edit:
+        title: Edit rule for %{resource}
+      new:
+        title: New rule for %{resource}
+      value_input:
+        from: From
+        no_value: No value needed for this condition.
+        or: or
+        pick_value: Pick a value…
+        to: To
+        value: Value
+        values: Values
+        values_placeholder: draft, sent
+    permission_sets:
+      assignments_tab:
+        assign: Assign to someone
+        assigned_on: "%{date} · by %{by}"
+        bulk: Bulk assign…
+        columns:
+          actions: Actions
+          assigned: Assigned
+          expires: Expires
+          person: Person
+        empty: Nobody has this Permission Set yet.
+        immediate: Assigning or revoking applies immediately.
+        label: Assignments
+        revoke_selected: Revoke from selected
+        select_all: Select everyone shown
+        select_hint: Select people to revoke this set from several at once.
+        select_person: Select %{name}
+        selected:
+          one: "%{count} selected"
+          other: "%{count} selected"
+      audit_tab:
+        all_types: All record types
+        any_time: Any time
+        anyone: Anyone
+        columns:
+          created: Created
+          edited: Last edited
+          record: Record
+          type: Type
+        count:
+          one: "%{count} record"
+          other: "%{count} records"
+        days: Date range
+        empty: No records match these filters.
+        label: Audit
+        last_days:
+          one: Last %{count} day
+          other: Last %{count} days
+        newest_first: Newest first ↓
+        oldest_first: Oldest first ↑
+        open_log: Open in the audit log
+        records: Records in this set
+        timeline: Change timeline
+        timeline_desc: Every recorded event of this set and its resources, fields,
+          actions, rules and assignments (direct assignments; group memberships are
+          on the group), newest first. Open an event to see before and after.
+        type: Record type
+        who: Person
+      conditions_tab:
+        flag: Session flag
+        flag_custom: Or type a flag name
+        flag_hint_html: Friendly names come from %{setting} in the initializer.
+        flag_intro: The set only counts when the request carries this flag (for example
+          after two-factor sign-in).
+        from: From
+        hours: Allowed hours
+        hours_only: Only during certain hours
+        intro: When activation conditions are set, this Permission Set only counts
+          while all of them are true.
+        ips: Allowed IPs or CIDR ranges
+        ips_hint: IPv4 and IPv6 are supported, e.g. 10.0.0.0/8 or 2001:db8::/32.
+        no_flag: No session flag needed
+        one_per_line: one per line
+        overnight: 'Overnight: active from %{from} until %{to} the next morning.'
+        reset: Reset
+        save: Save conditions · applies to %{people}
+        server_time: Server time (%{zone})
+        to: to
+      confirm_destroy:
+        body: "%{people} lose what this set gives them (%{resources}) unless another
+          set grants it."
+        body_muting: "%{people} will no longer be restricted by this set."
+        body_nobody: Nobody has this set, so no one's access changes.
+        confirm: Delete Permission Set
+        crumb: Delete
+        irreversible: This can't be undone.
+        title: Delete “%{name}”?
+      confirm_switch_mode:
+        to_granting:
+          body: Every setting inverts. Each ⊘ that used to take access away will instead
+            give it to the %{people} in this set.
+          confirm: Switch to granting
+          title: Switch “%{name}” to a granting set?
+        to_muting:
+          body: Every setting inverts. Each ✓ that used to give access will instead
+            take it away from the %{people} in this set, overriding their other sets.
+          confirm: Switch to muting
+          title: Switch “%{name}” to a Muting Permission Set?
+      copy_name: "%{name} (copy)"
+      header:
+        description: Description
+        description_placeholder: Add a description so others know when to use it
+        group: Group
+        name: Name
+      index:
+        columns:
+          actions: Actions
+          group: Group
+          people: People
+          set: Permission Set
+          status: Status
+        duplicate_aria: Duplicate %{name}
+        empty_body: A Permission Set is a bundle of access you assign to people. Create
+          one like “Sales rep”, add resources, then assign it.
+        empty_title: No Permission Sets yet
+        filter_label: Filter Permission Sets
+        filters:
+          all: All
+          conditional: Conditional
+          granting: Grants access
+          muting: Muting
+          'off': Turned off
+        help_term: Permission Set
+        help_text: A bundle of access you assign to people. A Muting Permission Set
+          takes access away; it overrides anything other sets grant.
+        new: New Permission Set
+        no_match: No Permission Sets match. Try another search or filter.
+        search: Search Permission Sets
+        subtitle: The fastest way to make a new set is to duplicate a similar one.
+      new:
+        blank: Blank
+        copy_of: Copy of %{name}
+        create: Create Permission Set
+        granting:
+          desc: 'Permission Set: a bundle of access you assign to people.'
+          example: 'Example: “Sales rep” can read and edit their own customers.'
+          title: Grants access
+        group: Group
+        muting:
+          desc: 'Muting Permission Set: takes access away. It overrides anything other
+            sets grant.'
+          example: 'Example: “Contractors — no financial data” hides IBAN and blocks
+            Export.'
+          title: Removes access
+        name: Name
+        name_placeholder: e.g. Sales rep
+        note: Copies resources, fields, actions, rules and conditions. Assignments
+          are not copied. You can switch between granting and muting later, but every
+          setting inverts.
+        start_from_granting: Start from
+        start_from_muting: Start from
+        title: New Permission Set
+        type: What should this set do?
+      records_summary:
+        ignored:
+          one: "%{count} rule ignored"
+          other: "%{count} rules ignored"
+        no_rules: No rules · every record
+        view_modify_all: View All · Modify All
+      resource_summary:
+        fields:
+          one: "%{count} field"
+          other: "%{count} fields"
+        masked:
+          one: "%{count} masked"
+          other: "%{count} masked"
+        muting: "%{hidden} hidden · %{masked} force-masked"
+        new:
+          one: "%{count} new"
+          other: "%{count} new"
+      resources_tab:
+        add: Add resource
+        empty: No resources yet. A resource is a model from the app, like Customer.
+          Add one to choose what people with this set can do.
+        label: Resources
+        open: Open
+        open_resource: Open %{resource}
+      review:
+        affected: 'Affected: %{names}.'
+        back: Back
+        body: Saving applies these to %{people} immediately.
+        body_nobody: Nobody has this set yet, so saving affects no one until you assign
+          it.
+        crumb: Review
+        save: Save changes
+        title:
+          one: Review %{count} change
+          other: Review %{count} changes
+      show:
+        and_more:
+          one: "%{count} more"
+          other: "%{count} more"
+        impact: "%{people} affected. Changes apply immediately: %{names}."
+        impact_none: Nobody has this set yet, so changes affect no one until you assign
+          it.
+        'on': 'on'
+        switch_to_granting: Switch to granting…
+        switch_to_muting: Switch to muting…
+        tabs:
+          assignments: Assignments
+          audit: Audit
+          conditions: Conditions
+          resources: Resources
+        tabs_label: Permission Set sections
+    resource_actions:
+      add_select:
+        block: Add and block
+        none: Don't add
+        not_permitted: Add, not permitted
+        permitted: Add and permit
+      confirm_destroy:
+        body: The action is removed from “%{set}”. This applies immediately.
+        title: Remove the action “%{action}”?
+      effect:
+        managed_elsewhere: Managed by other sets — not permitted here
+        managed_elsewhere_muting: Managed by other sets — not blocked here
+        permitted_by: 'Sets that permit it: %{sets}.'
+        permitted_by_nobody: No Permission Set permits it yet.
+        right_now: 'Right now:'
+        unmanaged_allowed: Not managed — everyone can run it
+        unmanaged_blocked: Not managed — blocked until a set permits it
+      endpoints:
+        guarded: Guarded
+        guarded_title: This controller includes the action guard, so the action is
+          checked on every request.
+        not_guarded: Not guarded
+        not_guarded_title: This controller does not include the action guard, so the
+          action is only checked where your code calls can?.
+      form:
+        block: Block this action
+        description: Description
+        label: Label
+        label_placeholder: e.g. Export to CSV
+        name: Key
+        name_hint: The name your app checks with can?(:export, …). Lowercase, with
+          underscores.
+        name_suggestions: Pick one of this resource's controller actions from the
+          suggestions, or type a key your code checks.
+        permitted: Permitted
+      managed_note:
+        body: As soon as one active Permission Set has a row for an action, only people
+          whose Permission Sets permit it can run it. Everyone else is refused.
+        title: Adding an action makes it managed for everyone
+        unmanaged_allowed: An action no Permission Set manages can be run by everyone.
+        unmanaged_blocked: An action no Permission Set manages is blocked for everyone.
+      new:
+        add: Add action
+        intro: Actions are app-specific verbs your code checks, like Export or Sync
+          to accounting.
+        title: New action for %{resource}
+        where: Where %{action} runs
+      show:
+        unlinked: Not linked to a controller action. That is expected for an action
+          your code checks with can?.
+        where: Where it runs
+      states:
+        blocked: Blocked
+        not_permitted: Not permitted
+        permitted: Permitted
+        unchanged: Unchanged
+    resource_fields:
+      explain:
+        capped: It shows as Read-only because Edit isn't allowed on this resource.
+        full_picture: See everything %{name} can access →
+        granted: "%{name} sees it through %{sets}."
+        muted: "%{name} doesn't see it in full because %{sets} hides or masks it."
+        no_access: "%{name} can't read %{resources}."
+        none: No set shows this field to %{name}.
+        unconfigured: No set configures this column, so the unconfigured-field setting
+          decides for %{name}.
+        virtual_default: "%{name} gets this virtual field by default, readable and
+          editable: one of their sets has no setting for it."
+      show:
+        access_level: Access level
+        across: Across all Permission Sets
+        applied: Applied
+        apply_recommendation: Apply recommendation
+        column: Name (column)
+        custom: "(custom)"
+        custom_link: Custom strategies in Settings
+        description: Description
+        details: Details
+        explain: Explain for a person
+        explain_button: Explain
+        explain_nobody: Nobody can read this resource yet.
+        flags_muting_note: In muting sets these flags mean “remove”.
+        impact: Saving applies to %{people} immediately.
+        label: Label
+        mask_strategy: Mask strategy
+        muting_note: This is a Muting Permission Set. Choices here take access away.
+        no_rules: No rules in this set filter on this field.
+        not_configured: 'No setting for this column in “%{set}”. With the current
+          configuration it is: %{behaviour}.'
+        not_configured_implicit: 'No setting for this field in “%{set}”. It follows
+          “Virtual fields without a setting”: with the current configuration it is
+          readable and editable by default.'
+        pick_person: Pick a person…
+        save: Save
+        sensitive: 'Matches privacy pattern “%{pattern}”. Recommended: Masked (%{strategy}).'
+        turned_off: 'The setting for this field in “%{set}” is turned off, so it does
+          not apply. With the current configuration the field is: %{behaviour}.'
+        turned_off_implicit: 'The setting for this field in “%{set}” is turned off,
+          so it does not apply. The field follows “Virtual fields without a setting”:
+          with the current configuration it is readable and editable by default.'
+        used_by_rules: Used by rules
+        variants: 'Also applies to:'
+        variants_muting: 'Muting this also mutes:'
+        virtual_discovered_html: 'Virtual field: not a database column. Found on the
+          model and not listed in %{method}, so it never gets access by default.'
+        virtual_html: 'Virtual field: not a database column. The model exposes it
+          through %{method}.'
+        virtual_model_masking_off: This level applies where the app filters parameters
+          and responses. Code that reads the field straight from the model gets the
+          real value.
+        virtual_model_masking_on: This level also applies when code reads the field
+          straight from the model.
+    resources:
+      actions_tab:
+        add: Add action
+        add_aria: Add %{action} to this set
+        bulk_label:
+          one: 'Add %{count} discovered action:'
+          other: 'Add all %{count} discovered actions:'
+        details_aria: Details for %{action}
+        empty: No actions yet. Add the verbs your app checks, like export or sync.
+        empty_discovery: No controller action maps to this resource, and no actions
+          have been added yet.
+        intro: Allow or block app-specific actions for people with this set.
+        intro_muting: Block app-specific actions for people with this set, whatever
+          their other sets allow.
+        no_guard_body_html: Permitting or blocking an action only takes effect where
+          your code calls can?. Include %{guard} in your controllers to check every
+          request.
+        no_guard_title: No controller includes the action guard yet
+        unlinked: Not linked to a controller action
+        unlinked_title: No controller action maps to this key. That is expected for
+          an action your code checks with can?.
+      confirm_destroy:
+        body: "%{people} lose what this set gives them on %{resources}, unless another
+          set grants it."
+        body_muting: "%{people} will no longer be restricted on this resource by this
+          set."
+        confirm: Remove resource
+        title: Remove %{resource} from “%{set}”?
+      fields_tab:
+        details: Details ›
+        details_aria: Details for %{field}
+        field: Field
+        filter_label: Filter fields
+        filters:
+          all: All
+          edit: Editable
+          hidden: Hidden
+          hide: Hidden
+          leave: Unchanged
+          mask: Force mask
+          masked: Masked
+          read: Read-only
+          sensitive: Sensitive
+          unconfigured: Not configured
+        implicit_grant: Editable by default
+        level: Access level
+        level_aria: Access level for %{field}
+        no_match: No fields match.
+        not_configured: Not configured · %{behaviour}
+        read_off: Turn on Read for %{resource} to choose which fields people see.
+        search: Search fields
+        select_all: Select all shown fields
+        select_field: Select %{field}
+        select_hint: Select fields to change several at once.
+        selected:
+          one: "%{count} selected"
+          other: "%{count} selected"
+        set_to: Set to
+        turned_off: Turned off · %{behaviour}
+      new:
+        add: Add
+        already: Already in this set
+        columns:
+          one: "%{count} column"
+          other: "%{count} columns"
+        intro: Pick a model from %{app}. Only real models are listed.
+        models: Models
+        no_models: No models match.
+        note: Fields will be created from the model's columns and virtual fields.
+        note_gdpr: Fields will be created from the model's columns and virtual fields.
+          Privacy defaults are on, so sensitive columns start Masked.
+        presets:
+          block_changes:
+            desc: Mutes Create, Edit, Delete and every action.
+            title: Block all changes
+          full:
+            desc: Read, create, edit and delete. All fields editable.
+            title: Full access
+          hide_sensitive:
+            desc: Hides every column that looks like personal data.
+            title: Hide sensitive fields
+          leave:
+            desc: Nothing muted yet. Set it up yourself.
+            title: Leave everything unchanged
+          nothing:
+            desc: Everything off. Set it up yourself.
+            title: Nothing
+          read:
+            desc: Read only. All fields read-only.
+            title: Read-only
+        search: Search models
+        sensitive:
+          one: "%{count} looks sensitive"
+          other: "%{count} look sensitive"
+        start_from: Start from
+        the_app: the app
+        title: Add a resource
+      rules_tab:
+        add: Add rule
+        all_queries: applies to all queries
+        blocked_message: 'Blocked message: “%{message}”'
+        empty: 'No rules yet, so records aren''t limited: people with this set see
+          every %{resources} they can read.'
+        empty_muting: Muting Permission Sets don't add record rules.
+        empty_view_all: No rules. View All is on, so every record is included anyway.
+        filter_rule: Filter rule · %{applies}
+        ignored: 'Ignored: View All is on'
+        ignored_both: 'Ignored: View All and Modify All are on'
+        join_rule: Follows a relationship · applies to scoped lookups only
+        join_rules_warning: These rules follow a relationship, so automatic query
+          scoping skips them. They only apply where the app uses find_by or permission_scoped.
+        muting: Muting Permission Sets only take access away; record rules come from
+          granting sets.
+        scoped_lookups: applies to scoped lookups only
+        scoping_off: 'Automatic query scoping is off: rules apply to find_by and permission_scoped
+          lookups.'
+        scoping_off_warning: Automatic query scoping is off, so these rules only apply
+          where the app uses find_by or permission_scoped. Other queries return every
+          record.
+        scoping_on: 'Automatic query scoping is on (filter_only): filter rules apply
+          to all queries; rules that follow a relationship only apply to scoped lookups.'
+        turn_off: Turn off
+        turn_on: Turn on
+      show:
+        description: Description
+        description_placeholder: Add a description
+        help_term: Resource
+        help_text: a model from the app (here %{model}). Inside it you choose fields,
+          actions and record rules.
+        impact: "%{people} affected · applies immediately after saving"
+        modify_all_html: "<b>Modify All</b>: edit and delete every %{resource} record.
+          Skips all record rules for changes."
+        modify_all_needs: Needs View All and Edit.
+        muting_hint: Muted actions are removed from people with this set, whatever
+          their other sets allow.
+        muting_note: Settings here take access away from %{set}'s people.
+        needs_read_hint: Edit and Delete need Read.
+        record_scope: Record scope
+        remove: Remove %{resource} from this set…
+        rules_ignored:
+          one: "%{count} rule is currently ignored because View All is on."
+          other: "%{count} rules are currently ignored because View All is on."
+        tabs_label: Resource sections
+        view_all_html: "<b>View All</b>: read every %{resource} record. Skips all
+          record rules for reading."
+        view_all_needs: Needs Read.
+        what_can_do: What people can do
+      sync:
+        add_as:
+          edit: Add all new with full access
+          hidden: Add all new as Hidden
+          hide: Add all new as Hidden
+          read: Add all new as Read-only
+        gdpr_off: Privacy defaults are off.
+        gdpr_on: 'Privacy defaults are on: sensitive columns are added as Masked.'
+        ignored_count:
+          one: "%{count} ignored"
+          other: "%{count} ignored"
+        ignored_link: Settings › Ignored columns
+        ignored_title: Ignored by configuration
+        missing_count:
+          one: "%{count} configured field whose column no longer exists"
+          other: "%{count} configured fields whose columns no longer exist"
+        missing_title: Configured, but the column no longer exists
+        new_count:
+          one: "%{count} new column not configured"
+          other: "%{count} new columns not configured"
+        new_title: New columns, not configured
+        none: None
+        remove_missing: Remove missing fields
+        review: Review
+        sensitive_rec: Sensitive → Masked (%{strategy})
+        title: Sync fields with model
+    settings:
+      items:
+        action_guard_bypass:
+          desc: People for whom controller actions are never checked, for example
+            administrators.
+          name: Who skips the action check
+        action_guard_nil_user_strategy:
+          desc: What the controller guard does with a guarded action when nobody is
+            signed in. Not set, it follows “Record rules with nobody signed in”.
+          name: Guarded actions without a signed-in user
+        admin_app_name:
+          desc: The app name shown under the logo in these screens.
+          name: App name
+        admin_assignment_authorization:
+          desc: Code that decides whether a request may change who holds a Permission
+            Set or belongs to a Permission Set Group, in these screens and in the
+            API. Called with (controller, target, user_ids, action); action is :grant,
+            :revoke, :change_expiry, :review, :add_member or :remove_member. Not set
+            means no extra check.
+          name: Who may change assignments
+        admin_back_url:
+          desc: 'Where the link under the logo leads (default: your app''s home page).'
+          name: '"Back to app" link'
+        admin_docs_url:
+          desc: Where the “Configuration docs” links on this page point to.
+          name: Configuration docs link
+        admin_model_resolver:
+          desc: Which models are offered when you add a resource.
+          name: Models offered in the admin
+        admin_session_flags:
+          desc: Friendly names for session flags offered on the Conditions tab.
+          name: Session flag names
+        admin_stale_assignment_days:
+          desc: Permanent assignments not reviewed for this long appear under Stale
+            assignments.
+          name: Review assignments after
+        admin_tenantless_access:
+          desc: What the admin screens and the admin API do with a request that has
+            no tenant while tenancy is on.
+          name: Requests without a tenant
+        api_action_authorization:
+          desc: Decides which API calls each caller may make.
+          name: API permission check
+        api_assignment_authorization:
+          desc: Decides who may assign Permission Sets through the API.
+          name: API assignment check
+        api_auth:
+          desc: How API callers prove who they are.
+          name: API sign-in
+        api_base_controller_class:
+          desc: The controller API endpoints inherit from.
+          name: API controller
+        api_default_per_page:
+          desc: Records per API page when the caller doesn't say.
+          name: Default page size
+        api_enabled:
+          desc: Lets other systems manage Permission Sets over HTTP.
+          name: JSON API
+        api_max_per_page:
+          desc: Upper limit on records per API page.
+          name: Maximum page size
+        api_pagination_handler:
+          desc: How API results are split into pages.
+          name: Pagination
+        api_record_identifier:
+          desc: Which identifier the API uses in URLs.
+          name: API record identifier
+        api_redact_rule_field_values:
+          desc: Rule values are redacted in API responses.
+          name: Hide rule values in the API
+        api_require_authorization:
+          desc: Refuses API changes when no permission check is configured.
+          name: Require API permission checks
+        api_serializer_overrides:
+          desc: Overrides for how records are written in API responses.
+          name: Custom serializers
+        api_stats_require_admin:
+          desc: Only admins can read usage statistics through the API.
+          name: Stats only for admins
+        audit_actor_resolver:
+          desc: Code that names who acts in a request to these screens or the API.
+            Not set means the signed-in person; under a password prompt, the username.
+          name: Who is recorded as the actor
+        audit_change_failure_strategy:
+          desc: 'What happens when a change cannot be recorded: the change is rolled
+            back (raise), goes through and is reported (report), or goes through and
+            is only logged (log).'
+          name: When a change cannot be recorded
+        audit_events:
+          desc: 'Records each change made through the permission models — the actor
+            as resolved (possibly unknown), when, and the previous values — in the
+            audit log. Auto: on when the audit table exists.'
+          name: Audit log
+        audit_hook_failure_strategy:
+          desc: 'What happens when a subscriber or hook fails while an event is delivered:
+            reported, only logged, or raised.'
+          name: When a subscriber fails
+        audit_log_authorization:
+          desc: Code that decides who may read the audit log pages, tabs, exports
+            and API. Not set means anyone with access to these screens. 'Last edited
+            by' footers and 'Assigned by' labels still show the latest actor to anyone
+            who can open the admin.
+          name: Who may read the audit log
+        audit_log_subscriber:
+          desc: Also writes every audit event to the application log.
+          name: Copy events to the log
+        audit_request_context:
+          desc: Code that gives the request id and IP address stored with each event.
+            Not set means the request id and the remote IP.
+          name: Request details on events
+        audit_retention_period:
+          desc: How long audit events are kept before the purge task may delete them.
+            Not set means forever.
+          name: Keep audit events for
+        audit_runtime_events:
+          desc: 'Which runtime decisions are stored, not only published: denied, bypass,
+            field_read, params_filtered, cache.'
+          name: Stored runtime events
+        audit_trail_enabled:
+          desc: Stores created-by / last-edited-by on PermissionForge records when
+            the actor is a signed-in user.
+          name: Record who created and last edited
+        audit_user_class:
+          desc: The model used for “created by” and “edited by”.
+          name: Audit people model
+        auto_apply_masked_attributes:
+          desc: Applies masking when the app reads attributes directly, not only in
+            responses.
+          name: Mask model attributes automatically
+        auto_query_scoping:
+          desc: Filter rules are added to every query automatically. Rules that follow
+            a relationship only apply to scoped lookups.
+          name: Apply rules to all queries
+        available_locales:
+          desc: Languages these screens are available in.
+          name: Languages
+        base_controller_class:
+          desc: The app controller these screens inherit from. This is where your
+            own sign-in check runs.
+          name: Admin controller
+        cache_backend:
+          desc: Where computed permissions are cached.
+          name: Cache store
+        cache_key_prefix:
+          desc: Prefix for every cache entry.
+          name: Cache key prefix
+        cache_ttl:
+          desc: How long computed permissions are kept. A new value applies to entries
+            cached after the change.
+          name: Cache lifetime
+        conditional_set_cache_ttl:
+          desc: How long permissions are kept for people with conditional sets.
+          name: Conditional set cache lifetime
+        conditional_sets_strict_mode:
+          desc: When request details are missing, strict mode treats conditional sets
+            as inactive.
+          name: Strict activation conditions
+        controller_action_discovery:
+          desc: Shows your app's controller actions on a resource's Actions tab so
+            they can be permitted or blocked.
+          name: List controller actions
+        controller_action_resolver:
+          desc: Decides which resource and action a controller action belongs to.
+          name: Controller action mapping
+        controller_discovery_exclude:
+          desc: Controllers that are never listed or checked.
+          name: Controllers left out
+        current_user_resolver:
+          desc: Tells PermissionForge who is signed in on each request.
+          name: How the current user is found
+        custom_mask_strategies:
+          desc: Extra masking styles defined in code, offered next to the built-in
+            ones.
+          name: Custom mask styles
+        database_row_level_security:
+          desc: Lets the database itself enforce record rules as a last line of defence.
+          name: Database row-level security
+        extra_fields_default_access:
+          desc: Whether a virtual field nobody configured is editable by default or
+            follows “Fields without a setting”.
+          name: Virtual fields without a setting
+        extra_fields_method:
+          desc: Model method that lists extra, non-database fields to protect.
+          name: Virtual fields method
+        field_variant_mappings:
+          desc: A field's setting also applies to these related column names.
+          name: Linked field variants
+        filter_parameters_integration:
+          desc: Adds the privacy patterns to Rails' filter_parameters so logs don't
+            show them.
+          name: Filter sensitive values from logs
+        gdpr_defaults:
+          desc: Columns that look personal get masked by default when they're added.
+          name: Privacy defaults
+        gdpr_field_patterns:
+          desc: Column names matching a pattern are flagged sensitive and get this
+            mask style.
+          name: Sensitive name patterns
+        gdpr_require_explicit_choice:
+          desc: The app refuses to boot until privacy defaults are switched on or
+            off explicitly.
+          name: Require a privacy-defaults choice
+        hidden_attribute_value:
+          desc: What a hidden attribute returns when code reads it.
+          name: Value for hidden attributes
+        http_basic_auth_enabled:
+          desc: Asks for a shared username and password before anyone can open these
+            screens.
+          name: Password-protect this admin
+        http_basic_auth_password:
+          desc: Password for the password prompt above. Never shown here.
+          name: Admin password
+        http_basic_auth_user:
+          desc: Username for the password prompt above.
+          name: Admin username
+        ignored_fields:
+          desc: Columns PermissionForge never manages. They don't appear in field
+            lists.
+          name: Ignored columns
+        mask_virtual_attributes:
+          desc: Also hides or masks computed, non-database fields when your code reads
+            them from the model.
+          name: Mask virtual fields on models
+        masked_attributes_nil_user_strategy:
+          desc: 'Whether masked models return their stored values or hidden ones when
+            there is no current user (jobs, mailers, the console). The user model
+            stays readable: sign-in reads it before anyone is signed in.'
+          name: Masked attributes with nobody signed in
+        masked_write_protection:
+          desc: Stops a masked value like “•••• 4821” from being saved back over the
+            real one.
+          name: Saving masked values
+        nil_user_strategy:
+          desc: Whether rules are skipped, deny everything, or raise an error when
+            there's no current user.
+          name: Record rules with nobody signed in
+        omit_hidden_in_attributes_hash:
+          desc: Hidden fields are removed from attribute hashes instead of being set
+            to empty.
+          name: Leave hidden fields out of attribute lists
+        on_cache_failure:
+          desc: Code that runs when cached permissions could not be cleared, for example
+            to alert you. Until the cache lifetime ends, that person may keep their
+            old permissions.
+          name: When the cache store fails
+        on_field_filtered:
+          desc: Code that runs each time a field is filtered, for example to log it.
+          name: When a field is hidden or masked
+        on_rule_bypass:
+          desc: Code that runs when View All or Modify All skips the record rules.
+          name: When rules are skipped
+        preset:
+          desc: ":strict closes the settings that fail open by default (the README's
+            production hardening checklist), except masking with nobody signed in,
+            which stays an explicit choice; :compat keeps the library defaults. A
+            setting made in the initializer always wins over the preset."
+          name: Preset
+        profile_builder:
+          desc: The profile details cached with each person's permissions.
+          name: Profile details
+        request_context_resolver:
+          desc: Where IP address, time and session flags come from.
+          name: Request details source
+        response_filter_nil_user_strategy:
+          desc: Whether field filtering is skipped or everything is blocked when there
+            is no current user.
+          name: Responses with nobody signed in
+        rls_session_variable:
+          desc: Name of the variable that tells the database who the current user
+            is.
+          name: Database session variable
+        snapshot_transactions:
+          desc: 'Whether a database transaction keeps seeing the data as it was when
+            it began. Permissions computed inside such a transaction are not cached.
+            Auto decides from the database: MySQL and SQLite do, PostgreSQL only at
+            repeatable read or stronger.'
+          name: Transactions read from a snapshot
+        table_name_prefix:
+          desc: Prefix for PermissionForge's own database tables.
+          name: Table prefix
+        tenant_column:
+          desc: Column that holds the tenant on each record.
+          name: Tenant column
+        tenant_model:
+          desc: Model that separates customers of a multi-tenant app.
+          name: Tenant model
+        unconfigured_action_strategy:
+          desc: What happens to a controller action that no Permission Set mentions.
+          name: Actions without a setting
+        unconfigured_field_strategy:
+          desc: What happens to a column that no Permission Set mentions.
+          name: Fields without a setting
+        unscoped_query_detection:
+          desc: Notices queries that skip record rules.
+          name: Detect unprotected queries
+        unscoped_query_detection_environments:
+          desc: Environments where unprotected-query detection is on.
+          name: Detection runs in
+        user_active_check:
+          desc: Tells PermissionForge whether an assigned person's account is still
+            active.
+          name: Active-person check
+        user_class:
+          desc: The model that represents a person who can receive Permission Sets.
+          name: People model
+        user_label_formatter:
+          desc: How a person is shown in lists, for example name and email.
+          name: Person label
+        user_list_limit:
+          desc: Maximum people loaded into a list before asking you to search.
+          name: People list limit
+        user_list_resolver:
+          desc: Which people appear in pickers on these screens.
+          name: People list source
+        uuid_generator:
+          desc: How record UUIDs are created.
+          name: UUID generator
+        virtual_field_discovery:
+          desc: Also lists store accessors and attribute-API attributes as virtual
+            fields.
+          name: Discover virtual fields
+      ladder:
+        active: Active
+        database: Database
+        detect: Detect
+        enforce: Enforce
+        intro: '3 levels of defence: enforce rules on queries, detect queries that
+          skip them, and let the database enforce them.'
+        'off': 'Off'
+      oks:
+        action_guard_nil_user_strategy: Guarded controller actions are refused when
+          nobody is signed in.
+        admin_tenantless_access: Admin requests without a tenant are refused.
+        api_require_authorization: API changes need a permission check.
+        audit_events: Who changed what is recorded in the audit log.
+        audit_trail_enabled: Stores created-by / last-edited-by on PermissionForge
+          records when the actor is a signed-in user.
+        conditional_sets_strict_mode: Conditional sets fail closed when request info
+          is missing.
+        extra_fields_default_access: Virtual fields nobody configured follow “Fields
+          without a setting”.
+        gdpr_defaults: New sensitive columns start masked.
+        http_basic_auth_enabled: Access to these screens is protected.
+        masked_attributes_nil_user_strategy: Masked models hide their values when
+          nobody is signed in (the user model stays readable for sign-in).
+        masked_write_protection: Masked values are never written back.
+        nil_user_strategy: Code without a signed-in user sees no records.
+        preset: The :strict preset closes the settings that fail open by default.
+        unconfigured_action_strategy: Controller actions nobody configured are blocked.
+      risks:
+        admin_tenantless_access: Admin requests without a tenant are served, across
+          every tenant.
+        api_require_authorization: The API is on, and changes are allowed even without
+          a permission check.
+        audit_events: Changes are not recorded in the audit log (switched off, or
+          the audit table is missing). With audit_events = true and no table, every
+          change fails (under the default :raise strategy).
+        audit_trail_enabled: No one is recorded as creating or editing records.
+        conditional_sets_strict_mode: Conditional sets are treated as active when
+          request info is missing (fail-open).
+        http_basic_auth_enabled: These screens are either locked (password prompt
+          on, but no credentials) or unprotected (no password and no custom admin
+          controller).
+        masked_write_protection: Masked values can be saved back over real data.
+        unconfigured_field_strategy: Columns nobody configured are shown unmasked
+          to anyone who can read the resource.
+      row:
+        changed: Changed
+        default: 'Default: %{value}'
+        docs: 'Configuration docs: %{key} ↗'
+        how_to_change: How to change
+        risk: Risk
+        secure: Secure
+        snippet_current: Snippet shows the current value.
+        snippet_recommended: Snippet shows the recommended value.
+        step_deploy: Commit and deploy (or restart the server locally).
+        step_edit: Edit the file above.
+        step_reload: Reload this page to confirm.
+      sections:
+        activation_conditions: Activation conditions
+        admin_access: Admin access
+        admin_api: Admin JSON API
+        admin_ui: Admin screens
+        audit_trail: Audit log
+        caching: Caching
+        controller_actions: Controller actions
+        database: Database & system
+        field_protection: Field protection
+        masked_attributes: Masked attributes on models
+        multi_tenancy: Multi-tenancy
+        people: People
+        preset: Preset
+        privacy: Privacy (GDPR)
+        record_rules: Record rules & query scoping
+      show:
+        api_disabled_html: API is disabled (%{key}).
+        changed_count:
+          one: "%{count} changed"
+          other: "%{count} changed"
+        changed_only: Show only changed from default
+        has_risk: Has a risky setting
+        health: Health summary
+        how_to_fix: How to fix
+        intro_html: Settings are defined in %{file}. Changes require a deploy/restart.
+          This page shows the current values and how to change them.
+        no_match: No settings match.
+        read_only: Read-only
+        search: Search settings
+        section_meta: "%{settings} · %{changed}"
+        secure_count:
+          one: "%{count} security and privacy setting looks good."
+          other: "%{count} security and privacy settings look good."
+        settings_count:
+          one: "%{count} setting"
+          other: "%{count} settings"
+      units:
+        days:
+          one: "%{count} day"
+          other: "%{count} days"
+        hours:
+          one: "%{count} hour"
+          other: "%{count} hours"
+        minutes:
+          one: "%{count} minute"
+          other: "%{count} minutes"
+        people:
+          one: person
+          other: people
+        records:
+          one: record
+          other: records
+      values:
+        disabled: Disabled
+        empty: None
+        hook_custom: Custom (defined in code)
+        hook_default: Default
+        hook_none: Not set
+        never_displayed: never displayed
+        nil: nil (not set)
+        not_set: Not set
+        'off': 'Off'
+        'on': 'On'
+        set: Set
+    shared:
+      across_sets:
+        muted_hidden: 'Muted: hidden'
+        none: No Permission Set includes this resource.
+      active: Active
+      audit_footer:
+        created: Created by %{created_by} · %{created_at}
+        disabled: Created-by and edited-by aren't being recorded.
+        edited: Last edited by %{updated_by} · %{updated_at}
+        history: History
+      crud_cell:
+        allowed: Allowed
+        muted: Muted
+        needs_read: Turn on Read first
+        needs_read_short: Needs Read
+        'no': 'No'
+        unchanged: Unchanged
+      expiry_picker:
+        custom_label: End date
+        default: Default
+        label: When this access ends
+        pick_date: Pick a date
+        presets:
+          1d: 1 day
+          1w: 1 week
+          30d: 30 days
+          custom: Custom date
+          eom: End of month
+          never: No expiry
+      help_banner:
+        got_it: Got it
+      inactive: Inactive
+      level_control:
+        needs_edit: Turn on Edit for %{resource} first
+      mode_banners:
+        duplicate_to_edit: Duplicate to edit
+        locked_body_html: This record has %{flag}, so it's read-only here. Duplicate
+          it to make an editable copy.
+        muting_body: It overrides anything other sets grant. Anything you mute or
+          hide here is removed for its people. Leave a setting on “Unchanged” to let
+          other sets decide.
+        muting_title: 'Muting Permission Set: takes access away'
+      preferences:
+        language: Language
+        signed_in_as: Signed in as %{name}
+        theme: Theme
+        themes:
+          auto: Auto
+          dark: Dark
+          light: Light
+      reason_field:
+        hint: Kept with the change in the audit log.
+        label: Reason
+        placeholder: e.g. ticket SEC-142
+        summary: Add a reason (optional)
+        summary_short: Reason
+      savebar:
+        clean: No unsaved changes
+        count:
+          one: "%{count} unsaved change"
+          other: "%{count} unsaved changes"
+        discard: Discard
+        label: Unsaved changes
+        note: Saving applies them to %{people} immediately.
+        note_nobody: Nobody has this set yet, so saving affects no one.
+        review: Review and save
+      sidebar:
+        aria: PermissionForge
+        back_to_app: Back to %{app}
+        back_to_app_generic: Back to the app
+        brand: PermissionForge
+      tech_details:
+        copied: Copied
+        copy: Copy
+        summary: Technical details
+      time_ago: "%{time} ago"
+      time_nil: "—"
+      toasts:
+        dismiss: Dismiss
+        undo: Undo
+      topbar:
+        menu: Menu
+      user: User
+      user_fallback: 'User #%{id}'
+      user_select_prompt: Select a person...
+      user_select_truncated: Showing only the first %{count} users. Configure user_list_resolver
+        to narrow this list.
+    ui:
+      actions: Actions
+      apply: Apply
+      assign_set: Assign a Permission Set
+      assignment:
+        never_reviewed: Never reviewed
+        reviewed: Reviewed %{when}
+        reviewed_by: Reviewed by %{who} on %{date}
+        reviewed_on: Reviewed on %{date}
+      audit:
+        system: System
+        types:
+          action: Action
+          assignment: Assignment
+          field: Field
+          group: Group
+          group_membership: Group membership
+          permission_set: Permission Set
+          resource: Resource
+          rule: Rule
+        who_when: "%{who} · %{when}"
+      badges:
+        column_missing: Column missing
+        conditional: Conditional
+        expired: Expired
+        fail_open: Fail-open
+        fail_open_long: 'Fail-open: active when request info is missing'
+        fail_open_title: conditional_sets_strict_mode is off
+        locked: Locked
+        muting: Muting
+        not_configured: Not configured
+        'off': 'Off'
+        sensitive: Sensitive
+        virtual: Virtual
+      breadcrumb: Breadcrumb
+      cancel: Cancel
+      changes:
+        action_managed_already: "(already managed; sets that permit it: %{sets})"
+        action_managed_first: "(this makes it managed: from now on only people whose
+          Permission Sets permit it can run it)"
+        action_managed_later: "(takes effect once this set and this resource are on)"
+        action_managed_nobody: "(already managed; no Permission Set permits it yet)"
+        action_muted: "%{resource}: %{action} blocked"
+        action_new_muted: "%{resource}: %{action} added and blocked"
+        action_new_off: "%{resource}: %{action} added, not permitted"
+        action_new_on: "%{resource}: %{action} added and permitted"
+        action_new_unmuted: "%{resource}: %{action} added, not blocked"
+        action_off: "%{resource}: %{action} no longer permitted"
+        action_on: "%{resource}: %{action} permitted"
+        action_unmuted: "%{resource}: %{action} no longer blocked"
+        attributes:
+          description: description
+          label: label
+          name: name
+        cascaded: "(switched automatically)"
+        cascaded_field: "(downgraded because Edit is off)"
+        field_level: "%{resource} › %{field}: %{from} → %{to}"
+        field_new: "%{resource} › %{field}: set to %{to}"
+        field_off: "%{resource} › %{field}: turned off"
+        field_on: "%{resource} › %{field}: turned on"
+        field_text: "%{resource} › %{field}: %{attribute} changed"
+        flag_off: "%{resource}: %{flag} removed"
+        flag_off_muting: "%{resource}: %{flag} no longer muted"
+        flag_on: "%{resource}: %{flag} allowed"
+        flag_on_muting: "%{resource}: %{flag} muted"
+        resource_text: "%{resource}: %{attribute} changed"
+        set_group: Moved to the group “%{group}”
+        set_no_group: Removed from its group
+        set_off: Turned the set off
+        set_on: Turned the set on
+        set_text: Permission Set %{attribute} changed
+      close: Close
+      conditions:
+        always: Always active. No activation conditions.
+        flag_generic: when %{flag} is set
+        flags:
+          marketing_consent: when marketing consent is given
+          mfa_verified: after two-factor sign-in
+          sso_login: after company SSO sign-in
+        from_ips: from %{ips}
+        hours: between %{from} and %{to}
+        hours_overnight: between %{from} and %{to} (overnight)
+        only_works: Only works %{parts}.
+        or: " or "
+      dates:
+        days_ago:
+          one: "%{count} day ago"
+          other: "%{count} days ago"
+        never: "—"
+        today: today
+        yesterday: yesterday
+      delete: Delete
+      dry_run: Dry run
+      duplicate: Duplicate
+      edit: Edit
+      expiry:
+        ends_in:
+          one: Ends in %{count} day · %{date}
+          other: Ends in %{count} days · %{date}
+        expired: Expired %{date}
+        none: No expiry
+        today: Ends today
+        until: Until %{date}
+      expiry_change:
+        1w: 1 week from today
+        30d: 30 days from today
+        eom: End of month
+        never: No expiry
+      export_csv: Export CSV
+      field_lookup: Field lookup
+      fields: Fields
+      flags:
+        marketing_consent: Has given marketing consent
+        mfa_verified: Signed in with two-factor
+        sso_login: Signed in through company SSO
+      flags_short:
+        create_access: Create
+        delete_access: Delete
+        edit_access: Edit
+        is_active: Active
+        modify_all: Modify All
+        read_access: Read
+        view_all: View All
+      keep: Keep
+      levels:
+        edit: Editable
+        hidden: Hidden
+        hide: Hide
+        leave: Unchanged
+        mask: Force mask
+        masked: Masked
+        muted: Muted
+        none: Not configured
+        read: Read-only
+      locked:
+        title: 'Locked: managed by the system/API'
+      mask_strategies:
+        email: Email
+        first1_last4: First 1 + last 4
+        full: Full
+        last4: Last 4
+      months:
+        apr: Apr
+        aug: Aug
+        dec: Dec
+        feb: Feb
+        jan: Jan
+        jul: Jul
+        jun: Jun
+        mar: Mar
+        may: May
+        nov: Nov
+        oct: Oct
+        sep: Sep
+      next: Next
+      no_group: Not in a group
+      open_person: Open person
+      open_setting: Open setting
+      operators:
+        between: is between
+        contains: contains
+        ends_with: ends with
+        equal: is
+        greater_than: is greater than
+        greater_than_or_equal: is at least
+        in: is one of
+        is_not_null: is not empty
+        is_null: is empty
+        less_than: is less than
+        less_than_or_equal: is at most
+        not_contains: doesn't contain
+        not_equal: is not
+        not_in: is not one of
+        starts_with: starts with
+      people_count:
+        one: "%{count} person"
+        other: "%{count} people"
+      previous: Previous
+      records: Records
+      remove: Remove
+      resource: Resource
+      rules:
+        and: and
+        current_user: the current user
+        only_show: Only show
+        or_empty: or %{field} is empty
+        where: where
+      rules_count:
+        one: Rules (%{count})
+        other: Rules (%{count})
+      rules_tab: Rules
+      search: Search
+      search_people: Search by name or email
+      setting: Setting
+      states:
+        blocked: Blocked
+        granted: Allowed
+        none: 'No'
+      unconfigured:
+        block: Blocked by default
+        mask_all: Fully masked
+        pass_through: Passes through unmasked
+        warn: Passes through and is logged
+      view_all: View All
+    validations:
+      name_blank: can't be blank
+      permission_set:
+        group_missing: must be an existing Permission Set Group
+      permission_set_rule:
+        between_requires_two_values: must contain exactly 2 comma-separated values
+          for between operator
+        field_value_required: is required for this operator
+        in_requires_values: must contain at least 1 comma-separated value
+        invalid_field_name: must be a valid column name (letters, numbers, underscores,
+          dots)
+        invalid_join_type: is not a valid join type
+        invalid_operator: is not a valid operator
+        numeric_or_date_required: must be a numeric or date value for comparison operators
+        value_not_expected: does not require a value for this operator
+        value_required: must not be blank for this operator
+      resource:
+        invalid_name: must be a valid model class name (e.g. Customer or Admin::Report)
+      resource_field:
+        invalid_mask_strategy: is not a valid mask strategy
+        mask_strategy_required: must be present when mask access is enabled
+      too_long: is too long (at most %{count} characters)

@@ -1,0 +1,25 @@
+<%# What the saved configuration means right now for people with this set, and
+    which Permission Sets permit the action.
+    Locals: row (Admin::ActionRows::Row), muting %>
+<% setting = pf_setting_path('unconfigured_action_strategy') %>
+<%# The four row states share their words with the "Across all Permission Sets" list. %>
+<% badges = {
+     permitted: ["✓ #{t('permission_forge.resource_actions.states.permitted')}", { variant: :grant }],
+     not_permitted: ["– #{t('permission_forge.resource_actions.states.not_permitted')}", {}],
+     blocked: ["⊘ #{t('permission_forge.resource_actions.states.blocked')}", { variant: :block }],
+     unchanged: ["– #{t('permission_forge.resource_actions.states.unchanged')}", {}],
+     managed_elsewhere: ["– #{muting ? t('.managed_elsewhere_muting') : t('.managed_elsewhere')}", {}],
+     unmanaged_allowed: ["○ #{t('.unmanaged_allowed')}", { variant: :unconfigured, href: setting }],
+     unmanaged_blocked: ["⊘ #{t('.unmanaged_blocked')}", { variant: :block, href: setting }]
+   } %>
+<% text, options = badges.fetch(row.effect) %>
+<span class="pf-row pf-row--tight pf-fs-12">
+  <span class="pf-text-3"><%= t('.right_now') %></span>
+  <%= pf_badge(text, square: true, extra: 'pf-badge--wrap', **options) %>
+  <% unless %i[permitted unmanaged_allowed unmanaged_blocked].include?(row.effect) %>
+    <%# The action is managed and this set does not permit it: say who does. %>
+    <span class="pf-text-3">
+      <%= row.permitted_by.any? ? t('.permitted_by', sets: row.permitted_by.map(&:name).join(', ')) : t('.permitted_by_nobody') %>
+    </span>
+  <% end %>
+</span>

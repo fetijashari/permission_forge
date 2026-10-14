@@ -1,0 +1,74 @@
+# frozen_string_literal: true
+
+module PermissionForge
+  module Admin
+    # Reads RuleForm's inputs, either from the submitted rule-builder params or
+    # from a saved PermissionSetRule. Returns a hash keyed by RuleForm reader
+    # (name, path, field_name, operator, value, values, value_from, value_to,
+    # current_user, include_nulls, failure_message, join, is_active).
+    module RuleFormInput
+      # @param attrs [Hash{String => Object}] stringified params
+      def self.from_params(attrs)
+        param_path(attrs).merge(param_values(attrs), param_options(attrs))
+      end
+
+      # @param rule [PermissionSetRule, nil] nil for a new rule
+      def self.from_rule(rule)
+        rule ||= PermissionForge::PermissionSetRule.new(operator: 'equal', include_nulls: false, is_active: true)
+        path = rule_path(rule)
+        path.merge(rule_values(rule.field_value.to_s, RuleForm::ARITY.fetch(path[:operator], :one)), rule_options(rule))
+      end
+
+      def self.param_path(attrs)
+        path = Array(attrs['path']).map(&:to_s).compact_blank
+        remove = attrs['remove_step']
+        { name: attrs['name'].to_s.strip, path: remove.present? ? path.first(remove.to_i) : path,
+          field_name: attrs['field_name'].to_s, operator: allowed(attrs['operator'], RuleForm::ARITY.keys, 'equal') }
+      end
+
+      def self.param_values(attrs)
+        { value: stripped(attrs['value']), values: list_values(attrs),
+          value_from: stripped(attrs['value_from']), value_to: stripped(attrs['value_to']),
+          current_user: attrs['current_user'] == '1' }
+      end
+
+      # Checked list values plus comma-separated free text.
+      def self.list_values(attrs)
+        values = Array(attrs['values']) + attrs['values_text'].to_s.split(',')
+        values.map { |v| stripped(v) }.compact_blank.uniq
+      end
+
+      def self.param_options(attrs)
+        { include_nulls: attrs['include_nulls'] == '1', failure_message: stripped(attrs['failure_message']),
+          join: allowed(attrs['join'], RuleForm::JOINS, 'auto'),
+          is_active: attrs.key?('is_active') ? attrs['is_active'] == '1' : true }
+      end
+
+      def self.rule_path(rule)
+        { name: rule.name.to_s, path: rule.field_accessor_path.to_s.split('.').compact_blank,
+          field_name: rule.field_name.to_s, operator: rule.operator.presence || 'equal' }
+      end
+
+      def self.rule_values(raw, arity)
+        current_user = raw == RuleForm::CURRENT_USER
+        value_from, value_to = arity == :range ? raw.split(',', 2).map(&:strip) : ['', '']
+        { current_user: current_user, value: current_user ? '' : raw,
+          values: arity == :list ? raw.split(',').map(&:strip) : [], value_from: value_from, value_to: value_to }
+      end
+
+      def self.rule_options(rule)
+        { include_nulls: rule.persisted? ? rule.include_nulls : false, failure_message: rule.failure_message.to_s,
+          join: rule.join_type.presence || 'auto', is_active: rule.is_active != false }
+      end
+
+      def self.allowed(value, choices, fallback)
+        value = value.to_s
+        choices.include?(value) ? value : fallback
+      end
+
+      def self.stripped(value)
+        value.to_s.strip
+      end
+    end
+  end
+end

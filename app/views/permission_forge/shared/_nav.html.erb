@@ -1,0 +1,12 @@
+<% attention = pf_attention.total %>
+<% risks = pf_settings_catalog.risky_rows.size %>
+<div class="pf-nav">
+  <%= pf_nav_link t('permission_forge.nav.home'), permission_forge.root_path, exact: true,
+                  badge: attention, badge_label: t('permission_forge.nav.badge_aria', count: attention) %>
+  <%= pf_nav_link t('permission_forge.nav.people'), permission_forge.people_path %>
+  <%= pf_nav_link t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path %>
+  <%= pf_nav_link t('permission_forge.nav.groups'), permission_forge.groups_path %>
+  <%= pf_nav_link t('permission_forge.nav.audit_log'), permission_forge.audit_events_path %>
+  <%= pf_nav_link t('permission_forge.nav.settings'), permission_forge.settings_path,
+                  badge: risks, badge_label: t('permission_forge.nav.badge_aria', count: risks) %>
+</div>

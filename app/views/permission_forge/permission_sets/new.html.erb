@@ -1,0 +1,63 @@
+<% content_for :pf_title, t('.title') %>
+<%= pf_dialog_frame({ title: t('.title'), role: 'dialog', wide: true,
+                     breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path], t('.title')) }) do %>
+  <%= form_with url: permission_forge.permission_sets_path, method: :post, class: 'pf-stack pf-stack--loose' do %>
+    <fieldset class="pf-stack">
+      <legend class="pf-label"><%= t('.type') %></legend>
+      <div class="pf-choices" role="radiogroup">
+        <label class="pf-choice">
+          <input type="radio" name="type" value="granting" <%= 'checked' unless @muting %>>
+          <span class="pf-choice__box">
+            <span class="pf-choice__title"><span class="pf-glyph-grant" aria-hidden="true">✓</span> <%= t('.granting.title') %></span>
+            <span class="pf-choice__desc"><%= t('.granting.desc') %></span>
+            <span class="pf-choice__sub"><%= t('.granting.example') %></span>
+          </span>
+        </label>
+        <label class="pf-choice pf-choice--muting">
+          <input type="radio" name="type" value="muting" <%= 'checked' if @muting %>>
+          <span class="pf-choice__box">
+            <span class="pf-choice__title"><span class="pf-glyph-restrict" aria-hidden="true">⊘</span> <%= t('.muting.title') %></span>
+            <span class="pf-choice__desc"><%= t('.muting.desc') %></span>
+            <span class="pf-choice__sub"><%= t('.muting.example') %></span>
+          </span>
+        </label>
+      </div>
+    </fieldset>
+
+    <div class="pf-field">
+      <label class="pf-label" for="pf-new-set-name"><%= t('.name') %></label>
+      <input id="pf-new-set-name" class="pf-input" type="text" name="name" value="<%= @name %>" required maxlength="255" autofocus
+             placeholder="<%= t('.name_placeholder') %>" <%= pf_attrs_when(@error, aria: { invalid: true, describedby: 'pf-new-set-error' }) %>>
+      <% if @error %><p id="pf-new-set-error" class="pf-error" role="alert"><%= @error %></p><% end %>
+    </div>
+
+    <% %w[granting muting].each do |kind| %>
+      <% options = @sources.select { |ps| ps.is_muting == (kind == 'muting') } %>
+      <div class="pf-field" data-pf-show-when="type=<%= kind %>">
+        <label class="pf-label" for="pf-new-set-from-<%= kind %>"><%= t(".start_from_#{kind}") %></label>
+        <select id="pf-new-set-from-<%= kind %>" name="start_from_<%= kind %>" class="pf-select">
+          <option value=""><%= t('.blank') %></option>
+          <% options.each do |ps| %>
+            <option value="<%= ps.id %>" <%= 'selected' if @start_from == ps.id.to_s %>><%= t('.copy_of', name: ps.name) %></option>
+          <% end %>
+        </select>
+      </div>
+    <% end %>
+
+    <div class="pf-field">
+      <label class="pf-label" for="pf-new-set-group"><%= t('.group') %></label>
+      <select id="pf-new-set-group" name="permission_set_group_id" class="pf-select">
+        <option value=""><%= t('permission_forge.ui.no_group') %></option>
+        <% @groups.each do |g| %><option value="<%= g.id %>" <%= 'selected' if @group_id == g.id.to_s %>><%= g.name %></option><% end %>
+      </select>
+    </div>
+
+    <p class="pf-hint"><%= t('.note') %></p>
+    <%= render 'permission_forge/shared/reason_field', id: 'pf-new-set-reason', value: params[:reason] %>
+
+    <div class="pf-actions pf-row--right">
+      <%= link_to t('permission_forge.ui.cancel'), permission_forge.permission_sets_path, class: 'pf-btn', data: { pf_close: true } %>
+      <button type="submit" class="pf-btn pf-btn--primary"><%= t('.create') %></button>
+    </div>
+  <% end %>
+<% end %>

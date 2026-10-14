@@ -1,0 +1,20 @@
+<details class="pf-tech">
+  <summary><%= t('.summary') %></summary>
+  <div class="pf-tech__body">
+    <% if record.respond_to?(:uuid) && record.uuid.present? %>
+      <div class="pf-copy">
+        <span>UUID</span>
+        <code class="pf-uuid"><%= record.uuid %></code>
+        <button type="button" class="pf-btn pf-btn--xs" data-pf-copy="<%= record.uuid %>" data-pf-copied="<%= t('.copied') %>" hidden data-pf-js-show><%= t('.copy') %></button>
+      </div>
+    <% end %>
+    <% if extras.any? %>
+      <div class="pf-row pf-gap-12">
+        <% extras.each do |key, value| %>
+          <code class="pf-mono-key"><%= key %>: <%= value.inspect %></code>
+        <% end %>
+      </div>
+    <% end %>
+    <%= extra_html %>
+  </div>
+</details>

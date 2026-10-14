@@ -1,0 +1,28 @@
+# frozen_string_literal: true
+
+namespace :permission_forge do
+  namespace :audit_events do
+    desc 'Delete audit events older than config.audit_retention_period (DRY_RUN=1 counts only). ACTOR= names who ran it.'
+    task purge: :environment do
+      task_name = 'permission_forge:audit_events:purge'
+      dry_run = %w[1 true].include?(ENV.fetch('DRY_RUN', nil))
+      purge = -> { PermissionForge::Services::AuditEventPurger.call(dry_run: dry_run) }
+      result = begin
+        dry_run ? purge.call : PermissionForge::RakeAudit.changing(task_name, &purge)
+      rescue PermissionForge::ConfigurationError => e
+        warn "Refused: #{e.message}"
+        PermissionForge::RakeAudit.log(task_name, "refused: #{e.message}")
+        exit 1
+      end
+      PermissionForge::RakeAudit.log(task_name, result.to_json)
+
+      if !result[:retention_configured]
+        puts 'Retention is not configured (config.audit_retention_period is nil): nothing was deleted.'
+      elsif dry_run
+        puts "Dry run — #{result[:purged]} audit event(s) older than #{result[:cutoff].iso8601} would be deleted."
+      else
+        puts "Deleted #{result[:purged]} audit event(s) older than #{result[:cutoff].iso8601}."
+      end
+    end
+  end
+end

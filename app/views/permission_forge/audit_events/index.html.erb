@@ -1,0 +1,161 @@
+<% content_for :pf_title, t('.title') %>
+<% filters = @log.filters %>
+<% value = ->(key) { pf_audit_filter_value(filters, key) } %>
+<% invalid = ->(key) { @errors&.key?(key.to_sym) ? tag.attributes('aria-invalid': 'true') : '' } %>
+<div class="pf-page-header">
+  <div class="pf-page-header__text">
+    <h1 class="pf-h1"><%= t('.title') %></h1>
+    <p class="pf-subtitle"><%= t('.subtitle') %></p>
+  </div>
+  <div class="pf-actions">
+    <%= link_to t('.holdings'), permission_forge.holdings_audit_events_path(format: :csv), class: 'pf-btn', title: t('.holdings_title') %>
+  </div>
+</div>
+
+<% if (problem = PermissionForge::Admin::AuditLog.recording_problem) %>
+  <%= render 'permission_forge/shared/audit_off_note', problem: problem %>
+<% end %>
+
+<% if @errors %>
+  <div class="pf-banner pf-banner--block" role="alert" id="pf-audit-errors">
+    <span class="pf-banner__glyph" aria-hidden="true">⊘</span>
+    <div class="pf-banner__body">
+      <span class="pf-banner__title"><%= t('.invalid.title') %></span>
+      <ul class="pf-audit-errors">
+        <% @errors.each do |name, messages| %>
+          <li><%= pf_audit_filter_error(name, messages, value.(name.to_s)) %></li>
+        <% end %>
+      </ul>
+    </div>
+  </div>
+<% end %>
+
+<%= form_with url: permission_forge.audit_events_path, method: :get, class: 'pf-card pf-audit-filters', role: 'search',
+              'aria-label': t('.filters.label') do %>
+  <div class="pf-card__body pf-audit-filters__grid">
+    <p class="pf-hint pf-audit-filters__zone"><%= t('.filters.time_zone', zone: PermissionForge::Admin::AuditLogDays.zone_name) %></p>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-audit-from"><%= t('.filters.from') %></label>
+      <input id="pf-audit-from" class="pf-input pf-input--sm" type="date" name="from" value="<%= value.('from') %>" <%= invalid.('from') %>>
+    </div>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-audit-to"><%= t('.filters.to') %></label>
+      <input id="pf-audit-to" class="pf-input pf-input--sm" type="date" name="to" value="<%= value.('to') %>" <%= invalid.('to') %>>
+    </div>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-audit-event"><%= t('.filters.event') %></label>
+      <select id="pf-audit-event" class="pf-select pf-select--sm" name="event" <%= invalid.('event') %>>
+        <option value=""><%= t('.filters.any_event') %></option>
+        <% PermissionForge::Admin::AuditLog.event_names_by_category.each do |category, names| %>
+          <optgroup label="<%= pf_audit_category_label(category) %>">
+            <% names.each do |name| %>
+              <option value="<%= name %>" <%= 'selected' if value.('event') == name %>><%= name %></option>
+            <% end %>
+          </optgroup>
+        <% end %>
+        <% if value.('event').present? && PermissionForge::Admin::AuditLog.event_names_by_category.values.flatten.exclude?(value.('event')) %>
+          <option value="<%= value.('event') %>" selected><%= value.('event') %></option>
+        <% end %>
+      </select>
+    </div>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-audit-category"><%= t('.filters.category') %></label>
+      <select id="pf-audit-category" class="pf-select pf-select--sm" name="category" <%= invalid.('category') %>>
+        <option value=""><%= t('.filters.any_category') %></option>
+        <% PermissionForge::AuditEvent::CATEGORIES.each do |category| %>
+          <option value="<%= category %>" <%= 'selected' if value.('category') == category %>><%= pf_audit_category_label(category) %></option>
+        <% end %>
+      </select>
+    </div>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-audit-actor-type"><%= t('.filters.actor_type') %></label>
+      <select id="pf-audit-actor-type" class="pf-select pf-select--sm" name="actor_type" <%= invalid.('actor_type') %>>
+        <option value=""><%= t('.filters.any_actor_type') %></option>
+        <% PermissionForge::AuditEvent::ACTOR_TYPES.each do |type| %>
+          <option value="<%= type %>" <%= 'selected' if value.('actor_type') == type %>><%= pf_audit_actor_type_label(type) %></option>
+        <% end %>
+      </select>
+    </div>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-audit-actor"><%= t('.filters.actor_id') %></label>
+      <input id="pf-audit-actor" class="pf-input pf-input--sm" type="text" name="actor_id" value="<%= value.('actor_id') %>"
+             list="pf-audit-people" autocomplete="off" placeholder="<%= t('.filters.id_placeholder') %>" <%= invalid.('actor_id') %>>
+    </div>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-audit-person"><%= t('.filters.subject_user_id') %></label>
+      <input id="pf-audit-person" class="pf-input pf-input--sm" type="text" name="subject_user_id" value="<%= value.('subject_user_id') %>"
+             list="pf-audit-people" autocomplete="off" placeholder="<%= t('.filters.id_placeholder') %>" <%= invalid.('subject_user_id') %>>
+    </div>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-audit-set"><%= t('.filters.permission_set') %></label>
+      <% sets = PermissionForge::PermissionSet.order(:name).pluck(:id, :name) %>
+      <select id="pf-audit-set" class="pf-select pf-select--sm" name="permission_set" <%= invalid.('permission_set') %>>
+        <option value=""><%= t('.filters.any_set') %></option>
+        <% sets.each do |id, name| %>
+          <option value="<%= id %>" <%= 'selected' if value.('permission_set') == id.to_s %>><%= name %></option>
+        <% end %>
+        <% if value.('permission_set').present? && sets.none? { |id, _| id.to_s == value.('permission_set') } %>
+          <option value="<%= value.('permission_set') %>" selected><%= t('.filters.deleted_set', id: value.('permission_set')) %></option>
+        <% end %>
+      </select>
+    </div>
+    <div class="pf-field">
+      <label class="pf-label" for="pf-audit-correlation"><%= t('.filters.correlation_id') %></label>
+      <input id="pf-audit-correlation" class="pf-input pf-input--sm" type="text" name="correlation_id" value="<%= value.('correlation_id') %>"
+             autocomplete="off" <%= invalid.('correlation_id') %>>
+    </div>
+    <% record_filter = %w[record_type record_id record_uuid].any? { |key| filters.key?(key) } %>
+    <% %w[record_type record_id record_uuid].each do |key| %>
+      <% if record_filter %>
+        <div class="pf-field">
+          <label class="pf-label" for="pf-audit-<%= key.dasherize %>"><%= t(".filters.#{key}") %></label>
+          <input id="pf-audit-<%= key.dasherize %>" class="pf-input pf-input--sm" type="text" name="<%= key %>" value="<%= value.(key) %>"
+                 autocomplete="off" <%= invalid.(key) %>>
+        </div>
+      <% end %>
+    <% end %>
+    <% unless @errors %>
+      <datalist id="pf-audit-people">
+        <% PermissionForge::Admin::AuditLog.known_people.each do |id, label| %>
+          <option value="<%= id %>"><%= label.presence || t('permission_forge.audit_log.person_id', id: id) %></option>
+        <% end %>
+      </datalist>
+    <% end %>
+    <label class="pf-checkbox pf-audit-filters__views">
+      <input type="checkbox" name="views" value="1" <%= 'checked' if params[:views].to_s == '1' %>>
+      <span><%= t('.filters.views') %></span>
+    </label>
+  </div>
+  <div class="pf-card__footer pf-card__footer--muted">
+    <button type="submit" class="pf-btn pf-btn--primary pf-btn--sm"><%= t('.filters.apply') %></button>
+    <% if @log.link_params.any? %>
+      <%= link_to t('.filters.clear'), permission_forge.audit_events_path, class: 'pf-btn pf-btn--sm' %>
+    <% end %>
+    <% unless @errors %>
+      <span class="pf-ml-auto pf-row pf-row--tight">
+        <span class="pf-fs-13 pf-text-2"><%= t('.export') %></span>
+        <%= link_to 'CSV', permission_forge.audit_events_path(filters.merge(format: :csv)), class: 'pf-btn pf-btn--sm', title: t('.export_title', kind: 'CSV') %>
+        <%= link_to 'JSON', permission_forge.audit_events_path(filters.merge(format: :json)), class: 'pf-btn pf-btn--sm', title: t('.export_title', kind: 'JSON') %>
+      </span>
+    <% end %>
+  </div>
+<% end %>
+
+<% if @page %>
+  <section class="pf-card" aria-labelledby="pf-audit-results">
+    <div class="pf-card__header">
+      <h2 class="pf-h2" id="pf-audit-results"><%= t('.results', count: @page.total) %></h2>
+      <span class="pf-card__desc"><%= t('.newest_first') %></span>
+    </div>
+    <% unless @log.include_views? %>
+      <p class="pf-card__row pf-fs-13 pf-text-2 pf-audit-views-note">
+        <%= t('.views_hidden') %>
+        <%= link_to t('.views_show'), permission_forge.audit_events_path(@log.link_params.merge('views' => '1')) %>
+      </p>
+    <% end %>
+    <%= render 'permission_forge/shared/audit_events', events: @page.events, lookups: @lookups,
+               empty: (filters.any? ? t('.empty_filtered') : t('permission_forge.audit_log.empty')) %>
+    <%= render 'permission_forge/shared/audit_pagination', page: @page,
+               path: ->(number) { permission_forge.audit_events_path(@log.link_params.merge(page: number)) } %>
+  </section>
+<% end %>

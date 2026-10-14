@@ -1,0 +1,20 @@
+<%# Optional reason for a change, kept on its audit events (and on an
+    assignment). Collapsed; works without JS. Locals (all optional):
+    id — unique input id on the page; compact — a small toggle for a row's
+    inline form; form — the id of the form the input belongs to when it sits
+    outside it; value — the reason typed before a re-render (opens the toggle). %>
+<% input_id = local_assigns[:id] || 'pf-reason' %>
+<% compact = local_assigns[:compact] %>
+<% value = local_assigns[:value].is_a?(String) ? local_assigns[:value] : nil %>
+<details class="pf-reason<%= ' pf-reason--compact' if compact %>"<%= ' open' if value.present? %>>
+  <summary class="pf-reason__summary">
+    <span class="pf-disclosure" aria-hidden="true">›</span>
+    <%= compact ? t('permission_forge.shared.reason_field.summary_short') : t('permission_forge.shared.reason_field.summary') %>
+  </summary>
+  <div class="pf-reason__body">
+    <label class="<%= compact ? 'pf-sr-only' : 'pf-label' %>" for="<%= input_id %>"><%= t('permission_forge.shared.reason_field.label') %></label>
+    <input id="<%= input_id %>" class="pf-input pf-input--sm" type="text" name="reason" maxlength="255" autocomplete="off" value="<%= value %>"
+           placeholder="<%= t('permission_forge.shared.reason_field.placeholder') %>"<%= tag.attributes(form: local_assigns[:form]) if local_assigns[:form] %>>
+    <% unless compact %><span class="pf-hint"><%= t('permission_forge.shared.reason_field.hint') %></span><% end %>
+  </div>
+</details>

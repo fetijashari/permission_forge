@@ -1,0 +1,44 @@
+<% muting = @permission_set.is_muting %>
+<% errors = @errors || {} %>
+<% new_record = action.new_record? %>
+<%# Discovered controller actions without a row yet, offered as suggestions (no JS needed). %>
+<% suggestions = local_assigns[:suggestions] || [] %>
+<div class="pf-field">
+  <%# Only a new action's name is a control; an existing one is shown, not edited. %>
+  <%= content_tag(new_record ? :label : :span, t('.name'), class: 'pf-label', for: ('pf-action-name' if new_record)) %>
+  <% if new_record %>
+    <input id="pf-action-name" class="pf-input pf-mono" type="text" name="resource_action[name]" value="<%= action.name %>" required
+           pattern="[a-z][a-z0-9_]*" placeholder="export" autofocus <%= pf_attrs_when(errors[:name], aria: { invalid: true }) %>
+           <%= pf_attrs_when(suggestions.any?, list: 'pf-action-keys') %>>
+    <% if suggestions.any? %>
+      <datalist id="pf-action-keys">
+        <% suggestions.each do |key| %><option value="<%= key %>"></option><% end %>
+      </datalist>
+    <% end %>
+    <span class="pf-hint"><%= t('.name_hint') %></span>
+    <% if suggestions.any? %><span class="pf-hint"><%= t('.name_suggestions') %></span><% end %>
+    <% if errors[:name] %><p class="pf-error" role="alert"><%= errors[:name] %></p><% end %>
+  <% else %>
+    <code class="pf-mono"><%= action.name %></code>
+  <% end %>
+</div>
+<div class="pf-field">
+  <label class="pf-label" for="pf-action-label"><%= t('.label') %></label>
+  <input id="pf-action-label" class="pf-input" type="text" name="resource_action[label]" value="<%= action.label %>" placeholder="<%= t('.label_placeholder') %>">
+</div>
+<div class="pf-field">
+  <label class="pf-label" for="pf-action-desc"><%= t('.description') %></label>
+  <textarea id="pf-action-desc" class="pf-textarea" name="resource_action[description]" rows="2"><%= action.description %></textarea>
+</div>
+<label class="pf-switch pf-switch--bare">
+  <input type="hidden" name="resource_action[is_permitted]" value="0">
+  <input type="checkbox" role="switch" name="resource_action[is_permitted]" value="1" <%= 'checked' if action.is_permitted %>>
+  <span class="pf-switch__track" aria-hidden="true"></span>
+  <span><%= muting ? t('.block') : t('.permitted') %></span>
+</label>
+<label class="pf-switch pf-switch--bare">
+  <input type="hidden" name="resource_action[is_active]" value="0">
+  <input type="checkbox" role="switch" name="resource_action[is_active]" value="1" <%= 'checked' if action.is_active %>>
+  <span class="pf-switch__track" aria-hidden="true"></span>
+  <span><%= t('permission_forge.shared.active') %></span>
+</label>

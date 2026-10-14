@@ -1,0 +1,271 @@
+---
+# Reek configuration for PermissionForge
+# Tuned for Rails engine conventions
+
+detectors:
+  # Disabled: Rails engines don't need doc comments on every module/class
+  IrresponsibleModule:
+    enabled: false
+
+  # Disabled: Rails concerns and controllers use instance variables across methods
+  InstanceVariableAssumption:
+    enabled: false
+
+  # Disabled: attr_accessor/attr_reader are standard Rails patterns (config, models)
+  Attribute:
+    enabled: false
+
+  # Disabled: Nil checks are idiomatic Ruby
+  NilCheck:
+    enabled: false
+
+  # Disabled: Boolean params are fine for simple toggles (grant_all, etc.)
+  BooleanParameter:
+    enabled: false
+
+  # Disabled: Domain-specific names like mask_last4 are clear in context
+  UncommunicativeMethodName:
+    enabled: false
+
+  # Disabled: Abstract base class params and respond_to? are standard patterns
+  UnusedParameters:
+    enabled: false
+
+  # Disabled: respond_to? / send are standard Rails metaprogramming
+  ManualDispatch:
+    enabled: false
+
+  # Disabled: Bang methods without safe counterparts are fine for internal APIs
+  MissingSafeMethod:
+    enabled: false
+
+  # Disabled: Branching on a param is normal in helpers and controllers
+  ControlParameter:
+    enabled: false
+
+  # Tuned: Allow longer methods in services and config that orchestrate multiple steps
+  TooManyStatements:
+    max_statements: 15
+
+  # Tuned: Allow referencing collaborator objects in service/concern methods
+  # (ApplicationHelper: view helpers format passed objects by design — same
+  # rationale as its UtilityFunction exclusion below; the *Helper modules are
+  # the parts ApplicationHelper includes)
+  FeatureEnvy:
+    exclude:
+      - PermissionForge::Api::BaseController
+      - PermissionForge::ApplicationHelper
+      - PermissionForge::AuditHelper
+      - PermissionForge::BadgesHelper
+      - PermissionForge::ChangesHelper
+      - PermissionForge::PeopleHelper
+      - PermissionForge::SentencesHelper
+      - PermissionForge::SettingsHelper
+      - PermissionForge::UiHelper
+      - PermissionForge::Api::Pagination
+      - PermissionForge::Api::ResponseRenderer
+      - PermissionForge::Api::SerializerResolver
+      - PermissionForge::Concerns::FieldMaskChecker
+      - PermissionForge::Concerns::MaskedAttributes
+      - PermissionForge::Concerns::PermissionCacheAccessor
+      - PermissionForge::Concerns::PermissionsPerContext
+      - PermissionForge::Concerns::PermissionScopedFindable
+      - PermissionForge::Concerns::PermissionedUser
+      - PermissionForge::Concerns::PermissionsRegenerator
+      - PermissionForge::Concerns::ResourcePermissionChecker
+      - PermissionForge::Configuration
+      - PermissionForge::ResourceAction
+      - PermissionForge::ResourceField
+      - PermissionForge::Services::DataSubjectErasure
+      - PermissionForge::Services::FieldPermissionMerger
+      - PermissionForge::Services::FiltersResponseAttributes
+      - PermissionForge::Services::GdprFieldAuditor
+      - PermissionForge::Services::PermissionHashBuilder
+      - PermissionForge::Services::PermissionRuleApplier
+      - PermissionForge::Services::PermissionSetCloner
+      - PermissionForge::Services::PermissionSetGroupCloner
+      - PermissionForge::Services::PermitsAttributes
+      - PermissionForge::Services::StaleAssignmentAuditor
+      - PermissionForge::Concerns::HasTenantScoping
+      # Security audit checks and their text rendering turn the records they
+      # inspect into report lines (same rationale as GdprFieldAuditor)
+      - PermissionForge::Services::SecurityAuditChecks::IntegrityCheck
+      - PermissionForge::Services::SecurityAuditChecks::PersonalDataCheck
+      - PermissionForge::Services::SecurityAuditChecks::PrivilegeCheck
+      - PermissionForge::Services::SecurityAuditChecks::RuleCheck
+      - PermissionForge::Services::SecurityAuditChecks::TextReport
+      # Audit event log: value objects, read models and formatters that take
+      # one record (event, assignment, decision, payload) and read its parts,
+      # the same by-design rationale as the helpers above
+      - PermissionForge::AssignmentAuthorization#pf_cast_user_ids
+      - PermissionForge::AuditEventsController#find_event
+      - PermissionForge::AuditSentencesHelper
+      - PermissionForge::Admin::AuditLookups#permission_set
+      - PermissionForge::Admin::AuditLookups#person
+      - PermissionForge::Admin::Exports::Holdings#granted_by
+      - PermissionForge::Admin::Exports::Holdings#person
+      - PermissionForge::Admin::Exports::Holdings#reviewed
+      - PermissionForge::Admin::Exports::Holdings#row
+      - PermissionForge::Admin::LastChanges#ids_by_type
+      - PermissionForge::Admin::LastChanges#latest
+      - PermissionForge::Audit::Actor#==
+      - PermissionForge::Audit::EventQuery#event_names
+      - PermissionForge::Audit::EventQuery#parse_timestamp
+      - PermissionForge::Audit::EventQuery#utc_offset
+      - PermissionForge::Audit::Recorder#permission_set_reference
+      - PermissionForge::Audit::Recorder#reference
+      - PermissionForge::Concerns::RecordsAuditEvents#audit_as_data
+      - PermissionForge::Concerns::RecordsAuditEvents#audit_as_override
+      - PermissionForge::Concerns::RecordsAuditEvents#audit_fetch
+      - PermissionForge::PermissionSetGroup#detach_permission_set
+      - PermissionForge::Services::Clonable#duplicate_record
+      # The controller guard turns the Authorizer's decision into a raise or a pass:
+      # security-reviewed, fails closed, so not reshaped for a smell score
+      - PermissionForge::Concerns::ControllerActionGuard#pf_action_allowed
+      - PermissionForge::Concerns::ControllerActionGuard#pf_action_denied
+      # Benchmarked, security-reviewed hot paths (runtime events, field access):
+      # not reshaped for a smell score
+      - PermissionForge::Audit::FieldAccess::Frame#add
+      - PermissionForge::Audit::Gate#heard_by
+      - PermissionForge::Audit::RuntimeEmission
+      - PermissionForge::Audit::Subscribers::LegacyHooks::FieldFiltered
+      - PermissionForge::Audit::Subscribers::LegacyHooks::RuleBypass
+
+  # Tuned: Service objects with private utility methods are fine
+  # Helpers are modules included into views — they don't use instance state by design
+  UtilityFunction:
+    public_methods_only: true
+    exclude:
+      - PermissionForge::ApplicationHelper
+      # Modules included into ApplicationHelper (same rationale)
+      - PermissionForge::AuditHelper
+      - PermissionForge::BadgesHelper
+      - PermissionForge::ChangesHelper
+      - PermissionForge::PeopleHelper
+      - PermissionForge::SentencesHelper
+      - PermissionForge::SettingsHelper
+      - PermissionForge::UiHelper
+      # Sentence helpers: format a passed event, no state (same as the other helpers)
+      - PermissionForge::AuditSentencesHelper
+      # Runtime-event hot path (gate check before any work); kept as it was benchmarked
+      - PermissionForge::Audit::RuntimeEmission#emitting?
+
+  # Tuned: Allow repeated accessor calls in data processing
+  DuplicateMethodCall:
+    max_calls: 4
+
+  # Tuned: Short block variables (k, v, e, _, l, r, g) are idiomatic Ruby
+  UncommunicativeVariableName:
+    accept:
+      - k
+      - v
+      - e
+      - i
+      - l
+      - r
+      - g
+      - _
+      - q
+      - id
+      - m
+      - u
+
+  # Tuned: Config objects and dashboard controllers need many instance variables
+  TooManyInstanceVariables:
+    max_instance_variables: 52
+
+  # Tuned: Configuration holds many config options with getters/setters/validators
+  TooManyMethods:
+    max_methods: 25
+    exclude:
+      - PermissionForge::Configuration
+      # A screen with one small action per tab / drawer / bulk step
+      - PermissionForge::AssignmentsController
+      # One small query-and-count method per attention card
+      - PermissionForge::Admin::AttentionItems
+      # One small SQL-builder method per operator/branch (strategy registry)
+      - PermissionForge::Services::RlsPolicyGenerator
+
+  # Tuned: Operator methods in Registry inherently share (query, col) as co-travelling params
+  DataClump:
+    max_copies: 7
+    exclude:
+      - PermissionForge::Operators::Registry
+
+  # Tuned: Operator strategies require (query, col, rule, val) by design
+  LongParameterList:
+    exclude:
+      # Public view-helper signatures called from the views: keyword options
+      # (href:, selected:, count:, ...) are the Rails tag-helper idiom
+      - PermissionForge::ApplicationHelper#pf_nav_link
+      - PermissionForge::BadgesHelper#pf_level_badge
+      - PermissionForge::BadgesHelper#pf_set_chip
+      - PermissionForge::UiHelper#pf_filter_chip
+      - PermissionForge::UiHelper#pf_modal_link
+      - PermissionForge::UiHelper#pf_state_cell
+      - PermissionForge::UiHelper#pf_tab
+      # Row builder for the DEFINITIONS lookup table: d(key, section, type, **options)
+      - PermissionForge::Admin::SettingsCatalog#self.d
+      # Finding builder: severity, code, title, detail, items: — one per report field
+      - PermissionForge::Services::SecurityAuditChecks::BaseCheck#finding
+      - PermissionForge::Concerns::MaskedAttributes
+      - PermissionForge::Operators::Registry
+      - PermissionForge::Services::AttributeAccessGuard
+      # What to check (path, action, controller) plus injectable dependencies
+      # (user:, configuration:, index:) with defaults
+      - PermissionForge::ControllerActions::Authorizer
+      - PermissionForge::Services::PermissionRuleApplier
+      # LIKE builder takes (col, rule, prefix:, suffix:) — mirrors the operator registry contract
+      - PermissionForge::Services::RlsPolicyGenerator
+      - PermissionForge::Services::RlsOperatorSql
+      # Audit event log: public keyword-argument APIs and value-object
+      # constructors where each parameter is one field of the event (actor,
+      # record, request, reason ...); a parameter object would only move the list
+      - PermissionForge#with_audit_actor
+      - PermissionForge::ActionNotAuthorizedError#initialize
+      - PermissionForge::AssignmentAuthorization#pf_assignment_refused?
+      - PermissionForge::AssignmentAuthorization#pf_audit_assignment_refusal
+      - PermissionForge::Admin::Exports#meta
+      - PermissionForge::Admin::Exports::Events#self.call
+      - PermissionForge::Audit#emit
+      - PermissionForge::Audit#write
+      - PermissionForge::Audit::ActorResolver#self.call
+      - PermissionForge::Audit::AuditedViews#register
+      - PermissionForge::Audit::EventQuery#real_moment?
+      - PermissionForge::Audit::Failure#handle
+      - PermissionForge::Audit::Refusals#assignment
+      - PermissionForge::Audit::RequestContext#refused
+      - PermissionForge::Audit::Subscribers::Base#call
+      - PermissionForge::Services::AuditEventPurger#initialize
+      - PermissionForge::Services::DataSubjectErasure#record_summary
+      - PermissionForge::Services::DataSubjectErasure#summary_data
+      # Runtime-event hot path (Runtime.denied/bypassed, field access reads and
+      # notes, emission): flat arguments avoid an allocation per check
+      - PermissionForge::Audit::FieldAccess
+      - PermissionForge::Audit::FieldAccess::Direct
+      - PermissionForge::Audit::FieldAccess::Frame
+      - PermissionForge::Audit::Runtime
+      - PermissionForge::Audit::RuntimeEmission
+      - PermissionForge::Audit::Subscribers::LegacyHooks::FieldFiltered
+
+  # Tuned: Nested iterators in collection processing are fine up to 2 levels
+  NestedIterators:
+    max_allowed_nesting: 2
+
+  # Tuned: Operator constants module is a dedicated constant registry
+  TooManyConstants:
+    max_constants: 12
+    exclude:
+      - PermissionForge::Operators::Constants
+
+  # Tuned: AMS vs built-in serializer check is a deliberate pattern
+  RepeatedConditional:
+    max_ifs: 4
+    exclude:
+      # The boot initializer is an ordered checklist of warnings; each database
+      # step is guarded by `db_available?` on its own line so the order stays readable
+      - PermissionForge::Engine
+
+exclude_paths:
+  - test
+  - app/views

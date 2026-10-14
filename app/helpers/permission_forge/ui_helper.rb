@@ -1,0 +1,184 @@
+module PermissionForge
+  # Building blocks shared by every admin screen: assets, text, dates, state
+  # cells, banners, footers, tabs, frames. Badges/chips live in BadgesHelper,
+  # people/assignment cells in PeopleHelper.
+  # Every class is pf- prefixed; no inline styles (strict-CSP friendly).
+  #
+  # @api private
+  module UiHelper
+    STATE_GLYPHS = { granted: '✓', blocked: '⊘', none: '–' }.freeze
+
+    # --- assets ---------------------------------------------------------------
+
+    def pf_asset_url(file)
+      permission_forge.pf_asset_path(file: file, v: PermissionForge::AssetsController.digest(file))
+    end
+
+    # ` nonce="…"` when the host app runs a CSP with nonces, else nothing.
+    def pf_nonce_attribute(_kind = :script)
+      nonce = respond_to?(:content_security_policy_nonce) ? content_security_policy_nonce : nil
+      nonce.present? ? tag.attributes(nonce: nonce) : ''
+    rescue StandardError
+      ''
+    end
+
+    def pf_lock_icon
+      tag.svg(class: 'pf-lock', viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6',
+              'aria-hidden': 'true', focusable: 'false') do
+        safe_join([tag.rect(x: 3, y: 7, width: 10, height: 7, rx: 1.5), tag.path(d: 'M5.5 7V5a2.5 2.5 0 0 1 5 0v2')])
+      end
+    end
+
+    # The attributes, only when the condition holds: `<input <%= pf_attrs_when(error, aria: { invalid: true }) %>>`.
+    # Built by `tag.attributes`, so every value is escaped; nothing is marked safe by hand.
+    def pf_attrs_when(condition, **attributes)
+      condition ? tag.attributes(**attributes) : ''
+    end
+
+    # --- text helpers ---------------------------------------------------------
+
+    def pf_ui(key, **)
+      t("permission_forge.ui.#{key}", **)
+    end
+
+    def pf_people_text(count)
+      pf_ui('people_count', count: count)
+    end
+
+    MONTH_KEYS = %w[jan feb mar apr may jun jul aug sep oct nov dec].freeze
+
+    # "12 Mar 2026" / "12 Mar" using the engine's own month names (no
+    # dependency on rails-i18n being installed in the host app).
+    def pf_date(value, year: true)
+      return pf_ui('dates.never') if value.nil?
+
+      date = value.to_date
+      month = t("permission_forge.ui.months.#{MONTH_KEYS[date.month - 1]}")
+      year ? "#{date.day} #{month} #{date.year}" : "#{date.day} #{month}"
+    end
+
+    def pf_datetime(value)
+      return pf_ui('dates.never') if value.nil?
+
+      "#{pf_date(value)} · #{value.in_time_zone.strftime('%H:%M')}"
+    end
+
+    # "today", "yesterday", "3 days ago", or a date for anything older than 30 days.
+    def pf_relative(value)
+      return pf_ui('dates.never') if value.nil?
+
+      days = (Time.zone.today - value.to_date).to_i
+      return pf_ui('dates.today') if days <= 0
+      return pf_ui('dates.yesterday') if days == 1
+      return pf_ui('dates.days_ago', count: days) if days < 30
+
+      pf_date(value)
+    end
+
+    def pf_hour(hour)
+      format('%02d:00', hour.to_i)
+    end
+
+    # Read-only state cell (effective access grid, across-sets lists).
+    def pf_state_cell(state, aria:, href: nil, why: nil, current: false)
+      state = state.to_sym
+      label = pf_ui("states.#{state}")
+      content = safe_join([content_tag(:span, STATE_GLYPHS.fetch(state), class: 'pf-cell__glyph', 'aria-hidden': true),
+                           content_tag(:span, label)], ' ')
+      opts = { class: "pf-state pf-state--#{state}", 'aria-label': "#{aria}: #{label}" }
+      opts[:'aria-current'] = 'true' if current
+      opts[:data] = { pf_why: why } if why
+      href ? link_to(content, href, opts) : content_tag(:span, content, opts)
+    end
+
+    # --- banners & footers ----------------------------------------------------
+
+    def pf_help_banner(key, term:, text:)
+      return unless pf_help_visible?(key)
+
+      render 'permission_forge/shared/help_banner', key: key, term: term, text: text
+    end
+
+    def pf_audit_footer(record, prefix: nil)
+      render 'permission_forge/shared/audit_footer', record: record, prefix: prefix
+    end
+
+    def pf_tech_details(record, extras: {}, &block)
+      render 'permission_forge/shared/tech_details', record: record, extras: extras,
+                                                     extra_html: (capture(&block) if block)
+    end
+
+    def pf_setting_path(key)
+      permission_forge.settings_path(focus: key, anchor: "set-#{key}")
+    end
+
+    def pf_setting_link(key, text = nil)
+      link_to(text || pf_ui('open_setting'), pf_setting_path(key), class: 'pf-fs-12')
+    end
+
+    # Tab link with ARIA state, plus count.
+    def pf_tab(label, href, selected:, count: nil)
+      text = count.nil? ? label : "#{label} (#{count})"
+      link_to(text, href, class: 'pf-tab', role: 'tab', 'aria-selected': selected.to_s)
+    end
+
+    def pf_filter_chip(label, href, selected:, count: nil)
+      body = [content_tag(:span, label)]
+      body << content_tag(:span, count, class: 'pf-filter__count') unless count.nil?
+      link_to(safe_join(body), href, class: 'pf-filter', 'aria-current': (selected ? 'true' : nil))
+    end
+
+    # A section heading inside a drawer or confirmation page. The page's own title is the h1 when
+    # the page stands alone and an h2 inside the dialog (the page behind has the h1), so a section
+    # is one level below that.
+    def pf_section_heading(text, id: nil)
+      content_tag(pf_fragment? ? :h3 : :h2, text, class: 'pf-h3', id: id)
+    end
+
+    # Breadcrumb from [[label, path], ..., label]
+    def pf_breadcrumb(*items)
+      parts = items.map do |item|
+        item.is_a?(Array) ? link_to(item.first, item.last) : content_tag(:span, item, 'aria-current': 'page')
+      end
+      content_tag(:nav, safe_join(parts, content_tag(:span, '/', 'aria-hidden': true)),
+                  class: 'pf-breadcrumb', 'aria-label': pf_ui('breadcrumb'))
+    end
+
+    # Re-emits nested params as hidden inputs (the review step re-posts the
+    # exact edits that were reviewed).
+    def pf_hidden_params(prefix, value)
+      value = value.to_unsafe_h if value.respond_to?(:to_unsafe_h)
+      case value
+      when Hash
+        safe_join(value.map { |k, v| pf_hidden_params("#{prefix}[#{k}]", v) })
+      when Array
+        safe_join(value.map { |v| pf_hidden_params("#{prefix}[]", v) })
+      when nil then safe_join([])
+      else
+        tag.input(type: 'hidden', name: prefix, value: value.to_s)
+      end
+    end
+
+    # Drawer / dialog frames. The body is captured here (not via `render
+    # layout:`) so lazy t('.key') lookups inside it resolve against the
+    # calling view, not the frame partial.
+    def pf_sheet_frame(locals = {}, &)
+      render 'permission_forge/shared/sheet_frame', **locals, body: capture(&)
+    end
+
+    def pf_dialog_frame(locals = {}, &)
+      render 'permission_forge/shared/dialog_frame', **locals, body: capture(&)
+    end
+
+    # Modal/drawer link: real page without JS, loaded into <dialog> with JS.
+    def pf_modal_link(text = nil, href = nil, kind: 'dialog', **opts, &block)
+      if block
+        opts = (href.is_a?(Hash) ? href : {}).merge(opts)
+        href = text
+        text = capture(&block)
+      end
+      opts[:data] = (opts[:data] || {}).merge(pf_modal: kind)
+      link_to(text, href, opts)
+    end
+  end
+end

@@ -1,0 +1,54 @@
+base_locale: en
+
+locales: [en, sq, mk]
+
+data:
+  read:
+    - config/locales/permission_forge.%{locale}.yml
+  write:
+    - config/locales/permission_forge.%{locale}.yml
+
+# All keys must be under the permission_forge namespace
+search:
+  paths:
+    - app/
+    - lib/
+  relative_roots:
+    - app/views
+  scanner_configs:
+    - scanner: I18n::Tasks::Scanners::PatternWithScopeScanner
+    - scanner: I18n::Tasks::Scanners::RubyAstScanner
+
+# Ignore dynamic keys that i18n-tasks can't resolve statically
+ignore_missing: []
+# Keys resolved dynamically (pf_ui helper, interpolated or conditional keys) that
+# the scanner can't see. Keep this list to namespaces, not single keys.
+ignore_unused:
+  - 'permission_forge.ui.*'
+  - 'permission_forge.settings.items.*'
+  - 'permission_forge.settings.risks.*'
+  - 'permission_forge.settings.oks.*'
+  - 'permission_forge.settings.sections.*'
+  - 'permission_forge.settings.units.*'
+  - 'permission_forge.settings.values.*'
+  - 'permission_forge.settings.ladder.*'
+  - 'permission_forge.flash.*'
+  - 'permission_forge.api.*'
+  - 'permission_forge.errors.*'
+  - 'permission_forge.validations.*'
+  - 'permission_forge.home.privacy_card.where*'
+  - 'permission_forge.home.tidy_card.*'
+  - 'permission_forge.people.audit_tab.kind_*'
+  - 'permission_forge.permission_sets.assignments_tab.selected.*'
+  - 'permission_forge.resources.fields_tab.selected.*'
+  - 'permission_forge.resources.rules_tab.filter_rule'
+  - 'permission_forge.shared.savebar.*'
+  - 'permission_forge.audit_log.sentences.*'
+  - 'permission_forge.audit_log.actor_named.*'
+  - 'permission_forge.audit_log.actor_types.*'
+  - 'permission_forge.audit_log.boolean.*'
+  - 'permission_forge.audit_log.categories.*'
+  - 'permission_forge.audit_log.sources.*'
+  - 'permission_forge.audit_events.index.filters.*'
+  - 'permission_forge.audit_events.index.invalid.*'
+  - 'permission_forge.home.audit_card.*'

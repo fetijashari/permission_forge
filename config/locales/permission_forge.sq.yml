@@ -1,0 +1,2164 @@
+---
+sq:
+  permission_forge:
+    api:
+      errors:
+        action_not_authorized: Veprimi nuk është i autorizuar
+        assignment_not_authorized: Caktimi nuk është i autorizuar
+        field_generation_failed: Fushat për këtë burim nuk mund të gjenerohen
+        forbidden: E ndaluar
+        not_editable: Ky regjistrim nuk mund të redaktohet
+        not_found: Regjistrimi nuk u gjet
+        tenant_required: Kjo kërkesë nuk ka qiramarrës. API-ja e administrimit shërben
+          një qiramarrës në një kohë.
+    assignments:
+      confirm_destroy:
+        body: "%{name} do të humbasë qasjen në %{resources}, përveç nëse një Grup
+          lejesh tjetër e jep atë. Kjo vlen menjëherë."
+        body_muting: "%{name} nuk do të kufizohet më nga %{set}. Grupet e tjera të
+          lejeve vlejnë plotësisht. Kjo vlen menjëherë."
+        body_nothing: Ky grup nuk i jep %{name} asnjë burim, kështu që asgjë nuk ndryshon
+          në atë që sheh.
+        crumb: Hiq qasjen
+        title: Të hiqet “%{set}” nga %{name}?
+      new:
+        already: E ka tashmë
+        applies_now: Caktimi vlen menjëherë.
+        assign: Cakto
+        assign_many:
+          one: Cakto %{count} grup
+          other: Cakto %{count} grupe
+        change: Ndrysho
+        expires: Skadon
+        filter_sets: Filtro Grupet e lejeve
+        forever: pa datë përfundimi
+        muting_notice: "⊘ Heshtës. %{sets} i heq qasjen %{name}, pavarësisht çfarë
+          lejojnë grupet e tjera."
+        no_sets: Asnjë Grup lejesh nuk përputhet.
+        person: Personi
+        summary: "%{name} merr %{sets}, %{until}. Kjo vlen menjëherë."
+        this_person: këtij personi
+        title: Cakto një Grup lejesh
+        title_person: Cakto një Grup lejesh për %{name}
+        title_set: Cakto “%{set}”
+        until: deri më %{date}
+      person_options:
+        capped: Po shfaqen %{shown} nga %{total} rezultate. Vazhdo të shkruash për
+          ta ngushtuar.
+        label: Personat
+        no_match: Askush nuk përputhet me “%{query}”. Kontrollo drejtshkrimin ose
+          kërko me email.
+        nobody: Nuk ka persona për të shfaqur.
+    audit_events:
+      index:
+        empty_filtered: Asnjë ngjarje nuk përputhet me këta filtra.
+        export: Eksporto
+        export_title: Shkarko si %{kind} çdo ngjarje që përputhet me këta filtra
+        filters:
+          actor_id: Aktori (id e personit)
+          actor_type: Lloji i aktorit
+          any_actor_type: Çdo lloj
+          any_category: Çdo kategori
+          any_event: Çdo ngjarje
+          any_set: Çdo Grup lejesh
+          apply: Zbato filtrat
+          category: Kategoria
+          clear: Pastro filtrat
+          correlation_id: Veprimi (id e korrelacionit)
+          deleted_set: 'Grup lejesh i fshirë #%{id}'
+          event: Ngjarja
+          from: Nga
+          id_placeholder: Id
+          label: Filtro regjistrin e auditimit
+          permission_set: Grup lejesh
+          record_id: Id e regjistrimit
+          record_type: Lloji i regjistrimit
+          record_uuid: Uuid e regjistrimit
+          subject_user_id: Personi (id)
+          time_zone: Datat janë ditë sipas zonës %{zone}.
+          to: Deri
+          views: Përfshi shikimet e regjistrit (audit.viewed)
+        holdings: Kush ka çfarë (CSV)
+        holdings_title: Çdo caktim siç është tani, me kush e dha, kur mbaron dhe rishikimin
+          e fundit
+        invalid:
+          blank: "%{field} duhet plotësuar për këtë filtër."
+          invalid: "%{field}: kjo vlerë nuk është e vlefshme."
+          invalid_value: "%{field}: “%{value}” nuk është e vlefshme."
+          title: Kontrollo filtrat
+        newest_first: Më të rejat në fillim
+        results:
+          one: "%{count} ngjarje"
+          other: "%{count} ngjarje"
+        subtitle: Ndryshimet e lejeve, caktimeve dhe rishikimeve të regjistruara kur
+          regjistri është aktiv, dhe kush e pa ose e eksportoi atë. Këto faqe nuk
+          ndryshojnë e nuk fshijnë kurrë një ngjarje (fshirja e të dhënave pastron
+          vetëm etiketat e emrave).
+        title: Regjistri i auditimit
+        views_hidden: Shikimet e regjistrit të auditimit fshihen këtu, që të mos mbulojnë
+          ndryshimet. Eksportet i përfshijnë gjithmonë.
+        views_show: Përfshi shikimet e regjistrit
+      show:
+        actor: Aktori
+        after: Pas
+        all_by_actor: Të gjitha ngjarjet nga ky aktor
+        all_for_person: Të gjitha ngjarjet për këtë person
+        all_for_record: Të gjitha ngjarjet e këtij regjistrimi
+        all_for_set: Të gjitha ngjarjet e këtij Grupi lejesh
+        all_in_action: Të gjitha ngjarjet e këtij veprimi
+        attribute: Atributi
+        before: Para
+        changes: Para dhe pas
+        changes_desc:
+          one: "%{count} atribut u ndryshua"
+          other: "%{count} atribute u ndryshuan"
+        correlation: Veprimi
+        data: Më shumë hollësi
+        id: id %{id}
+        ip: Adresa IP
+        key: Çelësi
+        no_data: Nuk u regjistruan hollësi të tjera.
+        no_reason: Nuk u dha arsye
+        open_person: Hap personin
+        permission_set: Grup lejesh
+        person: Personi
+        reason: Arsyeja
+        record: Regjistrimi
+        request_id: Id e kërkesës
+        snapshot: Gjendja
+        snapshot_desc: Regjistrimi siç u krijua.
+        snapshot_destroyed: Regjistrimi siç ishte kur u hoq.
+        source: Ku
+        title: Ngjarje auditimi %{event}
+        uuid: Id e ngjarjes
+        value: Vlera
+        what: Çfarë
+        who: Kush, ku dhe pse
+    audit_log:
+      actor_named:
+        api: "%{name} (API)"
+        basic_auth: "%{name} (dritarja e fjalëkalimit)"
+      actor_types:
+        api: Klient API
+        basic_auth: Dritarja e fjalëkalimit
+        system: Sistemi
+        unknown: I panjohur
+        user: Person
+      boolean:
+        'false': Jo
+        'true': Po
+      categories:
+        access: Qasje
+        admin: Administrim
+        change: Ndryshim
+        system: Sistem
+      deleted_group: 'Grupim #%{id}'
+      deleted_set: 'Grup lejesh #%{id}'
+      details: Hollësi
+      empty: Ende nuk është regjistruar asnjë ngjarje.
+      empty_text: "(tekst bosh)"
+      filter_actor: Shfaq çdo ngjarje nga ky aktor
+      filter_event: Shfaq çdo ngjarje %{event}
+      first_page: E para
+      last_page: E fundit
+      list_label: Ngjarjet e auditimit, më të rejat në fillim
+      no_value: asnjë
+      'off':
+        disabled: Regjistrimi është i çaktivizuar (audit_events = false). Ndryshimet
+          e bëra tani nuk hyjnë në regjistër.
+        failing: audit_events është true, por tabela e auditimit nuk ekziston, ndaj
+          çdo ndryshim i lejeve dështon. Ekzekuto bin/rails generate permission_forge:upgrade
+          dhe migrimet.
+        missing_table: Tabela e auditimit nuk ekziston ende, ndaj nuk regjistrohet
+          asgjë. Ekzekuto bin/rails generate permission_forge:upgrade dhe migrimet.
+        title: Regjistri i auditimit nuk po regjistron
+      page_of: Faqja %{page} nga %{pages}
+      pages_label: Faqet
+      person_id: 'Personi #%{id}'
+      reason_inline: 'Arsyeja: %{reason}'
+      refused:
+        body: Leximi i regjistrit të auditimit kufizohet nga cilësimi audit_log_authorization,
+          dhe kjo kërkesë nuk u lejua. Refuzimi regjistrohet në regjistrin e auditimit
+          kur regjistrimi është aktiv.
+        title: Nuk mund ta lexoni regjistrin e auditimit
+      sentence_variants:
+        assignment_revoked_expired: "%{actor} i hoqi %{person} Grupin e lejeve %{set}
+          pasi kishte skaduar më %{date}."
+        field_access_limited: "%{actor} lexoi %{record} me këto fusha të fshehura
+          ose të maskuara: %{fields}."
+      sentences:
+        access:
+          denied: Qasja e %{actor} te %{record} u refuzua.
+        action:
+          denied: Një veprim i %{actor} mbi %{record} u refuzua.
+        admin:
+          auth_failed: Një kërkesë e %{actor} në ekranet e administrimit u refuzua.
+          effective_access_viewed: "%{actor} pa qasjen efektive të %{person}."
+          lock_refused: "%{actor} provoi të ndryshojë regjistrimin e kyçur %{record}."
+        api:
+          auth_failed: Një kërkesë API e %{actor} u refuzua.
+        assignment:
+          changed: "%{actor} ndryshoi caktimin e %{person} te %{set}."
+          granted: "%{actor} i dha %{person} Grupin e lejeve %{set}."
+          reviewed: "%{actor} rishikoi qasjen e %{person} te %{set}."
+          revoked: "%{actor} i hoqi %{person} Grupin e lejeve %{set}."
+        audit:
+          exported: "%{actor} eksportoi të dhëna auditimi."
+          purged: "%{actor} fshiu ngjarjet e auditimit më të vjetra se periudha e
+            ruajtjes."
+          settings_observed: U regjistruan cilësimet e auditimit në fuqi.
+          viewed: "%{actor} pa të dhëna auditimi."
+        cache:
+          cleared: "%{actor} pastroi lejet e ruajtura në cache të të gjithë përdoruesve."
+        cleanup:
+          expired_assignments: "%{actor} hoqi caktimet e skaduara."
+        consent:
+          withdrawn: "%{actor} regjistroi se %{person} tërhoqi pëlqimin; qasja që
+            varej prej tij u hoq."
+        erasure:
+          performed: "%{actor} fshiu të dhënat e lejeve të %{person}."
+        fallback: "%{actor}: %{event}"
+        field:
+          access: "%{actor} lexoi %{record}."
+          sensitive_acknowledged: "%{actor} konfirmoi që fusha %{record} te %{set}
+            duhet të lexohet pa maskë."
+        group_membership:
+          added: "%{actor} shtoi %{person} te %{group}."
+          changed: "%{actor} ndryshoi anëtarësinë e %{person} te %{group}."
+          removed: "%{actor} hoqi %{person} nga %{group}."
+        params:
+          filtered: Fushat e %{model} që %{actor} nuk lejohet t'i ndryshojë u hoqën
+            nga një kërkesë.
+        permission_set:
+          cloned: "%{actor} krijoi Grupin e lejeve %{record} si kopje."
+          created: "%{actor} krijoi Grupin e lejeve %{record}."
+          destroyed: "%{actor} fshiu Grupin e lejeve %{record}."
+          updated: "%{actor} ndryshoi Grupin e lejeve %{record}."
+        permission_set_group:
+          cloned: "%{actor} krijoi grupimin %{record} si kopje."
+          created: "%{actor} krijoi grupimin %{record}."
+          destroyed: "%{actor} fshiu grupimin %{record}."
+          updated: "%{actor} ndryshoi grupimin %{record}."
+        permission_set_rule:
+          created: "%{actor} shtoi rregullin e regjistrimeve %{record} te %{set}."
+          destroyed: "%{actor} hoqi rregullin e regjistrimeve %{record} nga %{set}."
+          updated: "%{actor} ndryshoi rregullin e regjistrimeve %{record} te %{set}."
+        permissions:
+          invalidated: Lejet e ruajtura të %{person} u pastruan.
+          rebuilt: Lejet e %{person} u rindërtuan.
+        query:
+          unscoped: Një pyetje mbi %{model} për %{actor} u ekzekutua pa rregullat
+            e regjistrimeve.
+        report:
+          generated: "%{actor} krijoi një raport."
+        resource:
+          created: "%{actor} shtoi burimin %{record} te %{set}."
+          destroyed: "%{actor} hoqi burimin %{record} nga %{set}."
+          updated: "%{actor} ndryshoi burimin %{record} te %{set}."
+        resource_action:
+          created: "%{actor} shtoi veprimin %{record} te %{set}."
+          destroyed: "%{actor} hoqi veprimin %{record} nga %{set}."
+          updated: "%{actor} ndryshoi veprimin %{record} te %{set}."
+        resource_field:
+          created: "%{actor} shtoi fushën %{record} te %{set}."
+          destroyed: "%{actor} hoqi fushën %{record} nga %{set}."
+          updated: "%{actor} ndryshoi fushën %{record} te %{set}."
+        rule:
+          bypassed: Rregullat e regjistrimeve për %{model} u anashkaluan për %{actor}.
+        write:
+          masked_skipped: Një vlerë e maskuar e %{model} nuk u ruajt për %{actor}.
+      showing:
+        one: "%{from}–%{to} nga %{count} ngjarje"
+        other: "%{from}–%{to} nga %{count} ngjarje"
+      sources:
+        admin_ui: Ekranet e administrimit
+        api: API
+        console: Konsola
+        job: Punë në sfond
+        rake: Detyrë rake
+        runtime: Aplikacioni (gjatë punës)
+        service: Kodi
+      unknown: i panjohur
+      unknown_group: një grupim
+    bulk_assignments:
+      confirm_revoke:
+        body: Ata humbasin atë që u jep ky grup, përveç nëse një grup tjetër e jep.
+          Kjo vlen menjëherë.
+        confirm:
+          one: Hiq nga %{count} person
+          other: Hiq nga %{count} persona
+        crumb: Hiq
+        none: Zgjidh së pari të paktën një person.
+        title:
+          one: Të hiqet “%{set}” nga %{count} person?
+          other: Të hiqet “%{set}” nga %{count} persona?
+      new:
+        already:
+          one: "%{count} e ka tashmë"
+          other: "%{count} e kanë tashmë"
+        assign: Cakto
+        assign_count:
+          one: Cakto për %{count} person
+          other: Cakto për %{count} persona
+        check: Kontrollo emrat
+        crumb: Caktim në grup
+        errors:
+          nobody: Nuk ka kë të caktosh. Ngjit email-e ose emra, ose zgjidh persona.
+        not_found:
+          one: "%{count} nuk u gjet"
+          other: "%{count} nuk u gjetën"
+        paste: Ngjit email-e ose emra
+        paste_hint: Një për rresht, ose të ndarë me presje. Përdoren vetëm përputhjet
+          e sakta.
+        paste_placeholder: |-
+          ana@acme.com
+          Mark Peterson
+        pick: Ose zgjidh persona
+        title: Caktim në grup i “%{set}”
+        will_assign:
+          one: "%{count} do të caktohet"
+          other: "%{count} do të caktohen"
+    errors:
+      admin:
+        action_format: Përdor shkronja të vogla, numra dhe nënviza, duke filluar me
+          shkronjë (për shembull export).
+        action_taken: Ky burim ka tashmë një veprim me këtë emër.
+        expiry_missing: Zgjidh një datë përfundimi, ose zgjidh “Pa skadim”.
+        expiry_not_future: Data e përfundimit duhet të jetë pas sot.
+        flag: Flamujt e sesionit mund të përmbajnë vetëm shkronja, numra, pika, dy
+          pika, viza dhe nënviza.
+        group_blank: Jepi një emër grupimit.
+        ip: 'Rreshti %{line}: “%{ip}” nuk është adresë IP ose diapazon CIDR i vlefshëm.'
+        person: Zgjidh së pari një person.
+        resource_model: Zgjidh një model nga lista.
+        resource_taken: Ky model është tashmë në këtë Grup lejesh.
+        set_name_blank: Jepi një emër Grupit të lejeve.
+        set_name_taken: Ekziston tashmë një Grup lejesh me këtë emër.
+        sets: Zgjidh të paktën një Grup lejesh.
+      no_authenticated_user: Nuk ka përdorues të autentikuar
+      rls_requires_postgres: PermissionForge RLS kërkon PostgreSQL — adapteri aktual
+        i bazës së të dhënave nuk mbështet politika të sigurisë në nivel rreshti.
+      tenant_required: 'Kjo kërkesë nuk ka qiramarrës. Këto ekrane shfaqin dhe ndryshojnë
+        lejet e një qiramarrësi në një kohë: caktoni qiramarrësin në kontrolluesin
+        nga i cili trashëgojnë (base_controller_class), ose lejojeni me config.admin_tenantless_access
+        = :allow.'
+      unscoped_query: Kërkesë e pakufizuar në tabelën e mbrojtur '%{table}'. Përdorni
+        permission_scoped / find_by, aktivizoni auto_query_scoping, ose mbështillni
+        qasjen e qëllimshme në PermissionForge.without_permission_scope { }.
+    field_lookups:
+      show:
+        field: Fusha
+        hint: Listohen vetëm grupet që e përfshijnë këtë burim. Zgjidh një rresht
+          për ta hapur fushën në atë grup.
+        intro: Zgjidhni një burim dhe një fushë për të parë nivelin e qasjes në çdo
+          grup lejesh.
+        no_resources: Asnjë Grup lejesh nuk ka ende burime.
+        pick_field: Zgjidh një fushë…
+        pick_resource: Zgjidh një burim…
+        who_can_see: Kush mund ta shohë %{field}?
+    flash:
+      actions:
+        created: U shtua veprimi “%{action}”.
+        deleted: U hoq veprimi “%{action}”.
+        updated: U ruajt “%{action}”. Vlen menjëherë.
+      assignment_not_authorized: Nuk lejoheni ta bëni këtë ndryshim caktimi. Asgjë
+        nuk u ndryshua.
+      assignments:
+        assigned: "%{name} tani ka %{sets}."
+        assigned_until: "%{name} tani ka %{sets}, deri më %{date}."
+        end_changed: 'Qasja e %{name} në %{set}: %{when}.'
+        kept: Qasja e %{name} në %{set} u shënua si e rishikuar sot.
+        removed: U hoq %{set} nga %{name}.
+        restored: U rikthye %{set} për %{name}.
+        undone: U anulua. Caktimi u hoq.
+      bulk_assignments:
+        assigned:
+          one: "%{set} iu caktua %{count} personi."
+          other: "%{set} iu caktua %{count} personave."
+        revoked:
+          one: "%{set} iu hoq %{count} personi."
+          other: "%{set} iu hoq %{count} personave."
+      fields:
+        acknowledged: Në rregull. “%{field}” nuk do të shënohet më në auditimin e
+          privatësisë.
+        recommendation_applied: U aplikua maskimi i rekomanduar te “%{field}”.
+      groups:
+        created: U krijua grupimi “%{name}”.
+        deleted: U fshi grupimi “%{name}”. Grupet e tij të lejeve tani nuk janë në
+          asnjë grupim.
+        duplicated: U dublikua “%{name}” me të gjitha Grupet e lejeve.
+        member_added: "%{name} u shtua si anëtar. Kjo nuk i jep asnjë Grup lejesh."
+        set_added: "“%{set}” u zhvendos në këtë grupim."
+        set_removed: "“%{set}” u hoq nga ky grupim."
+        updated: Grupimi u ruajt. Qasja e askujt nuk ndryshoi.
+      locked_widening: 'Ky grup lejesh është i kyçur: qasja mund të hiqet ose të shkurtohet,
+        jo të jepet ose të zgjatet.'
+      locked_widening_muting: 'Ky grup lejesh heshtës është i kyçur: mbajtësit mund
+        të shtohen ose të mbahen më gjatë, jo të hiqen ose t’u jepet një datë mbarimi
+        më e hershme.'
+      maintenance:
+        cleaned:
+          one: U hoq %{count} caktim i skaduar.
+          other: U hoqën %{count} caktime të skaduara.
+      not_editable: Ky regjistrim nuk mund të ndryshohet.
+      people:
+        cache_refresh_failed: Lejet e ruajtura të %{name} nuk mund të rifreskoheshin.
+          Ruajtja e cache-it nuk e konfirmoi, prandaj lejet e vjetra mund të mbeten
+          në përdorim derisa të mbarojë jetëgjatësia e cache-it. Provo përsëri.
+        cache_refreshed: U rifreskuan lejet e ruajtura të %{name}.
+        consent_withdrawn:
+          one: U hoq %{count} Grup lejesh që kërkon %{flag}.
+          other: U hoqën %{count} Grupe lejesh që kërkojnë %{flag}.
+        consent_withdrawn_cache_kept:
+          one: U hoq %{count} Grup lejesh që kërkon %{flag}, por ruajtja e cache-it
+            nuk konfirmoi që lejet e ruajtura u pastruan. Lejet e vjetra mund të mbeten
+            në përdorim derisa të mbarojë jetëgjatësia e cache-it.
+          other: U hoqën %{count} Grupe lejesh që kërkojnë %{flag}, por ruajtja e
+            cache-it nuk konfirmoi që lejet e ruajtura u pastruan. Lejet e vjetra
+            mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.
+        erased: U fshinë caktimet dhe lejet e ruajtura të %{name}.
+        erased_cache_kept: U fshinë caktimet e %{name}, por ruajtja e cache-it nuk
+          konfirmoi që lejet e ruajtura u pastruan. Lejet e vjetra mund të mbeten
+          në përdorim derisa të mbarojë jetëgjatësia e cache-it.
+        removed_all:
+          one: U hoq %{count} caktim. %{name} tani nuk ka qasje përmes PermissionForge.
+          other: U hoqën %{count} caktime. %{name} tani nuk ka qasje përmes PermissionForge.
+        removed_all_cache_kept:
+          one: U hoq %{count} caktim, por ruajtja e cache-it nuk konfirmoi që lejet
+            e ruajtura të %{name} u pastruan. Lejet e vjetra mund të mbeten në përdorim
+            derisa të mbarojë jetëgjatësia e cache-it.
+          other: U hoqën %{count} caktime, por ruajtja e cache-it nuk konfirmoi që
+            lejet e ruajtura të %{name} u pastruan. Lejet e vjetra mund të mbeten
+            në përdorim derisa të mbarojë jetëgjatësia e cache-it.
+      permission_set_group_users:
+        add_failed: Përdoruesi nuk mund të shtohej.
+        removed: Përdoruesi u hoq nga grupimi.
+        user_not_found: Përdoruesi nuk u gjet.
+      permission_sets:
+        conditions_saved: Kushtet e aktivizimit u ruajtën. Vlejnë menjëherë.
+        created: U krijua “%{name}”. Ende nuk e ka askush.
+        deleted: U fshi “%{name}”.
+        duplicated: 'U dublikua “%{name}”: u kopjuan burimet, fushat, veprimet dhe
+          rregullat. Caktimet nuk u kopjuan.'
+        duplicated_outside_group: 'U dublikua “%{name}”: u kopjuan burimet, fushat,
+          veprimet dhe rregullat. Caktimet nuk u kopjuan. Kopja nuk është në “%{group}”,
+          që është i kyçur.'
+        no_changes: Nuk ka ndryshime për të ruajtur.
+        save_failed: 'Asgjë nuk u ruajt: %{errors}'
+        saved:
+          one: U ruajt %{count} ndryshim. Tani vlen për %{people}.
+          other: U ruajtën %{count} ndryshime. Tani vlejnë për %{people}.
+        switched_granting: "“%{name}” tani jep qasje."
+        switched_muting: "“%{name}” tani është Grup lejesh heshtës."
+      resources:
+        added:
+          one: U shtua %{resource} me %{count} fushë.
+          other: U shtua %{resource} me %{count} fusha.
+        columns_added:
+          one: U shtua %{count} kolonë.
+          other: U shtuan %{count} kolona.
+        missing_removed:
+          one: U hoq %{count} fushë, kolona e së cilës nuk ekziston më.
+          other: U hoqën %{count} fusha, kolonat e të cilave nuk ekzistojnë më.
+        removed: U hoq %{resource} nga “%{set}”.
+      rules:
+        created: U shtua rregulli “%{rule}”.
+        deleted: U hoq rregulli “%{rule}”.
+        turned_off: U çaktivizua “%{rule}”.
+        turned_on: U aktivizua “%{rule}”.
+        updated: U ruajt rregulli “%{rule}”.
+    home:
+      audit_card:
+        failing: Tabela e auditimit mungon dhe audit_events është true, ndaj çdo ndryshim
+          i lejeve dështon. Ekzekuto gjeneratorin e përditësimit dhe migrimet.
+        missing_table: Tabela e auditimit mungon, ndaj asnjë ndryshim nuk regjistrohet.
+          Ekzekuto gjeneratorin e përditësimit dhe migrimet.
+        'off': Regjistrimi është çaktivizuar në inicializues (audit_events = false).
+          Asnjë ndryshim nuk regjistrohet.
+        title: Regjistri i auditimit nuk po regjistron
+      ending_card:
+        description: Caktime që përfundojnë në 7 ditët e ardhshme.
+        extend: Zgjat 30 ditë
+        title: Qasje që përfundon këtë javë
+      expired_card:
+        description:
+          one: "%{count} caktim i skaduar nuk jep më qasje. Heqja e tij i mban listat
+            dhe auditimet të rregullta."
+          other: "%{count} caktime të skaduara nuk japin më qasje. Heqja e tyre i
+            mban listat dhe auditimet të rregullta."
+        dry_run: Provë · asgjë nuk ka ndryshuar ende
+        item: "%{person} · %{set}"
+        preview: Shiko pastrimin paraprakisht
+        remove:
+          one: Hiq %{count}
+          other: Hiq %{count}
+        title: Pastro caktimet e skaduara
+      index:
+        all_good:
+          body: Asnjë qasje nuk përfundon këtë javë, nuk ka caktime të skaduara për
+            t'u pastruar, çdo caktim i përhershëm është rishikuar në %{days} ditët
+            e fundit dhe auditimi i privatësisë nuk gjeti asgjë.
+          title: Asgjë nuk kërkon vëmendjen tënde
+        field_lookup_title: Kush mund ta shohë një fushë? Zgjidhni një burim dhe një
+          fushë.
+        first_run:
+          body: PermissionForge vendos kush mund të shohë dhe të ndryshojë të dhënat
+            në këtë aplikacion. Ende askush nuk ka qasje përmes tij.
+          cta: Krijo Grupin tënd të parë të lejeve
+          steps:
+            add:
+              body: Zgjidh modele nga aplikacioni, pastaj zgjidh Lexo, Krijo, Ndrysho,
+                Fshi dhe cilat fusha shohin njerëzit.
+              title: Shto burime
+            assign:
+              body: Jepua grupin njerëzve, me datë përfundimi nëse qasja është e përkohshme.
+              title: Caktoje
+            create:
+              body: Një paketë qasjesh që ua cakton njerëzve, si “Agjent shitjesh”.
+              title: Krijo një Grup lejesh
+          title: Konfiguro qasjen në 3 hapa
+        lookup: 'Kërko një person: çfarë mund të shohë dhe pse?'
+        people:
+          one: "%{count} person ka"
+          other: "%{count} persona kanë"
+        search_placeholder: Kërkoni një person sipas emrit ose email-it për të parë
+          çfarë mund të shohë dhe pse
+        sets:
+          one: "%{count} Grup lejesh aktiv"
+          other: "%{count} Grupe lejesh aktive"
+        subtitle: "%{things} · %{people} qasje përmes %{sets}."
+        things:
+          one: "%{count} gjë për t'u rishikuar"
+          other: "%{count} gjëra për t'u rishikuar"
+        title: Kërkon vëmendje
+      privacy_card:
+        description: "%{unmasked}, %{unconfigured}."
+        fix: Rregullo
+        intended: Kjo është e qëllimshme
+        per_set_note: Çdo rresht shikon një Grup lejesh më vete. Një person që ka
+          edhe një grup tjetër që e konfiguron fushën ndjek atë grup.
+        show_all: Shfaq të %{count}
+        title: Auditimi i privatësisë
+        turned_off:
+          one: "%{count} fushë e ndjeshme e ka cilësimin të çaktivizuar."
+          other: "%{count} fusha të ndjeshme e kanë cilësimin të çaktivizuar."
+        unconfigured:
+          one: "%{count} kolonë e ndjeshme nuk është konfiguruar fare"
+          other: "%{count} kolona të ndjeshme nuk janë konfiguruar fare"
+        unmasked:
+          one: "%{count} fushë e ndjeshme shfaqet pa maskim"
+          other: "%{count} fusha të ndjeshme shfaqen pa maskim"
+        where: "%{resource} · Lexohet pa maskim në “%{set}” · %{people}"
+        where_turned_off: "%{resource} · Cilësimi në “%{set}” është i çaktivizuar,
+          prandaj fusha kalon pa maskim · %{people}"
+        where_turned_off_virtual: "%{resource} · Cilësimi në “%{set}” është i çaktivizuar,
+          prandaj fusha është e lexueshme dhe e ndryshueshme si parazgjedhje (fushë
+          virtuale) · %{people}"
+        where_unconfigured: "%{resource} · E pakonfiguruar në “%{set}”, prandaj kalon
+          pa maskim · %{people}"
+        where_virtual: "%{resource} · E pakonfiguruar në “%{set}”, prandaj është e
+          lexueshme dhe e ndryshueshme si parazgjedhje (fushë virtuale) · %{people}"
+      rules_card:
+        join_rules: Kufizimi automatik i kërkesave është aktiv, por këto rregulla
+          ndjekin një lidhje, prandaj ai i anashkalon. Ato vlejnë vetëm aty ku aplikacioni
+          përdor find_by ose permission_scoped.
+        open: Hap rregullat
+        people:
+          one: "%{count} person e ka këtë grup."
+          other: "%{count} persona e kanë këtë grup."
+        rules:
+          one: "%{count} rregull për %{resource} në “%{name}”"
+          other: "%{count} rregulla për %{resource} në “%{name}”"
+        scoping_off: Kufizimi automatik i kërkesave është joaktiv, prandaj këto rregulla
+          vlejnë vetëm aty ku aplikacioni përdor find_by ose permission_scoped. Kërkesat
+          e tjera (where, all, lidhjet) kthejnë të gjitha regjistrimet.
+        title: Rregulla regjistrimesh që nuk zbatohen kudo
+      stale_card:
+        assigned: Caktuar më %{date} nga %{by}
+        description: Nuk janë rishikuar prej më shumë se %{days} ditësh. Konfirmo
+          që këta persona e kanë ende nevojë për këtë qasje.
+        title: Caktime të vjetruara
+      tidy_card:
+        inactive_with_people:
+          one: "“%{name}” është i çaktivizuar, por %{count} person e ka ende."
+          other: "“%{name}” është i çaktivizuar, por %{count} persona e kanë ende."
+        inactive_with_people_hint: Nuk u jep asgjë sa kohë është i çaktivizuar. Aktivizoje
+          përsëri, ose hiq caktimet.
+        no_people: "“%{name}” nuk ka asnjë person."
+        no_people_hint: Caktoje, ose fshije nëse nuk nevojitet më.
+        open: Hap grupin
+        title: Grupe lejesh për t'u rregulluar
+    layouts:
+      application:
+        skip_to_content: Kalo te përmbajtja
+        title: PermissionForge
+    nav:
+      audit_log: Regjistri i auditimit
+      badge_aria:
+        one: "%{count} element kërkon vëmendje"
+        other: "%{count} elemente kërkojnë vëmendje"
+      groups: Grupime të grupeve të lejeve
+      home: Kreu
+      people: Personat
+      permission_sets: Grupet e lejeve
+      settings: Cilësimet
+    people:
+      access_tab:
+        assigned: Caktuar më %{date} nga %{by}
+        change_end: Ndrysho datën e përfundimit
+        empty: "%{name} nuk mund të shohë asgjë përmes PermissionForge për momentin."
+        groups_html: Është gjithashtu anëtar i %{groups}. Anëtarësia në grupim nuk
+          jep asnjë Grup lejesh.
+        set_off: Ky grup është i çaktivizuar, prandaj aktualisht nuk jep asgjë.
+      audit_tab:
+        assigned_by: Caktuar nga %{who} · %{date}
+        created: 'Krijuar: %{value}'
+        disabled: Nuk regjistrohet kush krijoi dhe kush ndryshoi (audit_trail_enabled
+          është i çaktivizuar te Cilësimet).
+        edited: 'Ndryshuar: %{value}'
+        events_about: Ngjarjet për %{name}
+        events_by: Veprimet e %{name}
+        kind_group: Anëtarësi në grupim (pa qasje)
+        kind_muting: Grup lejesh heshtës
+        kind_set: Grup lejesh
+        made_by: Ndryshime të bëra nga %{name}
+        made_by_desc:
+          one: Regjistrime që %{name} krijoi ose ndryshoi së fundi, më të rejat në
+            fillim. %{count} regjistrim.
+          other: Regjistrime që %{name} krijoi ose ndryshoi së fundi, më të rejat
+            në fillim. %{count} regjistrime.
+        made_capped: Shfaqen %{count} regjistrimet e ndryshuara më së fundi për çdo
+          lloj. Eksporti CSV i përmban të gjitha.
+        made_none: "%{name} nuk ka krijuar ose ndryshuar asnjë regjistrim të PermissionForge."
+        no_assignments: Nuk ka caktime.
+        received: Qasja e marrë
+        timeline: Kronologjia e %{name}
+        timeline_desc: Çdo ngjarje e regjistruar që përmend %{name}, dhe ndryshimet
+          që bëri %{name} kur ishte i identifikuar.
+      confirm_remove_all:
+        body: "%{name} do të humbasë qasjen në %{resources}. Kjo vlen menjëherë."
+        body_no_resources: "%{name} do të humbasë çdo Grup lejesh më poshtë. Kjo vlen
+          menjëherë."
+        confirm:
+          one: Hiq %{count} caktim
+          other: Hiq të %{count} caktimet
+        crumb: Hiq të gjithë qasjen
+        kept: "%{sets} mbeten: një grup lejesh heshtës i kyçur i mban mbajtësit e
+          tij, sepse heqja e tyre do t’u kthente qasjen."
+        nothing: "%{name} nuk ka caktime për t'u hequr."
+        title: Të hiqet e gjithë qasja për %{name}?
+      consent_preview:
+        confirm:
+          one: Hiq %{count}
+          other: Hiq %{count}
+        flag: Flamur pëlqimi ose sesioni
+        intro: Heq %{name} nga çdo Grup lejesh që kërkon flamurin që zgjedh.
+        no_flags: "%{name} nuk ka Grupe lejesh që kërkojnë flamur pëlqimi ose sesioni."
+        nothing: "%{name} nuk ka Grupe lejesh që kërkojnë %{flag}. Asgjë nuk do të
+          ndryshonte."
+        preview: Shiko paraprakisht
+        title: Tërhiq pëlqimin
+        would_remove:
+          one: 'Provë: do të hiqej %{count} Grup lejesh. Asgjë nuk ka ndryshuar ende.'
+          other: 'Provë: do të hiqeshin %{count} Grupe lejesh. Asgjë nuk ka ndryshuar
+            ende.'
+      effective_field_source:
+        and_more:
+          one: " dhe %{count} tjetër"
+          other: " dhe %{count} të tjera"
+        from: nga %{set}
+        muted_by: I fshehur nga %{set}
+        none: Asnjë grup nuk e shfaq
+        unconfigured: E pakonfiguruar · %{behaviour}
+        virtual: Fushë virtuale, e lexueshme si parazgjedhje
+      effective_tab:
+        conditional: "%{sets} vlejnë vetëm kur kushtet e tyre të aktivizimit plotësohen.
+          Ato janë përfshirë këtu."
+        fields_visible: "%{visible} nga %{total} fusha të dukshme"
+        grid_label: Qasja efektive
+        hidden_by_muting: I fshehur nga heshtja
+        intro: Çfarë mund të bëjë %{name} tani, me të gjitha grupet bashkë. Zgjidh
+          çdo qelizë për të parë pse.
+        legend: Legjenda
+        legend_muted: I heshtur
+        legend_none: Nuk jepet
+        why: Pse
+        why_empty: Zgjidh një qelizë, fushë ose veprim për të parë cili Grup lejesh
+          e shkaktoi.
+        why_label: Shpjegimi
+      effective_why:
+        action_granted: "%{set} e lejon këtë veprim."
+        action_muted: "%{set} e bllokon këtë veprim."
+        action_none: Asnjë Grup lejesh nuk e lejon këtë veprim.
+        field_capped: Shfaqet si Vetëm lexim sepse Ndrysho nuk lejohet për këtë burim.
+        field_from: "%{set} e shfaq këtë fushë."
+        field_muted: "%{set} e fsheh ose e maskon këtë fushë."
+        field_none: Asnjë Grup lejesh nuk e shfaq këtë fushë.
+        field_unconfigured: 'Asnjë grup nuk e konfiguron këtë kolonë: %{behaviour}.'
+        field_variant: Ndjek cilësimin e %{base}.
+        field_virtual: Fushë virtuale nga modeli, e lexueshme përveç nëse një grup
+          e konfiguron.
+        flag_granted: "%{set} jep %{flag}."
+        flag_muted: "%{set} hesht %{flag}."
+        flag_none: Asnjë Grup lejesh nuk jep %{flag}.
+        no_rules: Nuk ka rregulla regjistrimesh, prandaj shfaqet çdo regjistrim.
+        note_add_up: 'Grupet e lejeve mblidhen: mjafton një leje.'
+        note_fields: Nëse disa grupe e shfaqin një fushë, fiton cilësimi më i hapur.
+        note_muting: Grupet e lejeve heshtës fitojnë gjithmonë mbi grupet që japin
+          qasje.
+        note_rules: Rregullat nga çdo grup vlejnë së bashku.
+        records_none: Lexo nuk lejohet, prandaj nuk shfaqet asnjë regjistrim.
+        records_title: Cilat %{resource}
+        view_all_from: "%{set} jep Shiko të gjitha: çdo regjistrim, rregullat e regjistrimeve
+          anashkalohen."
+      erasure_preview:
+        assignments:
+          one: "%{count} caktim"
+          other: "%{count} caktime"
+        confirm: Fshi përgjithmonë
+        counts: "%{assignments} · %{groups} · lejet e ruajtura"
+        eyebrow: GDPR Neni 17 · I pakthyeshëm
+        groups:
+          one: "%{count} anëtarësi në grupim"
+          other: "%{count} anëtarësi në grupime"
+        intro: Fshin caktimet dhe anëtarësimet në grupe të këtij personi në këtë qiramarrës
+          dhe pastron emrin e tij nga regjistri i auditimit. Ngjarjet e auditimit
+          (id-të, kohët, IP-të, arsyet) ruhen.
+        mismatch: Emri nuk përputhet. Asgjë nuk u fshi.
+        title: Fshirja e të dhënave të subjektit
+        title_for: Të fshihen të dhënat e qasjes së %{name}?
+        type_to_confirm_html: Shkruaj %{name} për ta konfirmuar
+        untouched: Llogaria e personit në aplikacion nuk preket. Fushat krijuar-nga
+          dhe ndryshuar-nga që tregojnë tek ai ruhen.
+      index:
+        columns:
+          ends: Qasja përfundon
+          person: Personi
+          sets: Grupet e lejeve
+        empty_filter: Askush në këtë pamje.
+        empty_query: Askush nuk përputhet me “%{query}”.
+        export_holdings: Kush ka çfarë (CSV)
+        filter_label: Filtro personat
+        filters:
+          all: Të gjithë
+          ending: Përfundon brenda 7 ditëve
+          expired: Të skaduar
+          muting: Ka një grup heshtës
+          no_access: Pa qasje
+        no_sets: Pa Grupe lejesh
+        showing: Po shfaqen %{from}–%{to} nga %{total}. Kërko me emër ose email për
+          ta ngushtuar.
+        subtitle: Të gjithë në aplikacion dhe Grupet e lejeve që u janë caktuar.
+      show:
+        actions: Veprimet
+        actions_label: Veprimet për personin
+        add_set: "+ Shto Grup lejesh"
+        menu:
+          add:
+            desc: Jep më shumë qasje, me datë përfundimi opsionale.
+            title: Shto një Grup lejesh
+          consent:
+            desc: Hiq grupet që kërkojnë flamur pëlqimi ose sesioni.
+            title: Tërhiq pëlqimin…
+          erasure:
+            desc: GDPR Neni 17. Fshin caktimet dhe anëtarësimet në grupe në këtë qiramarrës
+              dhe pastron emrin nga regjistri i auditimit.
+            title: Fshirja e të dhënave të subjektit…
+          refresh:
+            desc: 'Rrallë nevojitet: ndryshimet vlejnë tashmë menjëherë.'
+            title: Rifresko lejet e ruajtura
+          remove_all:
+            desc: 'Largim nga puna: heq çdo caktim.'
+            title: Hiq të gjithë qasjen
+          troubleshooting: Zgjidhja e problemeve
+        tabs:
+          access: Qasja
+          audit: Auditimi
+          effective: Qasja efektive
+        tabs_label: Seksionet e personit
+      why_item:
+        open_set: Hap %{set} →
+    permission_set_groups:
+      confirm_destroy:
+        body:
+          one: "%{count} Grupi i tij i lejeve mbetet dhe kalon te “Jo në grupim”.
+            Qasja e askujt nuk ndryshon."
+          other: "%{count} Grupet e tij të lejeve mbeten dhe kalojnë te “Jo në grupim”.
+            Qasja e askujt nuk ndryshon."
+        confirm: Fshi grupimin
+        crumb: Fshi
+        title: Të fshihet “%{name}”?
+      index:
+        create: Krijo grupim
+        empty: Ende nuk ka grupime. Grupimet organizojnë Grupet e lejeve. Shtimi i
+          dikujt në një grupim nuk i jep grupet e tij.
+        help_term: Grupim i grupeve të lejeve
+        help_text: Organizon grupet e lejeve. Shtimi i dikujt në një grupim nuk i
+          jep grupet e tij.
+        members_warning:
+          one: "%{count} anëtar (nuk i merr këto grupe)"
+          other: "%{count} anëtarë (nuk i marrin këto grupe)"
+        name: Emri i grupimit
+        new: Grupim i ri
+        sets_count:
+          one: "%{count} Grup lejesh"
+          other: "%{count} Grupe lejesh"
+        subtitle: Organizon Grupet e lejeve.
+        ungrouped: Jo në grupim
+      show:
+        add_member: Shto anëtar
+        add_set: Shto ose zhvendos një grup këtu
+        description: Përshkrimi i grupimit
+        description_placeholder: Shto një përshkrim
+        duplicate: Dublikim i plotë
+        duplicate_title:
+          one: Kopjon grupimin dhe %{count} Grupin e tij të lejeve me të gjitha burimet,
+            fushat, veprimet dhe rregullat.
+          other: Kopjon grupimin dhe %{count} Grupet e tij të lejeve me të gjitha
+            burimet, fushat, veprimet dhe rregullat.
+        in_group: në %{group}
+        members: Anëtarët
+        members_note_html: Anëtarët <b>nuk</b> i marrin Grupet e lejeve të këtij grupimi.
+          Për t'i dhënë qasje dikujt, caktoji një Grup lejesh nga faqja e tij te Personat.
+        name: Emri i grupimit
+        no_members: Nuk ka anëtarë.
+        no_sets: Nuk ka Grupe lejesh në këtë grupim.
+        organisational: Ndryshimet e grupimit janë organizative. Nuk ndryshojnë kurrë
+          qasjen e askujt.
+        remove_set: Hiq nga grupimi
+        save: Ruaj
+        sets: Grupet e lejeve në këtë grupim
+    permission_set_rules:
+      builder:
+        active: Rregulli është aktiv
+        advanced: Të avancuara
+        advanced_hint: Lloji i bashkimit, aktiv
+        condition: Kushti
+        errors:
+          field: Zgjidh fushën për t'u kontrolluar.
+          list: Shto të paktën një vlerë në listë.
+          name_blank: Jepi një emër rregullit.
+          range: Plotëso të dy skajet e diapazonit.
+          value: Shkruaj një vlerë, ose zgjidh “përdoruesi aktual”.
+        field: Fusha për t'u kontrolluar
+        follow: Ndiq një lidhje
+        ignored_warning: Shiko të gjitha është aktiv për këtë burim, prandaj rregullat
+          e regjistrimeve injorohen derisa të çaktivizohet.
+        include_nulls: Shfaq edhe regjistrimet ku %{field} është bosh
+        join: Lloji i bashkimit
+        join_note: Ka rëndësi vetëm kur rregulli ndjek një lidhje.
+        joins:
+          auto:
+            desc: Përdor “%{choice}” për këtë rregull.
+            title: Automatik (i rekomanduar)
+          joins:
+            desc: Regjistrimet pa regjistrimin e lidhur lihen jashtë.
+            title: Vetëm regjistrimet që kanë regjistrimin e lidhur
+          left_joins:
+            desc: Regjistrimet pa regjistrimin e lidhur mbahen.
+            title: Edhe regjistrimet pa të
+        message: Mesazhi i bllokimit
+        message_placeholder: Shfaqet kur dikush hap një regjistrim që ky rregull e
+          fsheh.
+        model_missing: Ky model ose lidhje nuk ekziston më në aplikacion.
+        name: Emri i rregullit
+        name_placeholder: p.sh. Klientët e mi
+        operator: Kushti
+        optional: opsionale
+        pick_field: Zgjidh një fushë…
+        preview: Pamja paraprake
+        preview_empty: Zgjidh një fushë për ta parë rregullin si fjali.
+        relationship: Lidhja
+        remove_step: Hiq këtë hap të lidhjes
+        save: Ruaj rregullin
+        this_field: kjo fushë
+        update_form: Përditëso
+      confirm_destroy:
+        body: Personat me “%{set}” do të shohin regjistrimet që ky rregull i fshihte.
+          Kjo vlen menjëherë.
+        title: Të hiqet rregulli “%{rule}”?
+      edit:
+        title: Ndrysho rregullin për %{resource}
+      new:
+        title: Rregull i ri për %{resource}
+      value_input:
+        from: Nga
+        no_value: Nuk nevojitet vlerë për këtë kusht.
+        or: ose
+        pick_value: Zgjidh një vlerë…
+        to: Deri
+        value: Vlera
+        values: Vlerat
+        values_placeholder: draft, sent
+    permission_sets:
+      assignments_tab:
+        assign: Caktoja dikujt
+        assigned_on: "%{date} · nga %{by}"
+        bulk: Caktim në grup…
+        columns:
+          actions: Veprimet
+          assigned: Caktuar
+          expires: Skadon
+          person: Personi
+        empty: Ende askush nuk e ka këtë Grup lejesh.
+        immediate: Caktimi ose heqja vlen menjëherë.
+        label: Caktimet
+        revoke_selected: Hiq nga të zgjedhurit
+        select_all: Zgjidh të gjithë të shfaqurit
+        select_hint: Zgjidh persona për ta hequr këtë grup nga disa njëkohësisht.
+        select_person: Zgjidh %{name}
+        selected:
+          one: "%{count} i zgjedhur"
+          other: "%{count} të zgjedhur"
+      audit_tab:
+        all_types: Të gjitha llojet e regjistrimeve
+        any_time: Çdo kohë
+        anyone: Kushdo
+        columns:
+          created: Krijuar
+          edited: Ndryshuar së fundi
+          record: Regjistrimi
+          type: Lloji
+        count:
+          one: "%{count} regjistrim"
+          other: "%{count} regjistrime"
+        days: Periudha
+        empty: Asnjë regjistrim nuk përputhet me këta filtra.
+        label: Auditimi
+        last_days:
+          one: "%{count} ditën e fundit"
+          other: "%{count} ditët e fundit"
+        newest_first: Më të rejat në fillim ↓
+        oldest_first: Më të vjetrat në fillim ↑
+        open_log: Hape në regjistrin e auditimit
+        records: Regjistrimet në këtë grup
+        timeline: Kronologjia e ndryshimeve
+        timeline_desc: Çdo ngjarje e regjistruar e këtij grupi dhe e burimeve, fushave,
+          veprimeve, rregullave dhe caktimeve të tij (caktimet e drejtpërdrejta; anëtarësimet
+          në grupe janë te grupi), më të rejat në fillim. Hap një ngjarje për të parë
+          si ishte para dhe pas.
+        type: Lloji i regjistrimit
+        who: Personi
+      conditions_tab:
+        flag: Flamuri i sesionit
+        flag_custom: Ose shkruaj emrin e një flamuri
+        flag_hint_html: Emrat e lexueshëm vijnë nga %{setting} në initializer.
+        flag_intro: Grupi vlen vetëm kur kërkesa e mbart këtë flamur (për shembull
+          pas hyrjes me dy faktorë).
+        from: Nga
+        hours: Orët e lejuara
+        hours_only: Vetëm gjatë orëve të caktuara
+        intro: Kur vendosen kushte aktivizimi, ky Grup lejesh vlen vetëm kur të gjitha
+          plotësohen.
+        ips: IP ose diapazone CIDR të lejuara
+        ips_hint: Mbështeten IPv4 dhe IPv6, p.sh. 10.0.0.0/8 ose 2001:db8::/32.
+        no_flag: Nuk nevojitet flamur sesioni
+        one_per_line: një për rresht
+        overnight: 'Gjatë natës: aktiv nga %{from} deri në %{to} të nesërmen në mëngjes.'
+        reset: Rivendos
+        save: Ruaj kushtet · vlen për %{people}
+        server_time: Ora e serverit (%{zone})
+        to: deri
+      confirm_destroy:
+        body: "%{people} humbasin atë që u jep ky grup (%{resources}), përveç nëse
+          një grup tjetër e jep."
+        body_muting: "%{people} nuk do të kufizohen më nga ky grup."
+        body_nobody: Askush nuk e ka këtë grup, prandaj qasja e askujt nuk ndryshon.
+        confirm: Fshi Grupin e lejeve
+        crumb: Fshi
+        irreversible: Kjo nuk mund të zhbëhet.
+        title: Të fshihet “%{name}”?
+      confirm_switch_mode:
+        to_granting:
+          body: Çdo cilësim përmbyset. Çdo ⊘ që hiqte qasje do t'u japë qasje %{people}
+            në këtë grup.
+          confirm: Kalo në dhënie qasjeje
+          title: Të kalohet “%{name}” në grup që jep qasje?
+        to_muting:
+          body: Çdo cilësim përmbyset. Çdo ✓ që jepte qasje do t'ua heqë atë %{people}
+            në këtë grup, duke anashkaluar grupet e tjera.
+          confirm: Kalo në heshtës
+          title: Të kalohet “%{name}” në Grup lejesh heshtës?
+      copy_name: "%{name} (kopje)"
+      header:
+        description: Përshkrimi
+        description_placeholder: Shto një përshkrim që të tjerët ta dinë kur ta përdorin
+        group: Grupimi
+        name: Emri
+      index:
+        columns:
+          actions: Veprimet
+          group: Grupimi
+          people: Personat
+          set: Grup lejesh
+          status: Statusi
+        duplicate_aria: Dublikoje %{name}
+        empty_body: Një Grup lejesh është një paketë qasjesh që ua cakton njerëzve.
+          Krijo një si “Agjent shitjesh”, shto burime, pastaj caktoje.
+        empty_title: Ende nuk ka Grupe lejesh
+        filter_label: Filtro Grupet e lejeve
+        filters:
+          all: Të gjitha
+          conditional: Me kushte
+          granting: Jep qasje
+          muting: Heshtës
+          'off': Të çaktivizuara
+        help_term: Grup lejesh
+        help_text: Një paketë qasjesh që ua cakton njerëzve. Një Grup lejesh heshtës
+          heq qasje; ai mbizotëron mbi çdo gjë që japin grupet e tjera.
+        new: Grup i ri lejesh
+        no_match: Asnjë Grup lejesh nuk përputhet. Provo një kërkim ose filtër tjetër.
+        search: Kërko Grupe lejesh
+        subtitle: Mënyra më e shpejtë për të krijuar një grup të ri është të dublikosh
+          një të ngjashëm.
+      new:
+        blank: Bosh
+        copy_of: Kopje e %{name}
+        create: Krijo Grupin e lejeve
+        granting:
+          desc: 'Grup lejesh: një paketë qasjesh që ua cakton njerëzve.'
+          example: 'Shembull: “Agjent shitjesh” mund të lexojë dhe ndryshojë klientët
+            e vet.'
+          title: Jep qasje
+        group: Grupimi
+        muting:
+          desc: 'Grup lejesh heshtës: heq qasje. Mbizotëron mbi çdo gjë që japin grupet
+            e tjera.'
+          example: 'Shembull: “Kontraktorë — pa të dhëna financiare” fsheh IBAN-in
+            dhe bllokon Eksportin.'
+          title: Heq qasje
+        name: Emri
+        name_placeholder: p.sh. Agjent shitjesh
+        note: Kopjon burimet, fushat, veprimet, rregullat dhe kushtet. Caktimet nuk
+          kopjohen. Mund të kalosh mes dhënies dhe heshtjes më vonë, por çdo cilësim
+          përmbyset.
+        start_from_granting: Fillo nga
+        start_from_muting: Fillo nga
+        title: Grup i ri lejesh
+        type: Çfarë duhet të bëjë ky grup?
+      records_summary:
+        ignored:
+          one: "%{count} rregull i injoruar"
+          other: "%{count} rregulla të injoruara"
+        no_rules: Pa rregulla · çdo regjistrim
+        view_modify_all: Shiko të gjitha · Ndrysho të gjitha
+      resource_summary:
+        fields:
+          one: "%{count} fushë"
+          other: "%{count} fusha"
+        masked:
+          one: "%{count} e maskuar"
+          other: "%{count} të maskuara"
+        muting: "%{hidden} të fshehura · %{masked} të maskuara me detyrim"
+        new:
+          one: "%{count} e re"
+          other: "%{count} të reja"
+      resources_tab:
+        add: Shto burim
+        empty: Ende nuk ka burime. Një burim është një model nga aplikacioni, si Customer.
+          Shto një për të zgjedhur çfarë mund të bëjnë personat me këtë grup.
+        label: Burimet
+        open: Hap
+        open_resource: Hap %{resource}
+      review:
+        affected: 'Të prekur: %{names}.'
+        back: Kthehu
+        body: Ruajtja i aplikon këto menjëherë për %{people}.
+        body_nobody: Ende askush nuk e ka këtë grup, prandaj ruajtja nuk prek askënd
+          derisa ta caktosh.
+        crumb: Rishiko
+        save: Ruaj ndryshimet
+        title:
+          one: Rishiko %{count} ndryshim
+          other: Rishiko %{count} ndryshime
+      show:
+        and_more:
+          one: "%{count} tjetër"
+          other: "%{count} të tjerë"
+        impact: "%{people} të prekur. Ndryshimet vlejnë menjëherë: %{names}."
+        impact_none: Ende askush nuk e ka këtë grup, prandaj ndryshimet nuk prekin
+          askënd derisa ta caktosh.
+        'on': aktiv
+        switch_to_granting: Kalo në dhënie qasjeje…
+        switch_to_muting: Kalo në heshtës…
+        tabs:
+          assignments: Caktimet
+          audit: Auditimi
+          conditions: Kushtet
+          resources: Burimet
+        tabs_label: Seksionet e Grupit të lejeve
+    resource_actions:
+      add_select:
+        block: Shto dhe blloko
+        none: Mos e shto
+        not_permitted: Shto, pa e lejuar
+        permitted: Shto dhe lejo
+      confirm_destroy:
+        body: Veprimi hiqet nga “%{set}”. Kjo vlen menjëherë.
+        title: Të hiqet veprimi “%{action}”?
+      effect:
+        managed_elsewhere: Menaxhohet nga grupe të tjera — nuk lejohet këtu
+        managed_elsewhere_muting: Menaxhohet nga grupe të tjera — nuk bllokohet këtu
+        permitted_by: 'Grupet që e lejojnë: %{sets}.'
+        permitted_by_nobody: Asnjë Grup lejesh nuk e lejon ende.
+        right_now: 'Tani:'
+        unmanaged_allowed: I pamenaxhuar — të gjithë mund ta kryejnë
+        unmanaged_blocked: I pamenaxhuar — i bllokuar derisa një grup ta lejojë
+      endpoints:
+        guarded: I mbrojtur
+        guarded_title: Ky kontrollues e përfshin kontrollin e veprimeve, ndaj veprimi
+          kontrollohet në çdo kërkesë.
+        not_guarded: I pambrojtur
+        not_guarded_title: Ky kontrollues nuk e përfshin kontrollin e veprimeve, ndaj
+          veprimi kontrollohet vetëm aty ku kodi yt thërret can?.
+      form:
+        block: Blloko këtë veprim
+        description: Përshkrimi
+        label: Etiketa
+        label_placeholder: p.sh. Eksporto në CSV
+        name: Çelësi
+        name_hint: Emri që aplikacioni yt kontrollon me can?(:export, …). Me shkronja
+          të vogla dhe nënviza.
+        name_suggestions: Zgjidh nga sugjerimet një nga veprimet e kontrolluesve të
+          këtij burimi, ose shkruaj një çelës që e kontrollon kodi yt.
+        permitted: I lejuar
+      managed_note:
+        body: Sapo një Grup lejesh aktiv ka një rresht për një veprim, vetëm personat
+          që e kanë të lejuar nga Grupet e tyre të lejeve mund ta kryejnë. Të gjithë
+          të tjerëve u refuzohet.
+        title: Shtimi i një veprimi e bën të menaxhuar për të gjithë
+        unmanaged_allowed: Një veprim që nuk e menaxhon asnjë Grup lejesh mund ta
+          kryejnë të gjithë.
+        unmanaged_blocked: Një veprim që nuk e menaxhon asnjë Grup lejesh është i
+          bllokuar për të gjithë.
+      new:
+        add: Shto veprim
+        intro: Veprimet janë folje specifike të aplikacionit që kodi yt kontrollon,
+          si Eksporto ose Sinkronizo me kontabilitetin.
+        title: Veprim i ri për %{resource}
+        where: Ku ekzekutohet %{action}
+      show:
+        unlinked: Nuk është i lidhur me një veprim kontrolluesi. Kjo pritet për një
+          veprim që kodi yt e kontrollon me can?.
+        where: Ku ekzekutohet
+      states:
+        blocked: I bllokuar
+        not_permitted: Nuk lejohet
+        permitted: I lejuar
+        unchanged: Pa ndryshim
+    resource_fields:
+      explain:
+        capped: Shfaqet si Vetëm lexim sepse Ndrysho nuk lejohet për këtë burim.
+        full_picture: Shiko gjithçka që %{name} mund të shohë →
+        granted: "%{name} e sheh përmes %{sets}."
+        muted: "%{name} nuk e sheh të plotë sepse %{sets} e fsheh ose e maskon."
+        no_access: "%{name} nuk mund të lexojë %{resources}."
+        none: Asnjë grup nuk ia shfaq këtë fushë %{name}.
+        unconfigured: Asnjë grup nuk e konfiguron këtë kolonë, prandaj për %{name}
+          vendos cilësimi për fushat e pakonfiguruara.
+        virtual_default: "%{name} e merr këtë fushë virtuale si parazgjedhje, të lexueshme
+          dhe të ndryshueshme: njëri nga grupet që i janë caktuar nuk ka cilësim për
+          të."
+      show:
+        access_level: Niveli i qasjes
+        across: Në të gjitha Grupet e lejeve
+        applied: U aplikua
+        apply_recommendation: Apliko rekomandimin
+        column: Emri (kolona)
+        custom: "(i personalizuar)"
+        custom_link: Strategji të personalizuara te Cilësimet
+        description: Përshkrimi
+        details: Detajet
+        explain: Shpjego për një person
+        explain_button: Shpjego
+        explain_nobody: Ende askush nuk mund ta lexojë këtë burim.
+        flags_muting_note: Në grupet heshtëse këta flamuj do të thonë “hiq”.
+        impact: Ruajtja vlen menjëherë për %{people}.
+        label: Etiketa
+        mask_strategy: Strategjia e maskimit
+        muting_note: Ky është Grup lejesh heshtës. Zgjedhjet këtu heqin qasje.
+        no_rules: Asnjë rregull në këtë grup nuk filtron sipas kësaj fushe.
+        not_configured: 'Nuk ka cilësim për këtë kolonë në “%{set}”. Me konfigurimin
+          aktual është: %{behaviour}.'
+        not_configured_implicit: 'Nuk ka cilësim për këtë fushë në “%{set}”. Ndjek
+          “Fushat virtuale pa cilësim”: me konfigurimin aktual është e lexueshme dhe
+          e ndryshueshme si parazgjedhje.'
+        pick_person: Zgjidh një person…
+        save: Ruaj
+        sensitive: 'Përputhet me modelin e privatësisë “%{pattern}”. Rekomandohet:
+          I maskuar (%{strategy}).'
+        turned_off: 'Cilësimi për këtë fushë në “%{set}” është i çaktivizuar, prandaj
+          nuk zbatohet. Me konfigurimin aktual fusha është: %{behaviour}.'
+        turned_off_implicit: 'Cilësimi për këtë fushë në “%{set}” është i çaktivizuar,
+          prandaj nuk zbatohet. Fusha ndjek “Fushat virtuale pa cilësim”: me konfigurimin
+          aktual është e lexueshme dhe e ndryshueshme si parazgjedhje.'
+        used_by_rules: Përdoret nga rregullat
+        variants: 'Vlen edhe për:'
+        variants_muting: 'Heshtja e kësaj hesht edhe:'
+        virtual_discovered_html: 'Fushë virtuale: nuk është kolonë e bazës së të dhënave.
+          U gjet në model dhe nuk është e listuar te %{method}, prandaj nuk merr kurrë
+          qasje si parazgjedhje.'
+        virtual_html: 'Fushë virtuale: nuk është kolonë e bazës së të dhënave. Modeli
+          e ekspozon përmes %{method}.'
+        virtual_model_masking_off: Ky nivel vlen aty ku aplikacioni filtron parametrat
+          dhe përgjigjet. Kodi që e lexon fushën drejtpërdrejt nga modeli merr vlerën
+          e vërtetë.
+        virtual_model_masking_on: Ky nivel vlen edhe kur kodi e lexon fushën drejtpërdrejt
+          nga modeli.
+    resources:
+      actions_tab:
+        add: Shto veprim
+        add_aria: Shto %{action} në këtë grup
+        bulk_label:
+          one: 'Shto %{count} veprim të zbuluar:'
+          other: 'Shto të %{count} veprimet e zbuluara:'
+        details_aria: Detajet për %{action}
+        empty: Ende nuk ka veprime. Shto foljet që aplikacioni yt kontrollon, si export
+          ose sync.
+        empty_discovery: Asnjë veprim kontrolluesi nuk lidhet me këtë burim dhe ende
+          nuk është shtuar asnjë veprim.
+        intro: Lejo ose blloko veprime specifike të aplikacionit për personat me këtë
+          grup.
+        intro_muting: Blloko veprime specifike të aplikacionit për personat me këtë
+          grup, pavarësisht çfarë lejojnë grupet e tjera.
+        no_guard_body_html: Lejimi ose bllokimi i një veprimi vlen vetëm aty ku kodi
+          yt thërret can?. Përfshi %{guard} në kontrolluesit e tu që të kontrollohet
+          çdo kërkesë.
+        no_guard_title: Asnjë kontrollues nuk e përfshin ende kontrollin e veprimeve
+        unlinked: Nuk është i lidhur me një veprim kontrolluesi
+        unlinked_title: Asnjë veprim kontrolluesi nuk lidhet me këtë çelës. Kjo pritet
+          për një veprim që kodi yt e kontrollon me can?.
+      confirm_destroy:
+        body: "%{people} humbasin atë që u jep ky grup për %{resources}, përveç nëse
+          një grup tjetër e jep."
+        body_muting: "%{people} nuk do të kufizohen më nga ky grup për këtë burim."
+        confirm: Hiq burimin
+        title: Të hiqet %{resource} nga “%{set}”?
+      fields_tab:
+        details: Detajet ›
+        details_aria: Detajet për %{field}
+        field: Fusha
+        filter_label: Filtro fushat
+        filters:
+          all: Të gjitha
+          edit: I ndryshueshëm
+          hidden: I fshehur
+          hide: I fshehur
+          leave: Pa ndryshim
+          mask: Maskim i detyruar
+          masked: I maskuar
+          read: Vetëm lexim
+          sensitive: E ndjeshme
+          unconfigured: E pakonfiguruar
+        implicit_grant: E ndryshueshme si parazgjedhje
+        level: Niveli i qasjes
+        level_aria: Niveli i qasjes për %{field}
+        no_match: Asnjë fushë nuk përputhet.
+        not_configured: E pakonfiguruar · %{behaviour}
+        read_off: Aktivizo Lexo për %{resource} për të zgjedhur cilat fusha shohin
+          personat.
+        search: Kërko fusha
+        select_all: Zgjidh të gjitha fushat e shfaqura
+        select_field: Zgjidh %{field}
+        select_hint: Zgjidh fusha për të ndryshuar disa njëkohësisht.
+        selected:
+          one: "%{count} e zgjedhur"
+          other: "%{count} të zgjedhura"
+        set_to: Vendos në
+        turned_off: E çaktivizuar · %{behaviour}
+      new:
+        add: Shto
+        already: Tashmë në këtë grup
+        columns:
+          one: "%{count} kolonë"
+          other: "%{count} kolona"
+        intro: Zgjidh një model nga %{app}. Listohen vetëm modelet reale.
+        models: Modelet
+        no_models: Asnjë model nuk përputhet.
+        note: Fushat do të krijohen nga kolonat dhe fushat virtuale të modelit.
+        note_gdpr: Fushat do të krijohen nga kolonat dhe fushat virtuale të modelit.
+          Parazgjedhjet e privatësisë janë aktive, prandaj kolonat e ndjeshme fillojnë
+          si të maskuara.
+        presets:
+          block_changes:
+            desc: Hesht Krijo, Ndrysho, Fshi dhe çdo veprim.
+            title: Blloko të gjitha ndryshimet
+          full:
+            desc: Lexo, krijo, ndrysho dhe fshi. Të gjitha fushat të ndryshueshme.
+            title: Qasje e plotë
+          hide_sensitive:
+            desc: Fsheh çdo kolonë që duket si e dhënë personale.
+            title: Fshih fushat e ndjeshme
+          leave:
+            desc: Ende asgjë e heshtur. Konfiguroje vetë.
+            title: Lëri të gjitha pa ndryshim
+          nothing:
+            desc: Gjithçka e çaktivizuar. Konfiguroje vetë.
+            title: Asgjë
+          read:
+            desc: Vetëm lexim. Të gjitha fushat vetëm për lexim.
+            title: Vetëm lexim
+        search: Kërko modele
+        sensitive:
+          one: "%{count} duket e ndjeshme"
+          other: "%{count} duken të ndjeshme"
+        start_from: Fillo nga
+        the_app: aplikacioni
+        title: Shto një burim
+      rules_tab:
+        add: Shto rregull
+        all_queries: vlen për të gjitha kërkesat
+        blocked_message: 'Mesazhi i bllokimit: “%{message}”'
+        empty: 'Ende nuk ka rregulla, prandaj regjistrimet nuk kufizohen: kushdo me
+          këtë grup sheh çdo %{resources} që mund të lexojë.'
+        empty_muting: Grupet e lejeve heshtës nuk shtojnë rregulla regjistrimesh.
+        empty_view_all: Pa rregulla. Shiko të gjitha është aktiv, prandaj çdo regjistrim
+          përfshihet gjithsesi.
+        filter_rule: Rregull filtrimi · %{applies}
+        ignored: 'Injoruar: Shiko të gjitha është aktiv'
+        ignored_both: 'Injoruar: Shiko të gjitha dhe Ndrysho të gjitha janë aktive'
+        join_rule: Ndjek një lidhje · vlen vetëm për kërkimet e kufizuara
+        join_rules_warning: Këto rregulla ndjekin një lidhje, prandaj kufizimi automatik
+          i kërkesave i anashkalon. Ato vlejnë vetëm aty ku aplikacioni përdor find_by
+          ose permission_scoped.
+        muting: Grupet e lejeve heshtës vetëm heqin qasje; rregullat e regjistrimeve
+          vijnë nga grupet që japin qasje.
+        scoped_lookups: vlen vetëm për kërkimet e kufizuara
+        scoping_off: 'Kufizimi automatik i kërkesave është joaktiv: rregullat vlejnë
+          për kërkimet me find_by dhe permission_scoped.'
+        scoping_off_warning: Kufizimi automatik i kërkesave është joaktiv, prandaj
+          këto rregulla vlejnë vetëm aty ku aplikacioni përdor find_by ose permission_scoped.
+          Kërkesat e tjera kthejnë të gjitha regjistrimet.
+        scoping_on: 'Kufizimi automatik i kërkesave është aktiv (filter_only): rregullat
+          e filtrimit vlejnë për të gjitha kërkesat; rregullat që ndjekin një lidhje
+          vlejnë vetëm për kërkimet e kufizuara.'
+        turn_off: Çaktivizo
+        turn_on: Aktivizo
+      show:
+        description: Përshkrimi
+        description_placeholder: Shto një përshkrim
+        help_term: Burim
+        help_text: një model nga aplikacioni (këtu %{model}). Brenda tij zgjedh fushat,
+          veprimet dhe rregullat e regjistrimeve.
+        impact: "%{people} të prekur · vlen menjëherë pas ruajtjes"
+        modify_all_html: "<b>Ndrysho të gjitha</b>: ndrysho dhe fshi çdo regjistrim
+          të %{resource}. Anashkalon të gjitha rregullat e regjistrimeve për ndryshimet."
+        modify_all_needs: Kërkon Shiko të gjitha dhe Ndrysho.
+        muting_hint: Veprimet e heshtura u hiqen personave me këtë grup, pavarësisht
+          çfarë lejojnë grupet e tjera.
+        muting_note: Cilësimet këtu u heqin qasje personave të %{set}.
+        needs_read_hint: Ndrysho dhe Fshi kërkojnë Lexo.
+        record_scope: Shtrirja e regjistrimeve
+        remove: Hiq %{resource} nga ky grup…
+        rules_ignored:
+          one: "%{count} rregull aktualisht injorohet sepse Shiko të gjitha është
+            aktiv."
+          other: "%{count} rregulla aktualisht injorohen sepse Shiko të gjitha është
+            aktiv."
+        tabs_label: Seksionet e burimit
+        view_all_html: "<b>Shiko të gjitha</b>: lexo çdo regjistrim të %{resource}.
+          Anashkalon të gjitha rregullat e regjistrimeve për leximin."
+        view_all_needs: Kërkon Lexo.
+        what_can_do: Çfarë mund të bëjnë personat
+      sync:
+        add_as:
+          edit: Shto të gjitha të rejat me qasje të plotë
+          hidden: Shto të gjitha të rejat si të fshehura
+          hide: Shto të gjitha të rejat si të fshehura
+          read: Shto të gjitha të rejat si Vetëm lexim
+        gdpr_off: Parazgjedhjet e privatësisë janë joaktive.
+        gdpr_on: 'Parazgjedhjet e privatësisë janë aktive: kolonat e ndjeshme shtohen
+          si të maskuara.'
+        ignored_count:
+          one: "%{count} e injoruar"
+          other: "%{count} të injoruara"
+        ignored_link: Cilësimet › Kolonat e injoruara
+        ignored_title: Të injoruara nga konfigurimi
+        missing_count:
+          one: "%{count} fushë e konfiguruar, kolona e së cilës nuk ekziston më"
+          other: "%{count} fusha të konfiguruara, kolonat e të cilave nuk ekzistojnë
+            më"
+        missing_title: E konfiguruar, por kolona nuk ekziston më
+        new_count:
+          one: "%{count} kolonë e re e pakonfiguruar"
+          other: "%{count} kolona të reja të pakonfiguruara"
+        new_title: Kolona të reja, të pakonfiguruara
+        none: Asnjë
+        remove_missing: Hiq fushat që mungojnë
+        review: Rishiko
+        sensitive_rec: E ndjeshme → I maskuar (%{strategy})
+        title: Sinkronizo fushat me modelin
+    settings:
+      items:
+        action_guard_bypass:
+          desc: Personat për të cilët veprimet e kontrolluesve nuk kontrollohen kurrë,
+            për shembull administratorët.
+          name: Kush e anashkalon kontrollin e veprimeve
+        action_guard_nil_user_strategy:
+          desc: Çfarë bën roja e kontrolluesit me një veprim të ruajtur kur askush
+            nuk është i identifikuar. Pa vlerë, ndjek “Rregullat e regjistrimeve kur
+            askush nuk ka hyrë”.
+          name: Veprime të ruajtura pa përdorues të identifikuar
+        admin_app_name:
+          desc: Emri i aplikacionit që shfaqet nën logon në këto ekrane.
+          name: Emri i aplikacionit
+        admin_assignment_authorization:
+          desc: Kod që vendos nëse një kërkesë mund të ndryshojë kush ka një Grup
+            lejesh ose kush bën pjesë në një grupim, në këto ekrane dhe në API. Thirret
+            me (controller, target, user_ids, action); action është :grant, :revoke,
+            :change_expiry, :review, :add_member ose :remove_member. E pavendosur
+            do të thotë pa kontroll shtesë.
+          name: Kush mund të ndryshojë caktimet
+        admin_back_url:
+          desc: 'Ku të çon lidhja nën logo (parazgjedhja: faqja kryesore e aplikacionit).'
+          name: Lidhja "Kthehu te aplikacioni"
+        admin_docs_url:
+          desc: Ku të çojnë lidhjet “Dokumentacioni i konfigurimit” në këtë faqe.
+          name: Lidhja e dokumentacionit të konfigurimit
+        admin_model_resolver:
+          desc: Cilat modele ofrohen kur shton një burim.
+          name: Modelet që ofrohen në admin
+        admin_session_flags:
+          desc: Emra të lexueshëm për flamujt e sesionit që ofrohen në skedën Kushtet.
+          name: Emrat e flamujve të sesionit
+        admin_stale_assignment_days:
+          desc: Caktimet e përhershme që nuk janë rishikuar për kaq kohë shfaqen te
+            Caktime të vjetruara.
+          name: Rishiko caktimet pas
+        admin_tenantless_access:
+          desc: Çfarë bëjnë ekranet dhe API-ja e administrimit me një kërkesë pa qiramarrës
+            kur qiramarrësit janë aktivë.
+          name: Kërkesat pa qiramarrës
+        api_action_authorization:
+          desc: Vendos cilat thirrje API mund të bëjë secili thirrës.
+          name: Kontrolli i lejeve të API-së
+        api_assignment_authorization:
+          desc: Vendos kush mund të caktojë Grupe lejesh përmes API-së.
+          name: Kontrolli i caktimeve të API-së
+        api_auth:
+          desc: Si e vërtetojnë identitetin thirrësit e API-së.
+          name: Hyrja në API
+        api_base_controller_class:
+          desc: Kontrolluesi nga i cili trashëgojnë pikat fundore të API-së.
+          name: Kontrolluesi i API-së
+        api_default_per_page:
+          desc: Regjistrime për faqe API kur thirrësi nuk e specifikon.
+          name: Madhësia e parazgjedhur e faqes
+        api_enabled:
+          desc: U lejon sistemeve të tjera të menaxhojnë Grupet e lejeve përmes HTTP.
+          name: JSON API
+        api_max_per_page:
+          desc: Kufiri i sipërm i regjistrimeve për faqe API.
+          name: Madhësia maksimale e faqes
+        api_pagination_handler:
+          desc: Si ndahen rezultatet e API-së në faqe.
+          name: Faqosja
+        api_record_identifier:
+          desc: Cilin identifikues përdor API-ja në URL.
+          name: Identifikuesi i regjistrimit në API
+        api_redact_rule_field_values:
+          desc: Vlerat e rregullave fshihen në përgjigjet e API-së.
+          name: Fshih vlerat e rregullave në API
+        api_require_authorization:
+          desc: Refuzon ndryshimet përmes API-së kur nuk është konfiguruar kontroll
+            lejesh.
+          name: Kërko kontrolle lejesh për API-në
+        api_serializer_overrides:
+          desc: Zëvendësime për mënyrën si shkruhen regjistrimet në përgjigjet e API-së.
+          name: Serializues të personalizuar
+        api_stats_require_admin:
+          desc: Vetëm administratorët mund të lexojnë statistikat e përdorimit përmes
+            API-së.
+          name: Statistikat vetëm për administratorët
+        audit_actor_resolver:
+          desc: Kod që përcakton kush vepron në një kërkesë drejt këtyre ekraneve
+            ose API-së. E pavendosur do të thotë personi i kyçur; me fjalëkalim bazik,
+            emri i përdoruesit.
+          name: Kush regjistrohet si veprues
+        audit_change_failure_strategy:
+          desc: 'Çfarë ndodh kur një ndryshim nuk mund të regjistrohet: ndryshimi
+            kthehet mbrapsht (raise), kalon dhe raportohet (report), ose kalon dhe
+            vetëm shënohet në log (log).'
+          name: Kur një ndryshim nuk mund të regjistrohet
+        audit_events:
+          desc: 'Regjistron çdo ndryshim të bërë përmes modeleve të lejeve — aktorin
+            siç u përcaktua (ndoshta i panjohur), kur, dhe vlerat e mëparshme — në
+            regjistrin e auditimit. Auto: aktiv kur tabela e auditimit ekziston.'
+          name: Regjistri i auditimit
+        audit_hook_failure_strategy:
+          desc: 'Çfarë ndodh kur një abonent ose hook dështon gjatë dorëzimit të një
+            ngjarjeje: raportohet, vetëm shënohet në log, ose ngrihet gabim.'
+          name: Kur një abonent dështon
+        audit_log_authorization:
+          desc: Kod që vendos kush mund të lexojë faqet, skedat, eksportet dhe API-në
+            e regjistrit të auditimit. E pavendosur do të thotë kushdo me akses në
+            këto ekrane. Fundfaqet 'Ndryshuar së fundi nga' dhe etiketat 'Caktuar
+            nga' ia tregojnë përsëri aktorin e fundit kujtdo që hap administrimin.
+          name: Kush mund të lexojë regjistrin e auditimit
+        audit_log_subscriber:
+          desc: Shkruan çdo ngjarje auditimi edhe në log-un e aplikacionit.
+          name: Kopjo ngjarjet në log
+        audit_request_context:
+          desc: Kod që jep ID-në e kërkesës dhe adresën IP që ruhen me çdo ngjarje.
+            E pavendosur do të thotë ID-ja e kërkesës dhe IP-ja e largët.
+          name: Detajet e kërkesës në ngjarje
+        audit_retention_period:
+          desc: Sa kohë ruhen ngjarjet e auditimit para se detyra e pastrimit të mund
+            t'i fshijë. E pavendosur do të thotë përgjithmonë.
+          name: Ruaj ngjarjet e auditimit për
+        audit_runtime_events:
+          desc: 'Cilat vendime gjatë ekzekutimit ruhen, jo vetëm publikohen: denied,
+            bypass, field_read, params_filtered, cache.'
+          name: Ngjarjet e ruajtura gjatë ekzekutimit
+        audit_trail_enabled:
+          desc: Ruan krijuar-nga / ndryshuar-së-fundi-nga në regjistrimet e PermissionForge
+            kur aktori është një përdorues i identifikuar.
+          name: Regjistro kush krijoi dhe kush ndryshoi së fundi
+        audit_user_class:
+          desc: Modeli që përdoret për “krijuar nga” dhe “ndryshuar nga”.
+          name: Modeli i personave për auditim
+        auto_apply_masked_attributes:
+          desc: Aplikon maskimin kur aplikacioni lexon atributet drejtpërdrejt, jo
+            vetëm në përgjigje.
+          name: Masko automatikisht atributet e modelit
+        auto_query_scoping:
+          desc: Rregullat filtruese shtohen automatikisht në çdo kërkesë. Rregullat
+            që ndjekin një lidhje zbatohen vetëm në kërkimet e kufizuara.
+          name: Zbato rregullat në të gjitha kërkesat
+        available_locales:
+          desc: Gjuhët në të cilat janë të disponueshme këto ekrane.
+          name: Gjuhët
+        base_controller_class:
+          desc: Kontrolluesi i aplikacionit nga i cili trashëgojnë këto ekrane. Këtu
+            ekzekutohet kontrolli yt i hyrjes.
+          name: Kontrolluesi i adminit
+        cache_backend:
+          desc: Ku ruhen në cache lejet e llogaritura.
+          name: Ruajtja e cache-it
+        cache_key_prefix:
+          desc: Parashtesa për çdo hyrje në cache.
+          name: Parashtesa e çelësave të cache-it
+        cache_ttl:
+          desc: Sa kohë mbahen lejet e llogaritura. Një vlerë e re vlen për hyrjet
+            që ruhen në cache pas ndryshimit.
+          name: Jetëgjatësia e cache-it
+        conditional_set_cache_ttl:
+          desc: Sa kohë mbahen lejet për personat me grupe me kushte.
+          name: Jetëgjatësia e cache-it për grupet me kushte
+        conditional_sets_strict_mode:
+          desc: Kur mungojnë detajet e kërkesës, modaliteti strikt i trajton grupet
+            me kushte si joaktive.
+          name: Kushte aktivizimi strikte
+        controller_action_discovery:
+          desc: Shfaq veprimet e kontrolluesve të aplikacionit në skedën Veprimet
+            të një burimi, që të lejohen ose të bllokohen.
+          name: Listo veprimet e kontrolluesve
+        controller_action_resolver:
+          desc: Vendos se cilit burim dhe cilit veprim i përket një veprim i kontrolluesit.
+          name: Lidhja e veprimeve të kontrolluesve
+        controller_discovery_exclude:
+          desc: Kontrollues që nuk listohen dhe nuk kontrollohen kurrë.
+          name: Kontrolluesit e lënë jashtë
+        current_user_resolver:
+          desc: I tregon PermissionForge kush ka hyrë në çdo kërkesë.
+          name: Si gjendet përdoruesi aktual
+        custom_mask_strategies:
+          desc: Stile shtesë maskimi të përcaktuara në kod, që ofrohen pranë atyre
+            të integruara.
+          name: Stile maskimi të personalizuara
+        database_row_level_security:
+          desc: I lejon vetë bazës së të dhënave të zbatojë rregullat e regjistrimeve
+            si mbrojtje e fundit.
+          name: Siguria në nivel rreshti në bazën e të dhënave
+        extra_fields_default_access:
+          desc: Nëse një fushë virtuale që askush nuk e ka konfiguruar është e ndryshueshme
+            si parazgjedhje apo ndjek “Fushat pa cilësim”.
+          name: Fushat virtuale pa cilësim
+        extra_fields_method:
+          desc: Metoda e modelit që liston fusha shtesë, jo të bazës së të dhënave,
+            për t'u mbrojtur.
+          name: Metoda e fushave virtuale
+        field_variant_mappings:
+          desc: Cilësimi i një fushe vlen edhe për këto emra kolonash të lidhura.
+          name: Variante të lidhura fushash
+        filter_parameters_integration:
+          desc: Shton modelet e privatësisë te filter_parameters të Rails që regjistrat
+            të mos i shfaqin.
+          name: Filtro vlerat e ndjeshme nga regjistrat
+        gdpr_defaults:
+          desc: Kolonat që duken personale maskohen si parazgjedhje kur shtohen.
+          name: Parazgjedhjet e privatësisë
+        gdpr_field_patterns:
+          desc: Emrat e kolonave që përputhen me një model shënohen si të ndjeshëm
+            dhe marrin këtë stil maskimi.
+          name: Modele emrash të ndjeshëm
+        gdpr_require_explicit_choice:
+          desc: Aplikacioni refuzon të niset derisa parazgjedhjet e privatësisë të
+            aktivizohen ose çaktivizohen shprehimisht.
+          name: Kërko zgjedhje për parazgjedhjet e privatësisë
+        hidden_attribute_value:
+          desc: Çfarë kthen një atribut i fshehur kur kodi e lexon.
+          name: Vlera për atributet e fshehura
+        http_basic_auth_enabled:
+          desc: Kërkon një emër përdoruesi dhe fjalëkalim të përbashkët para se dikush
+            të hapë këto ekrane.
+          name: Mbro adminin me fjalëkalim
+        http_basic_auth_password:
+          desc: Fjalëkalimi për kërkesën e fjalëkalimit më lart. Nuk shfaqet kurrë
+            këtu.
+          name: Fjalëkalimi i adminit
+        http_basic_auth_user:
+          desc: Emri i përdoruesit për kërkesën e fjalëkalimit më lart.
+          name: Emri i përdoruesit të adminit
+        ignored_fields:
+          desc: Kolona që PermissionForge nuk i menaxhon kurrë. Nuk shfaqen në listat
+            e fushave.
+          name: Kolonat e injoruara
+        mask_virtual_attributes:
+          desc: Fsheh ose maskon edhe fushat e llogaritura, jo të bazës së të dhënave,
+            kur kodi yt i lexon nga modeli.
+          name: Masko fushat virtuale në modele
+        masked_attributes_nil_user_strategy:
+          desc: 'Nëse modelet e maskuara kthejnë vlerat e ruajtura apo të fshehura
+            kur nuk ka përdorues aktual (punë në sfond, email-e, konsola). Modeli
+            i përdoruesit mbetet i lexueshëm: hyrja e lexon para se dikush të ketë
+            hyrë.'
+          name: Atributet e maskuara kur askush nuk ka hyrë
+        masked_write_protection:
+          desc: Ndalon që një vlerë e maskuar si “•••• 4821” të ruhet mbi vlerën e
+            vërtetë.
+          name: Ruajtja e vlerave të maskuara
+        nil_user_strategy:
+          desc: Nëse rregullat anashkalohen, mohojnë gjithçka ose ngrenë gabim kur
+            nuk ka përdorues aktual.
+          name: Rregullat e regjistrimeve kur askush nuk ka hyrë
+        omit_hidden_in_attributes_hash:
+          desc: Fushat e fshehura hiqen nga hash-et e atributeve në vend që të vendosen
+            bosh.
+          name: Lëri jashtë fushat e fshehura nga listat e atributeve
+        on_cache_failure:
+          desc: Kod që ekzekutohet kur lejet në cache nuk mund të pastroheshin, për
+            shembull për të të njoftuar. Derisa të mbarojë jetëgjatësia e cache-it,
+            ai person mund t'i mbajë lejet e vjetra.
+          name: Kur dështon ruajtja e cache-it
+        on_field_filtered:
+          desc: Kod që ekzekutohet sa herë filtrohet një fushë, për shembull për ta
+            regjistruar.
+          name: Kur një fushë fshihet ose maskohet
+        on_rule_bypass:
+          desc: Kod që ekzekutohet kur Shiko të gjitha ose Ndrysho të gjitha anashkalon
+            rregullat e regjistrimeve.
+          name: Kur rregullat anashkalohen
+        preset:
+          desc: ":strict mbyll cilësimet që si parazgjedhje e lënë qasjen të hapur
+            (lista e forcimit për prodhim në README), përveç maskimit kur askush nuk
+            ka hyrë, që mbetet zgjedhje e qartë; :compat mban parazgjedhjet e bibliotekës.
+            Një cilësim i vendosur në inicializues fiton gjithmonë mbi paracaktimin."
+          name: Paracaktimi i cilësimeve
+        profile_builder:
+          desc: Detajet e profilit që ruhen në cache me lejet e çdo personi.
+          name: Detajet e profilit
+        request_context_resolver:
+          desc: Nga vijnë adresa IP, ora dhe flamujt e sesionit.
+          name: Burimi i detajeve të kërkesës
+        response_filter_nil_user_strategy:
+          desc: Nëse filtrimi i fushave anashkalohet apo bllokohet gjithçka kur nuk
+            ka përdorues aktual.
+          name: Përgjigjet kur askush nuk ka hyrë
+        rls_session_variable:
+          desc: Emri i variablit që i tregon bazës së të dhënave kush është përdoruesi
+            aktual.
+          name: Variabli i sesionit në bazën e të dhënave
+        snapshot_transactions:
+          desc: 'Nëse një transaksion i bazës së të dhënave vazhdon t''i shohë të
+            dhënat siç ishin kur filloi. Lejet e llogaritura brenda një transaksioni
+            të tillë nuk ruhen në cache. Auto vendos sipas bazës së të dhënave: MySQL
+            dhe SQLite po, PostgreSQL vetëm me repeatable read ose më të fortë.'
+          name: Transaksionet lexojnë nga një pamje e çastit
+        table_name_prefix:
+          desc: Parashtesa për tabelat e vetë PermissionForge në bazën e të dhënave.
+          name: Parashtesa e tabelave
+        tenant_column:
+          desc: Kolona që mban qiramarrësin në çdo regjistrim.
+          name: Kolona e qiramarrësit
+        tenant_model:
+          desc: Modeli që ndan klientët e një aplikacioni me shumë qiramarrës.
+          name: Modeli i qiramarrësit
+        unconfigured_action_strategy:
+          desc: Çfarë ndodh me një veprim kontrolluesi që nuk e përmend asnjë Grup
+            lejesh.
+          name: Veprimet pa cilësim
+        unconfigured_field_strategy:
+          desc: Çfarë ndodh me një kolonë që nuk e përmend asnjë Grup lejesh.
+          name: Fushat pa cilësim
+        unscoped_query_detection:
+          desc: Vëren kërkesat që anashkalojnë rregullat e regjistrimeve.
+          name: Zbulo kërkesat e pambrojtura
+        unscoped_query_detection_environments:
+          desc: Mjediset ku zbulimi i kërkesave të pambrojtura është aktiv.
+          name: Zbulimi ekzekutohet në
+        user_active_check:
+          desc: I tregon PermissionForge nëse llogaria e një personi të caktuar është
+            ende aktive.
+          name: Kontrolli i personit aktiv
+        user_class:
+          desc: Modeli që përfaqëson një person që mund të marrë Grupe lejesh.
+          name: Modeli i personave
+        user_label_formatter:
+          desc: Si shfaqet një person në lista, për shembull emri dhe email-i.
+          name: Etiketa e personit
+        user_list_limit:
+          desc: Numri maksimal i personave që ngarkohen në një listë para se të të
+            kërkohet të kërkosh.
+          name: Kufiri i listës së personave
+        user_list_resolver:
+          desc: Cilët persona shfaqen në zgjedhësit e këtyre ekraneve.
+          name: Burimi i listës së personave
+        uuid_generator:
+          desc: Si krijohen UUID-të e regjistrimeve.
+          name: Gjeneruesi i UUID-ve
+        virtual_field_discovery:
+          desc: Liston edhe store accessors dhe atributet e attribute API si fusha
+            virtuale.
+          name: Zbulo fushat virtuale
+      ladder:
+        active: Aktiv
+        database: Baza e të dhënave
+        detect: Zbulo
+        enforce: Zbato
+        intro: '3 nivele mbrojtjeje: zbato rregullat në kërkesa, zbulo kërkesat që
+          i anashkalojnë dhe lëre bazën e të dhënave t''i zbatojë.'
+        'off': Joaktiv
+      oks:
+        action_guard_nil_user_strategy: Veprimet e ruajtura të kontrolluesve refuzohen
+          kur askush nuk është i identifikuar.
+        admin_tenantless_access: Kërkesat e administrimit pa qiramarrës refuzohen.
+        api_require_authorization: Ndryshimet përmes API-së kërkojnë kontroll lejesh.
+        audit_events: Kush ndryshoi çfarë regjistrohet në regjistrin e auditimit.
+        audit_trail_enabled: Ruan krijuar-nga / ndryshuar-së-fundi-nga në regjistrimet
+          e PermissionForge kur aktori është një përdorues i identifikuar.
+        conditional_sets_strict_mode: Grupet me kushte mbyllen kur mungojnë informacionet
+          e kërkesës.
+        extra_fields_default_access: Fushat virtuale që askush nuk i ka konfiguruar
+          ndjekin “Fushat pa cilësim”.
+        gdpr_defaults: Kolonat e reja të ndjeshme fillojnë të maskuara.
+        http_basic_auth_enabled: Qasja në këto ekrane është e mbrojtur.
+        masked_attributes_nil_user_strategy: Modelet e maskuara i fshehin vlerat kur
+          askush nuk ka hyrë (modeli i përdoruesit mbetet i lexueshëm për hyrjen).
+        masked_write_protection: Vlerat e maskuara nuk ruhen kurrë mbrapsht.
+        nil_user_strategy: Kodi pa përdorues të hyrë nuk sheh asnjë regjistrim.
+        preset: Paracaktimi :strict mbyll cilësimet që si parazgjedhje e lënë qasjen
+          të hapur.
+        unconfigured_action_strategy: Veprimet e kontrolluesve që askush nuk i ka
+          konfiguruar bllokohen.
+      risks:
+        admin_tenantless_access: Kërkesat e administrimit pa qiramarrës shërbehen,
+          për të gjithë qiramarrësit.
+        api_require_authorization: API-ja është aktive dhe ndryshimet lejohen edhe
+          pa kontroll lejesh.
+        audit_events: Ndryshimet nuk regjistrohen në regjistrin e auditimit (është
+          çaktivizuar, ose tabela e auditimit mungon). Me audit_events = true dhe
+          pa tabelë, çdo ndryshim dështon (me strategjinë e parazgjedhur :raise).
+        audit_trail_enabled: Askush nuk regjistrohet si krijues ose redaktues i regjistrimeve.
+        conditional_sets_strict_mode: Grupet me kushte trajtohen si aktive kur mungojnë
+          informacionet e kërkesës (fail-open).
+        http_basic_auth_enabled: Këto ekrane janë ose të bllokuara (kërkesa për fjalëkalim
+          aktive, por pa kredenciale) ose të pambrojtura (pa fjalëkalim dhe pa kontrollues
+          admini të personalizuar).
+        masked_write_protection: Vlerat e maskuara mund të ruhen mbi të dhënat e vërteta.
+        unconfigured_field_strategy: Kolonat që askush nuk i ka konfiguruar u shfaqen
+          pa maskim kujtdo që mund ta lexojë burimin.
+      row:
+        changed: Ndryshuar
+        default: 'Parazgjedhje: %{value}'
+        docs: 'Dokumentacioni i konfigurimit: %{key} ↗'
+        how_to_change: Si ta ndryshosh
+        risk: Rrezik
+        secure: I sigurt
+        snippet_current: Fragmenti tregon vlerën aktuale.
+        snippet_recommended: Fragmenti tregon vlerën e rekomanduar.
+        step_deploy: Bëj commit dhe deploy (ose rinis serverin lokalisht).
+        step_edit: Ndrysho skedarin më lart.
+        step_reload: Rifresko këtë faqe për ta konfirmuar.
+      sections:
+        activation_conditions: Kushtet e aktivizimit
+        admin_access: Qasja në admin
+        admin_api: JSON API i adminit
+        admin_ui: Ekranet e adminit
+        audit_trail: Regjistri i auditimit
+        caching: Cache
+        controller_actions: Veprimet e kontrolluesve
+        database: Baza e të dhënave dhe sistemi
+        field_protection: Mbrojtja e fushave
+        masked_attributes: Atribute të maskuara në modele
+        multi_tenancy: Shumë qiramarrës
+        people: Personat
+        preset: Paracaktimi
+        privacy: Privatësia (GDPR)
+        record_rules: Rregullat e regjistrimeve dhe kufizimi i kërkesave
+      show:
+        api_disabled_html: API-ja është e çaktivizuar (%{key}).
+        changed_count:
+          one: "%{count} i ndryshuar"
+          other: "%{count} të ndryshuar"
+        changed_only: Shfaq vetëm ato të ndryshuara nga parazgjedhja
+        has_risk: Ka një cilësim të rrezikshëm
+        health: Përmbledhja e gjendjes
+        how_to_fix: Si ta rregullosh
+        intro_html: Cilësimet përcaktohen në %{file}. Ndryshimet kërkojnë deploy/rinisje.
+          Kjo faqe tregon vlerat aktuale dhe si t'i ndryshosh.
+        no_match: Asnjë cilësim nuk përputhet.
+        read_only: Vetëm lexim
+        search: Kërko cilësime
+        section_meta: "%{settings} · %{changed}"
+        secure_count:
+          one: "%{count} cilësim sigurie dhe privatësie duket në rregull."
+          other: "%{count} cilësime sigurie dhe privatësie duken në rregull."
+        settings_count:
+          one: "%{count} cilësim"
+          other: "%{count} cilësime"
+      units:
+        days:
+          one: "%{count} ditë"
+          other: "%{count} ditë"
+        hours:
+          one: "%{count} orë"
+          other: "%{count} orë"
+        minutes:
+          one: "%{count} minutë"
+          other: "%{count} minuta"
+        people:
+          one: person
+          other: persona
+        records:
+          one: regjistrim
+          other: regjistrime
+      values:
+        disabled: Joaktiv
+        empty: Asnjë
+        hook_custom: I personalizuar (i përcaktuar në kod)
+        hook_default: Parazgjedhje
+        hook_none: I pavendosur
+        never_displayed: nuk shfaqet kurrë
+        nil: nil (i pavendosur)
+        not_set: I pavendosur
+        'off': Joaktiv
+        'on': Aktiv
+        set: I vendosur
+    shared:
+      across_sets:
+        muted_hidden: 'I heshtur: i fshehur'
+        none: Asnjë Grup lejesh nuk e përfshin këtë burim.
+      active: Aktiv
+      audit_footer:
+        created: Krijuar nga %{created_by} · %{created_at}
+        disabled: Nuk regjistrohet kush krijoi dhe kush ndryshoi.
+        edited: Ndryshuar së fundi nga %{updated_by} · %{updated_at}
+        history: Historiku
+      crud_cell:
+        allowed: Lejohet
+        muted: I heshtur
+        needs_read: Aktivizo së pari Lexo
+        needs_read_short: Kërkon Lexo
+        'no': Jo
+        unchanged: Pa ndryshim
+      expiry_picker:
+        custom_label: Data e përfundimit
+        default: Parazgjedhje
+        label: Kur përfundon kjo qasje
+        pick_date: Zgjidh një datë
+        presets:
+          1d: 1 ditë
+          1w: 1 javë
+          30d: 30 ditë
+          custom: Datë e personalizuar
+          eom: Fundi i muajit
+          never: Pa skadim
+      help_banner:
+        got_it: Në rregull
+      inactive: Joaktiv
+      level_control:
+        needs_edit: Aktivizo së pari Ndrysho për %{resource}
+      mode_banners:
+        duplicate_to_edit: Dublikoje për ta ndryshuar
+        locked_body_html: Ky regjistrim ka %{flag}, prandaj këtu është vetëm për lexim.
+          Dublikoje për të krijuar një kopje të ndryshueshme.
+        muting_body: Mbizotëron mbi çdo gjë që japin grupet e tjera. Çdo gjë që hesht
+          ose fsheh këtu u hiqet personave të tij. Lëre një cilësim në “Pa ndryshim”
+          që të vendosin grupet e tjera.
+        muting_title: 'Grup lejesh heshtës: heq qasje'
+      preferences:
+        language: Gjuha
+        signed_in_as: Hyrë si %{name}
+        theme: Tema
+        themes:
+          auto: Automatike
+          dark: E errët
+          light: E çelët
+      reason_field:
+        hint: Ruhet bashkë me ndryshimin në regjistrin e auditimit.
+        label: Arsyeja
+        placeholder: p.sh. bileta SEC-142
+        summary: Shto një arsye (opsionale)
+        summary_short: Arsye
+      savebar:
+        clean: Nuk ka ndryshime të paruajtura
+        count:
+          one: "%{count} ndryshim i paruajtur"
+          other: "%{count} ndryshime të paruajtura"
+        discard: Hidh poshtë
+        label: Ndryshime të paruajtura
+        note: Ruajtja i aplikon menjëherë për %{people}.
+        note_nobody: Ende askush nuk e ka këtë grup, prandaj ruajtja nuk prek askënd.
+        review: Rishiko dhe ruaj
+      sidebar:
+        aria: PermissionForge
+        back_to_app: Kthehu te %{app}
+        back_to_app_generic: Kthehu te aplikacioni
+        brand: PermissionForge
+      tech_details:
+        copied: U kopjua
+        copy: Kopjo
+        summary: Detaje teknike
+      time_ago: "%{time} më parë"
+      time_nil: "—"
+      toasts:
+        dismiss: Mbyll
+        undo: Zhbëj
+      topbar:
+        menu: Menyja
+      user: Përdoruesi
+      user_fallback: 'Përdoruesi #%{id}'
+      user_select_prompt: Zgjidh një person...
+      user_select_truncated: Shfaqen vetëm %{count} përdoruesit e parë. Konfiguro
+        user_list_resolver për ta ngushtuar listën.
+    ui:
+      actions: Veprimet
+      apply: Apliko
+      assign_set: Cakto një Grup lejesh
+      assignment:
+        never_reviewed: Nuk është rishikuar kurrë
+        reviewed: Rishikuar %{when}
+        reviewed_by: Rishikuar nga %{who} më %{date}
+        reviewed_on: Rishikuar më %{date}
+      audit:
+        system: Sistemi
+        types:
+          action: Veprim
+          assignment: Caktim
+          field: Fushë
+          group: Grupim
+          group_membership: Anëtarësi në grupim
+          permission_set: Grup lejesh
+          resource: Burim
+          rule: Rregull
+        who_when: "%{who} · %{when}"
+      badges:
+        column_missing: Kolona mungon
+        conditional: Me kushte
+        expired: Skaduar
+        fail_open: Fail-open
+        fail_open_long: 'Fail-open: aktiv kur mungojnë informacionet e kërkesës'
+        fail_open_title: conditional_sets_strict_mode është joaktiv
+        locked: I kyçur
+        muting: Heshtës
+        not_configured: E pakonfiguruar
+        'off': Joaktiv
+        sensitive: E ndjeshme
+        virtual: Virtuale
+      breadcrumb: Navigimi
+      cancel: Anulo
+      changes:
+        action_managed_already: "(tashmë i menaxhuar; grupet që e lejojnë: %{sets})"
+        action_managed_first: "(kjo e bën të menaxhuar: tani e tutje vetëm personat
+          që e kanë të lejuar nga Grupet e tyre të lejeve mund ta kryejnë)"
+        action_managed_later: "(hyn në fuqi sapo ky grup dhe ky burim të aktivizohen)"
+        action_managed_nobody: "(tashmë i menaxhuar; asnjë Grup lejesh nuk e lejon
+          ende)"
+        action_muted: "%{resource}: %{action} u bllokua"
+        action_new_muted: "%{resource}: %{action} u shtua dhe u bllokua"
+        action_new_off: "%{resource}: %{action} u shtua, nuk lejohet"
+        action_new_on: "%{resource}: %{action} u shtua dhe lejohet"
+        action_new_unmuted: "%{resource}: %{action} u shtua, nuk bllokohet"
+        action_off: "%{resource}: %{action} nuk lejohet më"
+        action_on: "%{resource}: %{action} lejohet"
+        action_unmuted: "%{resource}: %{action} nuk bllokohet më"
+        attributes:
+          description: përshkrimi
+          label: etiketa
+          name: emri
+        cascaded: "(ndryshuar automatikisht)"
+        cascaded_field: "(ulur sepse Ndrysho është joaktiv)"
+        field_level: "%{resource} › %{field}: %{from} → %{to}"
+        field_new: "%{resource} › %{field}: vendosur në %{to}"
+        field_off: "%{resource} › %{field}: çaktivizuar"
+        field_on: "%{resource} › %{field}: aktivizuar"
+        field_text: "%{resource} › %{field}: %{attribute} ndryshoi"
+        flag_off: "%{resource}: %{flag} u hoq"
+        flag_off_muting: "%{resource}: %{flag} nuk heshtet më"
+        flag_on: "%{resource}: %{flag} u lejua"
+        flag_on_muting: "%{resource}: %{flag} u hesht"
+        resource_text: "%{resource}: %{attribute} ndryshoi"
+        set_group: U zhvendos në grupimin “%{group}”
+        set_no_group: U hoq nga grupimi i tij
+        set_off: Grupi u çaktivizua
+        set_on: Grupi u aktivizua
+        set_text: "%{attribute} i Grupit të lejeve ndryshoi"
+      close: Mbyll
+      conditions:
+        always: Gjithmonë aktiv. Pa kushte aktivizimi.
+        flag_generic: kur %{flag} është vendosur
+        flags:
+          marketing_consent: kur është dhënë pëlqimi për marketing
+          mfa_verified: pas hyrjes me dy faktorë
+          sso_login: pas hyrjes me SSO të kompanisë
+        from_ips: nga %{ips}
+        hours: ndërmjet %{from} dhe %{to}
+        hours_overnight: ndërmjet %{from} dhe %{to} (gjatë natës)
+        only_works: Funksionon vetëm %{parts}.
+        or: " ose "
+      dates:
+        days_ago:
+          one: "%{count} ditë më parë"
+          other: "%{count} ditë më parë"
+        never: "—"
+        today: sot
+        yesterday: dje
+      delete: Fshi
+      dry_run: Provë
+      duplicate: Dublikoje
+      edit: Ndrysho
+      expiry:
+        ends_in:
+          one: Përfundon pas %{count} dite · %{date}
+          other: Përfundon pas %{count} ditësh · %{date}
+        expired: Skadoi më %{date}
+        none: Pa skadim
+        today: Përfundon sot
+        until: Deri më %{date}
+      expiry_change:
+        1w: 1 javë nga sot
+        30d: 30 ditë nga sot
+        eom: Fundi i muajit
+        never: Pa skadim
+      export_csv: Eksporto CSV
+      field_lookup: Kërkimi i fushës
+      fields: Fushat
+      flags:
+        marketing_consent: Ka dhënë pëlqimin për marketing
+        mfa_verified: Ka hyrë me dy faktorë
+        sso_login: Ka hyrë përmes SSO-së së kompanisë
+      flags_short:
+        create_access: Krijo
+        delete_access: Fshi
+        edit_access: Ndrysho
+        is_active: Aktiv
+        modify_all: Ndrysho të gjitha
+        read_access: Lexo
+        view_all: Shiko të gjitha
+      keep: Mbaje
+      levels:
+        edit: I ndryshueshëm
+        hidden: I fshehur
+        hide: Fshih
+        leave: Pa ndryshim
+        mask: Maskim i detyruar
+        masked: I maskuar
+        muted: I heshtur
+        none: E pakonfiguruar
+        read: Vetëm lexim
+      locked:
+        title: 'I kyçur: menaxhohet nga sistemi/API'
+      mask_strategies:
+        email: Email
+        first1_last4: 1 e para + 4 të fundit
+        full: I plotë
+        last4: 4 të fundit
+      months:
+        apr: Pri
+        aug: Gsh
+        dec: Dhj
+        feb: Shk
+        jan: Jan
+        jul: Kor
+        jun: Qer
+        mar: Mar
+        may: Maj
+        nov: Nën
+        oct: Tet
+        sep: Sht
+      next: Tjetër
+      no_group: Jo në grupim
+      open_person: Hap personin
+      open_setting: Hap cilësimin
+      operators:
+        between: është ndërmjet
+        contains: përmban
+        ends_with: përfundon me
+        equal: është
+        greater_than: është më i madh se
+        greater_than_or_equal: është të paktën
+        in: është një nga
+        is_not_null: nuk është bosh
+        is_null: është bosh
+        less_than: është më i vogël se
+        less_than_or_equal: është më së shumti
+        not_contains: nuk përmban
+        not_equal: nuk është
+        not_in: nuk është një nga
+        starts_with: fillon me
+      people_count:
+        one: "%{count} person"
+        other: "%{count} persona"
+      previous: I mëparshmi
+      records: Regjistrimet
+      remove: Hiq
+      resource: Burim
+      rules:
+        and: dhe
+        current_user: përdoruesi aktual
+        only_show: Shfaq vetëm
+        or_empty: ose %{field} është bosh
+        where: ku
+      rules_count:
+        one: Rregullat (%{count})
+        other: Rregullat (%{count})
+      rules_tab: Rregullat
+      search: Kërko
+      search_people: Kërko me emër ose email
+      setting: Cilësimi
+      states:
+        blocked: I bllokuar
+        granted: Lejohet
+        none: Jo
+      unconfigured:
+        block: Bllokohet si parazgjedhje
+        mask_all: I maskuar plotësisht
+        pass_through: Kalon pa maskim
+        warn: Kalon dhe regjistrohet
+      view_all: Shiko të gjitha
+    validations:
+      name_blank: nuk mund të jetë bosh
+      permission_set:
+        group_missing: duhet të jetë një grupim ekzistues i grupeve të lejeve
+      permission_set_rule:
+        between_requires_two_values: duhet të përmbajë saktësisht 2 vlera të ndara
+          me presje për operatorin between
+        field_value_required: kërkohet për këtë operator
+        in_requires_values: duhet të përmbajë të paktën 1 vlerë të ndarë me presje
+        invalid_field_name: duhet të jetë emër i vlefshëm kolone (shkronja, numra,
+          nënviza, pika)
+        invalid_join_type: nuk është lloj i vlefshëm bashkimi
+        invalid_operator: nuk është operator i vlefshëm
+        numeric_or_date_required: duhet të jetë vlerë numerike ose datë për operatorët
+          e krahasimit
+        value_not_expected: nuk kërkon vlerë për këtë operator
+        value_required: nuk duhet të jetë bosh për këtë operator
+      resource:
+        invalid_name: duhet të jetë emër i vlefshëm klase modeli (p.sh. Customer ose
+          Admin::Report)
+      resource_field:
+        invalid_mask_strategy: nuk është strategji e vlefshme maskimi
+        mask_strategy_required: duhet të jetë e pranishme kur aksesi i maskimit është
+          i aktivizuar
+      too_long: është shumë i gjatë (të shumtën %{count} karaktere)

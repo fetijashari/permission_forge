@@ -1,0 +1,3 @@
+<% content_for :pf_title, t('.title', resource: pf_resource_label(@resource)) %>
+<%= render 'builder', title: t('.title', resource: pf_resource_label(@resource)),
+           url: permission_forge.permission_set_resource_rule_path(@permission_set, @resource.name, @rule), method: :patch %>

@@ -1,0 +1,52 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "27c612f8a4d4b61e98fdeaf6623628ac0e02e732367f35106bc4b7e985368736",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "lib/permission_forge/rls.rb",
+      "line": 97,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "connection.execute(\"DROP POLICY IF EXISTS #{name} ON #{connection.quote_table_name(model_class.table_name)}\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "PermissionForge::RLS",
+        "method": "remove!"
+      },
+      "user_input": "name",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "False positive: table names come from quote_table_name, policy names from the frozen POLICY_NAMES constant \u2014 no user input reaches the DDL string."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "e81269c9c13a11d9a7c094912af86130a6c4dc2a552a4b515e259b8d5e419af9",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "lib/permission_forge/rls.rb",
+      "line": 150,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "connection.execute(\"SELECT set_config(#{connection.quote(PermissionForge.configuration.rls_session_variable)}, #{connection.quote(value)}, #{local})\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "PermissionForge::RLS",
+        "method": "run_set_config"
+      },
+      "user_input": "local",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "False positive: setting name and value both pass through connection.quote; the is_local flag is a Ruby boolean literal."
+    }
+  ],
+  "updated": "2026-07-23 00:00:00 +0000",
+  "brakeman_version": "8.0.4"
+}

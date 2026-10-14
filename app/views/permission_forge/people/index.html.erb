@@ -1,0 +1,78 @@
+<% content_for :pf_title, t('permission_forge.nav.people') %>
+<div class="pf-page-header">
+  <div class="pf-page-header__text">
+    <h1 class="pf-h1"><%= t('permission_forge.nav.people') %></h1>
+    <p class="pf-subtitle"><%= t('.subtitle') %></p>
+  </div>
+  <div class="pf-actions">
+    <%= link_to t('.export_holdings'), permission_forge.holdings_audit_events_path(format: :csv), class: 'pf-btn',
+                title: t('permission_forge.audit_events.index.holdings_title') %>
+    <%= pf_modal_link t('permission_forge.ui.assign_set'), permission_forge.new_assignment_path, kind: 'drawer', class: 'pf-btn pf-btn--primary' %>
+  </div>
+</div>
+
+<%= form_with url: permission_forge.people_path, method: :get, role: 'search', class: 'pf-stack' do %>
+  <input type="hidden" name="filter" value="<%= @filter %>">
+  <label class="pf-sr-only" for="pf-people-q"><%= t('permission_forge.ui.search_people') %></label>
+  <input id="pf-people-q" class="pf-input pf-input--lg" type="search" name="q" value="<%= @query %>" autocomplete="off"
+         placeholder="<%= t('permission_forge.ui.search_people') %>" data-pf-live="pf-people-results">
+<% end %>
+
+<div id="pf-people-results" class="pf-stack pf-stack--loose">
+  <div class="pf-filters" role="group" aria-label="<%= t('.filter_label') %>">
+    <% PermissionForge::Admin::PeopleDirectory::FILTERS.each do |filter| %>
+      <%= pf_filter_chip t(".filters.#{filter}"), permission_forge.people_path(q: @query.presence, filter: filter),
+                         selected: @filter == filter, count: @counts[filter] %>
+    <% end %>
+  </div>
+
+  <div class="pf-card">
+    <div class="pf-table pf-table--people" role="table" aria-label="<%= t('permission_forge.nav.people') %>">
+      <div class="pf-table__head" role="row">
+        <span role="columnheader"><%= t('.columns.person') %></span>
+        <span role="columnheader"><%= t('.columns.sets') %></span>
+        <span role="columnheader"><%= t('.columns.ends') %></span>
+      </div>
+      <% @page.people.each do |person| %>
+        <% assignments = @assignments[person.id] || [] %>
+        <% live = assignments.reject(&:expired?) %>
+        <% soonest = live.filter_map(&:expires_at).min %>
+        <div class="pf-table__row pf-table__row--link" role="row">
+          <span role="cell"><%= pf_person_cell(person, href: permission_forge.person_path(person)) %></span>
+          <span role="cell" class="pf-chips">
+            <% if assignments.empty? %>
+              <span class="pf-fs-13 pf-text-3"><%= t('.no_sets') %></span>
+            <% else %>
+              <% assignments.each do |a| %>
+                <%= pf_set_chip(a.permission_set, href: nil, expired: a.expired?) %>
+              <% end %>
+            <% end %>
+          </span>
+          <span role="cell" class="pf-fs-13">
+            <% if soonest %>
+              <%= pf_expiry_tag(soonest) %>
+            <% else %>
+              <span class="pf-text-3">—</span>
+            <% end %>
+          </span>
+        </div>
+      <% end %>
+    </div>
+    <% if @page.people.empty? %>
+      <p class="pf-empty"><%= @query.present? ? t('.empty_query', query: @query) : t('.empty_filter') %></p>
+    <% end %>
+    <% if @page.total > @page.per_page %>
+      <div class="pf-card__footer pf-card__footer--muted pf-pagination">
+        <span><%= t('.showing', from: ((@page.page - 1) * @page.per_page) + 1, to: @page.shown, total: @page.total) %></span>
+        <span class="pf-actions">
+          <% if @page.page > 1 %>
+            <%= link_to t('permission_forge.ui.previous'), permission_forge.people_path(q: @query.presence, filter: @filter, page: @page.page - 1), class: 'pf-btn pf-btn--xs' %>
+          <% end %>
+          <% if @page.more? %>
+            <%= link_to t('permission_forge.ui.next'), permission_forge.people_path(q: @query.presence, filter: @filter, page: @page.page + 1), class: 'pf-btn pf-btn--xs' %>
+          <% end %>
+        </span>
+      </div>
+    <% end %>
+  </div>
+</div>

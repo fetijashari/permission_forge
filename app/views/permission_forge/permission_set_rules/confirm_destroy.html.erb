@@ -1,0 +1,13 @@
+<% back = permission_forge.permission_set_resource_path(@permission_set, @resource.name, tab: 'rules') %>
+<% content_for :pf_title, t('.title', rule: @rule.name) %>
+<%= pf_dialog_frame({ title: t('.title', rule: @rule.name), danger: true }) do %>
+  <%= pf_rule_sentence(@rule, @resource.name) %>
+  <p class="pf-text-2"><%= t('.body', set: @permission_set.name) %></p>
+  <%= form_with url: permission_forge.permission_set_resource_rule_path(@permission_set, @resource.name, @rule), method: :delete, class: 'pf-confirm-form' do %>
+    <%= render 'permission_forge/shared/reason_field' %>
+    <div class="pf-actions pf-row--right">
+      <%= link_to t('permission_forge.ui.cancel'), back, class: 'pf-btn', data: { pf_close: true } %>
+      <button type="submit" class="pf-btn pf-btn--danger-solid"><%= t('permission_forge.ui.remove') %></button>
+    </div>
+  <% end %>
+<% end %>

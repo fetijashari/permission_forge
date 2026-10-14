@@ -1,0 +1,55 @@
+<% content_for :pf_title, t('permission_forge.nav.groups') %>
+<div class="pf-page-header">
+  <div class="pf-page-header__text">
+    <h1 class="pf-h1"><%= t('permission_forge.nav.groups') %></h1>
+    <p class="pf-subtitle"><%= t('.subtitle') %></p>
+  </div>
+  <%= link_to "+ #{t('.new')}", permission_forge.groups_path(new: 1, anchor: 'pf-new-group'), class: 'pf-btn pf-btn--primary' %>
+</div>
+
+<%= pf_help_banner('groups', term: t('.help_term'), text: t('.help_text')) %>
+
+<% if @new_open %>
+  <%= form_with url: permission_forge.groups_path, method: :post, id: 'pf-new-group', class: 'pf-card pf-card__body pf-row pf-row--end' do %>
+    <div class="pf-field pf-grow">
+      <label class="pf-label" for="pf-group-name"><%= t('.name') %></label>
+      <input id="pf-group-name" class="pf-input" type="text" name="name" value="<%= params[:name] %>" autofocus maxlength="255"
+             <%= pf_attrs_when(@new_error, aria: { invalid: true }) %>>
+      <% if @new_error %><p class="pf-error" role="alert"><%= @new_error %></p><% end %>
+    </div>
+    <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-new-group-reason', value: params[:reason] %>
+    <div class="pf-actions">
+      <%= link_to t('permission_forge.ui.cancel'), permission_forge.groups_path, class: 'pf-btn' %>
+      <button type="submit" class="pf-btn pf-btn--primary"><%= t('.create') %></button>
+    </div>
+  <% end %>
+<% end %>
+
+<% if @groups.empty? %>
+  <div class="pf-card"><p class="pf-empty"><%= t('.empty') %></p></div>
+<% else %>
+  <div class="pf-grid-groups">
+    <% @groups.each do |group| %>
+      <%= link_to permission_forge.group_path(group), class: 'pf-group-card' do %>
+        <span class="pf-row">
+          <b><%= group.name %></b>
+          <span class="pf-fs-13 pf-text-3"><%= t('.sets_count', count: group.permission_sets.size) %></span>
+          <%= pf_off_badge unless group.is_active %>
+          <%= pf_lock_badge if pf_locked_record?(group) %>
+        </span>
+        <% if group.description.present? %><span class="pf-fs-13 pf-text-2"><%= group.description %></span><% end %>
+        <span class="pf-chips"><% group.permission_sets.sort_by(&:name).each do |ps| %><%= pf_set_chip(ps, href: nil) %><% end %></span>
+        <% if group.permission_set_group_users.any? %>
+          <span class="pf-fs-12 pf-text-warn">⚠ <%= t('.members_warning', count: group.permission_set_group_users.size) %></span>
+        <% end %>
+      <% end %>
+    <% end %>
+  </div>
+<% end %>
+
+<% if @ungrouped.any? %>
+  <section class="pf-stack" aria-labelledby="pf-ungrouped">
+    <h2 class="pf-h2" id="pf-ungrouped"><%= t('.ungrouped') %></h2>
+    <div class="pf-chips"><% @ungrouped.each do |ps| %><%= pf_set_chip(ps) %><% end %></div>
+  </section>
+<% end %>

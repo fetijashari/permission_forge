@@ -1,0 +1,24 @@
+<% outcome = explain[:field] %>
+<% name = pf_person(explain[:user]).first_name %>
+<div class="pf-panel pf-panel--muted pf-stack pf-stack--tight pf-fs-13" aria-live="polite">
+  <% if outcome.nil? %>
+    <span><%= t('.no_access', name: name, resources: pf_resource_plural(resource.name)) %></span>
+  <% else %>
+    <div><%= pf_level_badge(outcome.level, strategy: (outcome.mask_strategy if outcome.level == 'masked')) %></div>
+    <span>
+      <% if outcome.blocked_by.any? %>
+        <%= t('.muted', name: name, sets: outcome.blocked_by.map(&:name).to_sentence) %>
+      <% elsif outcome.unconfigured %>
+        <%= t('.unconfigured', name: name) %>
+      <% elsif outcome.granted_by.any? %>
+        <%= t('.granted', name: name, sets: outcome.granted_by.map(&:name).to_sentence) %>
+      <% elsif outcome.implicit %>
+        <%= t('.virtual_default', name: name) %>
+      <% else %>
+        <%= t('.none', name: name) %>
+      <% end %>
+      <%= t('.capped') if outcome.capped %>
+    </span>
+    <%= link_to t('.full_picture', name: name), permission_forge.person_path(explain[:user], tab: 'effective', why: "#{resource.name}.field.#{outcome.name}", open: [resource.name]), class: 'pf-fs-12' %>
+  <% end %>
+</div>

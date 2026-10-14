@@ -1,0 +1,24 @@
+<% person = pf_person_name(@assignment.user) %>
+<% set = @assignment.permission_set %>
+<% content_for :pf_title, t('.title', set: set.name, name: person) %>
+<%= pf_dialog_frame({ title: t('.title', set: set.name, name: person), danger: true,
+                     breadcrumb: pf_breadcrumb([t('permission_forge.nav.people'), permission_forge.people_path], [person, permission_forge.person_path(@assignment.user_id)], t('.crumb')) }) do %>
+  <p class="pf-text-2">
+    <% first = pf_person(@assignment.user).first_name %>
+    <% if set.is_muting %>
+      <%= t('.body_muting', name: first, set: set.name) %>
+    <% elsif @lost.any? %>
+      <%= t('.body', name: first, resources: @lost.to_sentence) %>
+    <% else %>
+      <%= t('.body_nothing', name: first) %>
+    <% end %>
+  </p>
+  <%= form_with url: permission_forge.assignment_path(@assignment), method: :delete, class: 'pf-confirm-form' do %>
+    <%= render 'permission_forge/shared/reason_field' %>
+    <div class="pf-actions pf-row--right">
+      <input type="hidden" name="return_to" value="<%= params[:return_to] %>">
+      <%= link_to t('permission_forge.ui.cancel'), pf_back_or(permission_forge.person_path(@assignment.user_id)), class: 'pf-btn', data: { pf_close: true } %>
+      <button type="submit" class="pf-btn pf-btn--danger-solid"><%= t('permission_forge.ui.remove') %></button>
+    </div>
+  <% end %>
+<% end %>

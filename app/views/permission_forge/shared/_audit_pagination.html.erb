@@ -1,0 +1,19 @@
+<%# Page links for an AuditLog::Page. Locals: page, path (lambda: page number -> path). %>
+<% if page.total.positive? %>
+  <nav class="pf-card__footer pf-card__footer--muted pf-pagination" aria-label="<%= t('permission_forge.audit_log.pages_label') %>">
+    <span><%= t('permission_forge.audit_log.showing', from: page.first_index, to: page.last_index, count: page.total) %></span>
+    <% if page.pages > 1 %>
+      <span class="pf-actions">
+        <% if page.previous? %>
+          <%= link_to t('permission_forge.audit_log.first_page'), path.call(1), class: 'pf-btn pf-btn--xs' %>
+          <%= link_to t('permission_forge.ui.previous'), path.call(page.number - 1), class: 'pf-btn pf-btn--xs', rel: 'prev' %>
+        <% end %>
+        <span class="pf-fs-13"><%= t('permission_forge.audit_log.page_of', page: page.number, pages: page.pages) %></span>
+        <% if page.next? %>
+          <%= link_to t('permission_forge.ui.next'), path.call(page.number + 1), class: 'pf-btn pf-btn--xs', rel: 'next' %>
+          <%= link_to t('permission_forge.audit_log.last_page'), path.call(page.pages), class: 'pf-btn pf-btn--xs' %>
+        <% end %>
+      </span>
+    <% end %>
+  </nav>
+<% end %>

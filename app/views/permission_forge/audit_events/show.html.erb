@@ -1,0 +1,146 @@
+<% d = @detail %>
+<% event = d.event %>
+<% lookups = d.lookups %>
+<% content_for :pf_title, t('.title', event: event.event) %>
+<%= pf_breadcrumb([t('permission_forge.audit_events.index.title'), permission_forge.audit_events_path], event.event) %>
+
+<div class="pf-page-header">
+  <div class="pf-page-header__text">
+    <div class="pf-row pf-row--tight">
+      <%= pf_audit_category_badge(event.category) %>
+      <span class="pf-mono-key"><%= event.event %></span>
+    </div>
+    <h1 class="pf-h1"><%= pf_audit_sentence(event, lookups) %></h1>
+    <p class="pf-subtitle"><%= pf_datetime(event.occurred_at) %> · <time datetime="<%= event.occurred_at.utc.iso8601(6) %>"><%= event.occurred_at.utc.iso8601 %></time></p>
+  </div>
+</div>
+
+<div class="pf-grid-2">
+  <section class="pf-card" aria-labelledby="pf-event-who">
+    <div class="pf-card__header"><h2 class="pf-h2" id="pf-event-who"><%= t('.who') %></h2></div>
+    <dl class="pf-card__body pf-kv">
+      <dt><%= t('.actor') %></dt>
+      <dd>
+        <span class="pf-fw-600"><%= pf_audit_actor_name(event) %></span>
+        <span class="pf-text-3">· <%= pf_audit_actor_type_label(event.actor_type) %><% if d.actor_id? %> · <%= t('.id', id: event.actor_id) %><% end %></span>
+        <div class="pf-row pf-row--tight pf-fs-12">
+          <%= link_to t('.all_by_actor'), pf_audit_log_path(actor_type: event.actor_type, actor_id: event.actor_id) %>
+          <% if d.actor_user %>· <%= link_to t('.open_person'), permission_forge.person_path(d.actor_user) %><% end %>
+        </div>
+      </dd>
+      <dt><%= t('.source') %></dt>
+      <dd><%= pf_audit_source_label(event.source) %> <span class="pf-mono-key"><%= event.source %></span></dd>
+      <dt><%= t('.reason') %></dt>
+      <dd><%= event.reason.presence || t('.no_reason') %></dd>
+      <dt><%= t('.request_id') %></dt>
+      <dd class="pf-audit-code"><%= event.request_id.presence || t('permission_forge.audit_log.no_value') %></dd>
+      <dt><%= t('.ip') %></dt>
+      <dd class="pf-audit-code"><%= event.ip.presence || t('permission_forge.audit_log.no_value') %></dd>
+    </dl>
+  </section>
+
+  <section class="pf-card" aria-labelledby="pf-event-what">
+    <div class="pf-card__header"><h2 class="pf-h2" id="pf-event-what"><%= t('.what') %></h2></div>
+    <dl class="pf-card__body pf-kv">
+      <dt><%= t('.record') %></dt>
+      <dd>
+        <% if d.record? %>
+          <span class="pf-fw-600"><%= pf_audit_record_name(event) %></span>
+          <div class="pf-fs-12 pf-text-3"><span class="pf-audit-code"><%= event.record_type %></span><% if d.record_id? %> · <%= t('.id', id: event.record_id) %><% end %></div>
+          <% if d.record_uuid? %><div class="pf-fs-12 pf-audit-code pf-text-3"><%= event.record_uuid %></div><% end %>
+          <% if d.record_id? %>
+            <div class="pf-fs-12"><%= link_to t('.all_for_record'), pf_audit_log_path(record_type: event.record_type, record_id: event.record_id) %></div>
+          <% end %>
+        <% else %>
+          <%= t('permission_forge.audit_log.no_value') %>
+        <% end %>
+      </dd>
+      <dt><%= t('.permission_set') %></dt>
+      <dd>
+        <% if d.permission_set? %>
+          <% if d.permission_set %><%= link_to pf_audit_set_name(event, lookups), permission_forge.permission_set_path(d.permission_set) %><% else %><%= pf_audit_set_name(event, lookups) %><% end %>
+          <div class="pf-fs-12"><%= link_to t('.all_for_set'), pf_audit_log_path(permission_set: d.permission_set_key) %></div>
+        <% else %>
+          <%= t('permission_forge.audit_log.no_value') %>
+        <% end %>
+      </dd>
+      <dt><%= t('.person') %></dt>
+      <dd>
+        <% if d.subject_user? %>
+          <% if d.person %><%= link_to pf_audit_person_name(event, lookups), permission_forge.person_path(d.person) %><% else %><%= pf_audit_person_name(event, lookups) %><% end %>
+          <span class="pf-text-3">· <%= t('.id', id: event.subject_user_id) %></span>
+          <div class="pf-fs-12"><%= link_to t('.all_for_person'), pf_audit_log_path(subject_user_id: event.subject_user_id) %></div>
+        <% else %>
+          <%= t('permission_forge.audit_log.no_value') %>
+        <% end %>
+      </dd>
+      <dt><%= t('.correlation') %></dt>
+      <dd>
+        <% if d.correlation? %>
+          <span class="pf-audit-code pf-fs-12"><%= event.correlation_id %></span>
+          <div class="pf-fs-12"><%= link_to t('.all_in_action'), pf_audit_log_path(correlation_id: event.correlation_id) %></div>
+        <% else %>
+          <%= t('permission_forge.audit_log.no_value') %>
+        <% end %>
+      </dd>
+      <dt><%= t('.uuid') %></dt>
+      <dd class="pf-audit-code pf-fs-12"><%= event.uuid %></dd>
+    </dl>
+  </section>
+</div>
+
+<% if d.changes? %>
+  <section class="pf-card pf-scroll-x" aria-labelledby="pf-event-changes">
+    <div class="pf-card__header">
+      <h2 class="pf-h2" id="pf-event-changes"><%= t('.changes') %></h2>
+      <span class="pf-card__desc"><%= t('.changes_desc', count: d.changes_count) %></span>
+    </div>
+    <table class="pf-audit-table">
+      <thead><tr><th scope="col"><%= t('.attribute') %></th><th scope="col"><%= t('.before') %></th><th scope="col"><%= t('.after') %></th></tr></thead>
+      <tbody>
+        <% d.change_rows.each do |attribute, from, to| %>
+          <tr>
+            <th scope="row" class="pf-audit-code"><%= attribute %></th>
+            <td class="pf-audit-table__before"><span class="pf-sr-only"><%= t('.before') %>: </span><%= pf_audit_value(from) %></td>
+            <td class="pf-audit-table__after"><span aria-hidden="true">→ </span><span class="pf-sr-only"><%= t('.after') %>: </span><%= pf_audit_value(to) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </section>
+<% end %>
+
+<% if d.snapshot? %>
+  <section class="pf-card pf-scroll-x" aria-labelledby="pf-event-snapshot">
+    <div class="pf-card__header">
+      <h2 class="pf-h2" id="pf-event-snapshot"><%= t('.snapshot') %></h2>
+      <span class="pf-card__desc"><%= d.snapshot_of_removed? ? t('.snapshot_destroyed') : t('.snapshot_desc') %></span>
+    </div>
+    <table class="pf-audit-table">
+      <thead><tr><th scope="col"><%= t('.attribute') %></th><th scope="col"><%= t('.value') %></th></tr></thead>
+      <tbody>
+        <% d.snapshot_rows.each do |attribute, attribute_value| %>
+          <tr><th scope="row" class="pf-audit-code"><%= attribute %></th><td><%= pf_audit_value(attribute_value) %></td></tr>
+        <% end %>
+      </tbody>
+    </table>
+  </section>
+<% end %>
+
+<% if d.other? %>
+  <section class="pf-card pf-scroll-x" aria-labelledby="pf-event-data">
+    <div class="pf-card__header"><h2 class="pf-h2" id="pf-event-data"><%= t('.data') %></h2></div>
+    <table class="pf-audit-table">
+      <thead><tr><th scope="col"><%= t('.key') %></th><th scope="col"><%= t('.value') %></th></tr></thead>
+      <tbody>
+        <% d.other_rows.each do |key, data_value| %>
+          <tr><th scope="row" class="pf-audit-code"><%= key %></th><td class="pf-audit-code"><%= pf_audit_value(data_value) %></td></tr>
+        <% end %>
+      </tbody>
+    </table>
+  </section>
+<% end %>
+
+<% if d.no_data? %>
+  <p class="pf-fs-13 pf-text-3"><%= t('.no_data') %></p>
+<% end %>

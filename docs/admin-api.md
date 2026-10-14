@@ -1,0 +1,773 @@
+# Admin JSON API
+
+PermissionForge includes a built-in RESTful JSON API for managing permissions programmatically. This is ideal for CRM frontends, mobile apps, or any client that needs to manage permissions without the HTML admin UI.
+
+The API runs alongside the HTML admin UI — you can use both, either, or neither.
+
+## 1. Enable the API
+
+Add these settings to your initializer:
+
+```ruby
+# config/initializers/permission_forge.rb
+PermissionForge.configure do |config|
+  config.api_enabled = true
+  config.api_record_identifier = :uuid  # or :id — field used for record lookups in URLs
+end
+```
+
+Then mount the engine (if not already mounted):
+
+```ruby
+# config/routes.rb
+mount PermissionForge::Engine, at: '/permissions'
+```
+
+Your API is now available at `/permissions/api/...`.
+
+## 2. Authentication
+
+The API supports three authentication strategies. Choose the one that fits your app.
+
+#### Option A: Lambda Auth (recommended for most apps)
+
+Pass a lambda that receives the controller instance and returns `true`/`false`:
+
+```ruby
+PermissionForge.configure do |config|
+  config.api_enabled = true
+  config.api_auth = lambda { |controller|
+    controller.current_user&.has_role?(:admin)
+  }
+end
+```
+
+`controller.current_user` (here and in the examples below) exists only when your `api_base_controller_class` defines it (Option B: a base controller with Devise or your own authentication). On the default `::ActionController::Base` there is no `current_user`, and the call raises (a 500): check a header instead, as in the key and token examples below.
+
+The lambda has full access to the controller, so you can check headers, tokens, roles, etc. When it returns a falsy value, the request gets **403 Forbidden** (recorded as `api.auth_failed`).
+
+`api_auth` only proves who the caller is. Changes and assignments also need `api_action_authorization` and `api_assignment_authorization` (see [Security Considerations](#security-considerations)): until both are set they are refused with 403.
+
+```ruby
+# Example: API key authentication
+config.api_auth = lambda { |controller|
+  api_key = controller.request.headers['X-API-Key']
+  api_key.present? && ApiKey.active.exists?(key: api_key)
+}
+
+# Example: JWT token check
+config.api_auth = lambda { |controller|
+  token = controller.request.headers['Authorization']&.remove('Bearer ')
+  token.present? && JwtService.valid?(token)
+}
+```
+
+#### Option B: Base Controller Inheritance (recommended for apps with existing auth)
+
+If your app already has an admin base controller with authentication built in (e.g., Devise + role checking), inherit from it:
+
+```ruby
+PermissionForge.configure do |config|
+  config.api_enabled = true
+  config.api_base_controller_class = '::Api::V1::Admin::BaseController'
+  config.api_auth = ->(_controller) { true }  # Auth handled by base controller
+end
+```
+
+Your `Api::V1::Admin::BaseController` handles authentication and authorization — PermissionForge's API controllers inherit from it directly. With multi-tenancy on, it must also set the current tenant (see [Tenancy](#tenancy)).
+
+#### Option C: No Auth Configured (locked by default)
+
+If `api_auth` is `nil` (the default), **all API requests return 401 Unauthorized** (no body). This is the safe default — the API is locked until you explicitly configure authentication.
+
+```ruby
+# This is the default — API routes exist but return 401
+config.api_enabled = true
+# config.api_auth = nil  # <- default, all requests get 401
+```
+
+#### Disabling the API entirely
+
+When `api_enabled = false` (the default), all API routes return **404 Not Found** with no body. The routes are defined but guarded at runtime — no route leakage.
+
+## Response Format
+
+JSON responses use the envelope below. Some answers have no body: the 401 while `api_auth` is not set, the 404 while the API is disabled, the stats endpoint's 403 (`api_stats_require_admin`) and the 204 of a delete.
+
+**Success (single record):**
+```json
+{
+  "data": {
+    "id": 1,
+    "uuid": "abc-123",
+    "name": "Sales Team",
+    "is_active": true,
+    "created_at": "2026-03-10T12:00:00Z"
+  }
+}
+```
+
+**Success (collection):**
+```json
+{
+  "data": [
+    { "id": 1, "uuid": "abc-123", "name": "Sales Team" },
+    { "id": 2, "uuid": "def-456", "name": "Support Team" }
+  ]
+}
+```
+
+**Success (collection with pagination):**
+```json
+{
+  "data": [...],
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "per_page": 15,
+      "total_count": 42
+    }
+  }
+}
+```
+
+**Error (validation):**
+```json
+{
+  "error": {
+    "status": 422,
+    "messages": {
+      "name": ["can't be blank"]
+    }
+  }
+}
+```
+
+**Error (not found):**
+```json
+{
+  "error": {
+    "status": 404,
+    "messages": "Record not found"
+  }
+}
+```
+
+**What answers 422.** A failed validation (`messages` is the model's errors, as above), and input the API cannot read:
+
+- a body section that is not an object (`"permission_set": "x"`), or a missing one;
+- an unreadable `expires_at`;
+- a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
+- a `permission_set_group_id` that names no group of the current tenant;
+- a string longer than its column: `is too long (at most N characters)`. Only columns that declare a limit are checked — a `string` on MySQL is `varchar(255)` (counted in characters) and a `text` holds 65,535 bytes; on PostgreSQL and SQLite the install's `string` and `text` columns declare none, so nothing is checked there. A Permission Set name keeps its own 255-character rule on every database.
+
+NUL bytes are dropped from every attribute hash and name the API reads. A rule with `is_null` / `is_not_null` needs no `field_value` (it is stored as empty).
+
+## Endpoints Reference
+
+All URLs below assume the engine is mounted at `/permissions`. Replace with your mount path.
+
+#### Dashboard Stats
+
+The stats endpoint requires admin access by default:
+
+```ruby
+# In your initializer — when true, the api_auth lambda must set @admin = true
+config.api_stats_require_admin = true  # default: true (secure default)
+```
+
+Without `@admin`, the endpoint answers 403 with no body.
+
+```bash
+# Get overview counts
+GET /permissions/api/stats
+
+curl http://localhost:3000/permissions/api/stats
+
+# Response: 200 OK
+{
+  "data": {
+    "permission_sets_count": 5,
+    "active_sets_count": 3,
+    "resources_count": 12,
+    "rules_count": 8,
+    "groups_count": 2,
+    "users_count": 15
+  }
+}
+```
+
+#### Permission Sets
+
+```bash
+# List all permission sets
+GET /permissions/api/permission_sets
+
+curl http://localhost:3000/permissions/api/permission_sets
+
+# Get a single permission set
+GET /permissions/api/permission_sets/:uuid
+
+curl http://localhost:3000/permissions/api/permission_sets/abc-123
+
+# Create a permission set
+POST /permissions/api/permission_sets
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets \
+  -H "Content-Type: application/json" \
+  -d '{
+    "permission_set": {
+      "name": "Sales Team",
+      "description": "Permissions for sales users",
+      "is_active": true
+    }
+  }'
+# Response: 201 Created
+
+# Update a permission set
+PATCH /permissions/api/permission_sets/:uuid
+
+curl -X PATCH http://localhost:3000/permissions/api/permission_sets/abc-123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "permission_set": {
+      "name": "Sales Team (Updated)",
+      "is_active": false
+    }
+  }'
+# Response: 200 OK
+
+# Delete a permission set
+DELETE /permissions/api/permission_sets/:uuid
+
+curl -X DELETE http://localhost:3000/permissions/api/permission_sets/abc-123
+# Response: 204 No Content
+
+# Clone a permission set (deep clone: resources, fields, actions, rules)
+POST /permissions/api/permission_sets/:uuid/clone
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/clone \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Sales Team (Copy)" }'
+# Response: 201 Created — returns the cloned permission set
+# The copy and its rows are editable, like the admin's Duplicate. A copy of a
+# set in a locked group is created outside the group (permission_set_group_id: null).
+# Without "name" (or with one that is not text), the name is "<name> (Copy)".
+```
+
+#### Resources (nested under permission set)
+
+```bash
+# List resources for a permission set
+GET /permissions/api/permission_sets/:ps_uuid/resources
+
+curl http://localhost:3000/permissions/api/permission_sets/abc-123/resources
+
+# Get a single resource
+GET /permissions/api/permission_sets/:ps_uuid/resources/:uuid
+
+# Create a resource
+POST /permissions/api/permission_sets/:ps_uuid/resources
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resource": {
+      "name": "Customer",
+      "read_access": true,
+      "create_access": true,
+      "edit_access": true,
+      "delete_access": false,
+      "view_all": false,
+      "modify_all": false
+    }
+  }'
+# Response: 201 Created
+# "name" must have the shape of a Ruby constant path (e.g. "Customer" or "Admin::Report") —
+# other names return 422. Only the format is checked: a name that names no model
+# is accepted. Duplicate names within a permission set also return 422.
+
+# Update a resource
+PATCH /permissions/api/permission_sets/:ps_uuid/resources/:uuid
+
+curl -X PATCH http://localhost:3000/permissions/api/permission_sets/abc-123/resources/def-456 \
+  -H "Content-Type: application/json" \
+  -d '{ "resource": { "delete_access": true } }'
+
+# Delete a resource
+DELETE /permissions/api/permission_sets/:ps_uuid/resources/:uuid
+
+# Auto-generate fields from model columns
+POST /permissions/api/permission_sets/:ps_uuid/resources/:uuid/generate_fields
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resources/def-456/generate_fields \
+  -H "Content-Type: application/json" \
+  -d '{ "grant_all": "true" }'
+# Response: 201 Created — returns array of generated fields
+# grant_all is read only as the string "true" or "1" (a JSON true, or a body
+# sent without the Content-Type header, generates read-only fields)
+# A mutation like any other: gated by api_action_authorization (action
+# :generate_fields) and refused with 403 when the resource or its permission
+# set is locked
+# On failure: 422 with a generic message — the underlying exception is logged
+# server-side, never returned to the client
+```
+
+#### Resource Fields (nested under resource)
+
+```bash
+# List fields for a resource
+GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/fields
+
+# Get a single field
+GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/fields/:uuid
+
+# Create a field (with masking)
+POST /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/fields
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resources/def-456/fields \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resource_field": {
+      "name": "email",
+      "label": "Email Address",
+      "read_access": true,
+      "edit_access": false,
+      "mask_access": true,
+      "mask_strategy": "email"
+    }
+  }'
+# Response: 201 Created
+# mask_strategy options: "full", "email", "last4", "first1_last4",
+#                        plus any keys from config.custom_mask_strategies
+# Duplicate field names within a resource return 422
+
+# Update a field
+PATCH /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/fields/:uuid
+
+# Delete a field
+DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/fields/:uuid
+```
+
+#### Resource Actions (nested under resource)
+
+Custom actions beyond CRUD (e.g., sync, export, approve):
+
+```bash
+# List actions for a resource
+GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/actions
+
+# Create a custom action
+POST /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/actions
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resources/def-456/actions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resource_action": {
+      "name": "export",
+      "label": "Export to CSV",
+      "is_permitted": true
+    }
+  }'
+
+# Update an action
+PATCH /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/actions/:uuid
+
+# Delete an action
+DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/actions/:uuid
+```
+
+**Action names.** `name` is the key your code and the [controller action guard](controller-actions.md) look the action up by, so it must be a valid action key: lowercase letters, digits and `_`, starting with a letter, at most 63 characters (`export`, `export_csv`). The name is not normalized for you. Creating an action under any other name (`Export`, `archive ` with a trailing space, `export-csv`), or renaming one to it, returns 422:
+
+```json
+{ "error": { "status": 422, "messages": { "name": ["Use lowercase letters, numbers and underscores, starting with a letter (for example export)."] } } }
+```
+
+A row that already carries such a name (created before this rule) can still be read, updated without renaming it, cloned and deleted. `rake permission_forge:audit` lists those rows as `invalid_action_keys`.
+
+#### Permission Set Rules (nested under resource)
+
+Row-level query rules:
+
+```bash
+# List rules for a resource
+GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules
+
+# Create a rule
+POST /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resources/def-456/rules \
+  -H "Content-Type: application/json" \
+  -d '{
+    "permission_set_rule": {
+      "name": "Own records only",
+      "field_name": "owner_id",
+      "field_value": "current_user",
+      "operator": "equal",
+      "include_nulls": false,
+      "failure_message": "You can only view your own records"
+    }
+  }'
+# Operator options: "equal", "not_equal", "less_than", "greater_than",
+#                   "less_than_or_equal", "greater_than_or_equal", "in", "not_in",
+#                   "contains", "not_contains", "starts_with", "ends_with",
+#                   "between", "is_null", "is_not_null"
+# "is_null" / "is_not_null" take no field_value (it is stored as empty)
+
+# Update a rule
+PATCH /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
+
+# Delete a rule
+DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
+```
+
+A `field_value` is compared in the type of the column the rule names; a value that column cannot hold (`"5_id"` on an integer column) is accepted and makes the rule match nothing. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
+
+Rule `field_value`s can contain sensitive data (user IDs, account numbers, business logic values). Set `config.api_redact_rule_field_values = true` (default: `false`) to have API responses replace `field_value` with `"[REDACTED]"` — useful for GDPR/HIPAA environments.
+
+#### Permission Set Users (assign users to sets)
+
+```bash
+# List users in a permission set
+GET /permissions/api/permission_sets/:ps_uuid/users
+
+# Assign a user to a permission set
+POST /permissions/api/permission_sets/:ps_uuid/users
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users \
+  -H "Content-Type: application/json" \
+  -d '{ "user_id": 42, "expires_at": "2026-12-31T23:59:00Z" }'
+# Response: 201 Created — expires_at is optional (time-bound assignment)
+# Assigning a user who is already in the set returns 422 (uniqueness validation)
+# A user_id outside config.user_list_resolver returns 404, as an unknown one does
+# An unreadable expires_at returns 422
+
+# Remove a user from a permission set (:uuid is the assignment's identifier)
+DELETE /permissions/api/permission_sets/:ps_uuid/users/:uuid
+```
+
+`GET …/users` lists every holder of the set (each row carries its `user_id`), including people outside `user_list_resolver`: the resolver bounds who can be reached by id, not who is listed.
+
+#### Bulk User Assignment
+
+```bash
+# Bulk assign users to a permission set
+POST /permissions/api/permission_sets/:ps_uuid/users/bulk
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users/bulk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_ids": [1, 2, 3, 4, 5],
+    "bulk_action": "assign",
+    "expires_at": "2026-12-31T23:59:00Z"
+  }'
+# Response: 200 OK — expires_at is optional (time-bound assignments)
+# { "data": { "assigned": 3, "revoked": 0, "invalidated": 3 } }
+# Ids outside config.user_list_resolver (or naming nobody) are skipped.
+# "invalidated" counts the users whose assignment changed and whose cached
+# permissions were cleared; a user who already held the set is not counted.
+
+# Bulk revoke users from a permission set
+POST /permissions/api/permission_sets/:ps_uuid/users/bulk
+
+curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users/bulk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_ids": [1, 2, 3],
+    "bulk_action": "revoke"
+  }'
+# Response: 200 OK
+```
+
+#### Permission Set Groups
+
+```bash
+# List all groups
+GET /permissions/api/permission_set_groups
+
+# Create a group
+POST /permissions/api/permission_set_groups
+
+curl -X POST http://localhost:3000/permissions/api/permission_set_groups \
+  -H "Content-Type: application/json" \
+  -d '{
+    "permission_set_group": {
+      "name": "Admin Groups",
+      "description": "Groups for admin users"
+    }
+  }'
+
+# Get / Update / Delete a group
+GET    /permissions/api/permission_set_groups/:uuid
+PATCH  /permissions/api/permission_set_groups/:uuid
+DELETE /permissions/api/permission_set_groups/:uuid
+
+# Clone a group (deep clone: permission sets, resources, fields, actions, rules)
+POST /permissions/api/permission_set_groups/:uuid/clone
+
+curl -X POST http://localhost:3000/permissions/api/permission_set_groups/abc-123/clone \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Admin Groups (Copy)" }'
+# Response: 201 Created — returns the cloned group
+# The copied group, its sets and their rows are editable.
+```
+
+#### Permission Set Group Users (assign users to groups)
+
+```bash
+# List users in a group
+GET /permissions/api/permission_set_groups/:group_uuid/users
+
+# Add a user to a group
+POST /permissions/api/permission_set_groups/:group_uuid/users
+# Body: { "user_id": 42 }
+# A user_id outside config.user_list_resolver returns 404
+
+# Remove a user from a group
+DELETE /permissions/api/permission_set_groups/:group_uuid/users/:uuid
+```
+
+#### Audit Events (read-only)
+
+The [audit log](audit-log.md) over the API. `GET` only: no route writes, updates or deletes an event. It needs `api_enabled`, passes `api_auth`, and then `config.audit_log_authorization`: when it is set, only an exact `true` allows (anything else, or an error, is **403** and an `api.auth_failed` event with reason `audit_log_not_authorized`); when it is not set (the default), anyone who passes `api_auth` can read the whole log. Each call that returns 2xx is recorded as `audit.viewed` (`scope: api`).
+
+```bash
+# A page of events, newest first
+GET /permissions/api/audit_events?event=assignment.revoked&from=2026-07-01&to=2026-09-30&page=1&per_page=100
+
+# One event, by uuid (or by id when api_record_identifier is :id)
+GET /permissions/api/audit_events/:identifier
+```
+
+```json
+{
+  "data": [
+    {
+      "id": 481, "uuid": "5c1e...", "occurred_at": "2026-09-14T08:12:44.120391Z",
+      "event": "assignment.revoked", "category": "change",
+      "actor_type": "user", "actor_id": "7", "actor_label": "Ada Admin", "source": "admin_ui",
+      "record_type": "PermissionForge::PermissionSetUser", "record_id": "93", "record_uuid": "a77f...", "record_label": "Bo Brandt",
+      "permission_set_id": 12, "permission_set_uuid": "d2b4...", "subject_user_id": "31",
+      "data": { "snapshot": { "user_id": 31, "expires_at": null } },
+      "reason": "left the team", "request_id": "6f1b...", "ip": "203.0.113.9", "correlation_id": "0b8c...",
+      "created_at": "2026-09-14T08:12:44.121002Z"
+    }
+  ],
+  "meta": { "pagination": { "page": 1, "per_page": 100, "total_count": 1 } }
+}
+```
+
+Every column is returned except the tenant column; `data` is an object. Filters (all optional):
+
+| Parameter | Meaning |
+|---|---|
+| `from`, `to` | ISO 8601 timestamp or `YYYY-MM-DD`; without an offset UTC; a bare `to` date is the end of that day, inclusive. Impossible dates and years outside 0001-9999 answer 422. |
+| `event` | A name, an array, or a comma list; each must be in the event catalogue. |
+| `category`, `actor_type` | A known value. |
+| `actor_id`, `subject_user_id`, `correlation_id` | Exact match. |
+| `record_type` with `record_id` or `record_uuid` | `record_id` matches the `record_id` column only and `record_uuid` the `record_uuid` column only; either needs `record_type`, otherwise 422; `record_type` alone is also a filter. |
+| `permission_set` | A uuid, or a numeric id. |
+
+An invalid value answers `422 {"error":{"status":422,"messages":{"from":["is invalid"]}}}`; an array or hash for a scalar filter parameter, or a NUL byte in a value, is a 422 too (`page` and `per_page` are not filter parameters: an array or hash there reads as 1, the first page or a page size of 1). Unknown parameters are ignored. Order is `occurred_at desc, id desc`; page size follows `api_default_per_page` / `api_max_per_page`. **A `page` beyond 2,147,483,647 is clamped** (on every paginated endpoint) instead of failing in the database. With tenancy on, a request with no tenant set is refused (403, see [Tenancy](#tenancy)); under `admin_tenantless_access = :allow` it lists the events of every tenant, as the other endpoints do for their records.
+
+Writes through the API record their own events: the API sets the actor (`audit_actor_resolver`, else the current user, else an anonymous `api` actor), source `api`, the request id and IP, and reads an optional `reason` (a request parameter or JSON key, at most 255 characters) from any request that changes something.
+
+## Serializer Overrides (AMS Support)
+
+The API ships with lightweight built-in serializers (no dependencies). If your app uses ActiveModel::Serializer (AMS), you can override any serializer:
+
+```ruby
+PermissionForge.configure do |config|
+  config.api_serializer_overrides = {
+    permission_set: MyApp::PermissionSetSerializer,
+    resource: MyApp::ResourceSerializer,
+    resource_field: MyApp::ResourceFieldSerializer
+  }
+end
+```
+
+The base controller auto-detects AMS serializers and renders them with `render json: record, serializer: ..., root: :data` (collections also pass `meta:` with the pagination). Built-in serializers use plain Ruby `as_json`.
+
+AMS 0.10's default adapter (`:attributes`) ignores `root:` and `meta:`: the response is the bare serialized record or array, without the `data` envelope or the pagination metadata. Set `ActiveModelSerializers.config.adapter = :json` to keep the envelope.
+
+**Available override keys:** `permission_set`, `resource`, `resource_field`, `resource_action`, `permission_set_rule`, `permission_set_user`, `permission_set_group`, `permission_set_group_user`, `audit_event`
+
+## Pagination
+
+All collection endpoints are paginated by default with a built-in LIMIT/OFFSET paginator. The `per_page` parameter is hard-capped at `api_max_per_page` (default: 100) to prevent DoS via large result sets.
+
+```ruby
+PermissionForge.configure do |config|
+  config.api_max_per_page = 100     # Hard cap — clients cannot exceed this
+  config.api_default_per_page = 15  # Default when per_page param is omitted
+end
+```
+
+To use a custom pagination handler (e.g., Kaminari, will_paginate):
+
+```ruby
+# With Kaminari
+config.api_pagination_handler = ->(scope, page, per_page) { scope.page(page).per(per_page) }
+
+# With will_paginate
+config.api_pagination_handler = ->(scope, page, per_page) { scope.paginate(page: page, per_page: per_page) }
+```
+
+The pagination metadata reads `total_count` from what the handler returns (Kaminari answers it). will_paginate's collections answer `total_entries` instead, which is not read: `total_count` then falls back to the size of the page. Return an object that answers `total_count`, for example:
+
+```ruby
+config.api_pagination_handler = lambda { |scope, page, per_page|
+  records = scope.paginate(page: page, per_page: per_page)
+  records.define_singleton_method(:total_count) { records.total_entries }
+  records
+}
+```
+
+**Note:** Even with a custom handler, `per_page` is clamped to `[1, api_max_per_page]` before being passed to the handler. A request with `per_page=999999` will be silently clamped.
+
+Pass `page` and `per_page` query params:
+
+```bash
+curl "http://localhost:3000/permissions/api/permission_sets?page=2&per_page=10"
+```
+
+The response always includes pagination metadata:
+
+```json
+{
+  "data": [...],
+  "meta": {
+    "pagination": {
+      "page": 2,
+      "per_page": 10,
+      "total_count": 42
+    }
+  }
+}
+```
+
+## Security Considerations
+
+### Base Controller Class
+
+`api_base_controller_class` defaults to `ActionController::Base`. This means API controllers do **NOT** inherit your app's authentication chain (Devise, Warden, etc.) by default. You should override this to inherit your auth stack:
+
+```ruby
+config.api_base_controller_class = '::Api::BaseController'
+```
+
+### Action Authorization (Mutation Protection)
+
+`api_action_authorization` decides which creates, updates, destroys, clones and field generations a caller may make. Until it is set, every one of them is refused with 403 (`api_require_authorization`, below):
+
+```ruby
+config.api_action_authorization = ->(controller, action, record) {
+  controller.current_user&.admin?
+}
+```
+
+The lambda receives the controller instance, action name (`:create`, `:update`, `:destroy`, `:clone`, or `:generate_fields`), and the record being acted on (for a create, the unsaved record). A falsy answer denies (403, recorded as `api.auth_failed`).
+
+### Assignment Authorization (Privilege Escalation Protection)
+
+`api_assignment_authorization` decides who may change who holds a Permission Set or belongs to a group. Until it is set, every assignment endpoint is refused with 403:
+
+```ruby
+config.api_assignment_authorization = ->(controller, target, user_ids) {
+  controller.current_user&.admin?
+}
+```
+
+Without a `current_user` on your base controller, decide from the authenticated client instead, for example a key with its own scope:
+
+```ruby
+config.api_action_authorization = ->(controller, _action, _record) {
+  ApiKey.active.exists?(key: controller.request.headers['X-API-Key'], scope: 'permissions:write')
+}
+config.api_assignment_authorization = ->(controller, _target, _user_ids) {
+  ApiKey.active.exists?(key: controller.request.headers['X-API-Key'], scope: 'permissions:assign')
+}
+```
+
+`target` is the `PermissionSet`, or the `PermissionSetGroup` on the group-member endpoints. `user_ids` is an Array cast to the user model's key type (Integers for integer keys) on every endpoint. A falsy answer denies (403). This protects single assignments (`POST .../users`), single revokes (`DELETE .../users/:uuid`), bulk operations (`POST .../users/bulk`), and group membership changes (`POST`/`DELETE .../permission_set_groups/:uuid/users`). `config.admin_assignment_authorization`, when set, is asked after it (see [configuration.md](configuration.md#admin_assignment_authorization)).
+
+### Requiring Authorization Lambdas
+
+`api_auth` proves identity, not admin rights. So by default the API refuses changes until both lambdas are set:
+
+```ruby
+config.api_require_authorization = true  # default
+```
+
+While it is `true`, mutation and assignment endpoints return 403 (`api.auth_failed`) whenever the corresponding lambda (`api_action_authorization` / `api_assignment_authorization`) is unset. Setting it to `false` lets every caller that passes `api_auth` create permission sets and assign them to anyone; a boot warning is logged and `rake permission_forge:audit` reports `api_mutations_unguarded` (high) while a lambda is missing.
+
+### Non-Editable Records
+
+Records flagged `is_editable: false` are locked, and so is what they hold: a change is refused (403, recorded as `admin.lock_refused`) when the record, its Resource, its Permission Set, or — for a membership — its Permission Set Group is locked. That covers creating a resource, field, rule or action under a locked parent, `generate_fields`, assigning holders (single and bulk `assign`), adding and removing group members, moving a set into or out of a locked group (`permission_set_group_id`) and deleting a set that is in a locked group. Records with a `nil`/`true` flag are unaffected.
+
+**Narrowing access is never refused, widening always is — and which is which depends on the set.** On a locked granting set `DELETE …/users/:uuid` and bulk `revoke` work, while `POST …/users` and bulk `assign` are refused. A Muting Permission Set takes access away from its holders, so on a locked one it is the other way round: `POST …/users` and bulk `assign` work, while `DELETE …/users/:uuid` and bulk `revoke` are refused (403, `admin.lock_refused`). `DELETE …/permission_sets/:id/users/:uuid` and `DELETE …/permission_set_groups/:id/users/:uuid` answer 404 for a person `config.user_list_resolver` leaves out, like `POST …/users`. A locked group does not lock the content of its sets. `ResourceAction` has no flag of its own (it follows its Resource and set). Locking is one-way through the API (`PATCH { "is_editable": true }` on a locked record is refused); `POST …/clone` makes an editable copy (outside a locked group).
+
+### Tenancy
+
+With `tenant_model` set, a request that has no current tenant is refused with 403 (`api.auth_failed`, reason `tenant_missing`). Set the tenant in `api_base_controller_class` (or in middleware). `config.admin_tenantless_access = :allow` serves such requests instead: they read, edit and delete existing records of **every** tenant, and a create is refused (422) because the new row needs a tenant. See [multi-tenancy.md](multi-tenancy.md).
+
+### CSRF Posture
+
+API controllers use `protect_from_forgery with: :null_session, prepend: true`: the forgery check is the first callback of the chain, before `api_auth` and before your `api_base_controller_class`'s own callbacks. A mutating request without a valid CSRF token gets an empty session (`request.session`) and an empty cookie jar (`cookies` / `request.cookie_jar`) — and so does everything that reads them during the request, such as a Warden/Devise `current_user` loaded inside the controller. A cross-site form post from a signed-in admin's browser therefore reaches `api_auth` with no session, and an `api_auth` that derives identity from the session or the cookie jar refuses it (403, `api.auth_failed`).
+
+What `:null_session` does **not** empty — an `api_auth` that relies on any of these is still forgeable from another site: the raw `Cookie` header and Rack's `request.cookies`; anything a Rack middleware computed before the controller (an identity in `request.env`, a Warden user a middleware already loaded); credentials the browser attaches on its own (HTTP Basic it has cached, client certificates); the client IP. Authenticate API clients with a header the browser does not send by itself (a bearer token, an API key), or read identity from the session or cookie jar in `api_auth`.
+
+If your base controller declares `protect_from_forgery with: :exception`, the API controllers replace it with `:null_session` (same callback, prepended): a forged request reaches your own authentication callbacks with an empty session, and they answer with your own 401 or redirect. Same-origin JavaScript that uses the session must send `X-CSRF-Token`. With an `ActionController::API` base there is no forgery protection and, unless you add them, no cookies or session; authenticate with a header. If your API base adds cookies or a session (`include ActionController::Cookies`, a session store), it also needs forgery protection: `include ActionController::RequestForgeryProtection` in it, or authenticate with a header the browser does not send by itself.
+
+## Full Configuration Example
+
+```ruby
+# config/initializers/permission_forge.rb
+PermissionForge.configure do |config|
+  # Core settings
+  config.user_class = 'User'
+  config.current_user_resolver = -> { Current.user }  # your own resolver; assumes a CurrentAttributes class
+  config.cache_backend = :rails_cache
+
+  # JSON Admin API
+  config.api_enabled = true
+  config.api_base_controller_class = '::Api::V1::Admin::BaseController'
+  config.api_auth = ->(controller) { controller.current_user&.has_role?(:admin) }
+  config.api_pagination_handler = ->(scope, page, per_page) { scope.page(page).per(per_page) }
+  config.api_record_identifier = :uuid
+  config.api_action_authorization = ->(controller, action, record) { controller.current_user&.admin? }
+  config.api_assignment_authorization = ->(controller, target, user_ids) { controller.current_user&.admin? }
+  config.api_require_authorization = true  # the default: deny mutations while an authorization lambda is unset
+
+  # HTML Admin UI (runs alongside the API)
+  config.http_basic_auth_user = Rails.application.credentials.dig(:permission_forge, :username)
+  config.http_basic_auth_password = Rails.application.credentials.dig(:permission_forge, :password)
+end
+```
+
+## Automatic Cache Invalidation
+
+PermissionForge invalidates affected users' cached permissions whenever a permission-related record is created, updated, or destroyed, after the commit. Each user's hash is rebuilt on their next permission check, so changes made through the API (or HTML UI, console, or seeds) apply from the next check on — no manual cache rebuild required.
+
+**How it works:** All permission models include the `PermissionsRegenerator` concern, which registers `after_commit` callbacks. (This is cache invalidation, not auditing; the audit events are written by a separate concern inside the change's transaction, see [audit-log.md](audit-log.md).) After a successful database commit, the concern identifies affected users (via their PermissionSetUser assignments) and invalidates each one's cached permissions; the hash is rebuilt on the next read.
+
+**Models that invalidate:**
+
+| Model | Triggers on | Affected users |
+|-------|-------------|----------------|
+| `PermissionSet` | create/update/destroy | Users assigned to this set |
+| `Resource` | create/update/destroy | Users on the parent permission set |
+| `ResourceField` | create/update/destroy | Users on the parent permission set |
+| `ResourceAction` | create/update/destroy | Users on the parent permission set |
+| `PermissionSetRule` | create/update/destroy | Users on the parent permission set |
+| `PermissionSetGroup` | create/update/destroy | Users across all active sets in the group |
+| `PermissionSetUser` | create/update/destroy | The assigned user (and the previous one when an assignment moves to another user) |
+
+**Example:** Disabling a resource via the API immediately revokes access for all affected users:
+
+```bash
+# Before: user can read Customer
+curl -X PATCH /permissions/api/permission_sets/abc/resources/def \
+  -d '{ "resource": { "is_active": false } }'
+# After: user.can_read?(:Customer) returns false — no manual action needed
+```

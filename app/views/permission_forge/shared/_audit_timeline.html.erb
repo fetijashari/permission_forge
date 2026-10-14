@@ -1,0 +1,29 @@
+<%# A record's or a person's timeline on its audit tab.
+    Locals: title, description, page, lookups, path (page number -> path), links ([[label, path], ...]),
+    views_path (the same timeline with the views of the log; nil when they are shown). %>
+<section class="pf-card" aria-labelledby="pf-timeline-title">
+  <div class="pf-card__header">
+    <div class="pf-stack pf-stack--tight pf-grow">
+      <h2 class="pf-h2" id="pf-timeline-title"><%= title %></h2>
+      <span class="pf-card__desc"><%= description %></span>
+    </div>
+    <div class="pf-actions">
+      <% links.each do |label, href| %>
+        <%= link_to label, href, class: 'pf-btn pf-btn--sm' %>
+      <% end %>
+    </div>
+  </div>
+  <% if (problem = PermissionForge::Admin::AuditLog.recording_problem) %>
+    <div class="pf-card__body">
+      <%= render 'permission_forge/shared/audit_off_note', problem: problem %>
+    </div>
+  <% end %>
+  <% if local_assigns[:views_path] %>
+    <p class="pf-card__row pf-fs-13 pf-text-2 pf-audit-views-note">
+      <%= t('permission_forge.audit_events.index.views_hidden') %>
+      <%= link_to t('permission_forge.audit_events.index.views_show'), views_path %>
+    </p>
+  <% end %>
+  <%= render 'permission_forge/shared/audit_events', events: page.events, lookups: lookups %>
+  <%= render 'permission_forge/shared/audit_pagination', page: page, path: path %>
+</section>

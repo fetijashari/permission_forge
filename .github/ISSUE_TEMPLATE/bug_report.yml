@@ -1,0 +1,36 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security problems:** do not open an issue. Anything that lets someone see or do more than their
+        Permission Sets allow goes through private reporting, as described in SECURITY.md.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: PermissionForge, Ruby, Rails, and database (adapter and version).
+      placeholder: permission_forge 0.14.0, Ruby 3.4.5, Rails 8.1.0, PostgreSQL 17
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: The relevant parts of config/initializers/permission_forge.rb, with secrets removed.
+      render: ruby
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Ideally a failing test or a short script.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behaviour
+    validations:
+      required: true

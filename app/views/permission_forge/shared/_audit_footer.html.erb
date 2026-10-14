@@ -1,0 +1,16 @@
+<footer class="pf-audit-footer">
+  <% if PermissionForge.configuration.audit_trail_enabled %>
+    <% last_event = pf_audit_last_change(record) %>
+    <%= prefix %>
+    <%= t('.created', created_by: pf_person_name(record.try(:created_by)), created_at: pf_date(record.created_at)) %>
+    ·
+    <% if last_event %>
+      <%= t('.edited', updated_by: pf_audit_actor_name(last_event), updated_at: pf_relative(last_event.occurred_at)) %>
+      · <%= link_to t('.history'), pf_audit_log_path(record_type: last_event.record_type, record_id: last_event.record_id) %>
+    <% else %>
+      <%= t('.edited', updated_by: pf_person_name(record.try(:updated_by)), updated_at: pf_relative(record.updated_at)) %>
+    <% end %>
+  <% else %>
+    <%= t('.disabled') %> <%= pf_setting_link('audit_trail_enabled') %>
+  <% end %>
+</footer>

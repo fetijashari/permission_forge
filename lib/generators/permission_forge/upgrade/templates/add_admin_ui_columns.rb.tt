@@ -1,0 +1,8 @@
+class PermissionForgeAddAdminUiColumns < ActiveRecord::Migration<%= migration_version %>
+  # Nullable and additive: safe to run on a live table. The admin UI checks for
+  # the column and simply hides "This is intended" until it exists.
+  def change
+    add_column :<%= table_prefix %>resource_fields, :sensitive_acknowledged_at, :datetime,
+               if_not_exists: true
+  end
+end

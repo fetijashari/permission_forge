@@ -1,0 +1,16 @@
+<%# Where a controller action runs: verbs, paths, controller#action and whether
+    that controller includes the action guard.
+    Locals: endpoints ([Admin::ControllerCatalog::Entry]) %>
+<ul class="pf-stack pf-stack--tight">
+  <% endpoints.each do |endpoint| %>
+    <li class="pf-row pf-row--tight pf-fs-12">
+      <span class="pf-mono"><%= endpoint.verbs.join(', ') %> <%= endpoint.paths.join(', ') %></span>
+      <code class="pf-mono-key"><%= endpoint.endpoint %></code>
+      <% if endpoint.guarded? %>
+        <%= pf_badge("✓ #{t('.guarded')}", variant: :grant, title: t('.guarded_title')) %>
+      <% else %>
+        <%= pf_badge("⚠ #{t('.not_guarded')}", variant: :warn, title: t('.not_guarded_title')) %>
+      <% end %>
+    </li>
+  <% end %>
+</ul>

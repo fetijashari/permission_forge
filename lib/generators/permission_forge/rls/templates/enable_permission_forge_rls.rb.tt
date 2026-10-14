@@ -1,0 +1,15 @@
+# Enables Postgres Row-Level Security on all PermissionForge-protected tables
+# and installs policies generated from the current rule state.
+#
+# Policies check set membership dynamically (assign/revoke needs NO resync) but
+# bake rule content statically — after editing permission rules, run:
+#   rake permission_forge:rls:sync
+class EnablePermissionForgeRls < ActiveRecord::Migration<%= migration_version %>
+  def up
+    PermissionForge::RLS.sync!
+  end
+
+  def down
+    PermissionForge::RLS.remove!
+  end
+end

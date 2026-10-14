@@ -1,0 +1,12 @@
+<%# Adds a discovered controller action to the set through "Review and save".
+    The blank option posts nothing to add. In a muting set a row blocks.
+    Locals: id, name, muting %>
+<select id="<%= id %>" class="pf-select pf-select--sm pf-select--auto" name="<%= name %>" form="pf-res-form">
+  <option value=""><%= t('.none') %></option>
+  <% if muting %>
+    <option value="1"><%= t('.block') %></option>
+  <% else %>
+    <option value="1"><%= t('.permitted') %></option>
+    <option value="0"><%= t('.not_permitted') %></option>
+  <% end %>
+</select>

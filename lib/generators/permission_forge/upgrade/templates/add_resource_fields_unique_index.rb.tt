@@ -1,0 +1,69 @@
+class PermissionForgeAddResourceFieldsUniqueIndex < ActiveRecord::Migration<%= migration_version %>
+  def up
+    table = :<%= table_prefix %>resource_fields
+    index_name = 'idx_pf_resource_fields_unique'
+    columns = %i[resource_id name]
+    # Installs from 0.11 on create this unique index in their install
+    # migration: there is nothing to do. A same-named index that is not unique
+    # is replaced (add_index would fail on the existing name).
+    return if index_exists?(table, columns, name: index_name, unique: true)
+
+    remove_index table, name: index_name if index_name_exists?(table, index_name)
+
+    # Collapse any pre-existing duplicate (resource_id, name) rows before adding
+    # the unique index, otherwise index creation fails. Keep the most-restrictive
+    # row per group: masked over unmasked, then no-edit over edit, then lowest id.
+    duplicate_groups = select_rows(<<~SQL.squish)
+      SELECT resource_id, name, COUNT(*) AS c
+      FROM #{quote_table_name(table)}
+      GROUP BY resource_id, name
+      HAVING COUNT(*) > 1
+    SQL
+
+    duplicate_groups.each do |resource_id, name, _count|
+      rows = select_rows(<<~SQL.squish)
+        SELECT id, mask_access, edit_access
+        FROM #{quote_table_name(table)}
+        WHERE resource_id = #{quote(resource_id)}
+          AND name = #{quote(name)}
+      SQL
+
+      keeper = rows.min_by { |id, mask_access, edit_access| [truthy(mask_access) ? 0 : 1, truthy(edit_access) ? 1 : 0, id] }
+      loser_ids = rows.map(&:first) - [keeper.first]
+      next if loser_ids.empty?
+
+      # These deletes run past the models, so the audit log does not record
+      # them: the migration output is their trace.
+      say "resource_id #{resource_id}, name #{name.to_s.inspect}: kept id #{keeper[0]} " \
+          "(mask_access #{truthy(keeper[1])}, edit_access #{truthy(keeper[2])}); " \
+          "deleted ids #{loser_ids.sort.join(', ')} (not in the audit log)"
+
+      execute(<<~SQL.squish)
+        DELETE FROM #{quote_table_name(table)}
+        WHERE id IN (#{loser_ids.map { |id| quote(id) }.join(',')})
+      SQL
+    end
+
+    add_index table, columns, unique: true, name: index_name
+  end
+
+  # On an install from 0.11 on, `up` changed nothing, yet this removes the
+  # index the install migration created (as it always has).
+  def down
+    remove_index :<%= table_prefix %>resource_fields, name: 'idx_pf_resource_fields_unique'
+  end
+
+  private
+
+  def truthy(value)
+    [true, 1, '1', 't', 'true'].include?(value)
+  end
+
+  def select_rows(sql)
+    connection.select_rows(sql)
+  end
+
+  def quote(value)
+    connection.quote(value)
+  end
+end

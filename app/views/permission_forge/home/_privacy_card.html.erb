@@ -1,0 +1,67 @@
+<% findings = @attention.privacy_findings %>
+<% unmasked = findings.count { |f| !f.unconfigured? } %>
+<% turned_off = findings.count(&:turned_off?) %>
+<% unconfigured = findings.count(&:unconfigured?) - turned_off %>
+<% shown = @show_all_privacy ? findings : findings.first(PermissionForge::HomeController::PRIVACY_PREVIEW) %>
+<% can_ack = PermissionForge::Admin::AttentionItems.acknowledgement_supported? %>
+<section class="pf-card" aria-labelledby="pf-card-privacy">
+  <div class="pf-card__header">
+    <div class="pf-stack pf-stack--tight pf-grow">
+      <div class="pf-row">
+        <h2 class="pf-h2" id="pf-card-privacy"><%= t('.title') %></h2>
+        <span class="pf-count-pill pf-count-pill--warn"><%= findings.size %></span>
+      </div>
+      <p class="pf-card__desc">
+        <%= t('.description', unmasked: t('.unmasked', count: unmasked), unconfigured: t('.unconfigured', count: unconfigured)) %>
+        <%= t('.turned_off', count: turned_off) if turned_off.positive? %>
+      </p>
+      <%# Not-configured and turned-off lines describe one set on its own. %>
+      <% if findings.any?(&:unconfigured?) %>
+        <p class="pf-card__desc"><%= t('.per_set_note') %></p>
+      <% end %>
+    </div>
+  </div>
+  <% shown.each do |finding| %>
+    <% resource = finding.resource %>
+    <% field_label = finding.field&.label.presence || resource.name.safe_constantize&.human_attribute_name(finding.name) || finding.name.humanize %>
+    <div class="pf-card__row pf-card__row--top">
+      <div class="pf-stack pf-stack--tight pf-grow">
+        <div class="pf-row pf-row--tight">
+          <strong><%= field_label %></strong>
+          <code class="pf-mono-key"><%= finding.name %></code>
+          <%# A row that is turned off is not "not configured": the engine skips it, and Fix opens it. %>
+          <% if finding.turned_off? %>
+            <%= pf_off_badge %>
+          <% elsif finding.unconfigured? %>
+            <%= pf_badge(t('permission_forge.ui.badges.not_configured'), variant: :unconfigured,
+                         href: pf_setting_path(finding.implicit_grant? ? 'extra_fields_default_access' : 'unconfigured_field_strategy')) %>
+          <% end %>
+        </div>
+        <span class="pf-fs-13 pf-text-warn">
+          <% where = finding.implicit_grant? ? '.where_virtual' : '.where_unconfigured' %>
+          <% where = finding.implicit_grant? ? '.where_turned_off_virtual' : '.where_turned_off' if finding.turned_off? %>
+          <%= t(finding.unconfigured? ? where : '.where',
+                resource: pf_resource_label(resource), set: finding.permission_set.name,
+                people: pf_people_text(finding.people_count)) %>
+        </span>
+      </div>
+      <div class="pf-actions">
+        <%= pf_modal_link t('.fix'), permission_forge.permission_set_resource_field_path(finding.permission_set, resource.name, finding.name),
+                          kind: 'drawer', class: 'pf-btn pf-btn--sm' %>
+        <% if can_ack && !finding.unconfigured? && !pf_locked_record?(finding.field) %>
+          <%= form_with url: permission_forge.acknowledge_permission_set_resource_field_path(finding.permission_set, resource.name, finding.name),
+                        method: :post, class: 'pf-reason-form' do %>
+            <input type="hidden" name="return_to" value="<%= permission_forge.root_path %>">
+            <button type="submit" class="pf-btn pf-btn--ghost"><%= t('.intended') %></button>
+            <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-ack-reason-#{finding.field&.id || finding.name}" %>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+  <% if !@show_all_privacy && findings.size > shown.size %>
+    <div class="pf-card__footer">
+      <%= link_to t('.show_all', count: findings.size), permission_forge.root_path(privacy: 'all'), class: 'pf-btn pf-btn--ghost' %>
+    </div>
+  <% end %>
+</section>

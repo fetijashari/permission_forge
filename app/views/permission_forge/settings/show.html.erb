@@ -1,0 +1,67 @@
+<% content_for :pf_title, t('permission_forge.nav.settings') %>
+<% risky = @catalog.risky_rows %>
+<div class="pf-page-header">
+  <div class="pf-page-header__text">
+    <div class="pf-row">
+      <h1 class="pf-h1"><%= t('permission_forge.nav.settings') %></h1>
+      <code class="pf-mono-key">PermissionForge <%= PermissionForge::VERSION %></code>
+      <span class="pf-pill"><%= t('.read_only') %></span>
+    </div>
+    <p class="pf-subtitle"><%= t('.intro_html', file: content_tag(:code, 'config/initializers/permission_forge.rb')) %></p>
+  </div>
+</div>
+
+<section class="pf-card" aria-labelledby="pf-health">
+  <div class="pf-card__header"><h2 class="pf-h2" id="pf-health"><%= t('.health') %></h2></div>
+  <% risky.each do |row| %>
+    <div class="pf-card__row pf-card__row--top">
+      <span class="pf-text-warn" aria-hidden="true">⚠</span>
+      <span class="pf-stack pf-stack--tight pf-grow">
+        <b><%= t("permission_forge.settings.items.#{row.key}.name") %></b>
+        <span class="pf-fs-13 pf-text-2"><%= t("permission_forge.settings.risks.#{row.key}") %></span>
+        <code class="pf-mono-key"><%= row.key %> = <%= pf_setting_inline_value(row) %></code>
+      </span>
+      <%= link_to t('.how_to_fix'), permission_forge.settings_path(focus: row.key, anchor: "set-#{row.key}"), class: 'pf-btn pf-btn--sm' %>
+    </div>
+  <% end %>
+  <div class="pf-card__row">
+    <span class="pf-text-grant">✓ <%= t('.secure_count', count: @catalog.secure_count) %></span>
+  </div>
+</section>
+
+<%= form_with url: permission_forge.settings_path, method: :get, class: 'pf-row', role: 'search' do %>
+  <label class="pf-sr-only" for="pf-settings-q"><%= t('.search') %></label>
+  <input id="pf-settings-q" class="pf-input pf-input--auto pf-grow" type="search" name="q" value="<%= params[:q] %>"
+         placeholder="<%= t('.search') %>" data-pf-settings-filter>
+  <label class="pf-checkbox">
+    <input type="checkbox" name="changed" value="1" <%= 'checked' if @changed_only %> data-pf-autosubmit>
+    <span><%= t('.changed_only') %></span>
+  </label>
+  <button type="submit" class="pf-btn pf-btn--sm" data-pf-js-hide><%= t('permission_forge.ui.apply') %></button>
+<% end %>
+
+<div class="pf-card pf-card--visible">
+  <% if @sections.empty? %><p class="pf-empty"><%= t('.no_match') %></p><% end %>
+  <% @sections.each do |section, rows| %>
+    <% section_risky = rows.any?(&:warn?) %>
+    <% open = @focus.present? ? rows.any? { |r| r.key == @focus } : (@query.present? || @changed_only || section_risky) %>
+    <details class="pf-setting-section" data-pf-setting-section <%= 'open' if open %>>
+      <summary>
+        <span class="pf-disclosure" aria-hidden="true">▸</span>
+        <span class="pf-h2"><%= t("permission_forge.settings.sections.#{section}") %></span>
+        <% if section_risky %><span class="pf-text-warn" aria-label="<%= t('.has_risk') %>">⚠</span><% end %>
+        <span class="pf-fs-12 pf-text-3 pf-ml-auto"><%= t('.section_meta', settings: t('.settings_count', count: rows.size), changed: t('.changed_count', count: rows.count(&:changed?))) %></span>
+      </summary>
+      <% if section == 'admin_api' && !PermissionForge.configuration.api_enabled && !@query.present? %>
+        <p class="pf-setting pf-text-2"><%= t('.api_disabled_html', key: content_tag(:code, 'api_enabled = false')) %></p>
+        <% rows = rows.select { |r| r.key == 'api_enabled' } %>
+      <% end %>
+      <% if section == 'record_rules' %>
+        <%= render 'ladder' %>
+      <% end %>
+      <% rows.each do |row| %>
+        <%= render 'row', row: row, focused: row.key == @focus %>
+      <% end %>
+    </details>
+  <% end %>
+</div>

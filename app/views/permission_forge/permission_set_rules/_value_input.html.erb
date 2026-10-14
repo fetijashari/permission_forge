@@ -1,0 +1,42 @@
+<% aria_invalid = pf_attrs_when(invalid, aria: { invalid: true }) %>
+<% case_arity = form.arity %>
+<% if case_arity == :none %>
+  <span class="pf-fs-13 pf-text-3"><%= t('.no_value') %></span>
+<% elsif case_arity == :range %>
+  <label class="pf-sr-only" for="pf-rule-from"><%= t('.from') %></label>
+  <input id="pf-rule-from" class="pf-input pf-input--auto" type="<%= form.input_type %>" name="rule[value_from]" value="<%= form.value_from %>" <%= aria_invalid %>>
+  <span><%= t('permission_forge.ui.rules.and') %></span>
+  <label class="pf-sr-only" for="pf-rule-to"><%= t('.to') %></label>
+  <input id="pf-rule-to" class="pf-input pf-input--auto" type="<%= form.input_type %>" name="rule[value_to]" value="<%= form.value_to %>" <%= aria_invalid %>>
+<% elsif case_arity == :list %>
+  <% if form.enum_values.present? %>
+    <span class="pf-list-chips" role="group" aria-label="<%= t('.values') %>">
+      <% form.enum_values.each do |v| %>
+        <label class="pf-list-chip"><input type="checkbox" name="rule[values][]" value="<%= v %>" <%= 'checked' if form.values.include?(v) %>><span><%= v %></span></label>
+      <% end %>
+    </span>
+  <% else %>
+    <label class="pf-sr-only" for="pf-rule-values"><%= t('.values') %></label>
+    <input id="pf-rule-values" class="pf-input pf-input--auto" type="text" name="rule[values_text]" value="<%= form.values.join(', ') %>"
+           placeholder="<%= t('.values_placeholder') %>" <%= aria_invalid %>>
+  <% end %>
+<% else %>
+  <% if form.user_field? || form.current_user %>
+    <label class="pf-checkbox">
+      <input type="checkbox" name="rule[current_user]" value="1" <%= 'checked' if form.current_user %>>
+      <span class="pf-token pf-token--value"><%= t('permission_forge.ui.rules.current_user') %></span>
+    </label>
+    <span class="pf-fs-13 pf-text-3" data-pf-show-when="rule[current_user]="><%= t('.or') %></span>
+  <% end %>
+  <% if form.enum_values.present? %>
+    <label class="pf-sr-only" for="pf-rule-value"><%= t('.value') %></label>
+    <select id="pf-rule-value" name="rule[value]" class="pf-select pf-select--auto" <%= aria_invalid %>>
+      <option value=""><%= t('.pick_value') %></option>
+      <% form.enum_values.each do |v| %><option value="<%= v %>" <%= 'selected' if form.value == v %>><%= v %></option><% end %>
+    </select>
+  <% else %>
+    <label class="pf-sr-only" for="pf-rule-value"><%= t('.value') %></label>
+    <input id="pf-rule-value" class="pf-input pf-input--auto" type="<%= form.input_type %>" name="rule[value]" value="<%= form.value %>"
+           <%= aria_invalid %> <%= pf_attrs_when(form.user_field? || form.current_user, data: { pf_show_when: 'rule[current_user]=' }) %>>
+  <% end %>
+<% end %>

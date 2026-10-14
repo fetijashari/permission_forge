@@ -1,0 +1,15 @@
+<% config = PermissionForge.configuration %>
+<% tiles = [['enforce', 'auto_query_scoping', config.auto_query_scoping.to_s != 'off', config.auto_query_scoping],
+            ['detect', 'unscoped_query_detection', config.unscoped_query_detection.to_s != 'off', config.unscoped_query_detection],
+            ['database', 'database_row_level_security', config.database_row_level_security == true, config.database_row_level_security]] %>
+<div class="pf-stack pf-stack--tight">
+  <p class="pf-fs-13 pf-text-2 pf-setting"><%= t('.intro') %></p>
+  <div class="pf-ladder">
+    <% tiles.each do |level, key, on, value| %>
+      <%= link_to permission_forge.settings_path(focus: key, anchor: "set-#{key}"), class: "pf-ladder__tile#{' pf-ladder__tile--on' if on}" do %>
+        <span class="pf-fw-600"><%= on ? '✓' : '–' %> <%= t(".#{level}") %> · <%= on ? t('.active') : t('.off') %></span>
+        <code class="pf-mono-key"><%= key %> = <%= value.inspect %></code>
+      <% end %>
+    <% end %>
+  </div>
+</div>

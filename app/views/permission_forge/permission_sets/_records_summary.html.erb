@@ -1,0 +1,16 @@
+<% rules = resource.permission_set_rules.select(&:is_active) %>
+<% if muting %>
+  <span class="pf-text-3">—</span>
+<% elsif !resource.read_access %>
+  <span class="pf-text-3">–</span>
+<% elsif resource.view_all %>
+  <span><%= resource.modify_all ? t('.view_modify_all') : t('permission_forge.ui.view_all') %></span>
+  <% if rules.any? %><span class="pf-fs-12 pf-text-warn">⚠ <%= t('.ignored', count: rules.size) %></span><% end %>
+<% else %>
+  <span><%= t('permission_forge.ui.rules_count', count: rules.size) %></span>
+  <% if rules.first %>
+    <span class="pf-fs-12 pf-text-3 pf-ellipsis"><%= pf_rule_summary(rules.first, resource.name) %></span>
+  <% else %>
+    <span class="pf-fs-12 pf-text-warn"><%= t('.no_rules') %></span>
+  <% end %>
+<% end %>

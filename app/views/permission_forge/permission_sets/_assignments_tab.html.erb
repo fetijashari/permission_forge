@@ -1,0 +1,74 @@
+<% back = permission_forge.permission_set_path(set, tab: 'assignments') %>
+<div class="pf-stack pf-stack--loose" data-pf-bulk>
+  <div class="pf-row pf-row--between">
+    <p class="pf-text-2"><%= t('.immediate') %></p>
+    <% unless PermissionForge::Admin::EditableLock.widening_lock(set, :grant) %>
+      <div class="pf-actions">
+        <%= pf_modal_link t('.bulk'), permission_forge.new_permission_set_bulk_assignment_path(set), kind: 'drawer', class: 'pf-btn pf-btn--sm' %>
+        <%= pf_modal_link "+ #{t('.assign')}", permission_forge.new_assignment_path(permission_set_id: set.id, return_to: back),
+                          kind: 'drawer', class: 'pf-btn pf-btn--sm pf-btn--primary' %>
+      </div>
+    <% end %>
+  </div>
+
+  <%= form_with url: permission_forge.revoke_permission_set_bulk_assignment_path(set), method: :get, id: 'pf-revoke-form',
+                data: { pf_modal: 'dialog' } do %>
+  <% end %>
+
+  <% if @assignments.any? %>
+    <div class="pf-bulk-bar" data-pf-bulk-bar>
+      <span class="pf-fw-600" data-pf-selected-count data-pf-one="<%= t('.selected.one', count: '%{count}') %>"
+            data-pf-other="<%= t('.selected.other', count: '%{count}') %>"><%= t('.select_hint') %></span>
+      <button type="submit" form="pf-revoke-form" class="pf-btn pf-btn--sm"><%= t('.revoke_selected') %></button>
+    </div>
+  <% end %>
+
+  <div class="pf-card pf-scroll-x">
+    <div class="pf-table pf-table--assignments" role="table" aria-label="<%= t('.label') %>">
+      <div class="pf-table__head" role="row">
+        <span role="columnheader">
+          <% unless @assignments.empty? %>
+            <input type="checkbox" data-pf-select-all aria-label="<%= t('.select_all') %>" hidden data-pf-js-show>
+          <% end %>
+        </span>
+        <span role="columnheader"><%= t('.columns.person') %></span>
+        <span role="columnheader"><%= t('.columns.assigned') %></span>
+        <span role="columnheader"><%= t('.columns.expires') %></span>
+        <span role="columnheader"><span class="pf-sr-only"><%= t('.columns.actions') %></span></span>
+      </div>
+      <% @assignments.each do |a| %>
+        <% name = pf_person_name(a.user) %>
+        <div class="pf-table__row" role="row">
+          <span role="cell">
+            <input type="checkbox" name="user_ids[]" value="<%= a.user_id %>" form="pf-revoke-form" data-pf-select
+                   aria-label="<%= t('.select_person', name: name) %>">
+          </span>
+          <span role="cell"><%= pf_person_cell(a.user, href: permission_forge.person_path(a.user_id)) %></span>
+          <span role="cell" class="pf-fs-13 pf-text-2"><%= t('.assigned_on', date: pf_date(a.created_at), by: pf_person_name(a.try(:created_by))) %></span>
+          <span role="cell" class="pf-fs-13 pf-row pf-row--tight">
+            <%= pf_expiry_tag(a.expires_at) %>
+            <%= pf_badge(t('permission_forge.ui.badges.expired'), variant: :block) if a.expired? %>
+          </span>
+          <span role="cell" class="pf-row pf-row--tight pf-row--nowrap">
+            <%= form_with url: permission_forge.assignment_path(a), method: :patch, class: 'pf-row pf-row--tight pf-row--nowrap pf-reason-form' do %>
+              <input type="hidden" name="return_to" value="<%= back %>">
+              <label class="pf-sr-only" for="pf-sexp-<%= a.id %>"><%= t('permission_forge.people.access_tab.change_end') %></label>
+              <select id="pf-sexp-<%= a.id %>" name="expiry" class="pf-select pf-select--sm pf-select--auto" data-pf-autosubmit>
+                <option value="" selected><%= t('permission_forge.people.access_tab.change_end') %>…</option>
+                <% PermissionForge::Admin::ExpiryPresets::CHANGE_KEYS.each do |key| %>
+                  <option value="<%= key %>"><%= t("permission_forge.ui.expiry_change.#{key}") %></option>
+                <% end %>
+              </select>
+              <button type="submit" class="pf-btn pf-btn--xs" data-pf-js-hide><%= t('permission_forge.ui.apply') %></button>
+              <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-sexp-reason-#{a.id}" %>
+            <% end %>
+            <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.remove_assignment_path(a, return_to: back), class: 'pf-btn pf-btn--ghost-danger' %>
+          </span>
+        </div>
+      <% end %>
+    </div>
+    <% if @assignments.empty? %>
+      <p class="pf-empty"><%= t('.empty') %></p>
+    <% end %>
+  </div>
+</div>

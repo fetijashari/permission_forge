@@ -1,0 +1,27 @@
+<% name = pf_person(@person).name %>
+<% content_for :pf_title, t('.title', name: name) %>
+<%= pf_dialog_frame({ title: t('.title', name: name), danger: true,
+                     breadcrumb: pf_breadcrumb([t('permission_forge.nav.people'), permission_forge.people_path], [name, permission_forge.person_path(@person)], t('.crumb')) }) do %>
+  <% if @removable.empty? %>
+    <p class="pf-text-2"><%= t('.nothing', name: pf_person(@person).first_name) %></p>
+    <% if @kept.any? %><p class="pf-text-2"><%= t('.kept', sets: @kept.map { |a| a.permission_set.name }.to_sentence) %></p><% end %>
+    <div class="pf-actions pf-row--right">
+      <%= link_to t('permission_forge.ui.close'), permission_forge.person_path(@person), class: 'pf-btn', data: { pf_close: true } %>
+    </div>
+  <% else %>
+    <p class="pf-text-2">
+      <%= @lost.any? ? t('.body', name: pf_person(@person).first_name, resources: @lost.to_sentence) : t('.body_no_resources', name: pf_person(@person).first_name) %>
+    </p>
+    <ul class="pf-confirm__list">
+      <% @removable.each do |a| %><li><%= pf_set_chip(a.permission_set, href: nil, expired: a.expired?) %></li><% end %>
+    </ul>
+    <% if @kept.any? %><p class="pf-text-2"><%= t('.kept', sets: @kept.map { |a| a.permission_set.name }.to_sentence) %></p><% end %>
+    <%= form_with url: permission_forge.remove_all_person_path(@person), method: :delete, class: 'pf-confirm-form' do %>
+      <%= render 'permission_forge/shared/reason_field' %>
+      <div class="pf-actions pf-row--right">
+        <%= link_to t('permission_forge.ui.cancel'), permission_forge.person_path(@person), class: 'pf-btn', data: { pf_close: true } %>
+        <button type="submit" class="pf-btn pf-btn--danger-solid"><%= t('.confirm', count: @removable.size) %></button>
+      </div>
+    <% end %>
+  <% end %>
+<% end %>

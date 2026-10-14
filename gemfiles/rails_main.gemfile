@@ -1,0 +1,19 @@
+# frozen_string_literal: true
+
+# Rails from the main branch on GitHub, for the allow-failure CI job
+# (`rails-main` in .github/workflows/ci.yml). It runs
+# test/permission_forge/rails_internals_canary_test.rb first and then the
+# suite, so a change in Rails that the gem depends on shows up as one named
+# canary test before it reaches a release. A red job here is a warning, not a
+# broken build: read the canary failures first.
+#
+# The gemspec allows activerecord/activesupport/railties `< 8.2`, which a
+# prerelease of 8.2 (8.2.0.alpha) still satisfies. When main moves to a
+# version past that bound, bundling fails here until the bound is raised.
+#
+# Inherits everything else (dev/test gems + the gemspec runtime deps) from the
+# root Gemfile. No lockfile is committed (gemfiles/*.gemfile.lock is ignored):
+# every run resolves against the current main.
+eval_gemfile File.expand_path('../Gemfile', __dir__)
+
+gem 'rails', github: 'rails/rails', branch: 'main'

@@ -1,0 +1,18 @@
+<nav class="pf-sidebar" aria-label="<%= t('.aria') %>">
+  <%# The column spans the full page height; only its contents stick to the viewport. %>
+  <div class="pf-sidebar__inner">
+    <div class="pf-brand">
+      <%= link_to permission_forge.root_path, class: 'pf-brand__home' do %>
+        <img class="pf-brand__logo pf-brand__logo--light" src="<%= pf_asset_url('logo-light.svg') %>" alt="<%= t('.brand') %>" width="159" height="26">
+        <img class="pf-brand__logo pf-brand__logo--dark" src="<%= pf_asset_url('logo-dark.svg') %>" alt="<%= t('.brand') %>" width="159" height="26">
+      <% end %>
+      <%= link_to pf_back_to_app_url, class: 'pf-back-link' do %>
+        <span aria-hidden="true">←</span> <span><%= pf_back_to_app_label %></span>
+      <% end %>
+    </div>
+    <%= render 'permission_forge/shared/nav' %>
+    <div class="pf-sidebar__footer">
+      <%= render 'permission_forge/shared/preferences' %>
+    </div>
+  </div>
+</nav>

@@ -1,0 +1,26 @@
+<%# Person picker rows. Locals: page (PeopleDirectory::Page), query, field, type ('radio'|'checkbox'),
+    selected (ids), invalid (error text). %>
+<% selected = Array(local_assigns[:selected]).map(&:to_s) %>
+<% invalid = local_assigns[:invalid] %>
+<div class="pf-listbox" <%= pf_attrs_when(invalid, aria: { invalid: true }) %>>
+  <div class="pf-listbox__scroll" role="group" aria-label="<%= t('.label') %>">
+    <% if page.people.empty? %>
+      <p class="pf-option pf-text-3"><%= query.present? ? t('.no_match', query: query) : t('.nobody') %></p>
+    <% end %>
+    <% page.people.each do |person| %>
+      <% label = pf_person(person) %>
+      <label class="pf-option">
+        <input type="<%= type %>" name="<%= type == 'checkbox' ? "#{field}[]" : field %>" value="<%= person.id %>" <%= 'checked' if selected.include?(person.id.to_s) %>>
+        <%= pf_avatar(person, size: 'sm') %>
+        <span class="pf-option__main">
+          <span class="pf-fw-600 pf-ellipsis"><%= label.name %></span>
+          <% if label.secondary %><span class="pf-fs-12 pf-text-3 pf-ellipsis"><%= label.secondary %></span><% end %>
+        </span>
+      </label>
+    <% end %>
+  </div>
+  <% if page.total > page.people.size %>
+    <div class="pf-listbox__footer"><%= t('.capped', shown: page.people.size, total: page.total) %></div>
+  <% end %>
+</div>
+<% if invalid %><p class="pf-error" role="alert"><%= invalid %></p><% end %>

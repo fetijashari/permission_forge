@@ -1,0 +1,58 @@
+<% first_name = pf_person(@person).first_name %>
+<% granters = pf_granters(@assignments) %>
+<div class="pf-stack pf-stack--loose">
+  <div class="pf-card">
+    <% if @assignments.empty? %>
+      <p class="pf-empty"><%= t('.empty', name: first_name) %></p>
+    <% end %>
+    <% @assignments.each do |assignment| %>
+      <% set = assignment.permission_set %>
+      <div class="pf-assignment">
+        <div class="pf-assignment__main">
+          <div class="pf-row pf-row--tight"><%= pf_set_chip(set, large: true, expired: assignment.expired?) %></div>
+          <% if set.description.present? %><span class="pf-fs-13 pf-text-2"><%= set.description %></span><% end %>
+          <% if set.conditional? %>
+            <span class="pf-row pf-row--tight pf-fs-13 pf-text-accent">◷ <%= pf_condition_sentence(set) %> <%= pf_fail_open_badge if pf_fail_open? %></span>
+          <% end %>
+          <% unless set.is_active %>
+            <span class="pf-fs-13 pf-text-3">○ <%= t('.set_off') %></span>
+          <% end %>
+          <span class="pf-fs-12 pf-text-3"><%= t('.assigned', date: pf_date(assignment.created_at), by: pf_granted_by(assignment, granters)) %></span>
+        </div>
+        <div class="pf-assignment__when">
+          <%= pf_expiry_tag(assignment.expires_at) %>
+          <%= pf_reviewed(assignment) %>
+        </div>
+        <div class="pf-assignment__actions">
+          <%= pf_lock_badge if pf_locked_record?(set) %>
+          <%= form_with url: permission_forge.assignment_path(assignment), method: :patch, class: 'pf-row pf-row--tight' do %>
+            <input type="hidden" name="return_to" value="<%= permission_forge.person_path(@person) %>">
+            <label class="pf-sr-only" for="pf-exp-<%= assignment.id %>"><%= t('.change_end') %></label>
+            <select id="pf-exp-<%= assignment.id %>" name="expiry" class="pf-select pf-select--sm pf-select--auto" data-pf-autosubmit>
+              <option value="" selected><%= t('.change_end') %>…</option>
+              <% PermissionForge::Admin::ExpiryPresets::CHANGE_KEYS.each do |key| %>
+                <option value="<%= key %>"><%= t("permission_forge.ui.expiry_change.#{key}") %></option>
+              <% end %>
+            </select>
+            <button type="submit" class="pf-btn pf-btn--xs" data-pf-js-hide><%= t('permission_forge.ui.apply') %></button>
+            <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-exp-reason-#{assignment.id}" %>
+          <% end %>
+          <% if pf_stale?(assignment) %>
+            <%= form_with url: permission_forge.keep_assignment_path(assignment), method: :post, class: 'pf-reason-form' do %>
+              <input type="hidden" name="return_to" value="<%= permission_forge.person_path(@person) %>">
+              <button type="submit" class="pf-btn pf-btn--xs"><%= t('permission_forge.ui.keep') %></button>
+              <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-keep-reason-#{assignment.id}" %>
+            <% end %>
+          <% end %>
+          <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.remove_assignment_path(assignment, return_to: permission_forge.person_path(@person)),
+                            class: 'pf-btn pf-btn--ghost-danger' %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+  <% if @groups.any? %>
+    <p class="pf-fs-13 pf-text-2">
+      <%= t('.groups_html', groups: safe_join(@groups.map { |g| link_to(g.permission_set_group.name, permission_forge.group_path(g.permission_set_group)) }, ', ')) %>
+    </p>
+  <% end %>
+</div>

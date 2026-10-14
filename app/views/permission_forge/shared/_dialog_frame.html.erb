@@ -1,0 +1,11 @@
+<%# Confirmation dialog: a standalone page without JS, a <dialog> with JS. %>
+<% danger = local_assigns.fetch(:danger, false) %>
+<% unless pf_fragment? %>
+  <% if local_assigns[:breadcrumb] %><%= breadcrumb %><% end %>
+<% end %>
+<div class="pf-confirm<%= ' pf-confirm--danger' if danger %><%= ' pf-card pf-modal-page' unless pf_fragment? %>"
+     data-pf-role="<%= local_assigns.fetch(:role, 'alertdialog') %>" <%= pf_attrs_when(local_assigns[:wide], data: { pf_size: 'wide' }) %>>
+  <% if local_assigns[:eyebrow] %><span class="pf-badge pf-badge--block pf-badge--square"><%= eyebrow %></span><% end %>
+  <%= content_tag(pf_fragment? ? :h2 : :h1, title, class: 'pf-confirm__title', data: { pf_title: true }) %>
+  <%= body %>
+</div>

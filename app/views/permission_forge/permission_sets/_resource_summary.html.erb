@@ -1,0 +1,11 @@
+<% fields = resource.resource_fields %>
+<% model = @catalog&.find(resource.name) %>
+<% new_count = model ? (model.managed_field_names - fields.map(&:name)).size : 0 %>
+<% if muting %>
+  <%= t('.muting', hidden: fields.count { |f| PermissionForge::Admin::FieldLevel.level_of(f, muting: true) == 'hide' },
+                   masked: fields.count { |f| PermissionForge::Admin::FieldLevel.level_of(f, muting: true) == 'mask' }) %>
+<% else %>
+  <%= [t('.fields', count: fields.size),
+       t('.masked', count: fields.count { |f| PermissionForge::Admin::FieldLevel.level_of(f, muting: false) == 'masked' }),
+       (t('.new', count: new_count) if new_count.positive?)].compact.join(' · ') %>
+<% end %>

@@ -1,0 +1,22 @@
+<%# Drawer: a standalone page without JS, a right-anchored <dialog> with JS.
+    Locals: title, subtitle (opt), close_path, footer (opt, html), breadcrumb (opt). %>
+<% unless pf_fragment? %>
+  <% if local_assigns[:breadcrumb] %><%= breadcrumb %><% end %>
+<% end %>
+<div class="pf-sheet<%= ' pf-sheet--page' unless pf_fragment? %>" data-pf-role="dialog">
+  <div class="pf-sheet__header">
+    <div class="pf-stack pf-stack--tight">
+      <% if local_assigns[:subtitle].present? %><span class="pf-fs-12 pf-text-3"><%= subtitle %></span><% end %>
+      <%# The page's heading when it stands alone; inside the drawer (a fragment) the page behind it has the h1. %>
+      <%= content_tag(pf_fragment? ? :h2 : :h1, title, class: 'pf-drawer-title', data: { pf_title: true }) %>
+      <% if local_assigns[:after_title] %><%= after_title %><% end %>
+    </div>
+    <%= link_to '×', close_path, class: 'pf-close', 'aria-label': t('permission_forge.ui.close'), data: { pf_close: true } %>
+  </div>
+  <div class="pf-sheet__body">
+    <%= body %>
+  </div>
+  <% if local_assigns[:footer].present? %>
+    <div class="pf-sheet__footer"><%= footer %></div>
+  <% end %>
+</div>

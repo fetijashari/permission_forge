@@ -1,0 +1,13 @@
+<%# Unsaved-changes bar: the submit area of a batched-edit form (form="id"). %>
+<div id="<%= id %>" class="pf-savebar" role="region" aria-label="<%= t('.label') %>" data-pf-dirty="false">
+  <div class="pf-savebar__text">
+    <span class="pf-savebar__count pf-savebar__count--dirty" data-pf-dirty-count
+          data-pf-one="<%= t('.count.one', count: '%{count}') %>" data-pf-other="<%= t('.count.other', count: '%{count}') %>"></span>
+    <span class="pf-savebar__count pf-savebar__count--clean"><%= t('.clean') %></span>
+    <span class="pf-savebar__note"><%= people.to_i.positive? ? t('.note', people: pf_people_text(people)) : t('.note_nobody') %></span>
+  </div>
+  <div class="pf-actions">
+    <button type="reset" form="<%= form %>" class="pf-btn pf-btn--sm pf-btn--on-dark" hidden data-pf-js-show><%= t('.discard') %></button>
+    <button type="submit" form="<%= form %>" class="pf-btn pf-btn--sm pf-btn--inverse"><%= t('.review') %></button>
+  </div>
+</div>

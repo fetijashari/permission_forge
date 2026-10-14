@@ -1,0 +1,118 @@
+# frozen_string_literal: true
+
+require 'test_helper'
+
+module PermissionForge
+  module Security
+    # A rule's join_type picks one of three relation methods and nothing else.
+    # The model validates it, but a rule row can be written past the model (the
+    # tables are shared with other applications), and it used to be sent to the
+    # relation as it was: `send` with a field_accessor_path of `delete_all`
+    # emptied the table, `unscope` dropped the rules applied before it.
+    class RuleJoinTypeTest < ActiveSupport::TestCase
+      setup do
+        @user = create_user
+        @supplier = create_supplier(owner_id: @user.id)
+        @mine = create_customer(name: 'mine', supplier: @supplier)
+        @theirs = create_customer(name: 'theirs', supplier: create_supplier(owner_id: @user.id + 1))
+      end
+
+      test 'a join_type that is not one raises and never reaches the relation' do
+        %w[send public_send delete_all destroy_all unscope unscoped none reorder extending instance_eval JOINS].each do |join_type|
+          ['delete_all', 'supplier', 'where', nil].each do |path|
+            error = assert_raises(PermissionForge::ConfigurationError, "#{join_type} #{path.inspect}") do
+              scoped(owner_rule(join_type: join_type, field_accessor_path: path)).to_a
+            end
+
+            assert_includes error.message, join_type.inspect
+          end
+        end
+
+        assert_equal 2, Customer.where(id: [@mine.id, @theirs.id]).count
+      end
+
+      test 'a join_type that is not one cannot drop the rules applied before it' do
+        own = { name: 'Own', failure_message: 'No', field_name: 'name', operator: 'equal', field_value: 'mine', include_nulls: false }
+
+        assert_raises(PermissionForge::ConfigurationError) do
+          scoped(own, owner_rule(join_type: 'unscope', field_accessor_path: 'where')).to_a
+        end
+        assert_equal [@mine], scoped(own).where(id: [@mine.id, @theirs.id]).to_a
+      end
+
+      # One reading of "this is a filter rule" everywhere: a row written past
+      # the model with a blank join_type must not be a filter to the default
+      # scope and an error to the applier.
+      test 'a blank join_type is a filter rule to the applier, the default scope and the model alike' do
+        own = { name: 'Own', failure_message: 'No', field_name: 'name', operator: 'equal', field_value: 'mine', include_nulls: false }
+
+        [nil, '', ' ', "\t", 'filter', :filter].each do |join_type|
+          assert PermissionForge::PermissionSetRule.filter_join_type?(join_type), join_type.inspect
+          assert_not PermissionForge::PermissionSetRule.new(join_type: join_type).join_rule?, join_type.inspect
+          assert_equal [@mine], scoped(own.merge(join_type: join_type)).where(id: [@mine.id, @theirs.id]).to_a, join_type.inspect
+          assert Customer.send(:pf_filter_rule?, own.merge(join_type: join_type)), join_type.inspect
+        end
+
+        %w[Filter joins garbage].each do |join_type|
+          assert_not PermissionForge::PermissionSetRule.filter_join_type?(join_type), join_type
+          assert_not Customer.send(:pf_filter_rule?, own.merge(join_type: join_type)), join_type
+        end
+      end
+
+      test 'find_by raises as well' do
+        set = create_permission_set
+        create_permission_set_user(user: @user, permission_set: set)
+        resource = create_resource(permission_set: set, name: 'Customer', read_access: true)
+        rule = create_permission_set_rule(permission_set: set, resource: resource, field_name: 'owner_id',
+                                          join_type: 'joins', field_accessor_path: 'supplier', include_nulls: false)
+        rule.update_columns(join_type: 'send', field_accessor_path: 'delete_all')
+        @user.invalidate_permissions
+        Current.user = @user
+
+        assert_raises(PermissionForge::ConfigurationError) { Customer.find_by(id: @mine.id) }
+        assert_raises(PermissionForge::ConfigurationError) { Customer.permission_scoped.to_a }
+        assert Customer.unscoped.exists?(@mine.id)
+      end
+
+      test 'the three join types join, written as text or as a symbol' do
+        ['joins', 'left_joins', 'left_outer_joins', :joins, :left_joins].each do |join_type|
+          relation = scoped(owner_rule(join_type: join_type, field_accessor_path: 'supplier'))
+
+          assert_equal [@mine], relation.where(id: [@mine.id, @theirs.id]).to_a, join_type.inspect
+        end
+      end
+
+      # The value is not typed against the rule's own model when the path leads
+      # nowhere: ActiveRecord raises for the join, whatever the value is.
+      test 'an association path that cannot be followed raises, for a usable value and for an unusable one' do
+        %w[nowhere supplier.nowhere].each do |path|
+          %w[5 x].each do |value|
+            rule = owner_rule(join_type: 'joins', field_accessor_path: path, field_name: 'supplier_id', field_value: value)
+
+            assert_raises(ActiveRecord::ConfigurationError, "#{path} #{value}") { scoped(rule).to_a }
+          end
+        end
+      end
+
+      test 'a filter rule has no join, whatever its field_accessor_path says' do
+        [nil, '', 'filter', :filter].each do |join_type|
+          rule = { name: 'Filter', failure_message: 'No', field_name: 'name', operator: 'equal', field_value: 'mine',
+                   include_nulls: false, join_type: join_type, field_accessor_path: 'delete_all' }
+
+          assert_equal [@mine], scoped(rule).where(id: [@mine.id, @theirs.id]).to_a, join_type.inspect
+        end
+      end
+
+      private
+
+      def owner_rule(**attrs)
+        { name: 'Owner', failure_message: 'No', field_name: 'owner_id', operator: 'equal', field_value: 'current_user',
+          include_nulls: false }.merge(attrs)
+      end
+
+      def scoped(*rules)
+        PermissionForge::Services::PermissionRuleApplier.scope(model_class: Customer, rules: rules, current_user: @user)
+      end
+    end
+  end
+end

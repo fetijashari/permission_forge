@@ -1,0 +1,10 @@
+<div class="pf-banner pf-banner--help" role="note">
+  <div class="pf-banner__body">
+    <span><strong><%= term %>:</strong> <%= text %></span>
+  </div>
+  <%= form_with url: permission_forge.preferences_path, method: :patch, class: 'pf-inline-form' do %>
+    <input type="hidden" name="dismiss_help" value="<%= key %>">
+    <input type="hidden" name="return_to" value="<%= request.fullpath %>">
+    <button type="submit" class="pf-btn pf-btn--xs"><%= t('.got_it') %></button>
+  <% end %>
+</div>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="<%= I18n.locale %>" class="pf-root" data-theme="<%= pf_theme %>">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title><%= [content_for(:pf_title).presence, t('permission_forge.layouts.application.title')].compact.join(' · ') %></title>
+  <%= csrf_meta_tags %>
+  <%= csp_meta_tag if respond_to?(:csp_meta_tag) %>
+  <link rel="icon" href="<%= pf_asset_url('favicon.ico') %>" sizes="any">
+  <link rel="icon" href="<%= pf_asset_url('favicon.svg') %>" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="<%= pf_asset_url('apple-touch-icon.png') %>">
+  <link rel="stylesheet" href="<%= pf_asset_url('pf_admin.css') %>"<%= pf_nonce_attribute(:style) %>>
+  <script src="<%= pf_asset_url('pf_admin.js') %>" defer<%= pf_nonce_attribute(:script) %>></script>
+  <%= render 'permission_forge/shared/head_extra' %>
+</head>
+<body class="pf-body">
+  <a class="pf-skip" href="#pf-main"><%= t('permission_forge.layouts.application.skip_to_content') %></a>
+  <div class="pf-app">
+    <%= render 'permission_forge/shared/topbar' %>
+    <%= render 'permission_forge/shared/sidebar' %>
+    <main id="pf-main" class="pf-main" tabindex="-1">
+      <div class="pf-main__inner">
+        <%= yield %>
+      </div>
+    </main>
+  </div>
+  <%= render 'permission_forge/shared/toasts' %>
+</body>
+</html>

@@ -1,0 +1,198 @@
+class CreatePermissionForgeTables < ActiveRecord::Migration<%= migration_version %>
+  def change
+    create_table :<%= table_prefix %>permission_set_groups do |t|
+      t.string  :uuid, null: false
+      t.string  :name, null: false, default: 'Untitled Permission Set Group'
+      t.string  :description
+      t.boolean :is_active, null: false, default: true
+      t.boolean :is_editable, null: false, default: true
+<% if tenant_column %>      t.<%= tenant_id_type %>  :<%= tenant_column %>
+      t.index   :<%= tenant_column %>
+<% end %>      t.<%= user_id_type %>  :created_by_id
+      t.<%= user_id_type %>  :updated_by_id
+      t.timestamps
+
+      t.index :uuid, unique: true
+    end
+
+    create_table :<%= table_prefix %>permission_sets do |t|
+      t.string     :uuid, null: false
+      t.references :permission_set_group, foreign_key: { to_table: :<%= table_prefix %>permission_set_groups }, null: true
+      t.string     :name, null: false, default: 'Untitled Permission Set'
+      t.string     :description
+      t.boolean    :is_active, null: false, default: true
+      t.boolean    :is_editable, null: false, default: true
+      t.boolean    :is_muting, null: false, default: false
+      t.string     :requires_session_flag
+      t.string     :allowed_ips
+      t.integer    :allowed_hours_start
+      t.integer    :allowed_hours_end
+<% if tenant_column %>      t.<%= tenant_id_type %>     :<%= tenant_column %>
+      t.index      :<%= tenant_column %>
+<% end %>      t.<%= user_id_type %>     :created_by_id
+      t.<%= user_id_type %>     :updated_by_id
+      t.timestamps
+
+      t.index :uuid, unique: true
+    end
+
+    create_table :<%= table_prefix %>resources do |t|
+      t.string     :uuid, null: false
+      t.references :permission_set, foreign_key: { to_table: :<%= table_prefix %>permission_sets }, null: false
+      t.string     :name, null: false, default: 'Untitled Resource'
+      t.string     :label
+      t.string     :description
+      t.boolean    :is_active, null: false, default: true
+      t.boolean    :is_editable, null: false, default: true
+      t.boolean    :read_access, null: false, default: false
+      t.boolean    :create_access, null: false, default: false
+      t.boolean    :edit_access, null: false, default: false
+      t.boolean    :delete_access, null: false, default: false
+      t.boolean    :view_all, null: false, default: false
+      t.boolean    :modify_all, null: false, default: false
+<% if tenant_column %>      t.<%= tenant_id_type %>     :<%= tenant_column %>
+      t.index      :<%= tenant_column %>
+<% end %>      t.<%= user_id_type %>     :created_by_id
+      t.<%= user_id_type %>     :updated_by_id
+      t.timestamps
+
+      t.index :uuid, unique: true
+      t.index [:permission_set_id, :name], unique: true, name: 'idx_pf_resources_unique'
+    end
+
+    create_table :<%= table_prefix %>resource_fields do |t|
+      t.string     :uuid, null: false
+      t.references :resource, foreign_key: { to_table: :<%= table_prefix %>resources }, null: false
+      t.string     :name, null: false, default: 'untitled_field'
+      t.string     :label, null: false, default: 'Untitled Field'
+      t.string     :description
+      t.boolean    :is_active, null: false, default: true
+      t.boolean    :is_editable, null: false, default: true
+      t.boolean    :read_access, null: false, default: false
+      t.boolean    :edit_access, null: false, default: false
+      t.boolean    :mask_access, null: false, default: false
+      t.string     :mask_strategy, null: false, default: 'full'
+      t.datetime   :sensitive_acknowledged_at
+      t.<%= user_id_type %>     :sensitive_acknowledged_by_id
+<% if tenant_column %>      t.<%= tenant_id_type %>     :<%= tenant_column %>
+      t.index      :<%= tenant_column %>
+<% end %>      t.<%= user_id_type %>     :created_by_id
+      t.<%= user_id_type %>     :updated_by_id
+      t.timestamps
+
+      t.index :uuid, unique: true
+      t.index [:resource_id, :name], unique: true, name: 'idx_pf_resource_fields_unique'
+    end
+
+    create_table :<%= table_prefix %>resource_actions do |t|
+      t.string     :uuid, null: false
+      t.references :resource, foreign_key: { to_table: :<%= table_prefix %>resources }, null: false
+      t.string     :name, null: false
+      t.string     :label
+      t.string     :description
+      t.boolean    :is_permitted, null: false, default: false
+      t.boolean    :is_active, null: false, default: true
+<% if tenant_column %>      t.<%= tenant_id_type %>     :<%= tenant_column %>
+      t.index      :<%= tenant_column %>
+<% end %>      t.<%= user_id_type %>     :created_by_id
+      t.<%= user_id_type %>     :updated_by_id
+      t.timestamps
+
+      t.index :uuid, unique: true
+      t.index [:resource_id, :name], unique: true, name: 'idx_pf_resource_actions_unique'
+    end
+
+    create_table :<%= table_prefix %>permission_set_rules do |t|
+      t.string     :uuid, null: false
+      t.references :permission_set, foreign_key: { to_table: :<%= table_prefix %>permission_sets }, null: false
+      t.references :resource, foreign_key: { to_table: :<%= table_prefix %>resources }, null: false
+      t.string     :name, null: false, default: 'Untitled Rule'
+      t.string     :failure_message, default: 'You do not have permission to perform this action.'
+      t.string     :join_type
+      t.string     :field_name, null: false
+      t.string     :field_value, null: false
+      t.string     :field_accessor_path
+      t.string     :operator, null: false, default: 'equal'
+      t.boolean    :include_nulls, null: false, default: true
+      t.boolean    :is_active, null: false, default: true
+      t.boolean    :is_editable, null: false, default: true
+<% if tenant_column %>      t.<%= tenant_id_type %>     :<%= tenant_column %>
+      t.index      :<%= tenant_column %>
+<% end %>      t.<%= user_id_type %>     :created_by_id
+      t.<%= user_id_type %>     :updated_by_id
+      t.timestamps
+
+      t.index :uuid, unique: true
+    end
+
+    create_table :<%= table_prefix %>permission_set_users do |t|
+      t.string     :uuid, null: false
+      t.references :permission_set, foreign_key: { to_table: :<%= table_prefix %>permission_sets }, null: false
+      t.references :user, null: false, type: :<%= user_id_type %>
+      t.datetime   :expires_at
+      t.datetime   :reviewed_at
+      t.<%= user_id_type %>     :reviewed_by_id
+      t.string     :reason
+<% if tenant_column %>      t.<%= tenant_id_type %>     :<%= tenant_column %>
+      t.index      :<%= tenant_column %>
+<% end %>      t.<%= user_id_type %>     :created_by_id
+      t.<%= user_id_type %>     :updated_by_id
+      t.timestamps
+
+      t.index :uuid, unique: true
+      t.index [:permission_set_id, :user_id], unique: true, name: 'idx_pf_pset_users_unique'
+    end
+
+    create_table :<%= table_prefix %>permission_set_group_users do |t|
+      t.string     :uuid, null: false
+      t.references :permission_set_group, foreign_key: { to_table: :<%= table_prefix %>permission_set_groups }, null: false
+      t.references :user, null: false, type: :<%= user_id_type %>
+      t.string     :reason
+<% if tenant_column %>      t.<%= tenant_id_type %>     :<%= tenant_column %>
+      t.index      :<%= tenant_column %>
+<% end %>      t.<%= user_id_type %>     :created_by_id
+      t.<%= user_id_type %>     :updated_by_id
+      t.timestamps
+
+      t.index :uuid, unique: true
+      t.index [:permission_set_group_id, :user_id], unique: true, name: 'idx_pf_pset_group_users_unique'
+    end
+
+    # Insert-only audit log. No foreign keys: events outlive the records they describe.
+    create_table :<%= table_prefix %>audit_events do |t|
+      t.string   :uuid, null: false
+      t.datetime :occurred_at, null: false, precision: 6
+      t.string   :event, null: false
+      t.string   :category, null: false
+      t.string   :actor_type, null: false
+      t.string   :actor_id
+      t.string   :actor_label
+      t.string   :source, null: false
+      t.string   :record_type
+      t.string   :record_id
+      t.string   :record_uuid
+      t.string   :record_label
+      t.bigint   :permission_set_id
+      t.string   :permission_set_uuid
+      t.string   :subject_user_id
+      t.text     :data
+      t.string   :reason
+      t.string   :request_id
+      t.string   :ip
+      t.string   :correlation_id
+<% if tenant_column %>      t.<%= tenant_id_type %>   :<%= tenant_column %>
+      t.index    :<%= tenant_column %>, name: 'idx_pf_audit_tenant'
+<% end %>      t.datetime :created_at, null: false
+
+      t.index :uuid, unique: true, name: 'idx_pf_audit_uuid'
+      t.index :occurred_at, name: 'idx_pf_audit_occurred'
+      t.index [:event, :occurred_at], name: 'idx_pf_audit_event'
+      t.index [:subject_user_id, :occurred_at], name: 'idx_pf_audit_subject'
+      t.index [:permission_set_id, :occurred_at], name: 'idx_pf_audit_pset'
+      t.index [:permission_set_uuid, :occurred_at], name: 'idx_pf_audit_pset_uuid'
+      t.index [:record_type, :record_id, :occurred_at], name: 'idx_pf_audit_record'
+      t.index [:actor_id, :occurred_at], name: 'idx_pf_audit_actor'
+      t.index :correlation_id, name: 'idx_pf_audit_correlation'
+    end
+  end
+end

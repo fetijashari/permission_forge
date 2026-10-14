@@ -1,0 +1,18 @@
+<%# 4-level field control (radio group styled as a segmented control).
+    Locals: name, checked (level or nil), muting, aria, locked, edit_disabled, form (opt), large (opt), id_prefix %>
+<% form_attr = local_assigns[:form] ? { form: form } : {} %>
+<% levels = PermissionForge::Admin::FieldLevel.levels_for(muting: muting) %>
+<div class="pf-levels<%= ' pf-levels--lg' if local_assigns[:large] %>" role="radiogroup" aria-label="<%= aria %>">
+  <% levels.each do |level| %>
+    <% id = "#{id_prefix}-#{level}" %>
+    <% disabled = locked || (level == 'edit' && edit_disabled) %>
+    <% title = if locked then t('permission_forge.ui.locked.title')
+               elsif level == 'edit' && edit_disabled then t('.needs_edit', resource: local_assigns[:resource_label])
+               end %>
+    <span class="pf-level pf-level--<%= level %>">
+      <%= tag.input(type: 'radio', id: id, name: name, value: level, checked: checked == level, disabled: disabled,
+                    data: { pf_locked: (locked || nil) }, **form_attr) %>
+      <label class="pf-level__label" for="<%= id %>" title="<%= title %>"><%= pf_level_label(level) %></label>
+    </span>
+  <% end %>
+</div>

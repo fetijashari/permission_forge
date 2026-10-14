@@ -1,0 +1,15 @@
+<%# Locals: problem (Admin::AuditLog.recording_problem: :off, :failing or :missing_table). %>
+<div class="pf-banner pf-banner--warn" role="note">
+  <span class="pf-banner__glyph" aria-hidden="true">⚠</span>
+  <div class="pf-banner__body">
+    <span class="pf-banner__title"><%= t('permission_forge.audit_log.off.title') %></span>
+    <% if problem == :off %>
+      <span><%= t('permission_forge.audit_log.off.disabled') %></span>
+    <% elsif problem == :failing %>
+      <span><%= t('permission_forge.audit_log.off.failing') %></span>
+    <% else %>
+      <span><%= t('permission_forge.audit_log.off.missing_table') %></span>
+    <% end %>
+  </div>
+  <%= link_to t('permission_forge.ui.open_setting'), pf_setting_path('audit_events'), class: 'pf-btn pf-btn--xs' %>
+</div>

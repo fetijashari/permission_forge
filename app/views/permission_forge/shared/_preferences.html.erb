@@ -1,0 +1,24 @@
+<% locales = pf_available_locales %>
+<% if locales.size > 1 %>
+  <div class="pf-stack pf-stack--tight">
+    <span class="pf-sidebar__label" aria-hidden="true"><%= t('.language') %></span>
+    <div class="pf-segmented" role="group" aria-label="<%= t('.language') %>">
+      <% locales.each do |locale| %>
+        <%= link_to locale.to_s.upcase, pf_locale_switch_path(locale), class: 'pf-segmented__item',
+                    lang: locale, title: pf_locale_label(locale), 'aria-current': (I18n.locale.to_s == locale.to_s).to_s %>
+      <% end %>
+    </div>
+  </div>
+<% end %>
+<%= form_with url: permission_forge.preferences_path, method: :patch, class: 'pf-stack pf-stack--tight' do %>
+  <span class="pf-sidebar__label" aria-hidden="true"><%= t('.theme') %></span>
+  <input type="hidden" name="return_to" value="<%= request.fullpath %>">
+  <div class="pf-segmented" role="group" aria-label="<%= t('.theme') %>">
+    <% %w[auto light dark].each do |theme| %>
+      <button type="submit" name="theme" value="<%= theme %>" class="pf-segmented__item" aria-current="<%= (pf_theme == theme).to_s %>"><%= t(".themes.#{theme}") %></button>
+    <% end %>
+  </div>
+<% end %>
+<% if pf_current_admin %>
+  <span class="pf-sidebar__label"><%= t('.signed_in_as', name: pf_person_name(pf_current_admin)) %></span>
+<% end %>

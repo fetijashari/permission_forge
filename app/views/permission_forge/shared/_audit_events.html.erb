@@ -1,0 +1,36 @@
+<%# A list of audit events, newest first: when, what (a sentence), who, how.
+    Locals: events, lookups; optional empty (text when there are none). %>
+<% if events.empty? %>
+  <p class="pf-empty"><%= local_assigns[:empty] || t('permission_forge.audit_log.empty') %></p>
+<% else %>
+  <ol class="pf-audit-list" aria-label="<%= t('permission_forge.audit_log.list_label') %>">
+    <% events.each do |event| %>
+      <li class="pf-audit-event">
+        <time class="pf-audit-event__when" datetime="<%= event.occurred_at.utc.iso8601 %>">
+          <span class="pf-fw-600"><%= pf_date(event.occurred_at) %></span>
+          <span class="pf-text-3"><%= event.occurred_at.in_time_zone.strftime('%H:%M:%S') %></span>
+        </time>
+        <div class="pf-audit-event__main">
+          <%= link_to pf_audit_sentence(event, lookups), pf_audit_event_path(event), class: 'pf-audit-event__sentence' %>
+          <div class="pf-audit-event__meta">
+            <%= pf_audit_category_badge(event.category) %>
+            <%= link_to event.event, pf_audit_log_path(event: event.event), class: 'pf-mono-key',
+                        title: t('permission_forge.audit_log.filter_event', event: event.event) %>
+            <span aria-hidden="true">·</span>
+            <%= link_to pf_audit_actor_name(event), pf_audit_log_path(actor_type: event.actor_type, actor_id: event.actor_id),
+                        title: t('permission_forge.audit_log.filter_actor') %>
+            <span aria-hidden="true">·</span>
+            <span><%= pf_audit_source_label(event.source) %></span>
+            <% if event.reason.present? %>
+              <span aria-hidden="true">·</span>
+              <span class="pf-audit-event__reason"><%= t('permission_forge.audit_log.reason_inline', reason: event.reason) %></span>
+            <% end %>
+          </div>
+        </div>
+        <%= link_to pf_audit_event_path(event), class: 'pf-btn pf-btn--xs pf-audit-event__open' do %>
+          <%= t('permission_forge.audit_log.details') %> <span aria-hidden="true">→</span>
+        <% end %>
+      </li>
+    <% end %>
+  </ol>
+<% end %>

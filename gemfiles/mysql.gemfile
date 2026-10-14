@@ -1,0 +1,9 @@
+# frozen_string_literal: true
+
+# Adds a MySQL driver so the suite can run against MySQL:
+#   DB=mysql BUNDLE_GEMFILE=gemfiles/mysql.gemfile bundle exec rake test
+# Inherits everything else from the root Gemfile. Kept out of the root Gemfile
+# so the default (SQLite) and Postgres installs do not need a MySQL driver.
+eval_gemfile File.expand_path('../Gemfile', __dir__)
+
+gem 'trilogy', '~> 2.9'

@@ -1,0 +1,19 @@
+<% problem = @attention.audit_findings.first %>
+<section class="pf-card" aria-labelledby="pf-card-audit">
+  <div class="pf-card__header">
+    <div class="pf-stack pf-stack--tight pf-grow">
+      <div class="pf-row">
+        <span class="pf-text-block" aria-hidden="true">⊘</span>
+        <h2 class="pf-h2" id="pf-card-audit"><%= t('.title') %></h2>
+      </div>
+      <p class="pf-card__desc"><%= t(".#{problem}") %></p>
+    </div>
+    <%= link_to t('permission_forge.ui.open_setting'), pf_setting_path('audit_events'), class: 'pf-btn pf-btn--sm' %>
+  </div>
+  <% if %i[missing_table failing].include?(problem) %>
+    <div class="pf-card__body">
+      <pre class="pf-code">bin/rails generate permission_forge:upgrade
+bin/rails db:migrate</pre>
+    </div>
+  <% end %>
+</section>

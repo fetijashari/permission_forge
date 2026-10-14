@@ -1,0 +1,31 @@
+<% back = permission_forge.permission_set_resource_path(@permission_set, @resource.name, tab: 'actions') %>
+<% rows = @action_rows %>
+<%# Only a discovered action without a row here has something to show before it is added. %>
+<% row = @row unless @row&.configured? %>
+<% content_for :pf_title, t('.title', resource: pf_resource_label(@resource)) %>
+<%= form_with url: permission_forge.permission_set_resource_actions_path(@permission_set, @resource.name), method: :post do %>
+  <% footer = capture do %>
+    <%= link_to t('permission_forge.ui.cancel'), back, class: 'pf-btn', data: { pf_close: true } %>
+    <button type="submit" class="pf-btn pf-btn--primary"><%= t('.add') %></button>
+  <% end %>
+  <%= pf_sheet_frame({ title: t('.title', resource: pf_resource_label(@resource)), subtitle: @permission_set.name, close_path: back, footer: footer }) do %>
+    <p class="pf-fs-13 pf-text-2"><%= t('.intro') %></p>
+    <% if rows.discovery? %>
+      <%= render 'managed_note' %>
+      <% if row %>
+        <%# A discovered controller action: where it runs and who can run it today. %>
+        <section class="pf-stack" aria-labelledby="pf-na-where">
+          <%= pf_section_heading(t('.where', action: row.label), id: 'pf-na-where') %>
+          <%= render 'endpoints', endpoints: row.endpoints %>
+          <%= render 'effect', row: row, muting: @permission_set.is_muting %>
+        </section>
+        <section class="pf-stack" aria-labelledby="pf-na-across">
+          <%= pf_section_heading(t('permission_forge.resource_fields.show.across'), id: 'pf-na-across') %>
+          <%= render 'across_sets', rows: rows.across_sets(row.name) %>
+        </section>
+      <% end %>
+    <% end %>
+    <%= render 'form', action: @action_record, suggestions: rows.suggestions %>
+    <%= render 'permission_forge/shared/reason_field', id: 'pf-action-reason', value: params[:reason] %>
+  <% end %>
+<% end %>

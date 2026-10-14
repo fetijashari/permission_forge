@@ -1,0 +1,17 @@
+<% set = @permission_set %>
+<% label = pf_resource_label(@resource) %>
+<% content_for :pf_title, t('.title', resource: label, set: set.name) %>
+<%= pf_dialog_frame({ title: t('.title', resource: label, set: set.name), danger: true,
+                     breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
+                                               [set.name, permission_forge.permission_set_path(set)], label) }) do %>
+  <p class="pf-text-2">
+    <%= set.is_muting ? t('.body_muting', people: pf_people_text(@people_count)) : t('.body', people: pf_people_text(@people_count), resources: pf_resource_plural(@resource.name)) %>
+  </p>
+  <%= form_with url: permission_forge.permission_set_resource_path(set, @resource.name), method: :delete, class: 'pf-confirm-form' do %>
+    <%= render 'permission_forge/shared/reason_field' %>
+    <div class="pf-actions pf-row--right">
+      <%= link_to t('permission_forge.ui.cancel'), permission_forge.permission_set_resource_path(set, @resource.name), class: 'pf-btn', data: { pf_close: true } %>
+      <button type="submit" class="pf-btn pf-btn--danger-solid"><%= t('.confirm') %></button>
+    </div>
+  <% end %>
+<% end %>

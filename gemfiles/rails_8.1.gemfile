@@ -1,0 +1,8 @@
+# frozen_string_literal: true
+
+# Pins Rails to the 8.1.x line so CI's matrix.rails cells actually test that
+# version. Selected in CI via BUNDLE_GEMFILE. Inherits everything else (dev/test
+# gems + the gemspec runtime deps) from the root Gemfile.
+eval_gemfile File.expand_path('../Gemfile', __dir__)
+
+gem 'rails', '~> 8.1.0'

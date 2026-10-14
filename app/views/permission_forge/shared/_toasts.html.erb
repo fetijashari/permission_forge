@@ -1,0 +1,27 @@
+<% undo = flash[:pf_undo] %>
+<% if flash[:notice].present? || flash[:alert].present? %>
+  <div class="pf-toasts">
+    <% if flash[:alert].present? %>
+      <div class="pf-toast pf-toast--alert" role="alert">
+        <span class="pf-toast__text"><%= flash[:alert] %></span>
+        <button type="button" class="pf-close" data-pf-dismiss aria-label="<%= t('.dismiss') %>" hidden data-pf-js-show>×</button>
+      </div>
+    <% end %>
+    <% if flash[:notice].present? %>
+      <div class="pf-toast" role="status">
+        <span class="pf-toast__text">✓ <%= flash[:notice] %></span>
+        <% if undo.is_a?(Hash) && undo['path'].present? %>
+          <%= form_with url: undo['path'], method: (undo['method'] || 'post'), class: 'pf-inline-form' do %>
+            <% (undo['params'] || {}).each do |name, value| %>
+              <% Array(value).each do |v| %>
+                <input type="hidden" name="<%= value.is_a?(Array) ? "#{name}[]" : name %>" value="<%= v %>">
+              <% end %>
+            <% end %>
+            <button type="submit" class="pf-btn"><%= t('.undo') %></button>
+          <% end %>
+        <% end %>
+        <button type="button" class="pf-close" data-pf-dismiss aria-label="<%= t('.dismiss') %>" hidden data-pf-js-show>×</button>
+      </div>
+    <% end %>
+  </div>
+<% end %>

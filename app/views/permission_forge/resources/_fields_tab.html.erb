@@ -1,0 +1,89 @@
+<% rows = @rows.filtered(filter: @filter, query: @query) %>
+<% counts = @rows.counts %>
+<% label = pf_resource_label(resource) %>
+<% read_off = !muting && !resource.read_access %>
+<% edit_disabled = !muting && !resource.edit_access %>
+<% strategy = PermissionForge.configuration.unconfigured_field_strategy %>
+<div class="pf-stack pf-stack--loose" data-pf-bulk>
+  <div class="pf-row pf-row--between">
+    <%= form_with url: permission_forge.permission_set_resource_path(set, resource.name), method: :get, class: 'pf-row', role: 'search' do %>
+      <input type="hidden" name="filter" value="<%= @filter %>">
+      <label class="pf-sr-only" for="pf-field-q"><%= t('.search') %></label>
+      <input id="pf-field-q" class="pf-input pf-input--sm pf-input--auto" type="search" name="q" value="<%= @query %>"
+             placeholder="<%= t('.search') %>" data-pf-row-filter="pf-field-rows" data-pf-untracked>
+    <% end %>
+    <div class="pf-filters" role="group" aria-label="<%= t('.filter_label') %>">
+      <% @rows.filters.each do |f| %>
+        <%= pf_filter_chip t(".filters.#{f}"), permission_forge.permission_set_resource_path(set, resource.name, filter: f, q: @query.presence),
+                           selected: @filter == f, count: counts[f] %>
+      <% end %>
+    </div>
+  </div>
+
+  <% if read_off %>
+    <p class="pf-banner pf-banner--warn"><%= t('.read_off', resource: label) %></p>
+  <% end %>
+
+  <% unless locked || read_off %>
+    <div class="pf-bulk-bar" data-pf-bulk-bar>
+      <input type="hidden" name="pf[bulk][resource_id]" value="<%= resource.id %>" form="pf-res-form">
+      <span class="pf-fw-600" data-pf-selected-count data-pf-one="<%= t('.selected.one', count: '%{count}') %>"
+            data-pf-other="<%= t('.selected.other', count: '%{count}') %>"><%= t('.select_hint') %></span>
+      <span><%= t('.set_to') %></span>
+      <% PermissionForge::Admin::FieldLevel.levels_for(muting: muting).each do |level| %>
+        <button type="submit" form="pf-res-form" name="pf[bulk][level]" value="<%= level %>" class="pf-btn pf-btn--xs"
+                <%= 'disabled' if level == 'edit' && edit_disabled %>><%= pf_level_label(level) %></button>
+      <% end %>
+    </div>
+  <% end %>
+
+  <div class="pf-card" id="pf-field-rows" data-pf-fields-of="r<%= resource.id %>">
+    <div class="pf-fields__row pf-fields__row--head">
+      <% unless locked || read_off %>
+        <input type="checkbox" data-pf-select-all aria-label="<%= t('.select_all') %>" hidden data-pf-js-show>
+      <% end %>
+      <span class="pf-grow"><%= t('.field') %></span>
+      <span><%= t('.level') %></span>
+    </div>
+    <% rows.each do |row| %>
+      <% field = row.field %>
+      <% row_locked = locked || row.locked? || read_off %>
+      <% name = field ? "pf[fields][#{field.id}][level]" : "pf[new_fields][#{resource.id}][#{row.name}][level]" %>
+      <% detail = permission_forge.permission_set_resource_field_path(set, resource.name, row.name) %>
+      <div class="pf-fields__row" data-pf-row-text="<%= "#{row.name} #{row.label}".downcase %>">
+        <% unless locked || read_off %>
+          <input type="checkbox" name="pf[bulk][keys][]" value="<%= row.name %>" form="pf-res-form" data-pf-select data-pf-untracked
+                 aria-label="<%= t('.select_field', field: row.label) %>" <%= 'disabled' if row.locked? %>>
+        <% end %>
+        <%= pf_modal_link detail, kind: 'drawer', class: 'pf-fields__name', 'aria-label': t('.details_aria', field: row.label) do %>
+          <span class="pf-row pf-row--tight">
+            <span class="pf-fields__label"><%= row.label %></span>
+            <code class="pf-mono-key"><%= row.name %></code>
+            <%= pf_badge(t('permission_forge.ui.badges.sensitive'), variant: :sensitive) if row.sensitive? %>
+            <%= pf_badge(t('permission_forge.ui.badges.virtual')) if row.virtual %>
+            <%= pf_badge(t('permission_forge.ui.badges.column_missing'), variant: :column_missing) if row.missing %>
+            <%= pf_lock_badge if row.locked? %>
+            <%= pf_off_badge if field && !field.is_active %>
+          </span>
+        <% end %>
+        <%# No setting in force (none, or one that is turned off): say what applies right now. %>
+        <% unless row.in_force? %>
+          <% implicit = row.implicit_grant %>
+          <% behaviour = implicit ? t('.implicit_grant') : t("permission_forge.ui.unconfigured.#{strategy}", default: t('permission_forge.ui.unconfigured.block')) %>
+          <%= pf_badge(row.configured? ? t('.turned_off', behaviour: behaviour) : t('.not_configured', behaviour: behaviour),
+                       variant: :unconfigured, href: pf_setting_path(implicit ? 'extra_fields_default_access' : 'unconfigured_field_strategy')) %>
+        <% end %>
+        <%= render 'permission_forge/shared/level_control', name: name, checked: row.level, muting: muting,
+                   aria: t('.level_aria', field: row.label), locked: row_locked, edit_disabled: edit_disabled,
+                   form: 'pf-res-form', id_prefix: "pf-lv-#{resource.id}-#{row.name}", resource_label: label %>
+        <span class="pf-mask-preview">
+          <% if field && %w[masked mask].include?(row.level) %>
+            <%= pf_mask_strategy_label(field.mask_strategy) %> · <%= pf_mask_preview(row.name, field.mask_strategy) %>
+          <% end %>
+        </span>
+        <%= pf_modal_link t('.details'), detail, kind: 'drawer', class: 'pf-btn pf-btn--ghost pf-btn--xs', 'aria-label': t('.details_aria', field: row.label) %>
+      </div>
+    <% end %>
+    <% if rows.empty? %><p class="pf-empty"><%= t('.no_match') %></p><% end %>
+  </div>
+</div>

@@ -1,0 +1,36 @@
+<div class="pf-page-header">
+  <div class="pf-page-header__text">
+    <h1 class="pf-sr-only"><%= set.name %></h1>
+    <label class="pf-sr-only" for="pf-set-name"><%= t('.name') %></label>
+    <input id="pf-set-name" class="pf-title-input" type="text" name="pf[set][name]" value="<%= set.name %>" form="pf-set-form"
+           maxlength="255" required <%= 'readonly' if locked %>>
+    <label class="pf-sr-only" for="pf-set-desc"><%= t('.description') %></label>
+    <input id="pf-set-desc" class="pf-desc-input" type="text" name="pf[set][description]" value="<%= set.description %>" form="pf-set-form"
+           placeholder="<%= t('.description_placeholder') %>" <%= 'readonly' if locked %>>
+    <div class="pf-row pf-mt-4">
+      <label class="pf-fs-13 pf-text-2" for="pf-set-group"><%= t('.group') %></label>
+      <select id="pf-set-group" name="pf[set][permission_set_group_id]" class="pf-select pf-select--sm pf-select--auto" form="pf-set-form" <%= 'disabled' if locked %>>
+        <option value=""><%= t('permission_forge.ui.no_group') %></option>
+        <% @groups.each do |g| %>
+          <option value="<%= g.id %>" <%= 'selected' if set.permission_set_group_id == g.id %>><%= g.name %></option>
+        <% end %>
+      </select>
+    </div>
+  </div>
+  <div class="pf-actions">
+    <label class="pf-switch">
+      <input type="hidden" name="pf[set][is_active]" value="0" form="pf-set-form">
+      <input type="checkbox" role="switch" name="pf[set][is_active]" value="1" form="pf-set-form" <%= 'checked' if set.is_active %> <%= 'disabled' if locked %>>
+      <span class="pf-switch__track" aria-hidden="true"></span>
+      <span class="pf-switch__on"><%= t('permission_forge.shared.active') %></span>
+      <span class="pf-switch__off"><%= t('permission_forge.ui.badges.off') %></span>
+    </label>
+    <%= form_with url: permission_forge.duplicate_permission_set_path(set), method: :post, class: 'pf-reason-form' do %>
+      <button type="submit" class="pf-btn pf-btn--sm"><%= t('permission_forge.ui.duplicate') %></button>
+      <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-duplicate-reason' %>
+    <% end %>
+    <% unless locked %>
+      <%= pf_modal_link t('permission_forge.ui.delete'), permission_forge.delete_permission_set_path(set), class: 'pf-btn pf-btn--sm pf-btn--danger' %>
+    <% end %>
+  </div>
+</div>

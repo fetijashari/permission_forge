@@ -1,0 +1,201 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ['3.2', '3.3', '3.4']
+        rails: ['7.1', '7.2', '8.0', '8.1']
+
+    env:
+      RAILS_ENV: test
+      # Each matrix cell resolves against the matching per-Rails gemfile so the
+      # rails version is actually exercised (previously every cell used the same
+      # latest Rails, making the matrix decorative).
+      BUNDLE_GEMFILE: ${{ github.workspace }}/gemfiles/rails_${{ matrix.rails }}.gemfile
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby ${{ matrix.ruby }} / Rails ${{ matrix.rails }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+
+      - name: Run tests
+        run: bundle exec rake test
+
+  # Rails main, allowed to fail: an early warning, not a gate. The
+  # Rails-internals canary runs first, so a change in a private Rails API the
+  # gem relies on shows up as one named test with what to change. No lockfile
+  # is committed: every run resolves against the current main. Never list
+  # this job as a required status check (branch protection / rulesets): it
+  # runs unreleased Rails and is meant to go red before a release does.
+  rails-main:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+
+    env:
+      RAILS_ENV: test
+      BUNDLE_GEMFILE: ${{ github.workspace }}/gemfiles/rails_main.gemfile
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby / Rails main
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+
+      # The coverage minimum applies to the whole suite, not to one file.
+      - name: Rails internals canary
+        run: >-
+          bundle exec ruby -Itest -e 'require "test_helper"; SimpleCov.minimum_coverage(0);
+          require "./test/permission_forge/rails_internals_canary_test.rb"'
+
+      - name: Run tests
+        if: ${{ !cancelled() }}
+        run: bundle exec rake test
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+
+      - name: RuboCop
+        run: bundle exec rubocop --parallel
+
+      - name: Reek
+        run: bundle exec reek app lib
+
+      - name: YARD (public API documented, @api markers)
+        run: bundle exec rake yard:check
+
+      - name: i18n-tasks
+        run: bundle exec i18n-tasks health
+
+      - name: Build the gem
+        run: |
+          umask 022
+          gem build permission_forge.gemspec
+          tar -xOf permission_forge-*.gem data.tar.gz | tar -tzf - | grep -q '^lib/permission_forge.rb$'
+
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+
+      - name: Brakeman (static analysis)
+        run: bundle exec brakeman --no-pager --quiet --force
+
+      - name: bundler-audit (dependency CVEs)
+        run: |
+          bundle exec bundle-audit update
+          bundle exec bundle-audit check
+
+  # Postgres RLS enforcement suite (Level 3) — verifies that generated
+  # policies filter rows below the application layer (unscoped / raw SQL).
+  rls:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: permission_forge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      RAILS_ENV: test
+      DB: postgres
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+
+      - name: Run RLS enforcement tests
+        run: bundle exec rake test:rls
+
+  # The full suite on MySQL (trilogy driver from gemfiles/mysql.gemfile).
+  mysql:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: permission_forge_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      RAILS_ENV: test
+      DB: mysql
+      BUNDLE_GEMFILE: ${{ github.workspace }}/gemfiles/mysql.gemfile
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+
+      - name: Run tests on MySQL
+        run: bundle exec rake test

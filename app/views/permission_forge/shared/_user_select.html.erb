@@ -1,0 +1,16 @@
+<%
+  input_name = local_assigns.fetch(:name, 'user_id')
+  required   = local_assigns.fetch(:required, true)
+  users      = users.load if users.respond_to?(:load)
+  list_limit = PermissionForge.configuration.user_list_limit
+  truncated  = list_limit&.positive? && users.respond_to?(:size) && users.size >= list_limit
+%>
+<select name="<%= input_name %>" class="pf-select pf-select--sm pf-select--auto pf-user-select" aria-label="<%= t('permission_forge.shared.user_select_prompt') %>" <%= 'required' if required %>>
+  <option value=""><%= t('permission_forge.shared.user_select_prompt') %></option>
+  <% users.each do |u| %>
+    <option value="<%= u.id %>"><%= pf_user_option_label(u) %></option>
+  <% end %>
+</select>
+<% if truncated %>
+  <span class="pf-hint pf-user-select-hint"><%= t('permission_forge.shared.user_select_truncated', count: list_limit) %></span>
+<% end %>

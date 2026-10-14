@@ -1,0 +1,83 @@
+<% content_for :pf_title, t('permission_forge.nav.permission_sets') %>
+<div class="pf-page-header">
+  <div class="pf-page-header__text">
+    <h1 class="pf-h1"><%= t('permission_forge.nav.permission_sets') %></h1>
+    <p class="pf-subtitle"><%= t('.subtitle') %></p>
+  </div>
+  <div class="pf-actions">
+    <%= pf_modal_link t('permission_forge.ui.field_lookup'), permission_forge.field_lookup_path, kind: 'drawer', class: 'pf-btn' %>
+    <%= pf_modal_link "+ #{t('.new')}", permission_forge.new_permission_set_path, class: 'pf-btn pf-btn--primary' %>
+  </div>
+</div>
+
+<%= pf_help_banner('permission_sets', term: t('.help_term'), text: t('.help_text')) %>
+
+<% if @total.zero? %>
+  <section class="pf-card">
+    <div class="pf-empty">
+      <h2 class="pf-h2"><%= t('.empty_title') %></h2>
+      <p><%= t('.empty_body') %></p>
+      <%= pf_modal_link t('permission_forge.home.index.first_run.cta'), permission_forge.new_permission_set_path, class: 'pf-btn pf-btn--primary' %>
+    </div>
+  </section>
+<% else %>
+  <div class="pf-stack">
+    <%= form_with url: permission_forge.permission_sets_path, method: :get, role: 'search' do %>
+      <input type="hidden" name="filter" value="<%= @filter %>">
+      <label class="pf-sr-only" for="pf-sets-q"><%= t('.search') %></label>
+      <input id="pf-sets-q" class="pf-input" type="search" name="q" value="<%= @query %>" placeholder="<%= t('.search') %>"
+             autocomplete="off" data-pf-live="pf-sets-results">
+    <% end %>
+  </div>
+  <div id="pf-sets-results" class="pf-stack pf-stack--loose">
+    <div class="pf-filters" role="group" aria-label="<%= t('.filter_label') %>">
+      <% PermissionForge::PermissionSetsController::FILTERS.each do |filter| %>
+        <%= pf_filter_chip t(".filters.#{filter}"), permission_forge.permission_sets_path(q: @query.presence, filter: filter),
+                           selected: @filter == filter, count: @counts[filter] %>
+      <% end %>
+    </div>
+    <div class="pf-card pf-scroll-x">
+      <div class="pf-table pf-table--sets" role="table" aria-label="<%= t('permission_forge.nav.permission_sets') %>">
+        <div class="pf-table__head" role="row">
+          <span role="columnheader"><%= t('.columns.set') %></span>
+          <span role="columnheader"><%= t('.columns.people') %></span>
+          <span role="columnheader"><%= t('.columns.status') %></span>
+          <span role="columnheader"><%= t('.columns.group') %></span>
+          <span role="columnheader"><span class="pf-sr-only"><%= t('.columns.actions') %></span></span>
+        </div>
+        <% @permission_sets.each do |set| %>
+          <div class="pf-table__row" role="row">
+            <span role="cell" class="pf-stack pf-stack--tight">
+              <span class="pf-row pf-row--tight">
+                <%= link_to set.name, permission_forge.permission_set_path(set), class: 'pf-fw-600' %>
+                <%= pf_set_badges(set) %>
+              </span>
+              <% if set.description.present? %><span class="pf-fs-13 pf-text-2"><%= set.description %></span><% end %>
+              <% if set.resources.any? %>
+                <span class="pf-mono-key pf-fs-11"><%= set.resources.map(&:name).join(' · ') %></span>
+              <% end %>
+            </span>
+            <span role="cell" class="pf-tabular"><%= @people_counts.fetch(set.id, 0) %></span>
+            <span role="cell" class="pf-fs-13">
+              <% if set.is_active %>
+                <span class="pf-text-grant">● <%= t('permission_forge.shared.active') %></span>
+              <% else %>
+                <span class="pf-text-3">○ <%= t('permission_forge.ui.badges.off') %></span>
+              <% end %>
+            </span>
+            <span role="cell" class="pf-fs-13 pf-text-2 pf-ellipsis"><%= set.permission_set_group&.name || '—' %></span>
+            <span role="cell">
+              <%= form_with url: permission_forge.duplicate_permission_set_path(set), method: :post, class: 'pf-reason-form' do %>
+                <button type="submit" class="pf-btn pf-btn--xs pf-btn--fixed" aria-label="<%= t('.duplicate_aria', name: set.name) %>"><%= t('permission_forge.ui.duplicate') %></button>
+                <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-duplicate-reason-#{set.id}" %>
+              <% end %>
+            </span>
+          </div>
+        <% end %>
+      </div>
+      <% if @permission_sets.empty? %>
+        <p class="pf-empty"><%= t('.no_match') %></p>
+      <% end %>
+    </div>
+  </div>
+<% end %>
