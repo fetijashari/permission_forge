@@ -91,7 +91,7 @@ module PermissionForge
       isolated_execution_state_context: 'ActiveSupport::IsolatedExecutionState.context',
       executor_register_hook: 'app.executor.register_hook(RunHook)',
       write_multi_entries: 'instance_method(:write_multi_entries).owner',
-      redis_write_multi_answer: Regexp.union('instance_variable_get(:@error_handler)', 'HandledErrors.during('),
+      redis_write_multi_answer: Regexp.union('instance_variable_get(:@error_handler)', 'HandledErrors.written('),
       counter_updates: 'def update_counters(*, **)',
       local_cache: 'store.with_local_cache',
       key_matcher_anchor: Regexp.union("regexp = /^\#{lead}", "/^\#{Regexp.escape(prefix)}:/"),

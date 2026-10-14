@@ -206,29 +206,18 @@ module PermissionForge
         self.class.multi_write?(cache_store)
       end
 
-      # The store's one answer for all the entries (#written?); false, after
-      # the error is yielded, when the call raised.
-      def write_multi(entries, ttl, &)
+      # Whether the store took all the entries (HandledErrors.written); the
+      # error it handed its error handler, or raised, is yielded.
+      def write_multi(entries, ttl)
         options = ttl ? { expires_in: ttl } : {}
         store = cache_store
-        answer, handled = HandledErrors.during(store) do
+        written, error = HandledErrors.written(store) do
           store.write_multi(entries.transform_keys { |key| prefixed_key(key) }, options)
         end
-        written?(answer, handled, &)
+        yield error if error && block_given?
+        written
       rescue StandardError => e
         yield e if block_given?
-        false
-      end
-
-      # A batch is written when the store answered truthy and handed no error
-      # to its error handler meanwhile (HandledErrors): the answer of Rails
-      # 8.2's Redis store is the same either way. The last error handed on
-      # is yielded.
-      def written?(answer, handled)
-        return true if answer && handled.empty?
-
-        error = handled.compact.last
-        yield error if error && block_given?
         false
       end
 

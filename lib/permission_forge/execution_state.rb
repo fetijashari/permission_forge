@@ -113,7 +113,7 @@ module PermissionForge
               'Execution: a failure in a fiber of the block counts; never reset, so a none? around a run sees one in it'),
       Key.new(:pf_store_errors, :execution, :keep,
               'Array of the errors a cache store handed its error handler during the store call in progress ' \
-              '(Cache::HandledErrors.during). Execution: another fiber\'s error seen here counts against the call ' \
+              '(Cache::HandledErrors.during, .written). Execution: another fiber\'s error seen here counts against the call ' \
               '(it is tried again). Kept at the end of a run: the block puts back what it found, and emptying the ' \
               'slot inside the call would lose the error (a failed write taken for done)'),
       Key.new(:pf_audit_context, :execution, :clean,

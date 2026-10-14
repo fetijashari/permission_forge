@@ -40,6 +40,17 @@ module PermissionForge
           [ExecutionState.with(KEY, handled, &), handled]
         end
 
+        # Runs the block (a write to `store`) and says whether it was written:
+        # the store answered truthy and handed its error handler no error
+        # meanwhile (Rails 8.2's Redis store answers the same either way).
+        # Also returns the last error handed on, if any.
+        #
+        # @return [Array(Boolean, Exception, nil)]
+        def written(store, &)
+          answer, handled = during(store, &)
+          [answer ? handled.empty? : false, handled.compact.last]
+        end
+
         private
 
         # Puts a Handler in front of the store's own error handler, once.
