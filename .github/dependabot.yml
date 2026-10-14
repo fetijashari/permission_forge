@@ -14,12 +14,20 @@ updates:
     schedule:
       interval: weekly
 
-  # Actions used by .github/workflows/ci.yml (checkout, setup-ruby). Grouped so
-  # a week's worth of action bumps arrives as a single PR.
+  # Every `uses:` in .github/workflows/*.yml (directory `/` covers that folder).
+  # Each action is pinned to a full commit SHA with its release in a comment
+  # (`@<sha> # vX.Y.Z`); Dependabot bumps the SHA and the comment together.
+  # Not covered: `gem exec sigstore-cli:<version>` in release.yml and the
+  # `services:` images in ci.yml (update those by hand). Grouped so
+  # a week's worth of action bumps arrives as a single PR; the cooldown keeps
+  # a release out of a version-update PR until it is 14 days old (security
+  # updates are not delayed).
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 14
     groups:
       actions:
         patterns:
