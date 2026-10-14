@@ -10,7 +10,7 @@ group :development, :test do
   gem 'oj', '~> 3.16', require: false # Optional: faster JSON for cache backends
   gem 'pg', '~> 1.5' # Postgres RLS enforcement tests (DB=postgres rake test:rls)
   gem 'puma', '>= 8.0.2'
-  gem 'redis', '~> 5.4', require: false # the live-Redis cache tests (redis://127.0.0.1:6379/15; they skip without a server)
+  gem 'redis', '~> 6.0', require: false # the live-Redis cache tests (redis://127.0.0.1:6379/15; they skip without a server)
   gem 'reek', '~> 6.3', require: false
   gem 'rubocop', '~> 1.68', require: false
   gem 'simplecov', '~> 1.2', require: false
