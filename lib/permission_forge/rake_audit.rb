@@ -52,9 +52,8 @@ module PermissionForge
       def run(task, env, &)
         actor = label(task, env)
         log(task, "run by #{actor}")
-        PermissionForge::Audit::Context.with(
-          actor: PermissionForge::Audit::Actor.system(actor), source: 'rake', reason: env['REASON'].presence, &
-        )
+        context = { actor: PermissionForge::Audit::Actor.system(actor), source: 'rake', reason: env['REASON'].presence }
+        PermissionForge::Audit::Context.with(**context, &)
       end
 
       def missing_actor_warning(task)
