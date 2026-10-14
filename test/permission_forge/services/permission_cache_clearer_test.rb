@@ -14,8 +14,7 @@ module PermissionForge
     class PermissionCacheClearerTest < ActiveSupport::TestCase
       # Its Redis tests write to and flush a database every worker shares.
       include ParallelWorkers::SharedResource
-
-      REDIS_URL = 'redis://127.0.0.1:6379/15'
+      include LocalRedis
 
       # A Rails store that cannot remove keys by pattern (Memcached, Solid Cache).
       class NoPatternStore < ActiveSupport::Cache::MemoryStore
@@ -345,11 +344,8 @@ module PermissionForge
       end
 
       def redis_cache
-        require 'redis'
-        Redis.new(url: REDIS_URL).ping
-        Cache::RailsCache.new(prefix: 'pfclear', store: ActiveSupport::Cache::RedisCacheStore.new(url: REDIS_URL, pool: false))
-      rescue LoadError, StandardError => e
-        skip "no Redis at #{REDIS_URL}: #{e.class}"
+        require_local_redis!
+        Cache::RailsCache.new(prefix: 'pfclear', store: ActiveSupport::Cache::RedisCacheStore.new(url: LocalRedis::URL, pool: false))
       end
 
       def in_tenant(tenant)

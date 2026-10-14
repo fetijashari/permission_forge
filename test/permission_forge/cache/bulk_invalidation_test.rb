@@ -15,8 +15,7 @@ module PermissionForge
     class BulkInvalidationTest < ActiveSupport::TestCase
       # Its Redis tests write to and flush a database every worker shares.
       include ParallelWorkers::SharedResource
-
-      REDIS_URL = 'redis://127.0.0.1:6379/15'
+      include LocalRedis
 
       # A subclass of the user model (STI in a host); overrides nothing
       # unless a test gives it a method.
@@ -382,18 +381,11 @@ module PermissionForge
 
       private
 
-      def redis_store(url: REDIS_URL)
-        require 'redis'
-        if url == REDIS_URL
-          begin
-            Redis.new(url: url).ping
-          rescue StandardError => e
-            skip "no Redis at #{url}: #{e.class}"
-          end
-        end
+      # The local Redis (a skip without one), or a store on `url`, which
+      # nothing needs to listen on.
+      def redis_store(url: LocalRedis::URL)
+        require_local_redis! if url == LocalRedis::URL
         ActiveSupport::Cache::RedisCacheStore.new(url: url, pool: false, connect_timeout: 0.2, reconnect_attempts: 0)
-      rescue LoadError
-        skip 'the redis gem is not in this bundle'
       end
 
       def store_calls
