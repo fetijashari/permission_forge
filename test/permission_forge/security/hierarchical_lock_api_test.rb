@@ -37,7 +37,7 @@ module PermissionForge
 
       def assert_locked_out(&)
         assert_no_changes -> { snapshot } do
-          assert_difference -> { PermissionForge::AuditEvent.where(event: 'admin.lock_refused').count }, 1, &
+          assert_difference(-> { PermissionForge::AuditEvent.where(event: 'admin.lock_refused').count }, 1, &)
         end
         assert_response :forbidden
       end
