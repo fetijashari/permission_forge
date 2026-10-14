@@ -61,7 +61,7 @@ module PermissionForge
         engine = Class.new(host) do
           include PermissionForge::ForgeryProtection
 
-          pf_protect_from_forgery with: :exception
+          protect_from_forgery with: :exception, **pf_forgery_strategy
         end
 
         assert_equal :header_only, host.forgery_protection_verification_strategy

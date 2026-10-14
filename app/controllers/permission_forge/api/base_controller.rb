@@ -25,7 +25,7 @@ module PermissionForge
       # Verified like the admin screens (ForgeryProtection).
       include PermissionForge::ForgeryProtection
 
-      pf_protect_from_forgery with: :null_session, prepend: true if respond_to?(:protect_from_forgery)
+      protect_from_forgery with: :null_session, prepend: true, **pf_forgery_strategy if respond_to?(:protect_from_forgery)
 
       AUDIT_SOURCE = 'api'
       # Largest id a bigint column holds; past it PostgreSQL raises instead of matching nothing.

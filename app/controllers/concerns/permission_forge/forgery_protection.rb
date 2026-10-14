@@ -18,11 +18,12 @@ module PermissionForge
     STRATEGY = :header_or_legacy_token
 
     class_methods do
-      # protect_from_forgery with the engine's verification strategy where
-      # Rails offers one.
-      def pf_protect_from_forgery(**options)
-        options[:using] = STRATEGY if respond_to?(:forgery_protection_verification_strategy)
-        protect_from_forgery(options)
+      # The engine's verification strategy as protect_from_forgery options,
+      # empty where Rails offers no choice. Each controller calls
+      # protect_from_forgery itself with its own `with:`, so the call stays
+      # visible (and Brakeman sees it).
+      def pf_forgery_strategy
+        respond_to?(:forgery_protection_verification_strategy) ? { using: STRATEGY } : {}
       end
     end
   end

@@ -32,7 +32,7 @@ module PermissionForge
     # file is the same public, static script for every visitor.
     include PermissionForge::ForgeryProtection
 
-    pf_protect_from_forgery with: :exception
+    protect_from_forgery with: :exception, **pf_forgery_strategy
     skip_after_action :verify_same_origin_request
 
     def show
