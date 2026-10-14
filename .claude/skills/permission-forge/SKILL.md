@@ -1,7 +1,7 @@
 ---
 name: permission-forge
 description: Add PermissionForge permissions to a model — scaffolds concerns, resources, fields, rules, and tests
-argument-hint: <ModelName> [options: --with-rules --with-fields --grant-all --test-only]
+argument-hint: "<ModelName> [options: --with-rules --with-fields --grant-all --test-only]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent
 ---
 

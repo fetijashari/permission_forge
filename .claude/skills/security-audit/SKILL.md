@@ -1,7 +1,7 @@
 ---
 name: security-audit
 description: Audit PermissionForge permission configurations for security gaps, personal-data handling, over-privileged access, and the audit event log, with ISO 27001:2022 Annex A cross-references
-argument-hint: [scope] — scopes: full, gdpr, access-review, rules, api, config
+argument-hint: "[scope] — scopes: full, gdpr, access-review, rules, api, config"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent
 ---
 
