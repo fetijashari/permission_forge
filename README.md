@@ -9,6 +9,7 @@
   <a href="https://github.com/fetijashari/permission_forge/actions/workflows/ci.yml"><img src="https://github.com/fetijashari/permission_forge/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://rubygems.org/gems/permission_forge"><img src="https://img.shields.io/gem/v/permission_forge" alt="Gem Version"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/fetijashari/permission_forge"><img src="https://api.scorecard.dev/projects/github.com/fetijashari/permission_forge/badge" alt="OpenSSF Scorecard"></a>
+  <a href="https://www.bestpractices.dev/projects/15499"><img src="https://www.bestpractices.dev/projects/15499/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://rubydoc.info/gems/permission_forge"><img src="https://img.shields.io/badge/docs-rubydoc.info-blue.svg" alt="API documentation"></a>
   <a href="https://www.ruby-lang.org"><img src="https://img.shields.io/badge/ruby-%3E%3D%203.2-ruby.svg" alt="Ruby"></a>
   <a href="https://rubyonrails.org"><img src="https://img.shields.io/badge/rails-7.1%20to%208.1-red.svg" alt="Rails"></a>
