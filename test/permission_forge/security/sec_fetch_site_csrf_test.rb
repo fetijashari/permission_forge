@@ -93,6 +93,15 @@ module PermissionForge
         end
       end
 
+      test 'the static admin assets are not varied by Sec-Fetch-Site, the admin pages are' do
+        get "#{ROOT}/pf-assets/pf_admin.js"
+        assert_response :ok
+        assert_not_includes response.headers['Vary'].to_s, 'Sec-Fetch-Site'
+
+        get "#{ROOT}/permission_sets"
+        assert_includes response.headers['Vary'].to_s, 'Sec-Fetch-Site'
+      end
+
       test 'API: a cross-site POST with the session cookie is refused and creates nothing' do
         sign_in_by_session
 

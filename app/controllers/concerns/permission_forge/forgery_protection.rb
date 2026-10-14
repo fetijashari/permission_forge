@@ -5,9 +5,8 @@ module PermissionForge
   # such header through without any check — a forged request from a browser
   # that does not send it, or to an app served over HTTP. The engine's
   # controllers use `:header_or_legacy_token` whatever the host chose: the
-  # header decides when the browser sends it (same-origin and same-site pass,
-  # cross-site is refused unless its origin is in
-  # `forgery_protection_trusted_origins`), and without it the authenticity
+  # header decides when the browser sends it (same-origin and same-site pass
+  # without a token, cross-site is refused), and without it the authenticity
   # token is required, as on every earlier Rails. Rails before 8.2 has no
   # such choice and always checks the token.
   #

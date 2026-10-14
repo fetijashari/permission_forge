@@ -34,6 +34,9 @@ module PermissionForge
 
     protect_from_forgery with: :exception, **pf_forgery_strategy
     skip_after_action :verify_same_origin_request
+    # Rails 8.2 adds Vary: Sec-Fetch-Site to every protected response; the
+    # same public file for every visitor needs no per-header cache copies.
+    skip_after_action :append_sec_fetch_site_to_vary_header, raise: false
 
     def show
       name = params[:file].to_s

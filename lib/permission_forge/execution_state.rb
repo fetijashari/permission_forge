@@ -45,7 +45,8 @@ module PermissionForge
   #     wraps the whole run (a console or rake block around an inline job)
   #     keeps its value because it is still there.
   #   - :keep — outlives runs: a counter only ever compared before and
-  #     after one call.
+  #     after one call, or a slot whose block puts back what it found and
+  #     which, emptied in the middle of the block, would fail open.
   #
   # A run that completes inside a block that started during the run — a
   # `run!(reset: true)` completing an outer run (ActionDispatch::Executor

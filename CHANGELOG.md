@@ -12,13 +12,15 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   browser's `Sec-Fetch-Site` header, and `config.load_defaults 8.2` selects `:header_only`, under which a plain-HTTP
   request without that header is not checked at all. The engine's controllers now always use
   `:header_or_legacy_token`: the header decides when the browser sends it (a cross-site request is refused), and
-  without it the token is required, as before. Rails 7.1 to 8.1 are unaffected.
+  without it the token is required, as before. One change on Rails 8.2 the engine cannot avoid (Rails accepts it under
+  both strategies): a request the browser marks `Sec-Fetch-Site: same-site`, which includes a page on another subdomain
+  of your site, passes without a token. Rails 7.1 to 8.1 are unaffected.
 
 ### Fixed
 
 - **On Rails 8.2 (main), a Redis that cannot be reached no longer counts as a done invalidation.** Rails 8.2's
   `RedisCacheStore#write_multi` answers the same value whether Redis took the entries or not, so an edit to a Permission
-  Set whose holders are invalidated in bulk (one `write_multi` per 500 holders) was taken as confirmed while Redis was
+  Set whose holders are invalidated in bulk (two `write_multi` calls per 500 holders) was taken as confirmed while Redis was
   down: nothing was retried, owed or reported through `on_cache_failure`, and the holders kept their cached permissions
   until `cache_ttl`. A batch now counts as written only when the store also handed no error to its `error_handler`
   meanwhile; Rails 7.1 to 8.1 already answered `nil` for it. PermissionForge puts a wrapper in front of the
