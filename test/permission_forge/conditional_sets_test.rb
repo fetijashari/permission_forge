@@ -246,7 +246,7 @@ module PermissionForge
       assert_not served.selected_by?(session_flags: [], ip: '203.0.113.1', time: noon)
       assert_not served.selected_by?(session_flags: ['mfa_verified'], ip: '203.0.113.1', time: noon + 1.hour)
       assert_equal 'user_1_c_1', served.store_key('user_1'), 'the slot of the MFA set (bit 0)'
-      assert_equal 'user_1', conditional.serve({ ip: '203.0.113.1' }).store_key('user_1'), 'nothing passes: the base'
+      assert_equal 'user_1', conditional.serve({ ip: '203.0.113.1', time: noon }).store_key('user_1'), 'nothing passes: the base'
     end
 
     test 'the signature shares neither the flags array nor a flag with the context' do
