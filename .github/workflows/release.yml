@@ -67,6 +67,16 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "gem=permission_forge-$version.gem" >> "$GITHUB_OUTPUT"
 
+      # The GitHub Release's notes, taken here, before the approval: once the
+      # gem is pushed, a missing or mistyped heading could not be fixed (the
+      # tag cannot move). The github-release job only adds the checksum line.
+      - name: CHANGELOG.md has a section for this version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-notes"
+          .github/scripts/release_notes.sh "$VERSION" CHANGELOG.md > "$RUNNER_TEMP/release-notes/release-notes.md"
+
       # checkout v7 fetches the tag object itself; fetching it again by name
       # keeps this check independent of how a checkout version stores tags
       # (older ones kept a plain ref to the commit, which looks lightweight).
@@ -115,6 +125,13 @@ jobs:
           path: pkg/${{ steps.version.outputs.gem }}
           if-no-files-found: error
           retention-days: 30 # as long as GitHub allows a re-run
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes/release-notes.md
+          if-no-files-found: error
+          retention-days: 30
 
   publish:
     needs: build
@@ -221,8 +238,8 @@ jobs:
 
   # The GitHub Release for the tag, with the gem pushed to RubyGems.org, its
   # Sigstore bundle (the one RubyGems.org verified) and the provenance
-  # attestation. Release notes: this version's section of the CHANGELOG.md
-  # inside the gem. No approval: it runs only after `publish` succeeded, and
+  # attestation. Release notes: this version's CHANGELOG.md section, taken by
+  # the build job (release_notes.sh). No approval: it runs only after `publish` succeeded, and
   # its token can write releases but cannot create a v* tag (ruleset).
   github-release:
     needs: [build, publish, provenance]
@@ -253,6 +270,10 @@ jobs:
         with:
           name: provenance
 
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-notes
+
       - name: Gem is the one the build job checked
         run: echo "$SHA256  $GEM" | sha256sum --check --strict
 
@@ -267,22 +288,16 @@ jobs:
           gh attestation verify "$GEM" --bundle "$GEM.intoto.jsonl" --repo "$GH_REPO" \
             --signer-workflow "$GH_REPO/.github/workflows/release.yml" --source-ref "refs/tags/$TAG"
 
-      # From `## [X.Y.Z]` up to the next `## [` (or the link definitions at
-      # the end), blank lines around it trimmed.
-      - name: Release notes from the gem's CHANGELOG.md
+      # The CHANGELOG.md section the build job took (release_notes.sh), and
+      # the gem's checksum.
+      - name: Release notes
         run: |
-          tar -xOf "$GEM" data.tar.gz | tar -xzOf - CHANGELOG.md > CHANGELOG.md
-          awk -v head="## [$VERSION]" '
-            index($0, "## [") == 1 { if (found) exit; found = (index($0, head) == 1); next }
-            found && /^\[[^]]+\]: / { exit }
-            found && NF { if (started) for (; blanks > 0; blanks--) print ""; started = 1; blanks = 0; print; next }
-            found { blanks++ }
-          ' CHANGELOG.md > notes.md
-          if ! grep -q '[^[:space:]]' notes.md; then
-            echo "::error::CHANGELOG.md has no section for $VERSION (## [$VERSION])"
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::release-notes.md (from the build job) is empty"
             exit 1
           fi
           {
+            cat release-notes.md
             echo
             echo '---'
             echo
@@ -296,18 +311,20 @@ jobs:
       # prerelease. A re-run finds the release it created and replaces its files.
       - name: Create the GitHub Release
         run: |
+          set -o pipefail
           case "$VERSION" in
             *[!0-9.]*) prerelease=true ;;
             *) prerelease=false ;;
           esac
           latest=false
           if [ "$prerelease" = false ]; then
+            # On its own line, so a failed listing fails the step (a pipeline
+            # would see only this tag and call it the newest).
+            released=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1000 \
+              --json tagName --jq '.[].tagName')
             newest=$(
-              {
-                gh release list --exclude-drafts --exclude-pre-releases --limit 1000 \
-                  --json tagName --jq '.[].tagName'
-                echo "$TAG"
-              } | grep -E '^v[0-9]+(\.[0-9]+)*$' | sed 's/^v//' | sort -V | tail -n 1
+              { printf '%s\n' "$released"; echo "$TAG"; } |
+                grep -E '^v[0-9]+(\.[0-9]+)*$' | sed 's/^v//' | sort -V | tail -n 1
             )
             if [ "$newest" = "$VERSION" ]; then latest=true; fi
           fi
@@ -316,7 +333,7 @@ jobs:
           if gh release view "$TAG" --json tagName > /dev/null 2>&1; then
             echo "::notice::The release $TAG exists (a re-run): replacing its files"
             gh release upload "$TAG" "${assets[@]}" --clobber
-            gh release edit "$TAG" --verify-tag --draft=false --prerelease="$prerelease" --latest="$latest"
+            gh release edit "$TAG" --draft=false --prerelease="$prerelease" --latest="$latest"
           else
             gh release create "$TAG" "${assets[@]}" --verify-tag --title "$TAG" --notes-file notes.md \
               --prerelease="$prerelease" --latest="$latest"

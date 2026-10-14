@@ -21,7 +21,9 @@ updates:
   # `services:` images in ci.yml (update those by hand). Grouped so
   # a week's worth of action bumps arrives as a single PR; the cooldown keeps
   # a release out of a version-update PR until it is 14 days old (security
-  # updates are not delayed).
+  # updates are not delayed). The cooldown is on this entry only: the bundler
+  # entry above is left as it was, because CI resolves gems at run time without
+  # a lockfile, so delaying Dependabot's PRs would not delay what CI installs.
   - package-ecosystem: github-actions
     directory: /
     schedule:

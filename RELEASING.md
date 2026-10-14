@@ -14,8 +14,8 @@ RubyGems API key is stored in GitHub or anywhere else.
 - **A build provenance attestation** (GitHub artifact attestation, SLSA provenance v1, signed through Sigstore) for the
   same file: it names the repository, `release.yml`, the tag and the commit. GitHub keeps it with the repository's
   attestations (`https://github.com/fetijashari/permission_forge/attestations`).
-- **A GitHub Release** for the tag, titled `vX.Y.Z`, whose notes are that version's `CHANGELOG.md` section (as shipped
-  in the gem) followed by the gem's SHA-256. Attached:
+- **A GitHub Release** for the tag, titled `vX.Y.Z`, whose notes are that version's `CHANGELOG.md` section (taken by
+  the `build` job, before the approval) followed by the gem's SHA-256. Attached:
 
   | File | What it is |
   |---|---|
@@ -33,9 +33,10 @@ With the GitHub CLI and the gem from either place (`gem fetch permission_forge -
 `gh release download vX.Y.Z -R fetijashari/permission_forge`):
 
 ```bash
-sha256sum permission_forge-X.Y.Z.gem   # the SHA-256 in the release notes
+sha256sum permission_forge-X.Y.Z.gem   # macOS: shasum -a 256; the SHA-256 in the release notes
 
-# Build provenance: GitHub's attestation store, or the attached .intoto.jsonl with --bundle
+# Build provenance. Without --bundle, gh reads GitHub's attestation store and needs
+# `gh auth login`; with --bundle permission_forge-X.Y.Z.gem.intoto.jsonl it uses the attached file.
 gh attestation verify permission_forge-X.Y.Z.gem --repo fetijashari/permission_forge \
   --signer-workflow fetijashari/permission_forge/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z
 
@@ -99,6 +100,8 @@ The `build` job runs without any credentials and fails, so that nothing reaches 
 - the tag is not `v` followed by `PermissionForge::VERSION`;
 - the tag is lightweight, or does not point to the commit being built;
 - the tagged commit is not on `main`;
+- `CHANGELOG.md` has no section for the version (`.github/scripts/release_notes.sh`, which also gives the GitHub
+  Release its notes; CI's `lint` job runs it for `PermissionForge::VERSION` on every pull request);
 - the built gem's name or version is wrong, a file in it is not mode `0644` (the gem is built from files written under
   `umask 022`), its file list differs from the gemspec's (`git ls-files` filtered to `lib/`, `app/`, `config/routes.rb`,
   `config/locales/*.yml`, `LICENSE.txt`, `CHANGELOG.md`, `README.md`), or a tracked file under `lib/` or `app/` is left
@@ -116,8 +119,8 @@ After the push, two jobs run without an approval and without checking out the re
   the build provenance attestation (`actions/attest`). It is not in the `rubygems` environment, so RubyGems.org would
   not accept its OIDC token.
 - `github-release` (`contents: write`, the only job that has it) checks the gem's SHA-256 again, that the Sigstore
-  bundle signs that digest and that the provenance attestation verifies (`gh attestation verify`), takes the notes
-  from the `CHANGELOG.md` inside the gem (it fails when the version has no section), and runs
+  bundle declares that digest (RubyGems.org verified the signature itself at the push) and that the provenance
+  attestation verifies (`gh attestation verify`), adds the checksum to the notes the `build` job took, and runs
   `gh release create vX.Y.Z --verify-tag`: it refuses to run when the tag does not exist, and the token cannot create
   a `v*` tag anyway (ruleset "release tag creation").
 
@@ -140,12 +143,15 @@ The workflow never creates or pushes a tag or a branch.
   artifacts:
 
   ```bash
-  gh run download <run-id> -R fetijashari/permission_forge -n gem -n sigstore-bundle -n provenance
-  gh release create vX.Y.Z --verify-tag --title vX.Y.Z --notes-file notes.md -R fetijashari/permission_forge \
+  # one artifact per command: given several names, gh puts each in its own directory
+  for artifact in gem sigstore-bundle provenance release-notes; do
+    gh run download <run-id> -R fetijashari/permission_forge -n "$artifact"
+  done
+  gh release create vX.Y.Z --verify-tag --title vX.Y.Z --notes-file release-notes.md -R fetijashari/permission_forge \
     permission_forge-X.Y.Z.gem permission_forge-X.Y.Z.gem.sigstore.json permission_forge-X.Y.Z.gem.intoto.jsonl
   ```
 
-  (without the provenance file if `provenance` is the job that failed; `notes.md` = the version's CHANGELOG section).
+  (without the provenance file if `provenance` is the job that failed).
 
 ## Repository setup
 

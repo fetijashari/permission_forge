@@ -107,6 +107,12 @@ jobs:
       - name: i18n-tasks
         run: bundle exec i18n-tasks health
 
+      # The section the release workflow takes the GitHub Release notes from.
+      - name: CHANGELOG.md has a section for PermissionForge::VERSION
+        run: |
+          version=$(ruby -e 'require "./lib/permission_forge/version"; print PermissionForge::VERSION')
+          .github/scripts/release_notes.sh "$version" CHANGELOG.md > /dev/null
+
       # The release workflow's build and checks, so a pull request goes red
       # before a (permanent) release tag exists.
       - name: Build and check the gem
