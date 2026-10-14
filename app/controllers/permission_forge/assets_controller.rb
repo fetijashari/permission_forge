@@ -30,8 +30,13 @@ module PermissionForge
     # ever runs unprotected. The cross-origin <script> check is skipped: this
     # controller exists to serve pf_admin.js to <script src> tags, and the
     # file is the same public, static script for every visitor.
-    protect_from_forgery with: :exception
+    include PermissionForge::ForgeryProtection
+
+    protect_from_forgery with: :exception, **pf_forgery_strategy
     skip_after_action :verify_same_origin_request
+    # Rails 8.2 adds Vary: Sec-Fetch-Site to every protected response; the
+    # same public file for every visitor needs no per-header cache copies.
+    skip_after_action :append_sec_fetch_site_to_vary_header, raise: false
 
     def show
       name = params[:file].to_s

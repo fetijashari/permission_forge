@@ -22,7 +22,10 @@ module PermissionForge
       # only empty the session once api_auth had already let the request in.
       # ActionController::API bases have no forgery protection (and no
       # cookies), so this is a no-op there.
-      protect_from_forgery with: :null_session, prepend: true if respond_to?(:protect_from_forgery)
+      # Verified like the admin screens (ForgeryProtection).
+      include PermissionForge::ForgeryProtection
+
+      protect_from_forgery with: :null_session, prepend: true, **pf_forgery_strategy if respond_to?(:protect_from_forgery)
 
       AUDIT_SOURCE = 'api'
       # Largest id a bigint column holds; past it PostgreSQL raises instead of matching nothing.

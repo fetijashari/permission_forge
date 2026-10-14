@@ -46,6 +46,9 @@ module PermissionForge
 
         assert_operator chain.index(:verify_authenticity_token), :<, chain.index(:authenticate_api_request!)
         assert_operator chain.index(:verify_authenticity_token), :<, chain.index(:verify_api_enabled!)
+        # Rails 8.2 verifies in a callback of its own; it is prepended too.
+        verifier = chain.index(:verify_request_for_forgery_protection)
+        assert_operator verifier, :<, chain.index(:authenticate_api_request!) if verifier
       end
 
       test 'a session-authenticated GET still passes (reads are not forgery-checked)' do

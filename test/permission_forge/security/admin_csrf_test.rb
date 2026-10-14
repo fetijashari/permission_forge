@@ -40,8 +40,16 @@ module PermissionForge
         assert_response :success
       end
 
+      # Rails 8.2 raises InvalidCrossOriginRequest (InvalidAuthenticityToken
+      # is its deprecated name); earlier versions raise InvalidAuthenticityToken.
+      def forgery_error
+        return ActionController::InvalidAuthenticityToken unless ActionController::Base.respond_to?(:forgery_protection_verification_strategy)
+
+        ActionController::InvalidCrossOriginRequest
+      end
+
       test 'requests without a token are still rejected' do
-        assert_raises(ActionController::InvalidAuthenticityToken) do
+        assert_raises(forgery_error) do
           post "#{@base}/bulk_assignment/preview", params: { identifiers: 'nobody@x.test' }
         end
       end

@@ -206,12 +206,16 @@ module PermissionForge
         self.class.multi_write?(cache_store)
       end
 
-      # The store's one answer for all the entries; false, after the error
-      # is yielded, when the call raised.
+      # Whether the store took all the entries (HandledErrors.written); the
+      # error it handed its error handler, or raised, is yielded.
       def write_multi(entries, ttl)
-        options = {}
-        options[:expires_in] = ttl if ttl
-        cache_store.write_multi(entries.transform_keys { |key| prefixed_key(key) }, options) ? true : false
+        options = ttl ? { expires_in: ttl } : {}
+        store = cache_store
+        written, error = HandledErrors.written(store) do
+          store.write_multi(entries.transform_keys { |key| prefixed_key(key) }, options)
+        end
+        yield error if error && block_given?
+        written
       rescue StandardError => e
         yield e if block_given?
         false

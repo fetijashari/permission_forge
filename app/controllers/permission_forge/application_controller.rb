@@ -10,7 +10,9 @@ module PermissionForge
       include mod unless self < mod
     end
 
-    protect_from_forgery with: :exception
+    include PermissionForge::ForgeryProtection
+
+    protect_from_forgery with: :exception, **pf_forgery_strategy
     # Several admin forms submit to more than one action via `formaction`
     # buttons (rule builder refresh, bulk "Check names", "Apply
     # recommendation"). Per-form tokens are bound to the form's own action, so

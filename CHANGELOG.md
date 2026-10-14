@@ -6,6 +6,29 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-14
+
+### Security
+
+- **The admin screens and the API keep checking the CSRF token on Rails 8.2.** Rails 8.2 can verify a request by the
+  browser's `Sec-Fetch-Site` header, and `config.load_defaults 8.2` selects `:header_only`, under which a plain-HTTP
+  request without that header is not checked at all. The engine's controllers now always use
+  `:header_or_legacy_token`: the header decides when the browser sends it (a cross-site request is refused), and
+  without it the token is required, as before. One change on Rails 8.2 the engine cannot avoid (Rails accepts it under
+  both strategies): a request the browser marks `Sec-Fetch-Site: same-site`, which includes a page on another subdomain
+  of your site, passes without a token. Rails 7.1 to 8.1 are unaffected.
+
+### Fixed
+
+- **On Rails 8.2 (main), a Redis that cannot be reached no longer counts as a done invalidation.** Rails 8.2's
+  `RedisCacheStore#write_multi` answers the same value whether Redis took the entries or not, so an edit to a Permission
+  Set whose holders are invalidated in bulk (two `write_multi` calls per 500 holders) was taken as confirmed while Redis was
+  down: nothing was retried, owed or reported through `on_cache_failure`, and the holders kept their cached permissions
+  until `cache_ttl`. A batch now counts as written only when the store also handed no error to its `error_handler`
+  meanwhile; Rails 7.1 to 8.1 already answered `nil` for it. PermissionForge puts a wrapper in front of the
+  `error_handler` of a store it writes a batch to: your handler is still called for every error, with the same
+  arguments. The number of Redis round trips does not change.
+
 ## [0.14.0] - 2026-10-14
 
 This release closes the findings of a pre-release security review. Several defaults change: each is listed under
@@ -1110,5 +1133,6 @@ Security & correctness hardening release. **Contains behavior changes** (all pre
 - Install generator (migration + initializer)
 - Admin API generator (controllers, serializers, routes)
 
-[Unreleased]: https://github.com/fetijashari/permission_forge/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/fetijashari/permission_forge/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/fetijashari/permission_forge/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/fetijashari/permission_forge/releases/tag/v0.14.0
