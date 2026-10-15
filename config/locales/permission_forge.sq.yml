@@ -1183,6 +1183,8 @@ sq:
         not_configured_implicit: 'Nuk ka cilësim për këtë fushë në “%{set}”. Ndjek
           “Fushat virtuale pa cilësim”: me konfigurimin aktual është e lexueshme dhe
           e ndryshueshme si parazgjedhje.'
+        not_configured_muting: Asnjë cilësim për këtë kolonë në „%{set}“, prandaj
+          ky Grup lejesh heshtës nuk heq asgjë prej saj.
         pick_person: Zgjidh një person…
         save: Ruaj
         sensitive: 'Përputhet me modelin e privatësisë “%{pattern}”. Rekomandohet:
@@ -1192,6 +1194,8 @@ sq:
         turned_off_implicit: 'Cilësimi për këtë fushë në “%{set}” është i çaktivizuar,
           prandaj nuk zbatohet. Fusha ndjek “Fushat virtuale pa cilësim”: me konfigurimin
           aktual është e lexueshme dhe e ndryshueshme si parazgjedhje.'
+        turned_off_muting: Cilësimi për këtë fushë në „%{set}“ është i fikur, prandaj
+          ky Grup lejesh heshtës nuk heq asgjë prej saj.
         used_by_rules: Përdoret nga rregullat
         variants: 'Vlen edhe për:'
         variants_muting: 'Heshtja e kësaj hesht edhe:'
@@ -1253,6 +1257,7 @@ sq:
         implicit_grant: E ndryshueshme si parazgjedhje
         level: Niveli i qasjes
         level_aria: Niveli i qasjes për %{field}
+        mutes_nothing: Nuk heq asgjë
         no_match: Asnjë fushë nuk përputhet.
         not_configured: E pakonfiguruar · %{behaviour}
         read_off: Aktivizo Lexo për %{resource} për të zgjedhur cilat fusha shohin
@@ -1310,7 +1315,7 @@ sq:
         all_queries: vlen për të gjitha kërkesat
         blocked_message: 'Mesazhi i bllokimit: “%{message}”'
         empty: 'Ende nuk ka rregulla, prandaj regjistrimet nuk kufizohen: kushdo me
-          këtë grup sheh çdo %{resources} që mund të lexojë.'
+          këtë grup sheh çdo regjistrim të %{resource} që mund të lexojë.'
         empty_muting: Grupet e lejeve heshtës nuk shtojnë rregulla regjistrimesh.
         empty_view_all: Pa rregulla. Shiko të gjitha është aktiv, prandaj çdo regjistrim
           përfshihet gjithsesi.
@@ -1346,7 +1351,7 @@ sq:
         modify_all_needs: Kërkon Shiko të gjitha dhe Ndrysho.
         muting_hint: Veprimet e heshtura u hiqen personave me këtë grup, pavarësisht
           çfarë lejojnë grupet e tjera.
-        muting_note: Cilësimet këtu u heqin qasje personave të %{set}.
+        muting_note: Cilësimet këtu u heqin qasje të gjithë atyre që kanë „%{set}“.
         needs_read_hint: Ndrysho dhe Fshi kërkojnë Lexo.
         record_scope: Shtrirja e regjistrimeve
         remove: Hiq %{resource} nga ky grup…

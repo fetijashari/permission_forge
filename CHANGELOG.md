@@ -60,6 +60,13 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `to_i`, so `THRESHOLD_DAYS=`, `abc`, `0` or `-3` became a threshold of 0 (or less) days and reported every permanent
   assignment, exiting 1. Anything that is not a whole number of days from 1 to 36500 now prints what is expected on
   stderr and exits 2, without running the report.
+- **Admin wording.** The empty Rules tab says "every Customer record they can read" (it said "every Customers"); the
+  banner of a Muting Permission Set's resource says "take access away from everyone who has “No PII exports”" (it
+  said "No PII exports's people"). A person shown by the email or the "User #2" fallback is named in full in sentences
+  ("What User #2 can do right now"; it said "What User can do"), and an email label takes its initials from the local
+  part (`dave@acme.test` is "DA"; it was "DT"). In a Muting Permission Set a field without a setting reads "Not
+  configured · Mutes nothing", and its drawer says the set takes nothing away from it, instead of "Blocked by
+  default" and a link to `unconfigured_field_strategy`, which only decides for granting sets.
 
 ### Documentation
 

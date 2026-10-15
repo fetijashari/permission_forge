@@ -37,8 +37,12 @@ module PermissionForge
         email unless email == name
       end
 
+      # Two letters for the avatar: the first and last word of a name ("AK"),
+      # or the first two letters of a single word. A label that is the email
+      # takes them from its local part ("dave@acme.test" => "DA"), never from
+      # the domain.
       def initials
-        initial_letters(name.to_s.scan(/[[:alnum:]]+/)).join.upcase.presence || '?'
+        initial_letters(initials_source.scan(/[[:alnum:]]+/)).join.upcase.presence || '?'
       end
 
       # Lower-cased "name email" for in-memory search.
@@ -46,11 +50,28 @@ module PermissionForge
         "#{name} #{email}".downcase
       end
 
+      # The first word of a person's name, for sentences ("What Ana can do").
+      # A label that is not a name (the email, or the "User #2" fallback) is
+      # used whole: its first word would read as a placeholder ("User").
       def first_name
+        return name unless personal_name?
+
         name.to_s.split(/\s+/).first.presence || name
       end
 
       private
+
+      # Whether the label comes from a name (formatter or name attributes),
+      # not from the email or the id fallback.
+      def personal_name?
+        label = name
+        label != email && label != fallback
+      end
+
+      def initials_source
+        label = name.to_s
+        label == email ? label.split('@').first.to_s : label
+      end
 
       # First letters of the first and last word, or the first two letters of a single word.
       def initial_letters(words)

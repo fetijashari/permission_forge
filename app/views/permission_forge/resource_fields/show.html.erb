@@ -49,9 +49,9 @@
       <%# No setting in force (none, or one that is turned off): say what applies right now. %>
       <% if (note = d.unconfigured_note) %>
         <% behaviour = t("permission_forge.ui.unconfigured.#{d.unconfigured_behaviour}", default: t('permission_forge.ui.unconfigured.block')) %>
-        <p class="pf-fs-13 pf-text-warn">
+        <p class="pf-fs-13 <%= d.muting? ? 'pf-text-2' : 'pf-text-warn' %>">
           <%= t(".#{note}", set: set.name, behaviour: behaviour) %>
-          <%= pf_setting_link(d.unconfigured_setting) %>
+          <%= pf_setting_link(d.unconfigured_setting) if d.unconfigured_setting %>
         </p>
       <% end %>
 

@@ -67,19 +67,21 @@ module PermissionForge
 
       # The note under the level control while no setting is in force, as the
       # suffix of a locale key under `resource_fields.show` — or nil.
+      # In a Muting Permission Set a field without a setting takes nothing
+      # away (no strategy applies), so its note says that instead.
       def unconfigured_note
         return nil if row.in_force?
 
-        implicit = row.implicit_grant
-        if row.configured?
-          implicit ? :turned_off_implicit : :turned_off
-        else
-          implicit ? :not_configured_implicit : :not_configured
-        end
+        base = row.configured? ? :turned_off : :not_configured
+        return :"#{base}_muting" if muting?
+
+        row.implicit_grant ? :"#{base}_implicit" : base
       end
 
-      # Setting the note links to.
+      # Setting the note links to; nil in a Muting Permission Set (no setting decides it).
       def unconfigured_setting
+        return nil if muting?
+
         row.implicit_grant ? 'extra_fields_default_access' : 'unconfigured_field_strategy'
       end
 

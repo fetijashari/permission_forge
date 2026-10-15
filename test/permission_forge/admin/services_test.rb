@@ -62,6 +62,22 @@ module PermissionForge
         assert_equal 'Ana', label.first_name
       end
 
+      # f-fixes-verified #12: "dave@acme.test" read "DT" (first and last word of "dave acme test").
+      test 'an email label takes its initials from the local part' do
+        assert_equal 'DA', PersonLabel.new(create_user(name: nil, email: 'dave@acme.test')).initials
+        assert_equal 'DS', PersonLabel.new(create_user(name: nil, email: 'dave.smith@acme.test')).initials
+      end
+
+      # a-onboarding #42: the first word of "User #2" or of an email is no first name.
+      test 'first_name is the whole label when the label is the email or the fallback' do
+        email_only = create_user(name: nil, email: 'dave@acme.test')
+        nameless = create_user(name: nil, email: nil)
+
+        assert_equal 'dave@acme.test', PersonLabel.new(email_only).first_name
+        assert_equal "User ##{nameless.id}", PersonLabel.new(nameless).first_name
+        assert_equal 'Ana', PersonLabel.new(create_user(name: 'Ana Krasniqi')).first_name
+      end
+
       test 'honors user_label_formatter' do
         PermissionForge.configuration.user_label_formatter = ->(u) { "Dr. #{u.name}" }
 

@@ -46,7 +46,7 @@
   <% end %>
   <% if @rules.empty? %>
     <p class="pf-card pf-empty">
-      <%= muting ? t('.empty_muting') : (resource.view_all ? t('.empty_view_all') : t('.empty', resources: pf_resource_plural(resource.name))) %>
+      <%= muting ? t('.empty_muting') : (resource.view_all ? t('.empty_view_all') : t('.empty', resource: pf_resource_label(resource))) %>
     </p>
   <% end %>
   <% unless locked || muting %>
