@@ -23,6 +23,22 @@ module PermissionForge
         assert_equal 0, PermissionForge::PermissionSetUser.where(user: @user).count
       end
 
+      # e-operations #45: the counts of the audit-log label scrub, as the rake task prints them.
+      test 'a dry run counts the name labels to clear, the run returns the ones it cleared' do
+        subject_labels = PermissionForge::AuditEvent.unscoped.where(subject_user_id: @user.id.to_s)
+                                                    .where.not(record_label: nil).count
+        assert_predicate subject_labels, :positive?
+
+        preview = DataSubjectErasure.call(user: @user, dry_run: true)
+        assert_equal [0, subject_labels], preview.values_at(:actor_labels_to_clear, :record_labels_to_clear)
+
+        result = DataSubjectErasure.call(user: @user)
+        event = PermissionForge::AuditEvent.unscoped.where(event: 'erasure.performed').order(:id).last
+        assert_equal event.data.values_at('actor_labels_cleared', 'record_labels_cleared'),
+                     result.values_at(:actor_labels_cleared, :record_labels_cleared)
+        assert_operator result[:record_labels_cleared], :>=, subject_labels
+      end
+
       test 'removes group assignments for user' do
         group = create_permission_set_group
         PermissionForge::PermissionSetGroupUser.create!(

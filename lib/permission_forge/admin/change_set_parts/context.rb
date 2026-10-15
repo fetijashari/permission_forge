@@ -8,7 +8,8 @@ module PermissionForge
       # same resource/field objects, so later parts see earlier parts' edits
       # (e.g. field levels see the resource's new Edit flag).
       class Context
-        attr_reader :permission_set, :params, :sensitive
+        # refused: the ChangeSet::Refusal list the parts add to.
+        attr_reader :permission_set, :params, :sensitive, :refused
 
         def initialize(permission_set:, params:, sensitive:, catalog: nil)
           @permission_set = permission_set
@@ -16,6 +17,7 @@ module PermissionForge
           @sensitive = sensitive
           @controller_catalog = catalog
           @muting = permission_set.is_muting
+          @refused = []
         end
 
         # The app's controller actions (see NewActions). Built on first use:

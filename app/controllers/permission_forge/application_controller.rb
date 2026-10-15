@@ -50,7 +50,7 @@ module PermissionForge
     end
 
     def pf_settings_catalog
-      @pf_settings_catalog ||= PermissionForge::Admin::SettingsCatalog.new
+      @pf_settings_catalog ||= PermissionForge::Admin::SettingsCatalog.new(attention: pf_attention)
     end
 
     def set_locale

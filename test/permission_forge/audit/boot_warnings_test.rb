@@ -18,7 +18,8 @@ module PermissionForge
         PermissionForge::Audit.reset!
       end
 
-      def warn_setup = PermissionForge::Audit::BootWarnings.call(PermissionForge.configuration)
+      # The suite loads Rails::Generators (generator tests): a boot outside a generator is asked for.
+      def warn_setup = PermissionForge::Audit::BootWarnings.call(PermissionForge.configuration, generating: false)
 
       test 'a missing table is warned about exactly once' do
         PermissionForge::AuditEvent.define_singleton_method(:table_exists?) { false }
@@ -55,6 +56,26 @@ module PermissionForge
         assert_includes @log.string, BootWarnings.missing_table(PermissionForge::AuditEvent.table_name)
       ensure
         PermissionForge::AuditEvent.singleton_class.send(:remove_method, :table_exists?)
+      end
+
+      # a-onboarding #64: `bin/rails generate permission_forge:install` boots the app before it writes
+      # the migration; the boot told a fresh install to run the upgrade generator.
+      test 'no missing-table warning while a generator runs; the first event checks again' do
+        PermissionForge::AuditEvent.define_singleton_method(:table_exists?) { false }
+        PermissionForge::Audit::BootWarnings.call(PermissionForge.configuration, generating: true)
+
+        assert_no_match(/was not found/, @log.string)
+
+        assert_not PermissionForge::Audit.enabled?
+        assert_equal 1, @log.string.scan('audit_events is :auto but the table').size
+      ensure
+        PermissionForge::AuditEvent.singleton_class.send(:remove_method, :table_exists?)
+      end
+
+      test 'a generator is running once Rails::Generators is loaded' do
+        require 'rails/generators'
+
+        assert_predicate BootWarnings, :generator_running?
       end
 
       test 'no table warning when the table exists' do

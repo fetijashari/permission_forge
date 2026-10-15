@@ -79,6 +79,16 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
   raising. **Opt out:** run the task with `THRESHOLD_DAYS=90`, and call
   `Services::StaleAssignmentAuditor.call(threshold_days: 90)`.
+- **`rake permission_forge:audit` refuses a `FAIL_ON` it does not know.** A typo counted as `info` and failed the build
+  on any finding; the task now prints the levels on stderr and exits 2 before the review runs (as `stale_assignments`
+  does with a bad `THRESHOLD_DAYS`). Levels are read in any case (`FAIL_ON=HIGH` is `high`). **Opt out:** none needed
+  for a valid level; `FAIL_ON=info` keeps failing on every finding.
+- **`rake permission_forge:audit_masks` names the Permission Set and the suggested strategy.** An unmasked field is
+  reported once per set, and the lines looked like duplicates; "matches pattern 'first1_last4'" named the mask the
+  pattern suggests, not the pattern. The lines now read `[UNMASKED] Customer.name (Permission Set: Support) — personal
+  data, not masked (suggested strategy: 'first1_last4')` and `[UNMAPPED] Customer.phone — personal data, no active
+  ResourceField (suggested strategy: 'last4')`. A CI step that greps `[UNMASKED] Customer.name` still matches; one that
+  matches the rest of the old line must change. The report's Hash keys are unchanged.
 
 - **The production boot warning about an in-process cache also covers a `:memory_store`.** It fired only for
   `cache_backend = :memory`; `cache_backend = :rails_cache` over a `Rails.cache` that is a `:memory_store` (or a
@@ -128,6 +138,50 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `to_i`, so `THRESHOLD_DAYS=`, `abc`, `0` or `-3` became a threshold of 0 (or less) days and reported every permanent
   assignment, exiting 1. Anything that is not a whole number of days from 1 to 36500 now prints what is expected on
   stderr and exits 2, without running the report.
+- **Admin wording.** The empty Rules tab says "every Customer record they can read" (it said "every Customers"); the
+  banner of a Muting Permission Set's resource says "take access away from everyone who has “No PII exports”" (it
+  said "No PII exports's people"). A person shown by the email or the "User #2" fallback is named in full in sentences
+  ("What User #2 can do right now"; it said "What User can do"), and an email label takes its initials from the local
+  part (`dave@acme.test` is "DA"; it was "DT"). In a Muting Permission Set a field without a setting reads "Not
+  configured · Mutes nothing", and its drawer says the set takes nothing away from it, instead of "Blocked by
+  default" and a link to `unconfigured_field_strategy`, which only decides for granting sets.
+- **The rule builder's preview follows "the current user".** Ticking it left the preview at "Only show Customers
+  where Owner is …." (with a doubled period) until the rule was saved. The preview is now the sentence the saved rule
+  shows, and `pf_admin.js` keeps its value in step with the box and the value input; without JavaScript it changes on
+  the builder's refresh, as before.
+- **A success toast no longer covers the "unsaved changes" bar.** On a page with that sticky bar the toasts are shown
+  at the top of the window instead of the bottom.
+- **Effective access shows the whole rule in the Records cell**, wrapped, instead of cutting it mid-word ("Owner is
+  the cur").
+- **Settings' health summary warns about automatic query scoping** while it is off and record rules are in force that
+  it leaves to `find_by` / `permission_scoped` — the rules the Home "Record rules not applied everywhere" card lists, so
+  both pages warn together. It said "7 settings look good" while Home warned.
+- **"Review and save" says what it did not apply.** A request that turns on Edit (or Delete, View All, Modify All)
+  while Read is off — a form the admin never sends — was answered "No changes to save." It now says "Customer: Edit not
+  turned on, because Read is off" (Modify All: "because it needs View All and Edit"), in the alert when nothing else
+  changed and on the review page next to the changes that do apply (`Admin::ChangeSet#refused`).
+- **A locked Permission Set only offers the end dates it accepts.** The "Change end date…" menu of a locked granting set
+  offered "30 days from today" and "No expiry", which the lock then refused; it now lists only the presets that narrow
+  access (the other way round for a Muting Permission Set; `Admin::EditableLock.expiry_choices`). A person's Assign
+  drawer lists a locked set that cannot take holders as disabled with a "Locked" badge and a note, instead of leaving it
+  out. Home's "Ending soon" card shows the "Locked" badge in place of "Extend 30 days" where extending would be
+  refused (a locked granting set), and keeps offering it for a locked Muting Permission Set, where extending narrows.
+- **`rake permission_forge:audit` says why `FAIL_ON` fails the build**: `Failing: N finding(s) at or above <level>` on
+  stderr before the exit 1 (FORMAT=json output on stdout stays parseable).
+- **The security audit's footer no longer says "Read-only: nothing was changed"**: every run writes a
+  `report.generated` audit event. It says "No permission data was changed", and that the run is recorded in the audit
+  log (`report.generated`) when the log records.
+- **The `no_rules` finding's advice follows `auto_query_scoping`.** It said "enable auto_query_scoping" also when it
+  was on (under `config.preset = :strict`).
+- **`bin/rails -T permission_forge` shows the erasure task's description whole.** It stopped at "(supports GDPR Art";
+  the description says "Article 17".
+- **The erasure task reports the audit-log label scrub.** The dry run prints how many name labels it would clear (as
+  actor, as subject), the real run how many it cleared, as `erasure.performed` records them.
+  `Services::DataSubjectErasure` returns them: `actor_labels_to_clear` / `record_labels_to_clear` in a dry run,
+  `actor_labels_cleared` / `record_labels_cleared` otherwise.
+- **No "run the upgrade generator" warning while `bin/rails generate permission_forge:install` runs.** The generator
+  boots the app before it writes the migration that creates the audit table, and the boot told a fresh install to run
+  `permission_forge:upgrade`. While a generator runs the boot skips the check; the first audit event checks again.
 
 ### Documentation
 

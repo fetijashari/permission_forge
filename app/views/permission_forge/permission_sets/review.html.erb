@@ -9,6 +9,16 @@
   <ul class="pf-confirm__list pf-change-list">
     <% @changes.each do |change| %><li><span><%= pf_change_description(change) %></span></li><% end %>
   </ul>
+  <% refused = @change_set.refused %>
+  <% if refused.any? %>
+    <div class="pf-banner pf-banner--warn">
+      <span class="pf-banner__glyph" aria-hidden="true">⚠</span>
+      <div class="pf-banner__body">
+        <b><%= t('.not_applied') %></b>
+        <ul class="pf-change-list"><% refused.each do |refusal| %><li><%= pf_refusal_description(refusal) %></li><% end %></ul>
+      </div>
+    </div>
+  <% end %>
   <% if @impact_people.any? %>
     <p class="pf-fs-13 pf-text-3">
       <%= t('.affected', names: (@impact_people.map { |u| pf_person_name(u) } + (@people_count > 3 ? [t('permission_forge.permission_sets.show.and_more', count: @people_count - 3)] : [])).to_sentence) %>

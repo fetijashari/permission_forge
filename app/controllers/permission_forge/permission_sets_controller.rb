@@ -5,6 +5,7 @@ module PermissionForge
   # @api private
   class PermissionSetsController < ApplicationController
     include PermissionSetEditor
+    include PermissionForge::ChangeReview
     include PermissionForge::AuditLogGate
 
     FILTERS = %w[all granting muting conditional off].freeze
@@ -72,7 +73,7 @@ module PermissionForge
       @change_set = change_set
       if @change_set.empty?
         return redirect_to(pf_back_or(permission_forge.permission_set_path(@permission_set)),
-                           notice: t('permission_forge.flash.permission_sets.no_changes'))
+                           pf_nothing_to_save_flash(@change_set))
       end
 
       load_editor

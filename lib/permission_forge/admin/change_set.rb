@@ -52,6 +52,10 @@ module PermissionForge
         end
       end
 
+      # A flag the request turned on that stays off because what it needs is
+      # off (`needs`: :read, or :view_all_and_edit for Modify All). Not a change.
+      Refusal = Struct.new(:resource, :attribute, :needs, keyword_init: true)
+
       class Invalid < StandardError
         attr_reader :record
 
@@ -77,6 +81,13 @@ module PermissionForge
 
       def empty?
         changes.empty?
+      end
+
+      # @return [Array<Refusal>] what the request asked for and the
+      #   dependencies kept off (Edit with Read off, ...)
+      def refused
+        changes
+        @context.refused
       end
 
       # Saves every pending record, all or nothing, under one audit

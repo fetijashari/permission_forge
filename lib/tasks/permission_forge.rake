@@ -13,11 +13,21 @@ namespace :permission_forge do
 end
 
 namespace :permission_forge do
-  desc 'Read-only security review of the PermissionForge setup. FORMAT=json, FAIL_ON=critical|high|medium|low'
+  # Exits 1 when FAIL_ON is given and a finding of that severity or worse
+  # exists (saying so on stderr, so FORMAT=json output stays parseable), and 2
+  # when FAIL_ON names no severity (before the review runs).
+  desc 'Read-only security review of the PermissionForge setup. FORMAT=json, FAIL_ON=critical|high|medium|low|info'
   task audit: :environment do
-    report = PermissionForge::RakeAudit.reporting('permission_forge:audit', counts: :counts.to_proc) do
-      PermissionForge::Services::SecurityAudit.call
+    audit = PermissionForge::Services::SecurityAudit
+    given = ENV.fetch('FAIL_ON', nil).presence
+    fail_on = given && audit.severity_named(given)
+    if given && fail_on.nil?
+      warn "FAIL_ON must be one of #{audit::SEVERITIES.join(', ')} (got #{given.inspect}). " \
+           'Usage: rake permission_forge:audit FAIL_ON=high'
+      exit 2
     end
+
+    report = PermissionForge::RakeAudit.reporting('permission_forge:audit', counts: :counts.to_proc) { audit.call }
 
     if ENV['FORMAT'] == 'json'
       puts JSON.pretty_generate(report.to_h)
@@ -25,7 +35,10 @@ namespace :permission_forge do
       puts PermissionForge::Services::SecurityAuditChecks::TextReport.new(report)
     end
 
-    fail_on = ENV.fetch('FAIL_ON', nil).presence
-    exit 1 if fail_on && report.at_least(fail_on).any?
+    failing = fail_on ? report.at_least(fail_on).size : 0
+    if failing.positive?
+      warn "Failing: #{failing} finding(s) at or above #{fail_on} (FAIL_ON=#{given})."
+      exit 1
+    end
   end
 end

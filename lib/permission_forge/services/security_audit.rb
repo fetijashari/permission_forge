@@ -35,12 +35,24 @@ module PermissionForge
       Report = Struct.new(:findings, :generated_at, :preset, keyword_init: true) do
         def counts = SEVERITIES.index_with { |severity| findings.count { |finding| finding.severity == severity } }
 
+        # Findings of `severity` or worse. The name is read in any case
+        # (:high, 'HIGH'); one that is not a severity counts as :info.
         def at_least(severity)
-          limit = SEVERITIES.index(severity.to_sym) || SEVERITIES.size
+          limit = SEVERITIES.index(SecurityAudit.severity_named(severity)) || SEVERITIES.size
           findings.select { |finding| finding.rank <= limit }
         end
 
         def to_h = { generated_at: generated_at.iso8601, preset: preset, counts: counts, findings: findings.map(&:to_h) }
+      end
+
+      # The severity a name stands for, in any case and with surrounding
+      # blanks ignored (`FAIL_ON=HIGH`, `' medium'`).
+      #
+      # @param name [String, Symbol, nil]
+      # @return [Symbol, nil] one of SEVERITIES, nil for anything else
+      def self.severity_named(name)
+        wanted = name.to_s.strip.downcase
+        SEVERITIES.find { |severity| severity.to_s == wanted }
       end
 
       # @return [Array<Class>] the check classes run by default

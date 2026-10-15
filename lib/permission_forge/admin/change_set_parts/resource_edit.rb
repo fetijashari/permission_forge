@@ -10,9 +10,12 @@ module PermissionForge
         TEXT = %w[label description].freeze
         READ_DEPENDENT = %w[edit_access delete_access view_all modify_all].freeze
 
-        def initialize(resource, muting:)
+        # @param refused [Array] collects a ChangeSet::Refusal for each flag
+        #   the request turns on and the cascades keep off
+        def initialize(resource, muting:, refused: [])
           @resource = resource
           @muting = muting
+          @refused = refused
         end
 
         def changes(attrs)
@@ -29,6 +32,7 @@ module PermissionForge
         # part of) the request.
         def flag_changes(requested)
           wanted = wanted_flags(requested)
+          note_refused(requested, wanted)
           FLAGS.filter_map do |flag|
             to = wanted[flag]
             change(flag, to, kind: :resource_flag, cascaded: requested.fetch(flag, :absent) != to).assign
@@ -39,6 +43,18 @@ module PermissionForge
           wanted = FLAGS.to_h { |flag| [flag, requested.fetch(flag) { @resource.public_send(flag) }] }
           cascade!(wanted) unless @muting
           wanted
+        end
+
+        # A flag the request turns on that the cascades keep off (Edit without
+        # Read, say: a form the UI never sends) is not a change, so the review
+        # would say nothing about it. Noted, with what it needs.
+        def note_refused(requested, wanted)
+          requested.each do |flag, value|
+            next unless value && !wanted[flag] && !@resource.public_send(flag)
+
+            needs = flag == 'modify_all' && wanted['read_access'] ? :view_all_and_edit : :read
+            @refused << ChangeSet::Refusal.new(resource: @resource, attribute: flag, needs: needs)
+          end
         end
 
         def cascade!(flags)

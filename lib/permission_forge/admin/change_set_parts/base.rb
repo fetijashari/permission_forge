@@ -13,7 +13,7 @@ module PermissionForge
 
         private
 
-        delegate :permission_set, :params, :sensitive, :muting?, :section, :resources, :resource_of,
+        delegate :permission_set, :params, :sensitive, :muting?, :section, :resources, :resource_of, :refused,
                  to: :@context
 
         def change(**attrs)

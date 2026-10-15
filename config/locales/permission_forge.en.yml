@@ -32,6 +32,7 @@ en:
         expires: Expires
         filter_sets: Filter Permission Sets
         forever: with no end date
+        locked_hint: 'Managed by the system/API: holders can''t be added here.'
         muting_notice: "⊘ Muting. %{sets} takes access away from %{name}, whatever
           their other sets allow."
         no_sets: No Permission Sets match.
@@ -439,6 +440,7 @@ en:
           and rules were copied. Assignments were not. The copy is not in “%{group}”,
           which is locked.'
         no_changes: No changes to save.
+        nothing_applied: 'Nothing to save: %{reasons}.'
         save_failed: 'Nothing was saved: %{errors}'
         saved:
           one: Saved %{count} change. It applies to %{people} now.
@@ -1055,6 +1057,7 @@ en:
         body_nobody: Nobody has this set yet, so saving affects no one until you assign
           it.
         crumb: Review
+        not_applied: 'Not applied:'
         save: Save changes
         title:
           one: Review %{count} change
@@ -1167,6 +1170,8 @@ en:
         not_configured_implicit: 'No setting for this field in “%{set}”. It follows
           “Virtual fields without a setting”: with the current configuration it is
           readable and editable by default.'
+        not_configured_muting: No setting for this column in “%{set}”, so this Muting
+          Permission Set takes nothing away from it.
         pick_person: Pick a person…
         save: Save
         sensitive: 'Matches privacy pattern “%{pattern}”, so it may be personal data.
@@ -1176,6 +1181,8 @@ en:
         turned_off_implicit: 'The setting for this field in “%{set}” is turned off,
           so it does not apply. The field follows “Virtual fields without a setting”:
           with the current configuration it is readable and editable by default.'
+        turned_off_muting: The setting for this field in “%{set}” is turned off, so
+          this Muting Permission Set takes nothing away from it.
         used_by_rules: Used by rules
         variants: 'Also applies to:'
         variants_muting: 'Muting this also mutes:'
@@ -1235,6 +1242,7 @@ en:
         implicit_grant: Editable by default
         level: Access level
         level_aria: Access level for %{field}
+        mutes_nothing: Mutes nothing
         no_match: No fields match.
         not_configured: Not configured · %{behaviour}
         read_off: Turn on Read for %{resource} to choose which fields people see.
@@ -1291,7 +1299,7 @@ en:
         all_queries: applies to all queries
         blocked_message: 'Blocked message: “%{message}”'
         empty: 'No rules yet, so records aren''t limited: people with this set see
-          every %{resources} they can read.'
+          every %{resource} record they can read.'
         empty_muting: Muting Permission Sets don't add record rules.
         empty_view_all: No rules. View All is on, so every record is included anyway.
         filter_rule: Filter rule · %{applies}
@@ -1324,7 +1332,7 @@ en:
         modify_all_needs: Needs View All and Edit.
         muting_hint: Muted actions are removed from people with this set, whatever
           their other sets allow.
-        muting_note: Settings here take access away from %{set}'s people.
+        muting_note: Settings here take access away from everyone who has “%{set}”.
         needs_read_hint: Edit and Delete need Read.
         record_scope: Record scope
         remove: Remove %{resource} from this set…
@@ -1722,6 +1730,8 @@ en:
           the audit table is missing). With audit_events = true and no table, every
           change fails (under the default :raise strategy).
         audit_trail_enabled: No one is recorded as creating or editing records.
+        auto_query_scoping: 'Record rules are in use, but they only apply to find_by
+          and permission_scoped lookups: other queries return every record.'
         conditional_sets_strict_mode: Conditional sets are treated as active when
           request info is missing (fail-open).
         http_basic_auth_enabled: These screens are either locked (password prompt
@@ -1959,6 +1969,9 @@ en:
         flag_off_muting: "%{resource}: %{flag} no longer muted"
         flag_on: "%{resource}: %{flag} allowed"
         flag_on_muting: "%{resource}: %{flag} muted"
+        not_applied_read: "%{resource}: %{flag} not turned on, because Read is off"
+        not_applied_view_all_and_edit: "%{resource}: %{flag} not turned on, because
+          it needs View All and Edit"
         resource_text: "%{resource}: %{attribute} changed"
         set_group: Moved to the group “%{group}”
         set_no_group: Removed from its group

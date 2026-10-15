@@ -485,6 +485,7 @@
 .pf-state[aria-current="true"], .pf-effective__field[aria-current="true"], .pf-action-pill[aria-current="true"] { box-shadow: 0 0 0 2px var(--pf-accent); }
 .pf-state .pf-cell__glyph { font-weight: 700; }
 .pf-state--records { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; min-width: 0; width: 100%; overflow: hidden; text-align: left; }
+.pf-state__summary { overflow-wrap: anywhere; }
 
 /* 4-level field control */
 .pf-levels { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: var(--pf-radius-sm); background: var(--pf-surface-2); border: 1px solid var(--pf-border); }
@@ -691,6 +692,8 @@
 .pf-confirm__list { max-height: 200px; overflow-y: auto; padding: 10px 12px; border-radius: var(--pf-radius); background: var(--pf-surface-2); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .pf-confirm--danger { border-top: 3px solid var(--pf-block); }
 .pf-toasts { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; width: max-content; max-width: min(640px, calc(100% - 32px)); }
+/* A page with a sticky savebar keeps the bottom edge for it: toasts go to the top, so neither hides the other. */
+.pf-root:has(.pf-savebar) .pf-toasts { top: 16px; bottom: auto; }
 .pf-toast { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: var(--pf-radius); background: var(--pf-text); color: var(--pf-surface); box-shadow: var(--pf-shadow); font-size: 13px; }
 .pf-toast--alert { background: var(--pf-block); color: #fff; }
 .pf-toast__text { flex: 1; min-width: 0; }

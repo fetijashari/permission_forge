@@ -32,6 +32,7 @@ sq:
         expires: Skadon
         filter_sets: Filtro Grupet e lejeve
         forever: pa datë përfundimi
+        locked_hint: 'Menaxhohet nga sistemi/API: këtu nuk mund të shtohen mbajtës.'
         muting_notice: "⊘ Heshtës. %{sets} i heq qasjen %{name}, pavarësisht çfarë
           lejojnë grupet e tjera."
         no_sets: Asnjë Grup lejesh nuk përputhet.
@@ -444,6 +445,7 @@ sq:
           veprimet dhe rregullat. Caktimet nuk u kopjuan. Kopja nuk është në “%{group}”,
           që është i kyçur.'
         no_changes: Nuk ka ndryshime për të ruajtur.
+        nothing_applied: 'Asgjë për të ruajtur: %{reasons}.'
         save_failed: 'Asgjë nuk u ruajt: %{errors}'
         saved:
           one: U ruajt %{count} ndryshim. Tani vlen për %{people}.
@@ -1070,6 +1072,7 @@ sq:
         body_nobody: Ende askush nuk e ka këtë grup, prandaj ruajtja nuk prek askënd
           derisa ta caktosh.
         crumb: Rishiko
+        not_applied: 'Nuk u zbatua:'
         save: Ruaj ndryshimet
         title:
           one: Rishiko %{count} ndryshim
@@ -1186,6 +1189,8 @@ sq:
         not_configured_implicit: 'Nuk ka cilësim për këtë fushë në “%{set}”. Ndjek
           “Fushat virtuale pa cilësim”: me konfigurimin aktual është e lexueshme dhe
           e ndryshueshme si parazgjedhje.'
+        not_configured_muting: Asnjë cilësim për këtë kolonë në „%{set}“, prandaj
+          ky Grup lejesh heshtës nuk heq asgjë prej saj.
         pick_person: Zgjidh një person…
         save: Ruaj
         sensitive: 'Përputhet me modelin e privatësisë “%{pattern}”, prandaj mund
@@ -1195,6 +1200,8 @@ sq:
         turned_off_implicit: 'Cilësimi për këtë fushë në “%{set}” është i çaktivizuar,
           prandaj nuk zbatohet. Fusha ndjek “Fushat virtuale pa cilësim”: me konfigurimin
           aktual është e lexueshme dhe e ndryshueshme si parazgjedhje.'
+        turned_off_muting: Cilësimi për këtë fushë në „%{set}“ është i fikur, prandaj
+          ky Grup lejesh heshtës nuk heq asgjë prej saj.
         used_by_rules: Përdoret nga rregullat
         variants: 'Vlen edhe për:'
         variants_muting: 'Heshtja e kësaj hesht edhe:'
@@ -1256,6 +1263,7 @@ sq:
         implicit_grant: E ndryshueshme si parazgjedhje
         level: Niveli i qasjes
         level_aria: Niveli i qasjes për %{field}
+        mutes_nothing: Nuk heq asgjë
         no_match: Asnjë fushë nuk përputhet.
         not_configured: E pakonfiguruar · %{behaviour}
         read_off: Aktivizo Lexo për %{resource} për të zgjedhur cilat fusha shohin
@@ -1315,7 +1323,7 @@ sq:
         all_queries: vlen për të gjitha kërkesat
         blocked_message: 'Mesazhi i bllokimit: “%{message}”'
         empty: 'Ende nuk ka rregulla, prandaj regjistrimet nuk kufizohen: kushdo me
-          këtë grup sheh çdo %{resources} që mund të lexojë.'
+          këtë grup sheh çdo regjistrim të %{resource} që mund të lexojë.'
         empty_muting: Grupet e lejeve heshtës nuk shtojnë rregulla regjistrimesh.
         empty_view_all: Pa rregulla. Shiko të gjitha është aktiv, prandaj çdo regjistrim
           përfshihet gjithsesi.
@@ -1351,7 +1359,7 @@ sq:
         modify_all_needs: Kërkon Shiko të gjitha dhe Ndrysho.
         muting_hint: Veprimet e heshtura u hiqen personave me këtë grup, pavarësisht
           çfarë lejojnë grupet e tjera.
-        muting_note: Cilësimet këtu u heqin qasje personave të %{set}.
+        muting_note: Cilësimet këtu u heqin qasje të gjithë atyre që kanë „%{set}“.
         needs_read_hint: Ndrysho dhe Fshi kërkojnë Lexo.
         record_scope: Shtrirja e regjistrimeve
         remove: Hiq %{resource} nga ky grup…
@@ -1766,6 +1774,9 @@ sq:
           çaktivizuar, ose tabela e auditimit mungon). Me audit_events = true dhe
           pa tabelë, çdo ndryshim dështon (me strategjinë e parazgjedhur :raise).
         audit_trail_enabled: Askush nuk regjistrohet si krijues ose redaktues i regjistrimeve.
+        auto_query_scoping: 'Rregullat e regjistrimeve janë në përdorim, por zbatohen
+          vetëm te kërkimet find_by dhe permission_scoped: pyetjet e tjera kthejnë
+          çdo regjistrim.'
         conditional_sets_strict_mode: Grupet me kushte trajtohen si aktive kur mungojnë
           informacionet e kërkesës (fail-open).
         http_basic_auth_enabled: Këto ekrane janë ose të bllokuara (kërkesa për fjalëkalim
@@ -2004,6 +2015,10 @@ sq:
         flag_off_muting: "%{resource}: %{flag} nuk heshtet më"
         flag_on: "%{resource}: %{flag} u lejua"
         flag_on_muting: "%{resource}: %{flag} u hesht"
+        not_applied_read: "%{resource}: %{flag} nuk u aktivizua, sepse “Lexo” është
+          i fikur"
+        not_applied_view_all_and_edit: "%{resource}: %{flag} nuk u aktivizua, sepse
+          kërkon “Shiko të gjitha” dhe “Ndrysho”"
         resource_text: "%{resource}: %{attribute} ndryshoi"
         set_group: U zhvendos në grupimin “%{group}”
         set_no_group: U hoq nga grupimi i tij

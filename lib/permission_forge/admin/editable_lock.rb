@@ -127,6 +127,24 @@ module PermissionForge
         locked_record(permission_set)
       end
 
+      # The end-date changes a "Change end date" menu (or Home's "Extend 30
+      # days", ExpiryPresets::EXTEND_KEY) offers for `assignment`: those the
+      # lock lets through (.widening_lock), so a locked set never offers a
+      # choice that would be refused.
+      #
+      # @param assignment [PermissionForge::PermissionSetUser]
+      # @param keys [Array<String>] the changes to choose from (ExpiryPresets.change_to keys)
+      # @return [Array<String>]
+      def expiry_choices(assignment, keys: ExpiryPresets::CHANGE_KEYS, today: Time.zone.today)
+        set = assignment.permission_set
+        return keys unless locked_record(set)
+
+        keys.reject do |key|
+          to = ExpiryPresets.change_to(key, from: assignment.expires_at, today: today)
+          widening_lock(set, :change_expiry, from: assignment.expires_at, to: to)
+        end
+      end
+
       # +1 when the end date moves later or is cleared, -1 when it moves
       # earlier or is set where there was none, 0 when it stays. Compared at
       # the column's precision (microseconds): a preset computes its end with

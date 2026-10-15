@@ -174,7 +174,9 @@ module PermissionForge
       load_sets
       @people_counts = PermissionForge::PermissionSetUser.active_assignments.group(:permission_set_id).count
       pf_load_expiry
-      @chosen_sets = @sets.select { |set| @selected_ids.include?(set.id) && !@existing_ids.include?(set.id) }
+      @chosen_sets = @sets.select do |set|
+        @selected_ids.include?(set.id) && !@existing_ids.include?(set.id) && !@locked_ids.include?(set.id)
+      end
     end
 
     def load_person
@@ -193,22 +195,24 @@ module PermissionForge
       @set_query = pf_text_param(:set_q)
       @preset_set = PermissionForge::PermissionSet.find_by(id: params[:permission_set_id])
       @selected_ids = (pf_id_list(:set_ids) + [@preset_set&.id]).compact.uniq
-      @sets = assignable_sets
+      @sets = listed_sets
+      @locked_ids = @sets.select { |set| pf_widening_lock(set, :grant) }.to_set(&:id)
     end
 
     def picker_limit
       @person ? 0 : 8
     end
 
-    # The sets a holder can be added to: not those where that widens access
-    # on a locked set (a locked Muting Permission Set takes holders).
-    def assignable_sets
+    # Every set matching the filter. Those a holder cannot be added to (that
+    # widens access on a locked set; a locked Muting Permission Set takes
+    # holders) are listed as locked (@locked_ids) and never chosen.
+    def listed_sets
       scope = PermissionForge::PermissionSet.order(:is_muting, :name)
       unless @set_query.empty?
         needle = "%#{ActiveRecord::Base.sanitize_sql_like(@set_query.downcase)}%"
         scope = scope.where('LOWER(name) LIKE ?', needle).or(scope.where(id: @selected_ids))
       end
-      scope.reject { |set| pf_widening_lock(set, :grant) }
+      scope.to_a
     end
 
     def validate_form
@@ -245,15 +249,7 @@ module PermissionForge
 
     # :invalid for a blank or unknown key (CHANGE_KEYS has no blank entry).
     def new_expiry(key)
-      return extended_expiry if key == 'extend30'
-      return :invalid unless PermissionForge::Admin::ExpiryPresets::CHANGE_KEYS.include?(key)
-
-      PermissionForge::Admin::ExpiryPresets.expires_at_for(key)
-    end
-
-    def extended_expiry
-      base = [@assignment.expires_at&.to_date, Time.zone.today].compact.max
-      (base + 30).in_time_zone.end_of_day
+      PermissionForge::Admin::ExpiryPresets.change_to(key, from: @assignment.expires_at)
     end
 
     # What the person stops seeing when this (granting) assignment is removed.
