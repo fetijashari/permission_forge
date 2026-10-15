@@ -41,11 +41,12 @@ module PermissionForge
       end
 
       rescue_from ActiveRecord::RecordInvalid do |e|
-        render json: { error: { status: 422, messages: e.record.errors.messages } }, status: :unprocessable_entity
+        render_validation_errors(e.record)
       end
 
+      # Field-keyed like a validation error (ResponseRenderer#render_input_error).
       rescue_from ActionController::ParameterMissing, ActionController::BadRequest do |e|
-        render json: { error: { status: 422, messages: e.message } }, status: :unprocessable_entity
+        render_input_error(e)
       end
 
       private

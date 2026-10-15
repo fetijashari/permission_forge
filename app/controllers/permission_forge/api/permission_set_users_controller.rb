@@ -53,8 +53,6 @@ module PermissionForge
         return if performed? || bulk_refused?
 
         render json: { data: bulk_assignment }, status: :ok
-      rescue ArgumentError => e
-        render json: { error: { status: 422, messages: e.message } }, status: :unprocessable_entity
       end
 
       private
@@ -70,12 +68,11 @@ module PermissionForge
         psu.save ? render_created(psu, serializer_for(:permission_set_user)) : render_validation_errors(psu)
       end
 
-      # An unknown bulk_action raises ArgumentError (422, rescued in #bulk)
-      # before anything is authorized or changed.
+      # An unknown bulk_action is a 422 ({ "bulk_action": [...] }) before
+      # anything is changed.
       def bulk_refused?
-        action = BULK_ACTIONS.fetch(params[:bulk_action].to_s) do |name|
-          PermissionForge::Services::BulkPermissionSetAssignment.validate_action!(name)
-          raise ArgumentError, "Invalid action: #{name}" # a service action this controller does not map
+        action = BULK_ACTIONS.fetch(params[:bulk_action].to_s) do
+          raise ParamShapes::InvalidParam.new(:bulk_action, I18n.t('permission_forge.api.errors.bulk_action_invalid'))
         end
         pf_assignment_refused_api?(@permission_set, params[:user_ids], action)
       end

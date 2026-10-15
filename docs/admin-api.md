@@ -146,6 +146,17 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 }
 ```
 
+**Every 422 has this shape.** `messages` is always an object mapping a field to a list of messages: the model's attribute for a failed validation, the request parameter for input the API cannot read, and `base` when the error names no field:
+
+```json
+{ "error": { "status": 422, "messages": { "expires_at": ["is not an ISO 8601 date or time"] } } }
+{ "error": { "status": 422, "messages": { "permission_set": ["is missing, empty or not an object"] } } }
+{ "error": { "status": 422, "messages": { "bulk_action": ["must be assign or revoke"] } } }
+{ "error": { "status": 422, "messages": { "base": ["Could not generate fields for this resource"] } } }
+```
+
+The messages follow the request's locale. Through 0.14.1 an input error answered `messages` as one string (`"expires_at is not an ISO 8601 date or time"`, `"param is missing or the value is empty or invalid: permission_set"`). Other statuses (401, 403, 404) keep a string.
+
 **What answers 422.** A failed validation (`messages` is the model's errors, as above), and input the API cannot read:
 
 - a body section that is not an object (`"permission_set": "x"`), or one that is missing or empty (see below);
@@ -154,7 +165,7 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 - a `permission_set_group_id` that names no group of the current tenant;
 - a string longer than its column: `is too long (at most N characters)`. Only columns that declare a limit are checked — a `string` on MySQL is `varchar(255)` (counted in characters) and a `text` holds 65,535 bytes; on PostgreSQL and SQLite the install's `string` and `text` columns declare none, so nothing is checked there. A Permission Set name keeps its own 255-character rule on every database.
 
-**A flat JSON body is accepted where Rails wraps parameters.** With JSON parameter wrapping on, which `config.load_defaults 7.0` and later turn on for every controller (`wrap_parameters_by_default`), Rails copies the keys of a JSON body that are attributes of the endpoint's model under the section name before the API reads it: `POST /api/permission_sets` with `{"name":"Flat payload"}` reads as `{"permission_set":{"name":"Flat payload"}}` and creates the set (201). Only a body sent as `application/json` is wrapped, never one that already has the section. A flat body with none of the model's attributes then gives an empty section, and without wrapping (older defaults, a form-encoded body, `wrap_parameters false` in your `api_base_controller_class`) a missing section stays missing: both answer 422 `param is missing or the value is empty or invalid: permission_set`. Send the section explicitly to be independent of this setting.
+**A flat JSON body is accepted where Rails wraps parameters.** With JSON parameter wrapping on, which `config.load_defaults 7.0` and later turn on for every controller (`wrap_parameters_by_default`), Rails copies the keys of a JSON body that are attributes of the endpoint's model under the section name before the API reads it: `POST /api/permission_sets` with `{"name":"Flat payload"}` reads as `{"permission_set":{"name":"Flat payload"}}` and creates the set (201). Only a body sent as `application/json` is wrapped, never one that already has the section. A flat body with none of the model's attributes then gives an empty section, and without wrapping (older defaults, a form-encoded body, `wrap_parameters false` in your `api_base_controller_class`) a missing section stays missing: both answer 422 `{"permission_set": ["is missing, empty or not an object"]}`. Send the section explicitly to be independent of this setting.
 
 NUL bytes are dropped from every attribute hash and name the API reads. A rule with `is_null` / `is_not_null` needs no `field_value` (it is stored as empty).
 

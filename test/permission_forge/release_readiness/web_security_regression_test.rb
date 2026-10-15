@@ -217,6 +217,8 @@ module PermissionForge
         responses = ActionDispatch::ExceptionWrapper.rescue_responses
         assert_equal :bad_request, responses['ActionController::BadRequest']
         assert_equal :bad_request, responses['ActionController::ParameterMissing']
+        # Rails maps by exact class name: the gem's subclass is registered too.
+        assert_equal 400, ActionDispatch::ExceptionWrapper.status_code_for_exception('PermissionForge::ParamShapes::InvalidParam')
 
         assert_no_difference -> { PermissionForge::PermissionSetUser.count } do
           assert_raises(ActionController::BadRequest) do

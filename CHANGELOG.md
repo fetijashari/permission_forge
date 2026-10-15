@@ -18,6 +18,14 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Changed
 
+- **Every API 422 has one shape: field-keyed messages.** Input the API cannot read answered `messages` as one string
+  (`"expires_at is not an ISO 8601 date or time"`, `"param is missing or the value is empty or invalid:
+  permission_set"`, `"Invalid action: …"`), while a failed validation answered an object. Both are now an object that
+  maps the field to a list of messages, keyed by the request parameter (`{"expires_at": ["is not an ISO 8601 date or
+  time"]}`, `{"permission_set": ["is missing, empty or not an object"]}`, `{"bulk_action": ["must be assign or
+  revoke"]}`) or `base` when the error names none (`generate_fields`' failure). The messages follow the request's
+  locale. 401, 403 and 404 keep their string. **Opt out:** none; a client that read the string reads
+  `messages.values.flatten` instead. See [`docs/admin-api.md`](docs/admin-api.md#response-format).
 - **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
   `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
   `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`

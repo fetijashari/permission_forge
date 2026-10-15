@@ -9,7 +9,7 @@ module PermissionForge
       before_action :authorize_audit_log!
 
       rescue_from PermissionForge::Audit::EventQuery::Invalid do |error|
-        render json: { error: { status: 422, messages: error.errors } }, status: :unprocessable_entity
+        render_unprocessable(error.errors)
       end
 
       def index

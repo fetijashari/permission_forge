@@ -79,7 +79,8 @@ module PermissionForge
         UNREADABLE_EXPIRY.each do |value|
           post users_path, params: { user_id: @user.id, expires_at: value }, as: :json
           assert_response :unprocessable_entity, value
-          assert_match(/expires_at/, JSON.parse(response.body).dig('error', 'messages'), value)
+          assert_equal({ 'expires_at' => [I18n.t('permission_forge.api.errors.not_iso8601_time')] },
+                       JSON.parse(response.body).dig('error', 'messages'), value)
 
           post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'assign', expires_at: value }, as: :json
           assert_response :unprocessable_entity, value
