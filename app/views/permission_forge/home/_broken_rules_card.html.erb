@@ -15,12 +15,17 @@
     <% resource = item.resource %>
     <div class="pf-card__row pf-card__row--top">
       <div class="pf-stack pf-stack--tight pf-grow">
-        <strong><%= t('.rule', rule: item.rule.name, resource: pf_resource_label(resource), set: set.name) %></strong>
+        <div class="pf-row pf-row--tight">
+          <strong><%= t('.rule', rule: item.rule.name, resource: pf_resource_label(resource), set: set.name) %></strong>
+          <%= pf_lock_badge if item.locked? %>
+        </div>
         <span class="pf-fs-13 pf-text-block"><%= pf_rule_problem_line(item.problem) %></span>
         <span class="pf-fs-13 pf-text-2"><%= t('.people', count: item.people_count) %></span>
+        <%# A locked rule cannot be fixed here (its page offers only a copy): say where it can be. %>
+        <% if item.locked? %><span class="pf-fs-13 pf-text-2"><%= t('.locked_fix_html', flag: content_tag(:code, 'is_editable: false')) %></span><% end %>
       </div>
       <% if item.locked? %>
-        <%= link_to t('.open'), permission_forge.permission_set_resource_path(set, resource.name, tab: 'rules'), class: 'pf-btn pf-btn--sm' %>
+        <%= link_to t('.open'), permission_forge.permission_set_resource_path(set, resource.name, tab: 'rules'), class: 'pf-btn pf-btn--ghost' %>
       <% else %>
         <%= pf_modal_link t('.fix'), permission_forge.edit_permission_set_resource_rule_path(set, resource.name, item.rule),
                           kind: 'drawer', class: 'pf-btn pf-btn--sm' %>

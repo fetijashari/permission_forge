@@ -516,6 +516,9 @@ mk:
           Секое од нив не се совпаѓа со ништо: на секој на кого се однесува му е одбиен
           секој запис на ресурсот.'
         fix: Поправи го правилото
+        locked_fix_html: 'Заклучено (%{flag}): управувано е од системот или API што
+          го создал, па поправете го правилото таму (или отклучете го сетот во кодот).
+          Копија направена тука го остава ова правило какво што е.'
         open: Отвори правила
         people:
           one: "%{count} лице го има овој сет."
@@ -915,12 +918,14 @@ mk:
         message: Порака при блокирање
         message_placeholder: Се прикажува кога некој отвора запис што ова правило
           го скрива.
+        model_error: "%{field} %{message}"
         model_missing: Овој модел или врска веќе не постои во апликацијата.
         name: Име на правилото
         name_placeholder: пр. Сопствени клиенти
         operator: Услов
         optional: опционално
         pick_field: Изберете поле…
+        pick_relationship: Изберете врска…
         preview: Преглед
         preview_empty: Изберете поле за да го видите правилото како реченица.
         problem_field: Изберете го полето повторно за да го поправите.
@@ -929,6 +934,7 @@ mk:
         relationship: Врска
         remove_step: Отстрани го овој чекор на врската
         save: Зачувај правило
+        stored_field: "%{name} (како што е зачувано)"
         this_field: ова поле
         update_form: Ажурирај
       confirm_destroy:
@@ -1040,7 +1046,7 @@ mk:
       copy_name: "%{name} (копија)"
       header:
         description: Опис
-        description_placeholder: Додадете опис за другите да знаат кога да го користат
+        description_placeholder: 'Додадете опис: кога се користи'
         group: Група
         name: Име
       index:
@@ -1928,9 +1934,6 @@ mk:
         disabled: Не се бележи кој креирал и кој уредувал.
         edited: Последно уредено од %{updated_by} · %{updated_at}
         history: Историја
-        unknown_hint_html: "%{unknown}: за оваа промена не е именуван актер (код извршен
-          надвор од барање, како runner или задача во позадина). Именувајте го со
-          %{method}."
       crud_cell:
         allowed: Дозволено
         muted: Пригушено
@@ -2009,6 +2012,11 @@ mk:
       user_select_prompt: Изберете корисник...
       user_select_truncated: Прикажани се само првите %{count} корисници. Конфигурирајте
         user_list_resolver за да ја стесните листата.
+    support:
+      array:
+        last_word_connector: " и "
+        two_words_connector: " и "
+        words_connector: ", "
     ui:
       actions: Акции
       apply: Примени
@@ -2209,10 +2217,10 @@ mk:
         only_show: Прикажи само
         or_empty: или %{field} е празно
         problems:
-          missing_column: "%{name} не е колона на %{model}"
+          missing_column_html: "%{name} не е колона на %{model}"
           unjoinable_association: "%{name} е врска на %{model} што правило не може
             да ја следи"
-          unknown_association: "%{name} не е врска на %{model}"
+          unknown_association_html: "%{name} не е врска на %{model}"
         where: каде
       rules_count:
         one: Правила (%{count})

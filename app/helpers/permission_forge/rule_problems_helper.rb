@@ -17,16 +17,22 @@ module PermissionForge
       @pf_rule_problems[rule] = PermissionForge::Operators::RuleProblem.for(rule)
     end
 
-    # "Stauts is not a column of Customer"
+    # A name that is not there, shown as stored (`onwer_id`, `ownr`) so the
+    # admin recognises the typo; humanized it would read like a real field.
+    VERBATIM_PROBLEMS = %i[missing_column unknown_association].freeze
+
+    # "`stauts` is not a column of Customer" (a real relationship by its label).
     def pf_rule_problem_text(problem)
       model = problem.model
-      pf_ui("rules.problems.#{problem.kind}", name: pf_attribute_label(model, problem.name),
-                                              model: pf_resource_label(model.name))
+      name = problem.name
+      verbatim = VERBATIM_PROBLEMS.include?(problem.kind)
+      label = verbatim ? content_tag(:code, name, class: 'pf-mono-key') : pf_attribute_label(model, name)
+      pf_ui("rules.problems.#{problem.kind}#{'_html' if verbatim}", name: label, model: pf_resource_label(model.name))
     end
 
-    # "Matches nothing: Stauts is not a column of Customer"
+    # "Matches nothing: `stauts` is not a column of Customer"
     def pf_rule_problem_line(problem)
-      "#{pf_ui('rules.matches_nothing')}: #{pf_rule_problem_text(problem)}"
+      safe_join([pf_ui('rules.matches_nothing'), ': ', pf_rule_problem_text(problem)])
     end
 
     # The rule a one-line summary shows: one that matches nothing first.

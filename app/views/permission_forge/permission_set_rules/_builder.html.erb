@@ -49,7 +49,10 @@
         <% builder.steps.each_with_index do |(model, assoc), i| %>
           <span aria-hidden="true">›</span>
           <label class="pf-sr-only" for="pf-rule-path-<%= i %>"><%= t('.relationship') %></label>
-          <select id="pf-rule-path-<%= i %>" name="rule[path][]" class="pf-select pf-select--sm pf-select--rel" data-pf-refresh>
+          <% broken = builder.broken_step(i) %>
+          <select id="pf-rule-path-<%= i %>" name="rule[path][]" class="pf-select pf-select--sm pf-select--rel" data-pf-refresh
+                  <%= pf_attrs_when(broken, aria: { invalid: true }) %>>
+            <% if broken %><option value="<%= broken %>" selected><%= t('.pick_relationship') %></option><% end %>
             <% model.associations.each do |a| %>
               <option value="<%= a.name %>" <%= 'selected' if assoc&.name == a.name %>><%= a.label %></option>
             <% end %>
@@ -61,6 +64,7 @@
         <label class="pf-sr-only" for="pf-rule-field"><%= t('.field') %></label>
         <select id="pf-rule-field" name="rule[field_name]" class="pf-select pf-select--sm" data-pf-refresh <%= pf_attrs_when(errors[:field], aria: { invalid: true }) %>>
           <option value=""><%= t('.pick_field') %></option>
+          <% if (kept = builder.kept_field) %><option value="<%= kept %>" selected><%= t('.stored_field', name: kept) %></option><% end %>
           <% form.field_options.each do |col| %>
             <option value="<%= col.name %>" <%= 'selected' if builder.field_selected?(col) %>><%= col.label %> (<%= col.name %>)</option>
           <% end %>

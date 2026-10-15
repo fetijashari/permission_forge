@@ -41,6 +41,12 @@ module PermissionForge
       t("permission_forge.ui.#{key}", **)
     end
 
+    # "Bob, Carol and Dan" in the page's language (Admin::ListSentence): never
+    # a bare to_sentence, whose connectors stay English without rails-i18n.
+    def pf_to_sentence(items, **)
+      PermissionForge::Admin::ListSentence.call(items, **)
+    end
+
     def pf_people_text(count)
       pf_ui('people_count', count: count)
     end

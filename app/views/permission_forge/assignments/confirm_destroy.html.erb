@@ -8,7 +8,7 @@
     <% if set.is_muting %>
       <%= t('.body_muting', name: first, set: set.name) %>
     <% elsif @lost.any? %>
-      <%= t('.body', name: first, resources: @lost.to_sentence) %>
+      <%= t('.body', name: first, resources: pf_to_sentence(@lost)) %>
     <% else %>
       <%= t('.body_nothing', name: first) %>
     <% end %>

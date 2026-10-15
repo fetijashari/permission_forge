@@ -18,13 +18,23 @@ module PermissionForge
         def auto? = join == 'auto'
       end
 
-      attr_reader :form, :resource, :model_errors
+      # The builder's own label for an attribute the model refused (Rails'
+      # full_messages would say "Field accessor path …", in English). An
+      # attribute the builder does not show gets its message alone.
+      ERROR_LABELS = {
+        name: 'builder.name', field_accessor_path: 'builder.relationship', field_name: 'builder.field',
+        operator: 'builder.operator', field_value: 'value_input.value', join_type: 'builder.join',
+        failure_message: 'builder.message', is_active: 'builder.active'
+      }.freeze
+
+      attr_reader :form, :resource
 
       # rule: the saved rule being edited (nil for a new one).
+      # model_errors: the rule's ActiveModel::Errors after a refused save (or messages).
       def initialize(form:, resource:, model_errors: [], rule: nil, configuration: PermissionForge.configuration)
         @form = form
         @resource = resource
-        @model_errors = Array(model_errors)
+        @model_errors = model_errors.respond_to?(:errors) ? model_errors.errors : Array(model_errors)
         @rule = rule
         @configuration = configuration
       end
@@ -44,6 +54,12 @@ module PermissionForge
       def errors = form.errors
       def error_codes = errors.values
 
+      # The model's refusals, each named with the builder's label for its field:
+      # "Relationship names ownr, which is not an association of Customer".
+      def model_errors
+        @model_errors.map { |error| error.respond_to?(:attribute) ? model_error_text(error) : error.to_s }
+      end
+
       def steps = form.path_steps
       def target = form.target_model
 
@@ -56,6 +72,19 @@ module PermissionForge
 
       def model_missing? = target.nil?
 
+      # The stored segment of a path step that names no relationship ("ownr"):
+      # its select shows "Pick a relationship…" with this value instead of
+      # the first relationship as if it were chosen, and a refresh keeps it.
+      def broken_step(index)
+        step = steps[index]
+        form.path[index] if step && step.last.nil?
+      end
+
+      # The stored field while the path leads nowhere: the field select has
+      # no columns to offer, so it keeps this one selected; picking the
+      # relationship again keeps it when it is a column there.
+      def kept_field = (form.field_name.presence if model_missing?)
+
       # Open the advanced panel when the join is not the automatic one.
       def advanced_open? = form.join != 'auto'
 
@@ -67,6 +96,16 @@ module PermissionForge
 
       def field_selected?(column) = column.name == form.field_name
       def operator_selected?(operator) = operator == form.operator
+
+      private
+
+      def model_error_text(error)
+        key = ERROR_LABELS[error.attribute.to_sym]
+        return error.message unless key
+
+        I18n.t('permission_forge.permission_set_rules.builder.model_error',
+               field: I18n.t("permission_forge.permission_set_rules.#{key}"), message: error.message)
+      end
     end
   end
 end

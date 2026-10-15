@@ -15,7 +15,7 @@
     <div class="pf-banner">
       <span class="pf-banner__glyph" aria-hidden="true">◷</span>
       <div class="pf-banner__body">
-        <span><%= t('.conditional', sets: @conditional_sets.map(&:name).to_sentence) %></span>
+        <span><%= t('.conditional', sets: pf_to_sentence(@conditional_sets.map(&:name))) %></span>
       </div>
     </div>
   <% end %>
