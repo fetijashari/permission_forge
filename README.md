@@ -176,6 +176,10 @@ rules for a model gets every row.
 
 ### 4. Create a Permission Set and assign it
 
+Run these lines in order, in one console. If a `create!` raises (a Permission Set name is unique: one made in the
+admin already holds "Sales Team"), fix it and run it again before going on: the lines after it use its record and,
+without it, fail with a database `NOT NULL` error that hides the first one.
+
 ```ruby
 pset = PermissionForge::PermissionSet.create!(name: 'Sales Team', is_active: true)
 
@@ -191,15 +195,17 @@ PermissionForge::ResourceField.create!(
   read_access: true, edit_access: true
 )
 
-user = User.first # the person who gets the set
+user = User.find_by!(email_address: 'bob@example.com') # the person who gets the set (`email:` on a Devise app)
 PermissionForge::PermissionSetUser.create!(permission_set: pset, user: user)
 ```
 
 Only `name` has a field row here. A column with no row is refused by the default
 `unconfigured_field_strategy = :block`: its getter returns `nil` and `as_json` keeps the key as `null` (a Hidden row,
-read off, leaves the key out). `PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)`, or the
-admin's "Sync fields with model", gives every column a row (Hidden; timestamps read-only; columns that look like personal
-data readable and masked, under the default `gdpr_defaults`); then open the ones the set should read.
+read off, leaves the key out). `PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)` gives every
+column without a row one: Hidden, `created_at` / `updated_at` included, except the columns that look like personal data,
+which are readable and masked under the default `gdpr_defaults`. With `grant_all: true` every row is readable and
+editable, unmasked, and the timestamps read-only. The admin's "Sync fields with model" adds the rows at a level you
+pick. Then open the ones the set should read.
 
 Each change invalidates the cached permissions of the users it affects; the next read rebuilds them. The admin UI
 (mounted at `/permissions` in [Installation](#installation)) does the same through forms.
@@ -210,8 +216,10 @@ wrap it to say who and why: `PermissionForge.with_audit_actor(user: admin, reaso
 
 ### 5. Check permissions at runtime
 
+Look up the same person step 4 assigned (`User.first` may be someone else, who holds no set: `false` and `{}`):
+
 ```ruby
-user = User.first # the person you assigned in step 4
+user = User.find_by!(email_address: 'bob@example.com') # the person you assigned in step 4
 user.can_read?('Customer')   # => true
 user.can_delete?('Customer') # => false
 user.permissions_for(:Customer)
@@ -230,7 +238,8 @@ Several defaults fail open so that installing the gem changes nothing until you 
 through this list. `bin/rails permission_forge:audit` reports most of these settings.
 
 `config.preset = :strict` closes every row below that a setting can close, except masking with nobody signed in (an
-explicit choice: see its row); a setting you make yourself always wins over the preset. New installs get the safe
+explicit choice: see its row; `permission_forge:audit` keeps reporting it as `masked_nil_user_bypass`, medium, until
+you set it); a setting you make yourself always wins over the preset. New installs get the safe
 part (`action_guard_nil_user_strategy = :deny`, `conditional_sets_strict_mode = true`, `cache_backend = :rails_cache`)
 and the preset as a commented line with what it costs. The rows that need your code (`base_controller_class`,
 `admin_assignment_authorization`, `audit_log_authorization`, `user_active_check`) are not in a preset.

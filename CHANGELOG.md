@@ -388,6 +388,25 @@ Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authent
   submitted) and leaves out the ones they may not read.
 - Getting started and the generated initializer's `config.preset = :strict` comment: a seed's `find_or_create_by!` run
   with nobody signed in creates a duplicate on every run under the preset.
+- README Quick Start and [Getting started](docs/getting-started.md#wiring-a-scaffold): `ResourceFieldGenerator` without
+  `grant_all` leaves `created_at` / `updated_at` Hidden like every other column (they said read-only); only `grant_all`
+  makes them read-only. Step 4 says to run its lines in order and fix a failing `create!` first (a later line otherwise
+  fails with a `NOT NULL` error); step 5 looks up the person step 4 assigned instead of `User.first`.
+- [Handling denials](docs/row-level-rules.md#handling-denials) and [Controller actions](docs/controller-actions.md#2-answer-denied-requests):
+  a standalone `public/403.html` (a copy of Rails 8's `404.html` keeps its "404 Not Found" artwork, an inline SVG).
+  When the refused page is the one the handler would redirect to, it renders that page with status 403 instead of an
+  empty `head :forbidden`, which left a signed-in person without a Permission Set on the sign-in form after signing in;
+  other formats (JSON, CSV) get an empty 403 through `format.any`. The `sessions` / `passwords` exclusion is shown where
+  the guard is introduced, with its symptom: nobody can sign in and Sign out seems to do nothing.
+- [Getting started](docs/getting-started.md#wiring-a-scaffold): the scaffold's HTML partial printed the label of a field
+  the user may not read with a blank value; a helper on `field_permissions` skips such fields. The Rails 8 section names
+  the symptoms of a guarded sign-in page and of a public action without `resume_session` (a signed-in user is sent back
+  to the sign-in form).
+- The generated initializer, README and [Presets](docs/configuration.md#presets): `config.preset = :strict` does not close
+  every fail-open default. `masked_attributes_nil_user_strategy` stays `:bypass` (the audit keeps reporting
+  `masked_nil_user_bypass`), and the checklist rows that need your code are in no preset.
+- [filter_parameters_integration](docs/configuration.md#filter_parameters_integration) and the GDPR guide: the patterns
+  filter every `name` parameter in the app's request logs, the admin's own forms included; how to narrow them.
 
 ## [0.14.1] - 2026-10-14
 

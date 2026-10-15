@@ -48,7 +48,7 @@ The most actionable scope — finds and fixes unprotected PII:
 - **Runs `GdprFieldAuditor`** to identify unmasked PII fields, unmapped PII columns, `view_all`/`modify_all` bypasses on PII resources, and cross-set unmasking
 - **Validates mask strategies** match data types (email → `email`, SSN → `last4`, etc.)
 - **Checks `gdpr_defaults`** — when enabled, fields that look like personal data are masked when fields are generated (`ResourceFieldGenerator`), unless full access was asked for (`grant_all: true`, `grant_full_access!`, the admin's "Full access"): those fields are generated unmasked and reported by `GdprFieldAuditor` as `unmasked_field`
-- **Checks `filter_parameters_integration`** — prevents PII from leaking into Rails logs
+- **Checks `filter_parameters_integration`** — prevents PII from leaking into Rails logs. The patterns match parameter names across the whole app, so any `name` parameter (a product's, the admin's Permission Set and Resource names) is logged as `[FILTERED]` too; [configuration.md](configuration.md#filter_parameters_integration) shows how to narrow it
 - **Finds uncovered columns** — model columns with no ResourceField row in effect (none, or only switched-off ones) fall to `unconfigured_field_strategy` (default `:block` — omitted from responses); they leak only if you've relaxed it to `:pass_through`/`:warn`
 - **Cross-set masking risk** — mask_access uses AND logic, so a single unmasking set exposes PII for all roles
 

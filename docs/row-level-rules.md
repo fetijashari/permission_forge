@@ -274,9 +274,30 @@ The engine registers both errors in `config.action_dispatch.rescue_responses` as
 
 What the response looks like depends on Rails' error pages, not on the gem:
 
-- **Production** (`consider_all_requests_local = false`): `ActionDispatch::PublicExceptions` renders `public/403.html` (or `public/403.<locale>.html`). **Rails apps ship no `public/403.html`**, so an HTML request gets a 403 with an empty body, and the browser shows its own error page, until you add one or rescue the error. Add it next to the `public/404.html` Rails generated (a copy with the text changed is enough). A JSON request gets `{"status":403,"error":"Forbidden"}`.
+- **Production** (`consider_all_requests_local = false`): `ActionDispatch::PublicExceptions` renders `public/403.html` (or `public/403.<locale>.html`). **Rails apps ship no `public/403.html`**, so an HTML request gets a 403 with an empty body, and the browser shows its own error page, until you add one (below) or rescue the error. A JSON request gets `{"status":403,"error":"Forbidden"}`.
 - **Development**: the debug page, with status 403.
 - **Request tests**: under `config.action_dispatch.show_exceptions = :rescuable` (what a Rails 7.1+ app generates in `config/environments/test.rb`) the test now gets the 403 response, as it gets a 404 for `RecordNotFound`: a test that wrapped the request in `assert_raises` asserts `assert_response :forbidden` instead. Under `:none` the error still raises in the test.
+
+Add `public/403.html` yourself. Do not start from a copy of Rails' `public/404.html`: in Rails 8 its "404" and "Not Found" are drawn by an inline SVG, so a copy with the text changed still shows "404 Not Found". A page of its own is enough:
+
+```html
+<!-- public/403.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Not allowed (403)</title>
+  </head>
+  <body>
+    <h1>You are not allowed to see this page</h1>
+    <p>Your account does not give you access to it. If you think it should, ask an administrator.</p>
+    <p><a href="/">Back to the start page</a></p>
+  </body>
+</html>
+```
+
+The handler below renders the same file when it has no other page to send the visitor to.
 
 Like every mapped exception, an unrescued denial is not reported to `Rails.error` as an unhandled exception. The denial is still in the audit log: `access.denied` (rule) and `action.denied` (guard) are stored whenever the audit log is on (`audit_runtime_events` holds `:denied` by default; see [audit-log.md](audit-log.md)).
 
@@ -294,27 +315,48 @@ An HTML app (`ActionController::Base`):
 ```ruby
 class ApplicationController < ActionController::Base
   rescue_from PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError do |error|
-    # The rules' own messages, as the admin wrote them ([] when no rule denied).
-    @reasons = error.failure_messages
-    render 'errors/forbidden', status: :forbidden
+    respond_to do |format|
+      format.html do
+        # The rules' own messages, as the admin wrote them ([] when no rule denied).
+        @reasons = error.failure_messages
+        render 'errors/forbidden', status: :forbidden
+      end
+      format.any { head :forbidden } # JSON, CSV, ...: a 403 without HTML
+    end
   end
 
   rescue_from PermissionForge::ActionNotAuthorizedError do |error|
     # error.resource => "Customer", error.action => "index" (the action key, not a sentence),
     # error.controller_path => "customers",
     # error.reason => :crud_denied, :action_denied, ... (:nil_user_denied when nobody is signed in)
-    signed_out = error.reason == :nil_user_denied
-    target = signed_out ? new_session_path : root_path # your sign-in page; a page every user may open
-    if request.path == target
-      head :forbidden # never redirect to the page that was just refused: the browser would loop
-    else
-      redirect_to target, alert: t(signed_out ? 'errors.sign_in_first' : 'errors.not_allowed')
+    respond_to do |format|
+      format.html do
+        signed_out = error.reason == :nil_user_denied
+        target = signed_out ? new_session_path : root_path # your sign-in page; a page every user may open
+        if request.path == target
+          # Never redirect to the page that was just refused (the browser would loop): show the 403 page.
+          render file: Rails.public_path.join('403.html'), status: :forbidden, layout: false
+        else
+          redirect_to target, alert: t(signed_out ? 'errors.sign_in_first' : 'errors.not_allowed')
+        end
+      end
+      format.any { head :forbidden } # JSON, CSV, ...: a 403 without HTML
     end
   end
 end
 ```
 
-Do not answer a denial with `redirect_back fallback_location: root_path`. When the refused page is the root itself (a guarded `index` mounted at `root`, visited by someone who is not signed in, or who may not read it), the fallback sends the browser back to the page that was just refused: it loops until the browser gives up (`ERR_TOO_MANY_REDIRECTS`), and every hop writes an `action.denied` event. The handler above sends a signed-out visitor to sign in (Devise: `new_user_session_path`; on an action opened with Rails 8's `allow_unauthenticated_access`, a signed-in visitor also reads as signed out unless the session is resumed: see [Callback order](controller-actions.md#callback-order)) and anyone else to a page they may open, and answers 403 when the refused page is that page. `new_session_path` must not be guarded for signed-out visitors: with the guard in `ApplicationController`, Rails 8's `SessionsController` maps to its `Session` model and is refused like any other action under `action_guard_nil_user_strategy = :deny`, so exclude it (`config.controller_discovery_exclude += %w[sessions passwords]`).
+`format.html` also answers a Turbo request and a browser's `*/*`; `format.any` answers every other format with an empty 403 (Rails 7.1 and later).
+
+Do not answer a denial with `redirect_back fallback_location: root_path`. When the refused page is the root itself (a guarded `index` mounted at `root`, visited by someone who is not signed in, or who may not read it), the fallback sends the browser back to the page that was just refused: it loops until the browser gives up (`ERR_TOO_MANY_REDIRECTS`), and every hop writes an `action.denied` event. The handler above sends a signed-out visitor to sign in (Devise: `new_user_session_path`; on an action opened with Rails 8's `allow_unauthenticated_access`, a signed-in visitor also reads as signed out unless the session is resumed: see [Callback order](controller-actions.md#callback-order)) and anyone else to a page they may open. When the refused page is that page, it renders `public/403.html` with status 403. That is what a signed-in person who holds no Permission Set sees after signing in, when the root is a guarded page: Rails 8's sign-in redirects to the root, and with an empty `head :forbidden` there Turbo would leave them on the filled-in sign-in form, as if signing in had failed.
+
+**Keep the sign-in pages out of the guard.** With the guard in `ApplicationController`, Rails 8's `SessionsController` is guarded too (the guard maps it to the generator's `Session` model), and under `action_guard_nil_user_strategy = :deny` every signed-out request to it is refused. Nobody can sign in, and **Sign out seems to do nothing**: it ends the session, then the redirect lands on the refused sign-in page, which shows the 403 page, or, with a handler that answers an empty 403, nothing at all: Turbo keeps the old page, "Signed in as …" still in the header. Exclude the controllers in the initializer (`passwords` too, so that a `Password` model added later does not lock out password resets):
+
+```ruby
+config.controller_discovery_exclude += %w[sessions passwords] # the sign-in pages stay reachable signed out
+```
+
+The same holds for any controller a signed-out visitor must reach whose name matches a model.
 
 Write the message yourself. `error.action` is the key that was checked (`index`, `export`), so "You may not index customers" is what interpolating it gives; `errors.not_allowed` above is your own translation key ("You are not allowed to open that page."), and `error.resource` names the model if you want it in the text.
 

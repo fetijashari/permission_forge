@@ -29,6 +29,17 @@ end
 The guard adds one `before_action`. Include it **after** the callback that signs the user
 in — see [Callback order](#callback-order).
 
+> **Included in `ApplicationController`, the guard also runs on your sign-in pages.** Rails 8's
+> `SessionsController` maps to the generator's `Session` model, so under
+> `action_guard_nil_user_strategy = :deny` (what new installs get) a signed-out visitor is refused
+> the sign-in form. Nobody can sign in, and **Sign out seems to do nothing**: it ends the session,
+> then lands on the refused sign-in page (with a handler that answers an empty 403, Turbo keeps the
+> old page, "Signed in as …" still in the header). Exclude them in the initializer:
+>
+> ```ruby
+> config.controller_discovery_exclude += %w[sessions passwords]
+> ```
+
 ### 2. Answer denied requests
 
 The guard never renders or redirects. A denied action raises
@@ -46,22 +57,25 @@ class ApplicationController < ActionController::Base
         signed_out = error.reason == :nil_user_denied
         target = signed_out ? new_session_path : root_path # your sign-in page; a page every user may open
         if request.path == target
-          head :forbidden # never redirect to the page that was just refused: the browser would loop
+          # Never redirect to the page that was just refused (the browser would loop): show the 403 page.
+          render file: Rails.public_path.join('403.html'), status: :forbidden, layout: false
         else
           redirect_to target, alert: t(signed_out ? 'errors.sign_in_first' : 'errors.not_allowed')
         end
       end
-      format.json { head :forbidden }
+      format.any { head :forbidden } # JSON, CSV, ...: a 403 without HTML
     end
   end
 end
 ```
 
 Not `redirect_back fallback_location: root_path`: when the refused action is the root page, that
-redirects to it again, forever (`ERR_TOO_MANY_REDIRECTS`, one `action.denied` event per hop). Write
-the message yourself: `error.action` is a key (`index`), not a sentence. Keep the sign-in page out
-of the guard (Rails 8's `SessionsController` maps to its `Session` model):
-[Handling Denials](row-level-rules.md#handling-denials) explains both.
+redirects to it again, forever (`ERR_TOO_MANY_REDIRECTS`, one `action.denied` event per hop). When
+the refused page is the one the handler would send the visitor to, it renders `public/403.html`
+(add it: [Handling Denials](row-level-rules.md#handling-denials) has a page to start from) with
+status 403, not an empty `head :forbidden`: a signed-in person who holds no Permission Set, sent to a
+guarded root after signing in, would otherwise stay on the filled-in sign-in form, as if signing in
+had failed. Write the message yourself: `error.action` is a key (`index`), not a sentence.
 
 Without a `rescue_from` the request answers **403 Forbidden**: the engine registers the error in
 `config.action_dispatch.rescue_responses`. In production Rails renders `public/403.html`, which Rails apps do
@@ -336,7 +350,8 @@ is what resumes the session (`resume_session` sets `Current.session`, and `Curre
 it). A controller that includes the guard after inheriting from it gets the right order. An action
 opened with `allow_unauthenticated_access` skips `require_authentication`, so nothing resumes the
 session there: `Current.user` is `nil` even for a signed-in visitor. The guard then treats them as
-signed out (refused under `action_guard_nil_user_strategy = :deny`), and if the guard is skipped
+signed out (refused under `action_guard_nil_user_strategy = :deny`: a signed-in visitor is sent
+back to the sign-in form, as if not signed in), and if the guard is skipped
 too, row-level rules and masking follow the nil-user strategies, whose default `:bypass` shows
 every row unmasked. Resume the session on those actions, ahead of the guard:
 

@@ -210,7 +210,7 @@ entry[:fields]
 
 ## Wiring a scaffold
 
-A controller made by `bin/rails generate scaffold` needs two changes before the permissions show in it. Masked fields appear masked right away, which makes the first run look protected while it is not:
+A controller made by `bin/rails generate scaffold` needs a few changes before the permissions show in it. Masked fields appear masked right away, which makes the first run look protected while it is not:
 
 - **Row-level rules.** `PermissionScopedFindable` applies the user's rules to the class-level `find_by` / `find_by!` and to `permission_scoped` only. The scaffold's `Customer.all` (index) and `Customer.find` (`set_customer`) ignore them: every user lists every row and opens any record by its URL. Use the scoped calls:
 
@@ -235,7 +235,32 @@ A controller made by `bin/rails generate scaffold` needs two changes before the 
   json.url customer_url(customer, format: :json)
   ```
 
-  A column with **no row at all** is not left out. The default `unconfigured_field_strategy = :block` refuses it too, but `as_json` keeps its key with `null` (see [Unconfigured fields](./masked-attributes.md#unconfigured-fields)). Step 5 creates rows for `name` and `email` only, so `phone`, `status`, `notes`, `owner_id` and the timestamps come out as `null`. Give every column a row, so that each one is either readable or left out: the admin's **Sync fields with model** ("Add all new as Hidden", "… as Read-only" or "… with full access"), or in a console `PermissionForge::Services::ResourceFieldGenerator.call(resource: customer_resource)`. The generator adds a row for each column that has none: Hidden, except `created_at` / `updated_at` (read-only) and, under `gdpr_defaults` (on by default), columns that look like personal data (readable, masked); `grant_all: true` makes them all readable and editable. Then open the fields the set should read.
+  A column with **no row at all** is not left out. The default `unconfigured_field_strategy = :block` refuses it too, but `as_json` keeps its key with `null` (see [Unconfigured fields](./masked-attributes.md#unconfigured-fields)). Step 5 creates rows for `name` and `email` only, so `phone`, `status`, `notes`, `owner_id` and the timestamps come out as `null`. Give every column a row, so that each one is either readable or left out: the admin's **Sync fields with model** ("Add all new as Hidden", "… as Read-only" or "… with full access"), or in a console `PermissionForge::Services::ResourceFieldGenerator.call(resource: customer_resource)`. The generator adds a row for each column that has none: Hidden, `created_at` / `updated_at` included, except, under `gdpr_defaults` (on by default), columns that look like personal data (readable, masked); `grant_all: true` makes them all readable and editable, unmasked, and the timestamps read-only (see [Rails timestamps](./masked-attributes.md#rails-timestamps)). Then open the fields the set should read.
+
+- **HTML views.** The scaffold's `_customer.html.erb` prints a label and a getter for each column, so a field the user may not read still shows its label with a blank value (`Notes:` and nothing after it). Ask the user's field permissions and skip those fields, with a helper:
+
+  ```ruby
+  # app/helpers/customers_helper.rb
+  module CustomersHelper
+    # true when the signed-in user may read the Customer field (masked or not). A field without a
+    # row answers nil, so false: the default unconfigured_field_strategy (:block) refuses it too.
+    def customer_field_readable?(field)
+      Current.user&.field_permissions(:Customer, field)&.dig(:read_access) == true
+    end
+  end
+  ```
+
+  ```erb
+  <%# app/views/customers/_customer.html.erb: one block per column %>
+  <% if customer_field_readable?(:notes) %>
+    <div>
+      <strong>Notes:</strong>
+      <%= customer.notes %>  <%# masked by MaskedAttributes when the field is masked %>
+    </div>
+  <% end %>
+  ```
+
+  `field_permissions(resource, field_name)` returns the field's entry (`read_access`, `edit_access`, `mask_access`, `mask_strategy`) or `nil` when the user's sets give the field no row. With nobody signed in the helper answers `false` and the partial shows no field, while the getters follow `masked_attributes_nil_user_strategy`.
 
 The forms still offer every field: see [Telling the user what was not saved](./field-filtering.md#telling-the-user-what-was-not-saved) for rendering a field read-only and saying which keys `PermitsAttributes` dropped. And with nobody signed in the model layer restricts nothing by default: see the [hardening checklist](../README.md#production-hardening-checklist).
 
@@ -260,9 +285,16 @@ Restart the server with `PF_ADMIN_USER` and `PF_ADMIN_PASSWORD` set and open `ht
 
 ## Using Rails 8's authentication generator
 
-If your app was set up with `bin/rails generate authentication`, the generated `current_user_resolver` already reads its `Current.user`, so it needs no change. Two things to know:
+If your app was set up with `bin/rails generate authentication`, the generated `current_user_resolver` already reads its `Current.user`, so it needs no change. Three things to know:
 
-- **Public actions.** `allow_unauthenticated_access` skips `require_authentication`, which is what resumes the session, so on those actions `Current.user` is `nil` even for a signed-in visitor. The controller action guard then treats them as signed out, and row-level rules and masking follow the nil-user strategies (the default `:bypass` restricts nothing). Add `prepend_before_action :resume_session, only: ...` for the same actions: see [Controller Actions](./controller-actions.md#callback-order).
+- **The guard in `ApplicationController` guards the sign-in page too.** The generator's `SessionsController` maps to its `Session` model, so with `ControllerActionGuard` included in `ApplicationController` and `action_guard_nil_user_strategy = :deny` (what the install generator writes), a signed-out visitor is refused the sign-in form. The symptom: nobody can sign in, and **Sign out seems to do nothing** (the session ends, but the redirect lands on the refused sign-in page, so the page stays as it was, "Signed in as …" still in the header). Leave the sign-in pages out of the guard in the initializer:
+
+  ```ruby
+  config.controller_discovery_exclude += %w[sessions passwords]
+  ```
+
+  See [Handling Denials](./row-level-rules.md#handling-denials) for a handler that never loops.
+- **Public actions.** `allow_unauthenticated_access` skips `require_authentication`, which is what resumes the session, so on those actions `Current.user` is `nil` even for a signed-in visitor. The symptom on a guarded public action: a signed-in user who opens it is refused as signed out, and with the [Handling Denials](./row-level-rules.md#handling-denials) handler lands back on the sign-in form with its "sign in first" alert (`errors.sign_in_first`), although they are signed in. If the guard is skipped there, row-level rules and masking follow the nil-user strategies (the default `:bypass` restricts nothing). The fix: add `prepend_before_action :resume_session, only: ...` for the same actions (see [Callback order](./controller-actions.md#callback-order)).
 - **Your own admin controller.** An admin controller that inherits from your `ApplicationController` (`base_controller_class`, Option B) also inherits the generated `request_authentication`, which redirects to `new_session_path`. That path does not resolve inside the engine, so a signed-out visit to `/permissions` is a 500. Override it to use `main_app.new_session_path`: see [Admin UI](./admin-ui.md#rails-8-authentication-generator).
 
 ## What's Next?

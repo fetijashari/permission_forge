@@ -8,8 +8,10 @@ Set these in `config/initializers`. `user_class`, `audit_user_class` and `tenant
 
 ```ruby
 PermissionForge.configure do |config|
-  # Sets every option that decides whether something fails open, all at once
-  # (see Presets below). A setting made in this block wins over it, in any order.
+  # Sets the options that decide whether something fails open, all at once
+  # (see Presets below: masked_attributes_nil_user_strategy and the options
+  # that need your code are not among them). A setting made in this block
+  # wins over it, in any order.
   #   :compat — the defaults below (default)
   #   :strict — the closed values of the hardening checklist
   config.preset = :compat
@@ -604,7 +606,12 @@ Users who relied on old defaults can restore them in their initializer.
 | `cache_backend` | `:memory` | `:rails_cache` |
 | `api_require_authorization`, `admin_tenantless_access`, `nested_attributes_parent_fallback`, `unconfigured_field_strategy` | `true`, `:deny`, `false`, `:block` | the same |
 
-`masked_attributes_nil_user_strategy` is in no preset: `:hide` makes jobs and mailers that read masked models with no user see hidden values, a cost each app chooses for itself.
+What `:strict` leaves open:
+
+- `masked_attributes_nil_user_strategy` is in no preset (`Presets::OPT_IN`): `:hide` makes jobs and mailers that read masked models with no user see hidden values, a cost each app chooses for itself. It stays `:bypass` under `:strict`, so `bin/rails permission_forge:audit` still reports `masked_nil_user_bypass` (medium) until you set it.
+- The rows of the hardening checklist that need your code: an authenticated `base_controller_class` (and `api_base_controller_class`), `admin_assignment_authorization`, `audit_log_authorization`, a `request_context_resolver` for conditional Permission Sets, and `user_active_check`.
+
+So `:strict` is not "every finding closed": run the audit after setting it.
 
 What `:strict` costs: with `nil_user_strategy :deny` and `auto_query_scoping :filter_only`, code that runs with no current user (jobs, mailers, seeds, webhooks, the console, sign-in lookups on a user model that includes `PermissionScopedFindable`) sees no protected rows, and a `belongs_to` presence check on a protected parent fails ("must exist"). An idempotent seed is the easy one to miss: `Customer.find_or_create_by!(name: ...)` run with nobody signed in finds no row and creates a duplicate on every run. Run such code with a user, or inside `PermissionForge.without_permission_scope { }`: there `where`, `find`, `find_by` and `permission_scoped` apply no rules when nobody is signed in (a signed-in user's `find_by` and `permission_scoped` still apply theirs), so never put it around code an anonymous request reaches. Do not include `PermissionScopedFindable` in the user model. A conditional Permission Set needs a `request_context_resolver` that returns the request's IP and session flags, or its grant never applies.
 
@@ -864,7 +871,20 @@ See [controller-actions.md](controller-actions.md).
 
 #### filter_parameters_integration
 
-**Filter sensitive values from logs.** Adds the privacy patterns to Rails' filter_parameters so logs don't show them. The patterns also reach `ActiveRecord::Base.filter_attributes` (Rails copies `config.filter_parameters` there), so a matching attribute (`name` and `email` included) prints as `[FILTERED]` in `#inspect`, `pretty_print` and error reports.
+**Filter sensitive values from logs.** Adds the privacy patterns to Rails' filter_parameters so logs don't show them. The patterns also reach `ActiveRecord::Base.filter_attributes` (Rails copies `config.filter_parameters` there), so a matching attribute of your models (`name` and `email` included) prints as `[FILTERED]` in `#inspect`, `pretty_print` and error reports.
+
+**The patterns apply to the whole app, by parameter name.** Rails matches them against every parameter key, at any depth, whatever the form: a bare `name` key is filtered everywhere — a product's, a team's, and the admin's own forms (a Permission Set, a Resource, a field) — so request logs show `"name" => "[FILTERED]"` for values that are not personal data. To narrow it, add the patterns yourself without the one that matches a bare `name`, and filter `name` only under the forms that carry a person's name. Below the `configure` block of `config/initializers/permission_forge.rb`:
+
+```ruby
+# in the configure block: config.filter_parameters_integration = false
+
+patterns = PermissionForge.gdpr_filter_parameters
+bare_name = patterns.select { |pattern| pattern.match?('name') } # the one that also covers first_name, ...
+Rails.application.config.filter_parameters +=
+  (patterns - bare_name) + [/first_name|last_name|full_name|contact_name/, 'user.name', 'customer.name']
+```
+
+A String with a dot (`'customer.name'`) matches the nested key `customer[name]` only. `PermissionForge.gdpr_filter_parameters` reads `gdpr_field_patterns`, so set those in the `configure` block above it. Masking detection keeps using every pattern.
 
 ### Caching
 
