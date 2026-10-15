@@ -554,6 +554,13 @@ Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authent
   page with the documented handler (the 403 page where the form should be, also after Sign out) as well as with an
   empty 403. Steps 5 and 6 look up the person they assign by email instead of `User.first`, which may be someone
   holding no set.
+- [Handling denials](docs/row-level-rules.md#rescuing-them-yourself): after a Turbo sign-in that ends on a refused
+  page the address bar still shows `/session/new`, and Reload brought back the sign-in form with nobody signed in
+  (the generator's `sessions#new` does not resume the session). A one-line `SessionsController#new` that sends a
+  signed-in visitor to `after_authentication_url` (loop-free with the documented handler). The `errors/forbidden`
+  template no longer links to the start page, which for someone holding no Permission Set is refused too.
+- [Admin API](docs/admin-api.md#disabling-the-api-entirely): while `api_enabled` is off the empty 404 (not the JSON
+  envelope) is deliberate: it does not reveal that the API exists.
 
 ## [0.14.1] - 2026-10-14
 

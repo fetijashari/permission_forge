@@ -90,6 +90,8 @@ config.api_enabled = true
 
 When `api_enabled = false` (the default), all API routes return **404 Not Found** with no body — and so does any other path under the API mount. The routes are defined but guarded at runtime — no route leakage.
 
+This 404 is deliberately not the JSON envelope the API answers once it is on: an empty 404 (`head :not_found`, with whatever content type Rails gives it, `text/html` for a plain `curl`) does not reveal that an API exists under the mount while it is off. A client that expects `{ "error": … }` on every answer reads an empty body here; check `api_enabled` first when an endpoint answers 404 to everything.
+
 #### Who the audit log names for an API change
 
 Every change made through the API is an [audit event](audit-log.md#who-did-it-actor-resolution). Its actor is the first of: `config.audit_actor_resolver` (called with the controller), the current user (`config.current_user_resolver`), else an anonymous `api` actor labelled **"API client"**. `api_auth` answers only yes or no, so it cannot name anyone by itself.

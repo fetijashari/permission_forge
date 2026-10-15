@@ -75,8 +75,10 @@ Everyone else gets the 403 page in place, rendered as a template in your layout,
 `public/403.html`: a signed-in person who holds no Permission Set, sent to a guarded root by Rails 8's
 Turbo sign-in, sees it under your header with a way to sign out, where a static page (or an empty
 `head :forbidden`) leaves them on the sign-in form, as if signing in had failed.
-[Handling Denials](row-level-rules.md#rescuing-them-yourself) has the template and why. Write the
-message yourself: `error.action` is a key (`index`), not a sentence.
+[Handling Denials](row-level-rules.md#rescuing-them-yourself) has the template and why, and the line
+`SessionsController#new` needs so that Reload after that sign-in (Turbo leaves the address bar on
+`/session/new`) does not bring the sign-in form back. Write the message yourself: `error.action` is
+a key (`index`), not a sentence.
 
 Without a `rescue_from` the request answers **403 Forbidden**: the engine registers the error in
 `config.action_dispatch.rescue_responses`. In production Rails renders `public/403.html`, which Rails apps do

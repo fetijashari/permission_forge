@@ -351,7 +351,6 @@ end
   <% if @reasons.present? %>
     <ul><% @reasons.each do |reason| %><li><%= reason %></li><% end %></ul>
   <% end %>
-  <%= link_to 'Back to the start page', root_path unless current_page?(root_path) %>
   <%= button_to 'Sign out', session_path, method: :delete %>
 <% else %>
   <p>Sign in to see it. <%= link_to 'Sign in', new_session_path %></p>
@@ -360,9 +359,26 @@ end
 
 `authenticated?`, `new_session_path` and `session_path` are the generator's; with Devise use `user_signed_in?`, `new_user_session_path` and `destroy_user_session_path`. `format.html` also answers a Turbo request and a browser's `*/*`; `format.any` answers every other format with an empty 403 (Rails 7.1 and later).
 
+The template has no link to the start page on purpose: for someone who holds no Permission Set the root is refused too, so from any refused page that link leads to this page again. If your app has a page every signed-in person may open (an account page outside the guard), link to that one; otherwise your layout's navigation, the browser's Back button and Sign out are the ways on.
+
 **Render the 403 page in your layout, not `public/403.html`.** A signed-in person who holds no Permission Set is refused right after signing in when the root is a guarded page: Rails 8's sign-in redirects to the root, and the sign-in is a Turbo form submission. Turbo shows a 403 answer to it only when the page carries the same tracked assets (`data-turbo-track`) as the page it replaces, which a page in your layout does. With `public/403.html` (`render file: ..., layout: false`) Turbo reloads the sign-in page instead, and with an empty `head :forbidden` it keeps the filled-in form: either way the person is left on the sign-in form, as if signing in had failed. In the layout they read why under your header, and can sign out.
 
-Do not answer a denial with `redirect_back fallback_location: root_path`. When the refused page is the root itself (a guarded `index` mounted at `root`, visited by someone who is not signed in, or who may not read it), the fallback sends the browser back to the page that was just refused: it loops until the browser gives up (`ERR_TOO_MANY_REDIRECTS`), and every hop writes an `action.denied` event. The handler above redirects only a signed-out visitor, to sign in, and never from the sign-in page itself; everyone else gets the 403 page in place, at the address they opened, so no denial loops. On an action opened with Rails 8's `allow_unauthenticated_access`, a signed-in visitor also reads as signed out unless the session is resumed: see [Callback order](controller-actions.md#callback-order).
+**After that sign-in the address bar still shows the sign-in page.** Turbo renders a 4xx answer to a form submission in place without changing the URL, so the 403 page of the root is shown at `/session/new`. Pressing Reload then asks for the sign-in page again, and the generator's `SessionsController#new` (`allow_unauthenticated_access`) neither resumes the session nor sends a signed-in visitor anywhere: the sign-in form comes back with nobody shown as signed in, although the session is valid. Send a signed-in visitor on from the sign-in page:
+
+```ruby
+class SessionsController < ApplicationController
+  allow_unauthenticated_access only: %i[ new create ]
+
+  def new
+    redirect_to after_authentication_url if authenticated? # signed in already: never the sign-in form
+  end
+  # create and destroy as generated
+end
+```
+
+`authenticated?` resumes the session, and `after_authentication_url` is the page that sent them to sign in, if signing in has not used it yet, else the root. A refused page answers the 403 page in place, now at its own address, so Reload shows the 403 page again instead of the form. It cannot loop with the handler above: a resumed session sets `Current.user`, which the generated `current_user_resolver` returns, so the guard never sees that visitor as signed out and never sends them back to sign in. A signed-out visitor still gets the form.
+
+Do not answer a denial with `redirect_back fallback_location: root_path`. When the refused page is the root itself (a guarded `index` mounted at `root`, visited by someone who is not signed in, or who may not read it), the fallback sends the browser back to the page that was just refused: it loops until the browser gives up (`ERR_TOO_MANY_REDIRECTS`), and every hop writes an `action.denied` event. The handler above redirects only a signed-out visitor, to sign in, and never from the sign-in page itself; everyone else gets the 403 page in place, at the address they opened (after a Turbo sign-in, the sign-in page's: see above), so no denial loops. On an action opened with Rails 8's `allow_unauthenticated_access`, a signed-in visitor also reads as signed out unless the session is resumed: see [Callback order](controller-actions.md#callback-order).
 
 **Keep the sign-in pages out of the guard.** With the guard in `ApplicationController`, Rails 8's `SessionsController` is guarded too (the guard maps it to the generator's `Session` model), and under `action_guard_nil_user_strategy = :deny` every signed-out request to it is refused. Nobody can sign in: the sign-in page shows the 403 page ("Sign in to see it", with a link to the same page) instead of the form. Sign out ends the session, then lands on that page; with a handler that answers an empty 403, Sign out seems to do nothing: Turbo keeps the old page, "Signed in as …" still in the header. Exclude the controllers in the initializer (`passwords` too, so that a `Password` model added later does not lock out password resets):
 
