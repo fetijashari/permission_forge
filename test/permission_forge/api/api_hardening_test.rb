@@ -74,7 +74,8 @@ module PermissionForge
 
         assert_response :unprocessable_entity
         body = response.body
-        assert_includes body, I18n.t('permission_forge.api.errors.field_generation_failed')
+        assert_equal({ 'base' => [I18n.t('permission_forge.api.errors.field_generation_failed')] },
+                     JSON.parse(body).dig('error', 'messages'))
         assert_not_includes body, 'NoMethodError'
         assert_not_includes body, 'column_names'
       end

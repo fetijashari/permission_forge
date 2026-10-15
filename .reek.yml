@@ -174,7 +174,7 @@ detectors:
 
   # Tuned: Config objects and dashboard controllers need many instance variables
   TooManyInstanceVariables:
-    max_instance_variables: 52
+    max_instance_variables: 53
 
   # Tuned: Configuration holds many config options with getters/setters/validators
   TooManyMethods:

@@ -289,6 +289,15 @@ authentication is refused. That option only affects the guard; `nil_user_strateg
 [row-level rules](row-level-rules.md): changing it also changes what `find_by` and
 `permission_scoped` do without a user (jobs, consoles, rake tasks).
 
+**`:deny` here protects only the actions the guard runs on.** The model layer has its own
+nil-user defaults, and they fail open: `nil_user_strategy = :bypass` (row rules) and
+`masked_attributes_nil_user_strategy = :bypass` (masking). An action that skips the guard, or
+skips it for signed-out visitors (`skip_before_action`, a public index), then serves every row
+with every field as stored — notes, full emails — to a visitor who is not signed in. Close those
+two as well before production: see the
+[hardening checklist](../README.md#production-hardening-checklist) (`config.preset = :strict`
+closes the first; the second is a deliberate choice of its own).
+
 ### Callback order
 
 The guard reads the user from `config.current_user_resolver` when its `before_action` runs.

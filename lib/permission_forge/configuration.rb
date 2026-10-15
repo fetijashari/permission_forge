@@ -180,9 +180,17 @@ module PermissionForge
     # Default records per page when per_page param is not provided.
     attr_accessor :api_default_per_page
 
-    # When true, the /api/stats endpoint requires admin access.
-    # The api_auth lambda must set @admin = true on the controller.
+    # When true (default), GET /api/stats answers only callers
+    # api_stats_authorization allows (403 for everyone else). false: every
+    # caller api_auth admits.
     attr_accessor :api_stats_require_admin
+
+    # Lambda that receives the controller and decides who may read GET
+    # /api/stats while api_stats_require_admin is on; a truthy answer allows.
+    # When nil, stats are refused (until 0.16 an api_auth that sets @admin =
+    # true on the controller still allows, with a deprecation warning).
+    # Example: ->(controller) { PermissionForge.current_user&.admin? }
+    attr_accessor :api_stats_authorization
 
     # Record identifier field for API lookups (default: :uuid).
     # Change to :id if your app uses integer IDs in URLs.
@@ -300,8 +308,11 @@ module PermissionForge
     # Hash of regex => strategy string for GDPR field pattern matching
     attr_reader :gdpr_field_patterns
 
+    # Not created_at / updated_at (before 0.15 they were here): generated
+    # fields give them a read-only row (ResourceFieldGenerator), so the
+    # default unconfigured_field_strategy (:block) no longer hides them.
     DEFAULT_IGNORED_FIELDS = %w[
-      id created_at updated_at token_digest token_last_digits
+      id token_digest token_last_digits
       created_by updated_by token password encrypted_password
       deleted_at uuid deactivated
     ].freeze
@@ -576,6 +587,7 @@ module PermissionForge
       @api_auth = nil
       @api_base_controller_class = '::ActionController::Base'
       @api_stats_require_admin = true
+      @api_stats_authorization = nil
       @api_pagination_handler = nil
       @api_max_per_page = 100
       @api_default_per_page = 15

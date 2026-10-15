@@ -30,6 +30,11 @@ module PermissionForge
       AUDIT_SOURCE = 'api'
       # Largest id a bigint column holds; past it PostgreSQL raises instead of matching nothing.
       MAX_RECORD_ID = (2**63) - 1
+      # Body attributes that refer to another record (#with_reference_id),
+      # with the message of a reference that names none.
+      REFERENCES = {
+        permission_set_group_id: 'permission_forge.validations.permission_set.group_missing'
+      }.freeze
 
       before_action :set_api_locale
       before_action :pf_require_tenant
@@ -41,11 +46,12 @@ module PermissionForge
       end
 
       rescue_from ActiveRecord::RecordInvalid do |e|
-        render json: { error: { status: 422, messages: e.record.errors.messages } }, status: :unprocessable_entity
+        render_validation_errors(e.record)
       end
 
+      # Field-keyed like a validation error (ResponseRenderer#render_input_error).
       rescue_from ActionController::ParameterMissing, ActionController::BadRequest do |e|
-        render json: { error: { status: 422, messages: e.message } }, status: :unprocessable_entity
+        render_input_error(e)
       end
 
       private
@@ -104,6 +110,36 @@ module PermissionForge
         scope.find_by!(identifier => value)
       end
 
+      # `attrs` with the reference `key` (e.g. permission_set_group_id)
+      # replaced by the id of the record it names in `scope`, looked up like
+      # every identifier (tenant-scoped): its numeric id, or — under
+      # api_record_identifier = :uuid — its uuid, the identifier the API
+      # answers with. A blank value (null, "") is no reference (nil). Anything
+      # else that names no record of the scope is a 422 keyed by `key`; a
+      # uuid that starts with digits is never read as an id (the integer
+      # column would cast "12ab…" to 12).
+      #
+      # @raise [ParamShapes::InvalidParam]
+      def with_reference_id(attrs, key, scope)
+        return attrs unless attrs.key?(key)
+
+        value = attrs[key]
+        return attrs.merge(key => nil) if value.nil? || value == ''
+
+        attrs.merge(key => referenced_record(scope, value)&.id ||
+                           raise(ParamShapes::InvalidParam.new(key, I18n.t(REFERENCES.fetch(key)))))
+      end
+
+      def referenced_record(scope, value)
+        text = value.to_s if value.is_a?(String) || value.is_a?(Integer)
+        return unless text
+
+        if identifier_value?('id', text) then scope.find_by(id: text.to_i)
+        elsif PermissionForge.configuration.api_record_identifier.to_s == 'uuid' && identifier_value?('uuid', text)
+          scope.find_by(uuid: text)
+        end
+      end
+
       def identifier_value?(identifier, value)
         return false if value.empty? || value.include?("\0")
         return true unless identifier.to_s == 'id'
@@ -123,9 +159,8 @@ module PermissionForge
 
       def authorize_action!(action, record)
         authorizer = PermissionForge.configuration.api_action_authorization
-        message = I18n.t('permission_forge.api.errors.action_not_authorized')
         unless authorizer
-          return deny_when_authorization_required(message) do
+          return deny_when_authorization_required(I18n.t('permission_forge.api.errors.action_authorization_missing')) do
             audit_action_refused(action, record, hook: 'api_require_authorization')
           end
         end
@@ -133,7 +168,7 @@ module PermissionForge
         return if authorizer.call(self, action, record)
 
         audit_action_refused(action, record, hook: 'api_action_authorization')
-        render_not_authorized(message)
+        render_not_authorized(I18n.t('permission_forge.api.errors.action_not_authorized'))
       end
 
       # Runs the mutation authorization hook and the is_editable lock for a
@@ -174,9 +209,8 @@ module PermissionForge
       # A refusal records the ids as requested (bounded, Audit::Refusals).
       def authorize_assignment!(permission_set, user_ids)
         authorizer = PermissionForge.configuration.api_assignment_authorization
-        message = I18n.t('permission_forge.api.errors.assignment_not_authorized')
         unless authorizer
-          return deny_when_authorization_required(message) do
+          return deny_when_authorization_required(I18n.t('permission_forge.api.errors.assignment_authorization_missing')) do
             audit_assignment_refused(permission_set, user_ids, hook: 'api_require_authorization')
           end
         end
@@ -184,14 +218,15 @@ module PermissionForge
         return if authorizer.call(self, permission_set, PermissionForge::Admin::PeopleDirectory::Ids.cast(user_ids))
 
         audit_assignment_refused(permission_set, user_ids, hook: 'api_assignment_authorization')
-        render_not_authorized(message)
+        render_not_authorized(I18n.t('permission_forge.api.errors.assignment_not_authorized'))
       end
 
       # When config.api_require_authorization is on, a missing authorization lambda
       # means DENY (403) rather than the backward-compatible silent allow. This
       # prevents "authenticated == full admin" when the host wired api_auth but not
       # the per-action / assignment authorization hooks. The block records the
-      # refusal.
+      # refusal. The message names the missing option (the integrator's fix),
+      # unlike a lambda's denial; it carries nothing from the request.
       def deny_when_authorization_required(message)
         return unless PermissionForge.configuration.api_require_authorization
 

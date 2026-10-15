@@ -175,10 +175,12 @@ module ActiveSupport
       }.merge(attrs))
     end
 
+    # Set names are unique per tenant: without a name, the first free
+    # "Test Permission Set", "Test Permission Set 2", ...
     def create_permission_set(attrs = {})
       PermissionForge::PermissionSet.create!({
         uuid: SecureRandom.uuid,
-        name: 'Test Permission Set',
+        name: attrs.key?(:name) ? nil : PermissionForge::PermissionSet.unique_name('Test Permission Set'),
         description: 'A test permission set',
         is_active: true,
         is_editable: true

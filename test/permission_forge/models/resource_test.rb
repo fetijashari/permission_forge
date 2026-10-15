@@ -41,7 +41,8 @@ module PermissionForge
       assert resource.is_active
       assert resource.resource_fields.any?
       assert resource.resource_fields.all?(&:read_access)
-      assert resource.resource_fields.all?(&:edit_access)
+      assert resource.resource_fields.reject { |field| %w[created_at updated_at].include?(field.name) }.all?(&:edit_access)
+      assert_not resource.resource_fields.find_by!(name: 'created_at').edit_access, 'timestamps are read-only'
     end
 
     # Field test of 0.14.1: an Admin set made with grant_full_access! showed

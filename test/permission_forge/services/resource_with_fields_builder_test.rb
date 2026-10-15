@@ -25,7 +25,7 @@ module PermissionForge
         assert resource.resource_fields.any?
         resource.resource_fields.each do |field|
           assert field.read_access, "Expected #{field.name} to have read_access"
-          assert field.edit_access, "Expected #{field.name} to have edit_access"
+          assert_equal %w[created_at updated_at].exclude?(field.name), field.edit_access, "#{field.name} edit_access (timestamps are read-only)"
         end
       end
 

@@ -206,6 +206,35 @@ entry[:fields]
 #      email: { read_access: true, edit_access: false, mask_access: false, mask_strategy: 'full' } }
 ```
 
+## Wiring a scaffold
+
+A controller made by `bin/rails generate scaffold` needs two changes before the permissions show in it. Masked fields appear masked right away, which makes the first run look protected while it is not:
+
+- **Row-level rules.** `PermissionScopedFindable` applies the user's rules to the class-level `find_by` / `find_by!` and to `permission_scoped` only. The scaffold's `Customer.all` (index) and `Customer.find` (`set_customer`) ignore them: every user lists every row and opens any record by its URL. Use the scoped calls:
+
+  ```ruby
+  def index
+    @customers = Customer.permission_scoped # was Customer.all
+  end
+
+  private
+
+  def set_customer
+    @customer = Customer.find_by!(id: params[:id]) # was Customer.find: a denied record raises NotAuthorizedError (403)
+  end
+  ```
+
+  Or turn on [query scoping](./query-scoping.md) (`auto_query_scoping = :filter_only`) so that `all` and `find` are scoped too.
+- **JSON views.** The scaffold's jbuilder partial calls `json.extract!`, which calls each getter: a field the user may not read comes out as `"notes": null`, so a client cannot tell hidden from empty. `as_json` leaves hidden fields out (`omit_hidden_in_attributes_hash`, the default), so build the partial from it:
+
+  ```ruby
+  # app/views/customers/_customer.json.jbuilder
+  json.merge! customer.as_json(only: %i[id name email status notes created_at updated_at])
+  json.url customer_url(customer, format: :json)
+  ```
+
+The forms still offer every field: see [Telling the user what was not saved](./field-filtering.md#telling-the-user-what-was-not-saved) for rendering a field read-only and saying which keys `PermitsAttributes` dropped. And with nobody signed in the model layer restricts nothing by default: see the [hardening checklist](../README.md#production-hardening-checklist).
+
 ## Step 7: Open the Admin UI
 
 The admin UI is where a business owner manages Permission Sets, people and assignments without the console. Mount it in `config/routes.rb`:

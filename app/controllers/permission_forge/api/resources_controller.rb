@@ -27,9 +27,7 @@ module PermissionForge
         # Log the internal detail; return a generic message so model/column names
         # and adapter errors are not leaked to API clients.
         Rails.logger.error("[PermissionForge] generate_fields failed for #{@resource&.name}: #{e.class}: #{e.message}")
-        render json: {
-          error: { status: 422, messages: I18n.t('permission_forge.api.errors.field_generation_failed') }
-        }, status: :unprocessable_entity
+        render_unprocessable('base' => [I18n.t('permission_forge.api.errors.field_generation_failed')])
       end
 
       private

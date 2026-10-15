@@ -50,7 +50,7 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSet.count } do
           post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'forged' } }
         end
-        assert_response :forbidden
+        assert_response :unauthorized
 
         get "#{ROOT}/permission_sets"
         token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1]
@@ -64,7 +64,7 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSet.count } do
           post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'forged' } }
         end
-        assert_response :forbidden
+        assert_response :unauthorized
 
         PermissionForge.configuration.api_auth = ->(controller) { controller.request.headers['Authorization'] == 'Bearer s3cret' }
         post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'token client' } }.to_json,

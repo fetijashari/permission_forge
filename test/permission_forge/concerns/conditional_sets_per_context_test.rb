@@ -763,7 +763,7 @@ module PermissionForge
 
       def grant(**attrs)
         conditions = attrs.slice(:requires_session_flag, :allowed_ips, :allowed_hours_start, :allowed_hours_end)
-        @conditional = create_permission_set(name: 'Conditional', **conditions)
+        @conditional = create_permission_set(name: PermissionForge::PermissionSet.unique_name('Conditional'), **conditions)
         @assignment = create_permission_set_user(user: @user, permission_set: @conditional)
         access = { read_access: true, delete_access: true }.merge(attrs.except(*conditions.keys))
         @conditional_resource = create_resource(permission_set: @conditional, name: 'Customer', **access)

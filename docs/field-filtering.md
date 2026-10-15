@@ -36,7 +36,8 @@ Instead of creating fields one by one, you can auto-generate them:
 
 ```ruby
 # Creates a ResourceField for every column in the Customer model
-# (except ignored fields like id, created_at, password, etc.)
+# (except ignored fields like id, uuid, password; created_at / updated_at get
+# a read-only row whatever grant_all says)
 PermissionForge::Services::ResourceFieldGenerator.call(
   resource: resource,
   grant_all: false  # Set to true to grant read+edit on all fields, unmasked
@@ -119,6 +120,39 @@ end
 Pass params you have already permitted (`customer_params.to_h`, or the permitted `ActionController::Parameters`). The result is a plain Hash, which Rails' `ForbiddenAttributesProtection` does not check: if you pass unpermitted params, the keys the user may edit reach `update!` without Rails' own permit step.
 
 Without a current user `PermitsAttributes` returns `{}`: every key is dropped. A key the user may not edit is dropped whatever its value — a Hash or an Array under it is a value (a json column), never looked into. The resource may be a record or a model class.
+
+### Telling the user what was not saved
+
+Dropping is silent: the update succeeds with the keys that were kept, and a scaffold then says "Customer was successfully updated." although `status` and `notes` were ignored. Pass `report: true` to learn what was dropped. The call then answers a `PermitsAttributes::Result` instead of the Hash: `params` (the same filtered Hash), `dropped` (the paths of the dropped keys: `status`, `supplier_attributes.secret`, `lines_attributes.*.price`; never their values), `dropped?` and `dropped_fields` (the top-level keys, for a message). Without `report:` the return value is the Hash, as before.
+
+```ruby
+def update
+  result = PermissionForge::Services::PermitsAttributes.call(
+    resource: @customer, permitted_params: customer_params, report: true
+  )
+
+  if @customer.update(result.params)
+    notice = 'Customer was successfully updated.'
+    notice += " Not saved: #{result.dropped_fields.join(', ')}." if result.dropped?
+    redirect_to @customer, notice: notice
+  else
+    render :edit, status: :unprocessable_entity
+  end
+end
+```
+
+Translate the message as you do your others. Better still, do not offer what will be dropped: render a field the user may not edit as read-only text (or leave it out when they may not read it) by asking the same permissions the filter uses:
+
+```erb
+<% access = Current.user&.field_permissions(:Customer, :status) || {} %>
+<% if access[:edit_access] %>
+  <%= form.text_field :status %>
+<% elsif access[:read_access] %>
+  <p><%= @customer.status %></p>  <%# masked by MaskedAttributes when the field is masked %>
+<% end %>
+```
+
+`field_permissions` returns `nil` for a field without a row; `PermitsAttributes` drops such a key too.
 
 ## Filtering in Serializers
 
@@ -335,7 +369,7 @@ The hook is called for each configured field during `FiltersResponseAttributes.c
 
 2. **Use `grant_all: true` for admin sets** — saves time when you want full access. Since 0.15.0 it applies no mask, also with `gdpr_defaults: true` (before, GDPR-sensitive fields were still masked). Run `rake permission_forge:audit_masks` afterwards and mask the personal-data fields the set should not read in the clear; or generate without `grant_all` (sensitive fields start masked, the rest without access) and open what is needed.
 
-3. **Check the ignored_fields config** — fields like `id`, `password`, and `created_at` are excluded by default. Customize the list if needed.
+3. **Check the ignored_fields config** — fields like `id`, `uuid` and `password` are excluded by default (Rails' timestamps get a read-only row instead). Customize the list if needed.
 
 4. **Field names are case-sensitive** — `Name` and `name` are different fields to the engine. Always use the exact database column name. (On a case-insensitive collation, MySQL's default, the two cannot both be saved on one resource: the second is a validation error.)
 

@@ -35,7 +35,29 @@ module PermissionForge
       end
 
       def render_validation_errors(record)
-        render json: { error: { status: 422, messages: record.errors.messages } }, status: :unprocessable_entity
+        render_unprocessable(record.errors.messages)
+      end
+
+      # The one 422 shape: `messages` maps a field (a parameter, an attribute,
+      # or "base" when the error names none) to its messages, for validation
+      # errors and unreadable input alike.
+      def render_unprocessable(messages)
+        render json: { error: { status: 422, messages: messages } }, status: :unprocessable_entity
+      end
+
+      # An input error (ParamShapes::InvalidParam, a missing or malformed
+      # body section, Rails' own BadRequest) as field-keyed messages.
+      def render_input_error(error)
+        render_unprocessable(input_error_messages(error))
+      end
+
+      def input_error_messages(error)
+        case error
+        when PermissionForge::ParamShapes::InvalidParam then { error.param => [error.detail] }
+        when ActionController::ParameterMissing
+          { error.param.to_s => [I18n.t('permission_forge.api.errors.section_missing')] }
+        else { 'base' => [error.message] }
+        end
       end
 
       # Saves a record and renders the created resource or its validation errors.

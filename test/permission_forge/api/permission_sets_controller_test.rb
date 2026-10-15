@@ -61,11 +61,25 @@ module PermissionForge
         post '/permission_forge/api/permission_sets', params: { not_an_attribute: 'x' }.to_json,
                                                       headers: { 'CONTENT_TYPE' => 'application/json' }
         assert_response :unprocessable_entity
-        assert_match(/permission_set/, JSON.parse(response.body).dig('error', 'messages'))
+        assert_equal({ 'permission_set' => [I18n.t('permission_forge.api.errors.section_missing')] },
+                     JSON.parse(response.body).dig('error', 'messages'))
 
         post '/permission_forge/api/permission_sets', params: { name: 'Form-encoded' }
         assert_response :unprocessable_entity
         assert_nil PermissionForge::PermissionSet.find_by(name: 'Form-encoded')
+      end
+
+      # One 422 shape: input errors are field-keyed like validation errors.
+      test 'a section that is not an object is a field-keyed 422, like a validation error' do
+        post '/permission_forge/api/permission_sets', params: { permission_set: 'x' }.to_json,
+                                                      headers: { 'CONTENT_TYPE' => 'application/json' }
+        assert_response :unprocessable_entity
+        assert_equal({ 'status' => 422, 'messages' => { 'permission_set' => [I18n.t('permission_forge.api.errors.section_missing')] } },
+                     JSON.parse(response.body)['error'])
+
+        post '/permission_forge/api/permission_sets', params: { permission_set: { name: '' } }, as: :json
+        assert_response :unprocessable_entity
+        assert_kind_of Array, JSON.parse(response.body).dig('error', 'messages', 'name')
       end
 
       # ---------- UPDATE ----------

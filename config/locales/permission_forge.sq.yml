@@ -3,14 +3,27 @@ sq:
   permission_forge:
     api:
       errors:
+        action_authorization_missing: Ndryshimet përmes API-së kërkojnë config.api_action_authorization;
+          refuzohen sa kohë që nuk është vendosur dhe config.api_require_authorization
+          është aktiv
         action_not_authorized: Veprimi nuk është i autorizuar
+        assignment_authorization_missing: Caktimet përmes API-së kërkojnë config.api_assignment_authorization;
+          refuzohen sa kohë që nuk është vendosur dhe config.api_require_authorization
+          është aktiv
         assignment_not_authorized: Caktimi nuk është i autorizuar
+        bulk_action_invalid: duhet të jetë assign ose revoke
+        expires_at_past: duhet të jetë në të ardhmen
         field_generation_failed: Fushat për këtë burim nuk mund të gjenerohen
         forbidden: E ndaluar
         not_editable: Ky regjistrim nuk mund të redaktohet
         not_found: Regjistrimi nuk u gjet
+        not_iso8601_time: nuk është datë ose kohë ISO 8601
+        section_missing: mungon, është bosh ose nuk është objekt
+        stats_authorization_missing: GET /api/stats kërkon config.api_stats_authorization,
+          ose config.api_stats_require_admin = false
         tenant_required: Kjo kërkesë nuk ka qiramarrës. API-ja e administrimit shërben
           një qiramarrës në një kohë.
+        unauthorized: Nuk jeni i autentikuar
     assignments:
       confirm_destroy:
         body: "%{name} do të humbasë qasjen në %{resources}, përveç nëse një Grup
@@ -1479,6 +1492,9 @@ sq:
         api_serializer_overrides:
           desc: Zëvendësime për mënyrën si shkruhen regjistrimet në përgjigjet e API-së.
           name: Serializues të personalizuar
+        api_stats_authorization:
+          desc: Vendos kush mund të lexojë statistikat e përdorimit përmes API-së.
+          name: Kontrolli i statistikave të API-së
         api_stats_require_admin:
           desc: Vetëm administratorët mund të lexojnë statistikat e përdorimit përmes
             API-së.
@@ -2162,6 +2178,7 @@ sq:
       name_blank: nuk mund të jetë bosh
       permission_set:
         group_missing: duhet të jetë një grupim ekzistues i grupeve të lejeve
+        name_taken: përdoret tashmë nga një Grup lejesh tjetër
       permission_set_rule:
         between_requires_two_values: duhet të përmbajë saktësisht 2 vlera të ndara
           me presje për operatorin between

@@ -189,7 +189,7 @@ PermissionForge.configure do |config|
   # }
 
   # Fields to skip when auto-generating resource fields
-  config.ignored_fields = %w[id created_at updated_at password encrypted_password ...]
+  config.ignored_fields = %w[id uuid password encrypted_password ...]  # add created_at updated_at to give them no row
 
   # Field name variants (auto-creates permission entries for derived names)
   config.field_variant_mappings = {
@@ -512,8 +512,9 @@ PermissionForge.configure do |config|
   config.api_default_per_page = 15
   config.api_pagination_handler = nil  # nil = built-in LIMIT/OFFSET paginator
 
-  # Stats endpoint requires admin by default
+  # Stats endpoint closed until api_stats_authorization says who may read it
   config.api_stats_require_admin = true
+  config.api_stats_authorization = nil  # ->(controller) { PermissionForge.current_user&.admin? }
 
   # Record identifier for URL lookups
   config.api_record_identifier = :uuid
@@ -601,7 +602,7 @@ Users who relied on old defaults can restore them in their initializer.
 
 `masked_attributes_nil_user_strategy` is in no preset: `:hide` makes jobs and mailers that read masked models with no user see hidden values, a cost each app chooses for itself.
 
-What `:strict` costs: with `nil_user_strategy :deny` and `auto_query_scoping :filter_only`, code that runs with no current user (jobs, mailers, seeds, webhooks, the console, sign-in lookups on a user model that includes `PermissionScopedFindable`) sees no protected rows, and a `belongs_to` presence check on a protected parent fails ("must exist"). Run such code with a user, or inside `PermissionForge.without_permission_scope { }`: there `where`, `find`, `find_by` and `permission_scoped` apply no rules when nobody is signed in (a signed-in user's `find_by` and `permission_scoped` still apply theirs), so never put it around code an anonymous request reaches. Do not include `PermissionScopedFindable` in the user model. A conditional Permission Set needs a `request_context_resolver` that returns the request's IP and session flags, or its grant never applies.
+What `:strict` costs: with `nil_user_strategy :deny` and `auto_query_scoping :filter_only`, code that runs with no current user (jobs, mailers, seeds, webhooks, the console, sign-in lookups on a user model that includes `PermissionScopedFindable`) sees no protected rows, and a `belongs_to` presence check on a protected parent fails ("must exist"). An idempotent seed is the easy one to miss: `Customer.find_or_create_by!(name: ...)` run with nobody signed in finds no row and creates a duplicate on every run. Run such code with a user, or inside `PermissionForge.without_permission_scope { }`: there `where`, `find`, `find_by` and `permission_scoped` apply no rules when nobody is signed in (a signed-in user's `find_by` and `permission_scoped` still apply theirs), so never put it around code an anonymous request reaches. Do not include `PermissionScopedFindable` in the user model. A conditional Permission Set needs a `request_context_resolver` that returns the request's IP and session flags, or its grant never applies.
 
 ```ruby
 PermissionForge.configure do |config|
@@ -718,7 +719,7 @@ Your User model needs no `uuid` column: `uuid` is then `nil`, and `permission_se
 
 #### ignored_fields
 
-**Ignored columns.** Columns PermissionForge never manages. They don't appear in field lists. The list is frozen: extend it with `config.ignored_fields += %w[internal_flag]`, not `<<`.
+**Ignored columns.** Columns PermissionForge never manages. They don't appear in field lists and get no generated row (under `unconfigured_field_strategy = :block` a column without a row reads as hidden). The list is frozen: extend it with `config.ignored_fields += %w[internal_flag]`, not `<<`. Since 0.15 the default no longer lists `created_at` / `updated_at`: generating fields gives Rails' timestamps a read-only row instead; `config.ignored_fields += %w[created_at updated_at]` restores the old behaviour.
 
 #### field_variant_mappings
 
@@ -963,7 +964,7 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### api_auth
 
-**API sign-in.** How API callers prove who they are.
+**API sign-in.** How API callers prove who they are. Called with the controller; a falsy answer is a 401 (`api.auth_failed`, reason `api_auth_denied`). Not set: every request is a 401. What an authenticated caller may change is `api_action_authorization` / `api_assignment_authorization` (403).
 
 #### api_base_controller_class
 
@@ -983,7 +984,11 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### api_stats_require_admin
 
-**Stats only for admins.** Only admins can read usage statistics through the API.
+**Stats only for admins.** Only admins can read usage statistics through the API. Default `true`: `GET /api/stats` answers only callers `api_stats_authorization` allows (403 otherwise, also while it is unset). `false`: every caller `api_auth` admits.
+
+#### api_stats_authorization
+
+**API stats check.** Decides who may read usage statistics through the API while `api_stats_require_admin` is on. Called with the controller; a truthy answer allows, anything else is a 403 recorded as `api.auth_failed` (reason `stats_not_authorized`). Not set: the stats are refused. Replaces an `api_auth` that sets `@admin = true` on the controller, which still allows while this is unset (deprecated, removed in 0.16).
 
 #### api_record_identifier
 

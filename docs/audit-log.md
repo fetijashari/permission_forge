@@ -99,7 +99,7 @@ Viewing, exporting and refused requests. Written by `Audit.record`.
 | `audit.viewed` | `data.scope` (`log`, `event`, `person`, `permission_set`, `api`) and the filters used; the 2xx response only |
 | `audit.exported` | `data.scope` (`log`, `holdings`, `person`, `permission_set`), `data.format`, the filters |
 | `admin.auth_failed` | `data.reason` (`invalid_credentials`, `basic_auth_not_configured`, `assignment_not_authorized`, `audit_log_not_authorized`, `tenant_missing`), `method`, `path`, `endpoint`; for a Basic sign-in the typed username as actor label, never the password. An assignment refusal adds `hook`, `action`, `user_ids` (at most 100) and `user_count`. `tenant_missing`: tenancy is on, the request has no current tenant and `admin_tenantless_access` is not `:allow` |
-| `api.auth_failed` | `data.reason` (`api_auth_not_configured`, `api_auth_denied`, `action_not_authorized`, `assignment_not_authorized`, `audit_log_not_authorized`, `tenant_missing`), `hook` (the option that refused), `method`, `path`, `endpoint`; `status` for the two `api_auth` reasons; `action` for an action refusal; `user_ids` (at most 100) and `user_count` for an assignment refusal |
+| `api.auth_failed` | `data.reason` (`api_auth_not_configured`, `api_auth_denied`, `action_not_authorized`, `assignment_not_authorized`, `audit_log_not_authorized`, `stats_not_authorized`, `tenant_missing`), `hook` (the option that refused), `method`, `path`, `endpoint`; `status` for the two `api_auth` reasons; `action` for an action refusal; `user_ids` (at most 100) and `user_count` for an assignment refusal |
 | `admin.lock_refused` | a change refused because a record is locked (`is_editable: false`), from the admin screens or the API: `method`, `path`, `endpoint`; the event's record is the locked one, which may be the changed record itself or what holds it (its Resource, its Permission Set, or a membership's Permission Set Group). A change to a locked set's holders is refused only when it widens access: adding holders or extending/clearing end dates on a granting set, removing holders or ending them sooner on a Muting Permission Set |
 
 ### Runtime (access) events (9)
@@ -179,7 +179,7 @@ The actor of an event is the first of these that names someone (`Audit::Actor.cu
 
 1. An explicit block: `PermissionForge.with_audit_actor(...)` or `Audit::Context.with(actor: ...)`. A host that wraps requests in its own around-action wins over the request's resolution.
 2. The request (admin UI): `config.audit_actor_resolver`, called with the controller; then `config.current_user_resolver`; then, under HTTP Basic auth, the username that was checked (`actor_type: basic_auth`, no id).
-3. The request (API): `audit_actor_resolver`; then the current user; otherwise an anonymous `api` actor labelled "API client" (`api_auth` answers yes or no, so it cannot name a principal).
+3. The request (API): `audit_actor_resolver`; then the current user; otherwise an anonymous `api` actor labelled "API client" (`api_auth` answers yes or no, so it cannot name a principal). On the default `api_base_controller_class` your app's sign-in does not run, so `Current.user` is not set there and changes read "API client" even from a signed-in browser: see [naming the API caller](admin-api.md#who-the-audit-log-names-for-an-api-change).
 4. Outside a request: `PermissionForge.current_user`; otherwise `unknown`.
 
 The actor is never taken from parameters or headers. A resolver that raises, or answers with something that is not an actor, gives `unknown` and is reported through `audit_hook_failure_strategy`.
@@ -458,6 +458,8 @@ This is the one sanctioned mutation of events (`update_all`, recorded by `erasur
 - with a tenant set: the person's assignments and memberships in other tenants (counted in `assignments_remaining_elsewhere` and `group_assignments_remaining_elsewhere`) and the labels in other tenants' events;
 - the person's user record and application data in your app, unless your `on_erasure` callback deletes them;
 - copies outside the table (see [What is not recorded](#what-is-not-recorded)).
+
+**The admin's Audit log page still shows the person's name** while their user record exists. The page names people from your user table, looked up by id when it renders, not from the stored labels, so it reads "Carol Support" on her events although the labels were cleared (the CSV export and `GET /api/audit_events` show the stored, now empty, labels). Once your `on_erasure` callback deletes or anonymises the user record, the page shows the id only.
 
 **`on_erasure:`** runs after the erasure commits. Called outside a transaction, it runs right after the erasure; an error it raises propagates (the erasure stands and is recorded) and the result's `callback_invoked` is `true`. Called inside your own transaction, it runs after your transaction commits, never if it rolls back; the result's `callback_invoked` is then `nil`, and an error it raises is reported through `Rails.error` and the log rather than raised (raising from the commit would skip other after-commit work). Events it writes keep the labels they are given.
 

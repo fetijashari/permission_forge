@@ -53,8 +53,6 @@ module PermissionForge
         return if performed? || bulk_refused?
 
         render json: { data: bulk_assignment }, status: :ok
-      rescue ArgumentError => e
-        render json: { error: { status: 422, messages: e.message } }, status: :unprocessable_entity
       end
 
       private
@@ -66,33 +64,50 @@ module PermissionForge
       end
 
       def create_assignment(user)
-        psu = @permission_set.permission_set_users.build(user: user, expires_at: pf_time_param(:expires_at))
+        psu = @permission_set.permission_set_users.build(user: user, expires_at: future_expires_at)
         psu.save ? render_created(psu, serializer_for(:permission_set_user)) : render_validation_errors(psu)
       end
 
-      # An unknown bulk_action raises ArgumentError (422, rescued in #bulk)
-      # before anything is authorized or changed.
+      # params[:expires_at] (ParamShapes#pf_time_param) for a new
+      # assignment. An end that is not after now would create an assignment
+      # that grants nothing: refused (422) before anybody is assigned. The
+      # admin's Undo restores a removed assignment with the end it had, also
+      # one that has passed, and does not come through here.
+      def future_expires_at
+        expires_at = pf_time_param(:expires_at)
+        return expires_at if expires_at.nil? || expires_at > Time.current
+
+        raise ParamShapes::InvalidParam.new(:expires_at, I18n.t('permission_forge.api.errors.expires_at_past'))
+      end
+
+      # An unknown bulk_action is a 422 ({ "bulk_action": [...] }) before
+      # anything is changed.
       def bulk_refused?
-        action = BULK_ACTIONS.fetch(params[:bulk_action].to_s) do |name|
-          PermissionForge::Services::BulkPermissionSetAssignment.validate_action!(name)
-          raise ArgumentError, "Invalid action: #{name}" # a service action this controller does not map
+        action = BULK_ACTIONS.fetch(params[:bulk_action].to_s) do
+          raise ParamShapes::InvalidParam.new(:bulk_action, I18n.t('permission_forge.api.errors.bulk_action_invalid'))
         end
         pf_assignment_refused_api?(@permission_set, params[:user_ids], action)
       end
 
+      # The service's counts plus `skipped`: the ids of the request that
+      # name nobody config.user_list_resolver lists.
       def bulk_assignment
-        PermissionForge::Services::BulkPermissionSetAssignment.call(
+        user_ids = bulk_user_ids
+        result = PermissionForge::Services::BulkPermissionSetAssignment.call(
           permission_set: @permission_set,
-          user_ids: bulk_user_ids,
+          user_ids: user_ids,
           action: params[:bulk_action],
           created_by: PermissionForge.current_user,
-          expires_at: pf_time_param(:expires_at)
+          expires_at: params[:bulk_action] == 'assign' ? future_expires_at : pf_time_param(:expires_at)
         )
+        # Someone outside user_list_resolver and an id that names no user
+        # read the same: the answer says nothing about who exists.
+        result.merge(skipped: PermissionForge::Admin::PeopleDirectory::Ids.unmatched(params[:user_ids], user_ids))
       end
 
       # The people of the request within config.user_list_resolver
       # (Admin::PeopleDirectory#find_all); an id naming nobody there is
-      # skipped, as an unknown id always was.
+      # skipped (and reported).
       def bulk_user_ids
         PermissionForge::Admin::PeopleDirectory.new.find_all(params[:user_ids]).map(&:id)
       end

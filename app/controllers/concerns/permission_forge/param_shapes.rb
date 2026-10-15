@@ -18,6 +18,24 @@ module PermissionForge
       value.is_a?(String) ? value.delete("\0").strip : ''
     end
 
+    # A request value that cannot be read, naming the parameter: a 400 in
+    # the admin, a 422 in the API keyed by the parameter like a validation
+    # error (`{ "expires_at": ["is not an ISO 8601 date or time"] }`).
+    #
+    # @api private
+    class InvalidParam < ActionController::BadRequest
+      # @return [String] the parameter, e.g. "expires_at"
+      attr_reader :param
+      # @return [String] what is wrong with it, without its name
+      attr_reader :detail
+
+      def initialize(param, detail)
+        @param = param.to_s
+        @detail = detail
+        super("#{@param} #{detail}")
+      end
+    end
+
     # The time an ISO 8601 String names, in Time.zone: see IsoTime.
     #
     # @return [ActiveSupport::TimeWithZone, nil] nil for anything else
@@ -78,20 +96,22 @@ module PermissionForge
     # The time params[key] names (an ISO 8601 date or date-time, IsoTime),
     # nil when it is blank.
     #
-    # @raise [ActionController::BadRequest] for anything else ("tuesday",
-    #   "2026-13-45"): a date that cannot be read must never become "no end
-    #   date", nor a time somebody did not mean
+    # @raise [InvalidParam] for anything else ("tuesday", "2026-13-45"): a
+    #   date that cannot be read must never become "no end date", nor a time
+    #   somebody did not mean
     def pf_time_param(key)
       value = params[key]
       return nil if value.blank?
 
-      ParamShapes.time(value) || raise(ActionController::BadRequest, "#{key} is not an ISO 8601 date or time")
+      ParamShapes.time(value) || raise(InvalidParam.new(key, I18n.t('permission_forge.api.errors.not_iso8601_time')))
     end
 
     # The ISO 8601 forms a time parameter is read in, and nothing else
     # (Time.zone.parse reads "tuesday" as today 00:00):
     #
-    # - a date, `2026-10-22`: the beginning of that day in Time.zone;
+    # - a date, `2026-10-22`: the end of that day in Time.zone
+    #   (23:59:59.999999999), as the admin's end-date presets: an assignment
+    #   that ends on a date lasts through it;
     # - a date and a time of day, `2026-10-22T10:00`, with optional seconds
     #   and fraction (`10:00:00`, `10:00:00.5`), `T` or one space between
     #   them, and an optional offset, `Z` or `+02:00`; without one the time
@@ -112,7 +132,9 @@ module PermissionForge
         match = FORMAT.match(value.strip) if value.is_a?(String)
         fields = match && fields_of(match)
         offset = match && match[:offset]
-        at(fields, offset) if fields && valid_offset?(offset)
+        return unless fields && valid_offset?(offset)
+
+        match[:hour] ? at(fields, offset) : Time.zone.local(*fields.first(3)).end_of_day
       end
 
       # [year, month, day, hour, minute, seconds with fraction], nil when a

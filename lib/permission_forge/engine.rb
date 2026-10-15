@@ -28,7 +28,11 @@ module PermissionForge
     # names, not constants: nothing is loaded for this.
     config.action_dispatch.rescue_responses.merge!(
       'PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError' => :forbidden,
-      'PermissionForge::ActionNotAuthorizedError' => :forbidden
+      'PermissionForge::ActionNotAuthorizedError' => :forbidden,
+      # A request value the admin cannot read (ParamShapes::InvalidParam, an
+      # ActionController::BadRequest): 400 as its parent, which Rails maps by
+      # exact class name only. The API answers it with a 422 itself.
+      'PermissionForge::ParamShapes::InvalidParam' => :bad_request
     )
 
     # The models (app/models/permission_forge) are autoloaded like any engine

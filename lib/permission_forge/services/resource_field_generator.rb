@@ -56,9 +56,22 @@ module PermissionForge
         columns.map do |column_name|
           attrs = build_field_attrs(column_name)
           attrs.merge!(gdpr_default_attrs(column_name)) if PermissionForge.configuration.gdpr_defaults
+          apply_timestamp_access(attrs, model_class, column_name)
           PermissionForge::ResourceField.create!(attrs)
         end
       end
+
+      def apply_timestamp_access(attrs, model_class, column_name)
+        attrs.merge!(TIMESTAMP_ACCESS) if model_class.all_timestamp_attributes_in_model.include?(column_name)
+      end
+
+      # Rails' own timestamps (created_at / updated_at, *_on) are metadata
+      # every reader of the record may see and nobody edits: read-only,
+      # whatever grant_all says. Without a row they would be unconfigured,
+      # which unconfigured_field_strategy = :block (the default) hides from
+      # everyone. config.ignored_fields keeps them out (no row) as before.
+      TIMESTAMP_ACCESS = { read_access: true, edit_access: false, mask_access: false }.freeze
+      private_constant :TIMESTAMP_ACCESS
 
       def build_field_attrs(column_name)
         {

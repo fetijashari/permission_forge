@@ -12,6 +12,7 @@ module PermissionForge
 
         assert_match(%r{create\s+config/initializers/permission_forge\.rb.*Next steps:}m, output)
         assert_includes output, '1. bin/rails db:migrate'
+        assert_includes output, '2. In your User model: include PermissionForge::Concerns::PermissionedUser'
         assert_includes output, 'mount PermissionForge::Engine, at: "/permissions"'
         assert_includes output, 'PF_ADMIN_USER, PF_ADMIN_PASSWORD'
         assert_includes output, 'Option B'
@@ -33,7 +34,7 @@ module PermissionForge
         output = install('--skip-migration')
 
         assert_not_includes output, 'db:migrate'
-        assert_includes output, '1. Mount the admin'
+        assert_includes output, '1. In your User model'
       end
 
       test 'rails destroy prints no next steps' do

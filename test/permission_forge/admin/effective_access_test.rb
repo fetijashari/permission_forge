@@ -260,9 +260,9 @@ module PermissionForge
           MODES.each do |mode|
             PermissionForge.configuration.extra_fields_default_access = mode
             @user = create_user
-            bare = create_permission_set(name: 'Bare', created_at: bare_created)
+            bare = create_permission_set(name: PermissionForge::PermissionSet.unique_name('Bare'), created_at: bare_created)
             create_resource(permission_set: bare, read_access: true, edit_access: true)
-            strict = create_permission_set(name: 'Strict', created_at: strict_created)
+            strict = create_permission_set(name: PermissionForge::PermissionSet.unique_name('Strict'), created_at: strict_created)
             row = create_resource(permission_set: strict, read_access: true, edit_access: true)
             create_resource_field(resource: row, name: 'full_address', read_access: true, mask_access: true)
             [bare, strict].each { |ps| create_permission_set_user(user: @user, permission_set: ps) }

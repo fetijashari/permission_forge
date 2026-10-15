@@ -183,7 +183,7 @@ module PermissionForge
         post "#{ROOT}/permission_set_groups/#{@group.uuid}/clone", params: { name: 'Copy' }
 
         copy = PermissionForge::PermissionSetGroup.find_by!(uuid: response.parsed_body.dig('data', 'uuid'))
-        assert_equal ['Seeded'], copy.permission_sets.map(&:name)
+        assert_equal [I18n.t('permission_forge.permission_sets.copy_name', name: 'Seeded')], copy.permission_sets.map(&:name)
         assert(copy.permission_sets.all?(&:is_editable))
         assert(copy.permission_sets.flat_map(&:resources).all?(&:is_editable))
       end

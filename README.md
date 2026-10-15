@@ -198,6 +198,10 @@ PermissionForge::PermissionSetUser.create!(permission_set: pset, user: user)
 Each change invalidates the cached permissions of the users it affects; the next read rebuilds them. The admin UI
 (mounted at `/permissions` in [Installation](#installation)) does the same through forms.
 
+Every change is also an audit event. Made in a console, a seed or a script, it is recorded with actor `unknown`;
+wrap it to say who and why: `PermissionForge.with_audit_actor(user: admin, reason: 'onboarding') { ... }` (see
+[Audit Log](https://github.com/fetijashari/permission_forge/blob/main/docs/audit-log.md)).
+
 ### 5. Check permissions at runtime
 
 ```ruby

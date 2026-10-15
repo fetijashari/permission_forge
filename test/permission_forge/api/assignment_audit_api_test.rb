@@ -128,7 +128,8 @@ module PermissionForge
           ['explode', '', nil].each do |bulk_action|
             post "#{users_path}/bulk", params: { user_ids: [@holder.id], bulk_action: bulk_action }.compact
             assert_response :unprocessable_entity
-            assert_match 'Invalid action', JSON.parse(response.body)['error']['messages']
+            assert_equal({ 'bulk_action' => [I18n.t('permission_forge.api.errors.bulk_action_invalid')] },
+                         JSON.parse(response.body)['error']['messages'])
           end
         ensure
           replace_method(service.singleton_class, :call, service.singleton_class.instance_method(:pf_kept_call))

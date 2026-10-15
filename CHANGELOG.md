@@ -14,7 +14,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   and `details` are unchanged. See [Handling Denials](docs/row-level-rules.md#handling-denials).
 - **The install generator prints the next steps.** After the files it lists `bin/rails db:migrate` (not with
   `--skip-migration`), the mount line, where the admin credentials go (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`, or your
-  own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start. `rails destroy` prints none.
+  own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start, plus the line that makes
+  `can_*?` work: `include PermissionForge::Concerns::PermissionedUser` in your User model. `rails destroy` prints none.
 - **A boot warning in development when the permission cache is per process.** Rails 8.0+ generates
   `config.cache_store = :memory_store` for development (7.1/7.2: after `bin/rails dev:cache`) and the generated
   initializer caches through `Rails.cache`, so a permission change made from a console, `bin/rails runner` or a rake
@@ -24,6 +25,23 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `cache_backend = :null` in development) when `cache_backend` is `:memory` or the store is a `MemoryStore`; file,
   Redis, Solid Cache, Memcached and null stores are not warned about, nor is any other environment. The generated
   initializer's comment above `cache_backend` and [Cache Consistency](docs/configuration.md#cache-consistency) say so.
+- **`config.api_stats_authorization`.** A lambda called with the controller that decides who may read
+  `GET /api/stats` while `api_stats_require_admin` is on (the default); a truthy answer allows. It replaces an
+  `api_auth` that set `@admin = true` on the controller (see Deprecated). A refusal answers 403 with a body (it had
+  none) and is recorded as `api.auth_failed` with reason `stats_not_authorized`; while the lambda is unset the 403
+  names it. See [Dashboard Stats](docs/admin-api.md#dashboard-stats).
+- **`PermitsAttributes.call(..., report: true)` says what was dropped.** It answers a `PermitsAttributes::Result`:
+  `params` (the filtered Hash, as before), `dropped` (the paths of the dropped keys, never values), `dropped?` and
+  `dropped_fields` (the top-level keys), so a controller can say "Not saved: status, notes" instead of a silent
+  success. The paths are collected whether or not `params.filtered` is heard. Without `report:` the return value is the
+  Hash, unchanged. See [Telling the user what was not saved](docs/field-filtering.md#telling-the-user-what-was-not-saved).
+- **Bulk assignment reports the ids it skipped.** `POST …/users/bulk` answers `skipped` next to `assigned`, `revoked`
+  and `invalidated`: the requested ids that name nobody `user_list_resolver` lists (`[99]`; `[]` when none), so a typo
+  in an automated list no longer goes unnoticed. An id outside the resolver and an unknown one read the same.
+- **`permission_set_group_id` takes the group's uuid.** The API answers with uuids (`api_record_identifier = :uuid`),
+  but `PATCH`/`POST …/permission_sets` read `permission_set_group_id` only as a numeric id: the group's uuid was a 422.
+  Under `:uuid` it now takes the uuid or the id; under `:id`, the id. The value is looked up in the current tenant
+  like every identifier (see Fixed for a uuid that starts with digits).
 
 ### Changed
 
@@ -89,13 +107,11 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   data, not masked (suggested strategy: 'first1_last4')` and `[UNMAPPED] Customer.phone — personal data, no active
   ResourceField (suggested strategy: 'last4')`. A CI step that greps `[UNMASKED] Customer.name` still matches; one that
   matches the rest of the old line must change. The report's Hash keys are unchanged.
-
 - **The production boot warning about an in-process cache also covers a `:memory_store`.** It fired only for
   `cache_backend = :memory`; `cache_backend = :rails_cache` over a `Rails.cache` that is a `:memory_store` (or a
   `MemoryStore` instance as `cache_backend`) is as inconsistent across Puma workers and is now warned about too. The
   line reads "Using an in-process permission cache in production" (it said "in-process MemoryCache"): update a log
   alert that matches the old text. **Opt out:** use a store the workers share.
-
 - **A field variant gets a permission-hash entry only when the model has that name.** The default
   `field_variant_mappings` (`_id` → `_uuid`, `_cents` → base name) added an entry for every mapped name, so a
   `Customer` with an `owner_id` row and no `owner_uuid` column had an `owner_uuid` entry, and the admin's Effective
@@ -107,6 +123,55 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   have. `FiltersResponseAttributes` still reads such a key in a serializer's hash (`owner_uuid` computed in a view) by
   the entry of the field it is a variant of, so API responses filter as before. **Opt out:** none needed; if your code
   reads the entry of a computed variant, give the model the reader (or declare it in `extra_fields_for_permissions`).
+- **Permission Set names are unique within a tenant, ignoring case and surrounding spaces.** The admin form already
+  refused a second "Sales Team"; the console, seeds, services and the API created one silently, and both then showed
+  as "Sales Team" in every picker. A new set or a rename to a name another set of the same tenant uses is now a
+  validation error (`name_taken`). Two sets that already share a name stay valid until one of them is renamed. A
+  clone without a name (`PermissionSetCloner`, the group clone, `POST …/clone`) gets a numbered copy name ("Sales
+  Team (copy)", "Sales Team (copy) 2"). No migration: the check is a validation. Opt out: none; give duplicates
+  distinct names.
+- **Every API 422 has one shape: field-keyed messages.** Input the API cannot read answered `messages` as one string
+  (`"expires_at is not an ISO 8601 date or time"`, `"param is missing or the value is empty or invalid:
+  permission_set"`, `"Invalid action: …"`), while a failed validation answered an object. Both are now an object that
+  maps the field to a list of messages, keyed by the request parameter (`{"expires_at": ["is not an ISO 8601 date or
+  time"]}`, `{"permission_set": ["is missing, empty or not an object"]}`, `{"bulk_action": ["must be assign or
+  revoke"]}`) or `base` when the error names none (`generate_fields`' failure). The messages follow the request's
+  locale. 401, 403 and 404 keep their string. **Opt out:** none; a client that read the string reads
+  `messages.values.flatten` instead. See [`docs/admin-api.md`](docs/admin-api.md#response-format).
+- **An API `expires_at` given as a date means the end of that day.** `"2026-10-22"` on `POST …/users` and
+  `POST …/users/bulk` is now 23:59:59.999999 of that day in `Time.zone`, as the admin's end-date presets and its custom
+  date; it was the beginning of the day (00:00), so the assignment had ended when its last day started. A date and time
+  (`2026-10-22T10:00`, with or without an offset) is read as before. **Opt out:** send the moment you mean,
+  `2026-10-22T00:00`.
+- **The API refuses an `expires_at` that is not after now.** A single assignment or a bulk `assign` with an end that
+  has passed (`"2020-01-01"`, yesterday, a minute ago) created an assignment that granted nothing, answered 201/200. It
+  is now a 422 (`{"expires_at": ["must be in the future"]}`) and nobody is assigned. A bulk `revoke` ignores
+  `expires_at`; the admin's Undo still restores a removed assignment with the end it had. **Opt out:** none.
+- **Generated fields give `created_at` / `updated_at` a read-only row.** They were in the default `ignored_fields`, so
+  generating fields made no row for them and, under the default `unconfigured_field_strategy = :block`, every reader
+  (admin included) saw `null` timestamps. `ignored_fields` no longer lists them by default, and
+  `ResourceFieldGenerator` (also the admin's "Sync fields" and the API's `generate_fields`) creates their rows with
+  read on, edit off and no mask, whatever `grant_all` says. Existing resources change only when you sync their fields;
+  the admin then lists the two columns as not configured. Treating timestamps as readable without a row was not chosen:
+  it would carve an exception into `:block` for every resource, rows or not. **Opt out:**
+  `config.ignored_fields += %w[created_at updated_at]`.
+- **A refusing `api_auth` answers 401 Unauthorized instead of 403.** A wrong or missing token is a failed
+  authentication: clients that refresh credentials on 401 did not on the 403. The body is
+  `{"error":{"status":401,"messages":"Not authenticated"}}`; the `api.auth_failed` event keeps its reason
+  (`api_auth_denied`) and records `status: 401`. No `WWW-Authenticate` challenge is invented (the gem does not know your
+  scheme): one your `api_auth` sets on `controller.response.headers` is kept. 403 now means an authenticated caller the
+  authorization lambdas refuse, a lock, a missing tenant or `audit_log_authorization`. **Opt out:** none; a client that
+  treated 403 as "bad token" checks 401.
+- **A 403 for a missing authorization lambda says so.** While `api_require_authorization` is on and
+  `api_action_authorization` / `api_assignment_authorization` is unset, a change or an assignment answered "Action not
+  authorized" / "Assignment not authorized", the same text as a real denial. It now names the missing option ("API
+  changes need config.api_action_authorization; …"); a lambda's refusal keeps its message. **Opt out:** none.
+
+### Deprecated
+
+- **An `api_auth` that sets `@admin = true` on the controller to open `GET /api/stats`.** Set
+  `config.api_stats_authorization = ->(controller) { … }` instead. While that option is unset, `@admin` still allows,
+  warning once per process through `PermissionForge.deprecator`; once it is set, `@admin` is ignored. Removed in 0.16.
 
 ### Fixed
 
@@ -129,8 +194,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **An `expires_at` that is not ISO 8601 is refused.** The API (`POST …/users`, `POST …/users/bulk`) and the admin's
   Undo after a removal read `expires_at` with `Time.zone.parse`, which takes any text with a recognisable fragment:
   `"tuesday"` or `"next tuesday-ish"` became today 00:00 and was answered 201 with an assignment that had already ended,
-  and `"2030-02-30"` became 2 March. `expires_at` is now read only as an ISO 8601 date (`2026-10-22`, the beginning of
-  that day in `Time.zone`, as before) or date and time (`2026-10-22T10:00`, optional seconds and fraction, `T` or one
+  and `"2030-02-30"` became 2 March. `expires_at` is now read only as an ISO 8601 date (`2026-10-22`, now the end of
+  that day in `Time.zone`: see **Changed**) or date and time (`2026-10-22T10:00`, optional seconds and fraction, `T` or one
   space, optional `Z` or `±HH:MM`); anything else is a 422 in the API (a 400 in the admin) and assigns nobody. The
   formats are listed in [`docs/admin-api.md`](docs/admin-api.md#expires_at-formats). The values the admin itself sends
   are unchanged.
@@ -182,6 +247,9 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **No "run the upgrade generator" warning while `bin/rails generate permission_forge:install` runs.** The generator
   boots the app before it writes the migration that creates the audit table, and the boot told a fresh install to run
   `permission_forge:upgrade`. While a generator runs the boot skips the check; the first audit event checks again.
+- **An API `permission_set_group_id` that starts with digits no longer names another group.** The integer column cast
+  `"12ab…"` (a uuid that starts with digits) to 12, so `PATCH …/permission_sets/:uuid` could move the set into the
+  group whose id is 12. Only a string of digits is read as an id now; anything else is a uuid (under `:uuid`) or a 422.
 
 ### Documentation
 
@@ -205,6 +273,12 @@ Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authent
 - [Assignment expiration](docs/assignment-expiration.md#rake-task-stale-assignments): `rake
   permission_forge:stale_assignments`, its `THRESHOLD_DAYS`, its output and its exit status 1 when it finds stale
   assignments.
+- [Admin API](docs/admin-api.md#who-the-audit-log-names-for-an-api-change): why API changes read "API client" even
+  from a signed-in browser (the default `api_base_controller_class` runs none of your sign-in, so `Current.user` is not
+  set), and the two ways to name the caller: an `api_base_controller_class` that resumes the session, or an
+  `audit_actor_resolver` that maps the credential `api_auth` verified (never a caller-chosen header).
+- [Admin API](docs/admin-api.md#permission-set-group-users-group-membership--grants-nothing): the group-member
+  endpoints say that membership is organisational and grants none of the group's sets.
 
 ## [0.14.1] - 2026-10-14
 

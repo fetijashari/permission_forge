@@ -58,6 +58,21 @@ module PermissionForge
         assert_equal (Time.zone.today + 5), restored.expires_at.to_date
       end
 
+      # Undo is the exact inverse of the removal: an assignment whose end
+      # has passed (not cleaned up yet) comes back with that end. The API
+      # refuses a past expires_at for a new assignment; the admin's restore
+      # is not a new grant.
+      test 'undo restores an assignment whose end has already passed' do
+        @assignment.update_columns(expires_at: 2.days.ago)
+        ended = @assignment.reload.expires_at
+        delete pf("/assignments/#{@assignment.id}")
+
+        undo = flash[:pf_undo]
+        post undo[:path], params: undo[:params]
+        restored = PermissionForge::PermissionSetUser.find_by!(user: @ana, permission_set: @set)
+        assert_equal ended, restored.expires_at
+      end
+
       # The toast's Undo posts the end date the admin itself wrote
       # (TimeWithZone#iso8601(6), with the zone's offset): each preset and a
       # custom date come back exactly (23:59:59.999999), also outside UTC.
