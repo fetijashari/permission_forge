@@ -39,6 +39,15 @@ module PermissionForge
 
       # Derives the level from a field's flags. Flag combinations the UI never
       # writes (e.g. edit + mask) collapse to the closest level.
+      # What a muting row takes away, for provenance (the WHY panel): its
+      # level, except a row that mutes edit but not read (API / console
+      # only), which takes editing away and leaves the field readable:
+      # 'no_edit', a level no form offers.
+      def muting_provenance(field)
+        level = level_of(field, muting: true)
+        level == 'hide' && !field.read_access ? 'no_edit' : level
+      end
+
       def level_of(field, muting:)
         read = field.read_access
         edit = field.edit_access

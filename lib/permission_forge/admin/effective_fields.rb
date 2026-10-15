@@ -122,15 +122,13 @@ module PermissionForge
       # #mute_single_field: a row that mutes read mutes edit too), plus
       # provenance.
       def mute_field(entry, field, permission_set)
-        level = FieldLevel.level_of(field, muting: true)
+        level = FieldLevel.muting_provenance(field)
         return if level == 'leave'
 
         entry[:read_access] = false if field.read_access
         entry[:edit_access] = false if field.read_access || field.edit_access
         entry[:mask_access] = true if field.mask_access
-        # A row that mutes edit but not read (API / console only) takes
-        # editing away; the field stays readable.
-        (entry[:mutes] ||= []) << [permission_set, level == 'hide' && !field.read_access ? 'no_edit' : level]
+        (entry[:mutes] ||= []) << [permission_set, level]
       end
 
       def field_outcome(name, virtual)
