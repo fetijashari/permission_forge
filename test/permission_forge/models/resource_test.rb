@@ -44,6 +44,26 @@ module PermissionForge
       assert resource.resource_fields.all?(&:edit_access)
     end
 
+    # Field test of 0.14.1: an Admin set made with grant_full_access! showed
+    # customer names as 'G*************tion'. Full access applies no
+    # personal-data mask; the privacy audit still reports the fields.
+    test '.grant_full_access! applies no personal-data masks under gdpr_defaults' do
+      PermissionForge.configuration.gdpr_defaults = true
+      PermissionForge::Resource.grant_full_access!(permission_set: @permission_set, resource_name: 'Customer')
+      user = create_user
+      create_permission_set_user(user: user, permission_set: @permission_set)
+      customer = create_customer(name: 'Globex Corporation', email: 'ceo@globex.example')
+
+      Current.user = user
+      assert_equal ['Globex Corporation', 'ceo@globex.example'], customer.as_json.values_at('name', 'email')
+      assert_not user.masked_field?(:Customer, :name)
+      assert user.field_permissions(:Customer, :email)[:edit_access]
+
+      unmasked = Services::GdprFieldAuditor.call.select { |f| f[:type] == :unmasked_field }.map { |f| f[:field_name] }
+      assert_includes unmasked, 'name'
+      assert_includes unmasked, 'email'
+    end
+
     # --- Permission dependency validation ---
 
     test 'edit_access requires read_access' do

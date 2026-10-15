@@ -5,8 +5,15 @@ module PermissionForge
     #
     # @api public
     class ResourceFieldGenerator
+      # Under `gdpr_defaults` a column that looks like personal data is
+      # created masked (readable, not editable). With `grant_all` the caller
+      # asked for full access, so no mask is applied: the field is readable
+      # and editable in the clear, keeps the recommended mask strategy for
+      # when someone masks it, and is still reported as personal data
+      # (GdprFieldAuditor, the admin's privacy audit).
+      #
       # @param resource [Resource]
-      # @param grant_all [Boolean] grant read and edit on the generated fields
+      # @param grant_all [Boolean] grant read and edit, unmasked, on the generated fields
       # @return [Array<ResourceField>] the fields created
       def self.call(resource:, grant_all: false)
         new(resource: resource, grant_all: grant_all).call
@@ -48,7 +55,7 @@ module PermissionForge
 
         columns.map do |column_name|
           attrs = build_field_attrs(column_name)
-          apply_gdpr_defaults(attrs, column_name) if PermissionForge.configuration.gdpr_defaults
+          attrs.merge!(gdpr_default_attrs(column_name)) if PermissionForge.configuration.gdpr_defaults
           PermissionForge::ResourceField.create!(attrs)
         end
       end
@@ -80,13 +87,14 @@ module PermissionForge
         self.class.without_blank_names(model_class, PermissionForge::VirtualFields.new(model_class, configuration).names)
       end
 
-      def apply_gdpr_defaults(attrs, column_name)
+      # Full access (grant_all) records the recommended strategy without
+      # masking; otherwise the column becomes readable, masked.
+      def gdpr_default_attrs(column_name)
         _pattern, strategy = PermissionForge.configuration.gdpr_field_patterns.find { |regex, _| column_name.match?(regex) }
-        return unless strategy
+        return {} unless strategy
+        return { mask_strategy: strategy } if @grant_all
 
-        attrs[:read_access] = true
-        attrs[:mask_access] = true
-        attrs[:mask_strategy] = strategy
+        { mask_strategy: strategy, read_access: true, mask_access: true }
       end
     end
   end

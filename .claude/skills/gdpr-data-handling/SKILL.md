@@ -117,7 +117,7 @@ Review PermissionForge configuration for privacy-by-design principles:
    - Bad: "Admin", "User", "ReadWrite" (too generic, not purpose-bound)
 4. **Pseudonymization support** — Check if `config.api_record_identifier = :uuid` (not sequential `:id`)
 5. **Muting for deny-by-default** — Are muting sets used to ensure new features don't automatically grant access?
-6. **GDPR defaults enabled** — `config.gdpr_defaults = true` masks the field rows `ResourceFieldGenerator` creates for columns that match `gdpr_field_patterns` (rows made by hand, and columns no pattern matches, are not masked)
+6. **GDPR defaults enabled** — `config.gdpr_defaults = true` masks the field rows `ResourceFieldGenerator` creates for columns that match `gdpr_field_patterns` (rows made by hand, columns no pattern matches, and rows generated with full access — `grant_all: true`, `grant_full_access!`, the admin's "Full access" — are not masked; `GdprFieldAuditor` lists the unmasked ones)
 7. **Row-level isolation** — Verify `current_user` rules exist on all PII resources (data subjects should only see their own data by default)
 
 **Output:** Privacy-by-design scorecard with implementation recommendations.
@@ -242,7 +242,7 @@ Before citing the log, read [What is not recorded](../../../docs/audit-log.md#wh
 - **Model-level masking (v0.9+)** — `MaskedAttributes` auto-applies to models with a Resource record (`config.auto_apply_masked_attributes`, default `:auto`), so direct AR readers (`customer.email`), `attributes`, and `as_json` are masked/hidden too. `pluck` and raw SQL bypass the model layer — use `FiltersResponseAttributes` for those paths. `masked_write_protection` (default `:skip`) prevents masked values from being persisted back over real data.
 - **Most-permissive-wins merge** — Adding permission sets can only increase access. Over-assignment = over-exposure of personal data.
 - **Muting sets for deny** — Use `is_muting: true` sets to subtract access when consent is withdrawn or processing purposes end.
-- **GDPR defaults** — When `config.gdpr_defaults = true`, `ResourceFieldGenerator` automatically masks fields matching PII patterns when it generates them.
+- **GDPR defaults** — When `config.gdpr_defaults = true`, `ResourceFieldGenerator` automatically masks fields matching PII patterns when it generates them, unless full access was asked for (`grant_all: true`, `grant_full_access!`): then it masks nothing and `GdprFieldAuditor` reports those fields.
 - **GdprFieldAuditor** — Built-in service that scans for unmasked PII fields and uncovered model columns. Run regularly.
 
 ## How to Run Checks Programmatically

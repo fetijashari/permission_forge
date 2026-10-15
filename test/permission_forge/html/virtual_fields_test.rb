@@ -109,11 +109,11 @@ module PermissionForge
         assert_equal [true, false], entry.values_at(:read_access, :edit_access)
       end
 
-      test 'the Full access preset makes virtual fields editable, and privacy defaults mask sensitive ones' do
+      test 'the Full access preset makes virtual fields editable, sensitive ones too (no privacy-default mask)' do
         @config.gdpr_defaults = true
         account = add_account('full')
 
-        assert_equal 'masked', level_of(account, 'full_address')
+        assert_equal 'edit', level_of(account, 'full_address')
         assert_equal 'edit', level_of(account, 'supplier_id')
         assert_nil level_of(account, 'theme'), 'discovery is off'
       end

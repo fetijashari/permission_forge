@@ -45,10 +45,11 @@ resource = PermissionForge::Resource.create!(
   edit_access: true, delete_access: true
 )
 
-# Auto-generate field permissions from model columns
+# Auto-generate field permissions from model columns: grant_all gives read and
+# edit on every field, unmasked (personal-data columns included)
 PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: true)
 
-# Or grant full access in one call (creates resource + fields)
+# Or grant full access in one call (creates resource + fields, no masks)
 PermissionForge::Resource.grant_full_access!(permission_set: pset, resource_name: 'Customer')
 
 # Assign a user — takes effect at the user's next permission read
@@ -237,6 +238,8 @@ end
 
 When `config.gdpr_defaults = true` (the default since v0.5.0), the `ResourceFieldGenerator` automatically applies masking to fields matching known privacy-sensitive patterns. This only applies at field **creation** time — it never overwrites admin changes.
 
+Full access is the exception (since 0.15.0): `ResourceFieldGenerator.call(grant_all: true)`, `Resource.grant_full_access!`, `ResourceWithFieldsBuilder`, the API's `generate_fields` with `grant_all` and the admin's "Full access" preset apply no mask. The fields are still flagged as personal data — `GdprFieldAuditor` / `rake permission_forge:audit_masks` report them as `unmasked_field`, and the admin's Home lists them under "Privacy audit" — so you decide, field by field, which to mask (or confirm "This is intended"). The recommended strategy is stored on the row (`mask_strategy`), so masking it later uses the right one.
+
 > **Important:** Masking provides display-level obfuscation only — it does NOT constitute GDPR-compliant anonymization or pseudonymization. See [GDPR Masking Disclaimer](gdpr_masking_disclaimer.md) for details.
 
 ```ruby
@@ -247,17 +250,22 @@ PermissionForge.configure do |config|
 end
 
 # With gdpr_defaults enabled (the default), auto-generated fields get masks applied
+PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)
+# email field → read_access: true, mask_access: true, mask_strategy: 'email'
+# phone field → read_access: true, mask_access: true, mask_strategy: 'last4'
+# name field  → read_access: true, mask_access: true, mask_strategy: 'first1_last4'
+# (other fields: no access)
+
+# Full access applies no mask; the recommended strategy is kept for later
 PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: true)
-# email field → mask_access: true, mask_strategy: 'email'
-# phone field → mask_access: true, mask_strategy: 'last4'
-# name field  → mask_access: true, mask_strategy: 'first1_last4'
+# email field → read_access: true, edit_access: true, mask_access: false, mask_strategy: 'email'
 ```
 
 **Built-in privacy patterns** (`DEFAULT_GDPR_FIELD_PATTERNS`):
 
 | Pattern | Fields Matched | Strategy |
 |---------|---------------|----------|
-| `email`, `*_email` | email, work_email, billing_email | `email` |
+| `email`, `*_email`, `email_address`, `*_email_address` | email, work_email, email_address (Rails 8 authentication), billing_email_address | `email` |
 | `*phone*`, `*telefon*`; `tel`, `fax`, `mobile` as a name segment | phone, mobile_phone, home_tel, fax_number, telNumber | `last4` |
 | `ssn`, `social_security*`, `national_id` | ssn, social_security_number | `last4` |
 | `*iban*`, `*bank_account*`, `*credit_card*` | iban, bank_account_number | `last4` |
@@ -268,6 +276,8 @@ PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant
 | `*ethnic*`, `*telegram*` | ethnicity, telegram_handle | `full` |
 
 A name segment is delimited by `_`, the ends of the name, a digit or a camelCase capital: `hotel_id`, `capacity` and `telemetry_enabled` do not match, nor does a stem glued to another word (`homecity`, `telno`); add a pattern for such names.
+
+Detection reads the column name only, the same way for every model (the same patterns are Rails' `filter_parameters`, which know no model). So a flag means "may be personal data": `name` on a company model is flagged like a person's name — and a company's name can itself be personal data (a sole trader's). When a flagged field may be read unmasked, confirm it with **This is intended** on the admin's Home (Privacy audit): it keeps its **Sensitive** badge but leaves the list, and the confirmation is an audit event (`field.sensitive_acknowledged`). `GdprFieldAuditor` and `rake permission_forge:audit_masks` do not read the confirmation and keep reporting the field.
 
 **Extend or override patterns:**
 

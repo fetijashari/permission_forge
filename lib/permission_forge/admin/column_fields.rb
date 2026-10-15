@@ -3,9 +3,15 @@
 module PermissionForge
   module Admin
     # Creates ResourceFields for model columns and virtual fields at one level,
-    # applying privacy defaults: sensitive names start Masked when gdpr_defaults
-    # is on, and the muting 'hide_sensitive' level hides only sensitive names.
+    # applying privacy defaults: under gdpr_defaults sensitive names added
+    # Read-only start Masked, and the muting 'hide_sensitive' level hides only
+    # sensitive names. Editable is full access (the "Full access" preset, "Add
+    # all new with full access"): nothing is masked, every row keeps the
+    # recommended strategy, and the privacy audit still flags the names.
     class ColumnFields
+      # Granting levels that privacy defaults turn into Masked for a sensitive name.
+      MASKED_BY_PRIVACY_DEFAULTS = %w[read].freeze
+
       def initialize(resource, muting:, sensitive: SensitiveColumns.new, configuration: PermissionForge.configuration)
         @resource = resource
         @muting = muting
@@ -39,7 +45,7 @@ module PermissionForge
 
       def granting_level(level, match)
         return nil unless FieldLevel.valid?(level, muting: false)
-        return 'masked' if match && %w[read edit].include?(level) && @configuration.gdpr_defaults
+        return 'masked' if match && MASKED_BY_PRIVACY_DEFAULTS.include?(level) && @configuration.gdpr_defaults
 
         level
       end

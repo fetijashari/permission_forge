@@ -53,6 +53,19 @@ module PermissionForge
       assert_empty NOT_PERSONAL.select { |name| detected?(name) }, 'not treated as personal data'
     end
 
+    # Rails 8's authentication generator names the column email_address. It
+    # also matches `address`; the email pattern comes first and decides.
+    test 'email_address is detected as an email, everywhere the patterns are read' do
+      %w[email_address billing_email_address].each do |name|
+        match = Admin::SensitiveColumns.new.match(name)
+        assert_equal %w[email email_address], [match&.strategy, match&.pattern], name
+      end
+      assert_equal 'email', PermissionForge.configuration.gdpr_field_patterns.find { |pattern, _| 'email_address'.match?(pattern) }&.last
+      assert_equal 'j***@example.com', Services::MaskValue.call('jane@example.com', strategy: 'email')
+      assert_equal 'full', Admin::SensitiveColumns.new.match('street_address')&.strategy
+      assert_equal 'full', Admin::SensitiveColumns.new.match('email_address_verified_at')&.strategy, 'an address column, not an email'
+    end
+
     test 'Admin::SensitiveColumns still names the alternative that matched' do
       assert_equal 'last4', Admin::SensitiveColumns.new.match('telephone')&.strategy
       assert_equal 'full', Admin::SensitiveColumns.new.match('home_city')&.strategy

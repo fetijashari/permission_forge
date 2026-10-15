@@ -301,6 +301,10 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
 # Response: 201 Created — returns array of generated fields
 # grant_all is read only as the string "true" or "1" (a JSON true, or a body
 # sent without the Content-Type header, generates read-only fields)
+# With grant_all every field is readable and editable, unmasked — also the
+# personal-data columns under gdpr_defaults (their recommended mask_strategy
+# is returned, mask_access is false). Without it, under gdpr_defaults, those
+# columns come back readable and masked and the others without access.
 # A mutation like any other: gated by api_action_authorization (action
 # :generate_fields) and refused with 403 when the resource or its permission
 # set is locked

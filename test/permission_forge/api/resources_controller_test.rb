@@ -107,6 +107,34 @@ module PermissionForge
         assert json['data'].is_a?(Array)
         assert json['data'].size.positive?
       end
+
+      # grant_all asks for full access: no personal-data mask, whatever
+      # gdpr_defaults says (the recommended strategy is kept for later).
+      test 'POST generate_fields with grant_all applies no masks under gdpr_defaults' do
+        PermissionForge.configuration.gdpr_defaults = true
+        resource = create_resource(permission_set: @ps, name: 'Customer')
+
+        post "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{resource.uuid}/generate_fields",
+             params: { grant_all: 'true' }
+
+        assert_response :created
+        fields = JSON.parse(response.body)['data'].index_by { |field| field['name'] }
+        name = fields.fetch('name')
+        assert_equal [true, true, false, 'first1_last4'], name.values_at('read_access', 'edit_access', 'mask_access', 'mask_strategy')
+        assert_equal([], fields.values.select { |field| field['mask_access'] }.map { |field| field['name'] })
+      end
+
+      test 'POST generate_fields without grant_all keeps the privacy defaults' do
+        PermissionForge.configuration.gdpr_defaults = true
+        resource = create_resource(permission_set: @ps, name: 'Customer')
+
+        post "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{resource.uuid}/generate_fields"
+
+        assert_response :created
+        fields = JSON.parse(response.body)['data'].index_by { |field| field['name'] }
+        assert_equal [true, false, true, 'email'], fields.fetch('email').values_at('read_access', 'edit_access', 'mask_access', 'mask_strategy')
+        assert_equal [false, false, false], fields.fetch('domain').values_at('read_access', 'edit_access', 'mask_access')
+      end
     end
   end
 end
