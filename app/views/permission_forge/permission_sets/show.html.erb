@@ -36,7 +36,9 @@
 </div>
 
 <% unless locked %>
-  <%= render 'permission_forge/shared/savebar', id: 'pf-set-savebar', form: 'pf-set-form', people: @people_count %>
+  <%# Only the Resources tab edits through the savebar; elsewhere it serves the header alone. %>
+  <%= render 'permission_forge/shared/savebar', id: 'pf-set-savebar', form: 'pf-set-form', people: @people_count,
+                                                quiet: @tab != 'resources' %>
 <% end %>
 
 <%= pf_tech_details(set, extras: { is_muting: set.is_muting }) do %>

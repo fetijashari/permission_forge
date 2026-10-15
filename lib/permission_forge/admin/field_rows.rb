@@ -78,6 +78,13 @@ module PermissionForge
         new_columns.any? || missing_fields.any?
       end
 
+      # Whether the sync panel is a warning. A column with no setting in a
+      # Muting Permission Set takes nothing away — the normal state, not a
+      # gap — so there only a configured field whose column is gone warns.
+      def sync_warning?
+        missing_fields.any? || (!@muting && new_columns.any?)
+      end
+
       private
 
       # Every row counts, switched off or not: a field with a row cannot get a

@@ -10,6 +10,8 @@ module PermissionForge
     NO_VALUE_OPERATORS = %w[is_null is_not_null].freeze
     USER_OPERATORS = %w[equal not_equal in not_in is_null is_not_null].freeze
     CURRENT_USER = 'current_user'.freeze
+    # Resource flags a Muting Permission Set can take away, in the order the page shows them.
+    MUTED_FLAGS = %i[read_access create_access edit_access delete_access].freeze
 
     # --- activation conditions ------------------------------------------------
 
@@ -59,6 +61,38 @@ module PermissionForge
     def pf_flag_phrase(flag)
       t("permission_forge.ui.conditions.flags.#{flag}",
         default: pf_ui('conditions.flag_generic', flag: pf_flag_label(flag)))
+    end
+
+    # --- resources ------------------------------------------------------------
+
+    # The toast after "Add resource": how many fields it got. In a Muting
+    # Permission Set "with 0 fields" reads like a gap, so there it says what
+    # the resource takes away, or that it takes nothing away yet.
+    def pf_added_resource_notice(resource, muting:)
+      label = pf_resource_label(resource)
+      count = resource.resource_fields.size
+      return t('permission_forge.flash.resources.added', resource: label, count: count) unless muting
+
+      taken = pf_muted_parts(resource, count)
+      return t('permission_forge.flash.resources.added_muting_nothing', resource: label) if taken.empty?
+
+      t('permission_forge.flash.resources.added_muting', resource: label, what: taken.to_sentence)
+    end
+
+    # What a muting resource takes away: its muted flags, then its field rows.
+    def pf_muted_parts(resource, field_count)
+      parts = MUTED_FLAGS.select { |flag| resource.public_send(flag) }.map { |flag| pf_ui("flags_short.#{flag}") }
+      parts << t('permission_forge.flash.resources.muted_fields', count: field_count) if field_count.positive?
+      parts
+    end
+
+    # --- field levels ---------------------------------------------------------
+
+    # What one Permission Set does to a field, by its level (an
+    # Admin::EffectiveAccess::FieldSource): "Sales rep shows this field masked (Email)."
+    def pf_field_source_sentence(source)
+      pf_ui("level_sentences.#{source.level}", set: source.permission_set.name,
+                                               strategy: pf_mask_strategy_label(source.mask_strategy))
     end
 
     # --- record rules ---------------------------------------------------------

@@ -1,5 +1,7 @@
-<%# Unsaved-changes bar: the submit area of a batched-edit form (form="id"). %>
-<div id="<%= id %>" class="pf-savebar" role="region" aria-label="<%= t('.label') %>" data-pf-dirty="false">
+<%# Unsaved-changes bar: the submit area of a batched-edit form (form="id").
+    `quiet: true` — the page's own controls apply at once, so with JS the bar shows only once
+    something joined to the form (the header) has changed; without JS it stays, as the only way to save that. %>
+<div id="<%= id %>" class="pf-savebar<%= ' pf-savebar--quiet' if local_assigns[:quiet] %>" role="region" aria-label="<%= t('.label') %>" data-pf-dirty="false">
   <div class="pf-savebar__text">
     <span class="pf-savebar__count pf-savebar__count--dirty" data-pf-dirty-count
           data-pf-one="<%= t('.count.one', count: '%{count}') %>" data-pf-other="<%= t('.count.other', count: '%{count}') %>"></span>

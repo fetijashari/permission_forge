@@ -27,9 +27,14 @@ module PermissionForge
     # over the page's records; without one that covers the record, the
     # page's preloaded lookup or a lookup of its own is used.
     def pf_audit_creator(record, creations = nil)
-      lookup = [creations, @pf_creations].find { |candidate| candidate&.covers?(record) }
-      event = (lookup || pf_audit_creations([record]))[record]
+      event = pf_audit_creation_event(record, creations)
       event ? pf_audit_actor_name(event) : pf_person_name(record.try(:created_by))
+    end
+
+    # The record's creation event, or nil (see pf_audit_creator for `creations`).
+    def pf_audit_creation_event(record, creations = nil)
+      lookup = [creations, @pf_creations].find { |candidate| candidate&.covers?(record) }
+      (lookup || pf_audit_creations([record]))[record]
     end
 
     # The creation events of `records` in one lookup (two queries per type).

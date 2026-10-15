@@ -24,8 +24,8 @@
 
   <% res.fields.each do |field| %>
     <% field_label = res.name.safe_constantize&.human_attribute_name(field.name) || field.name.humanize %>
-    <% reasons = field.granted_by.map { |ps| ['✓', t('.field_from', set: ps.name), ps] } %>
-    <% reasons += field.blocked_by.map { |ps| ['⊘', t('.field_muted', set: ps.name), ps] } %>
+    <% reasons = field.grants.map { |src| ['✓', pf_field_source_sentence(src), src.permission_set] } %>
+    <% reasons += field.mutes.map { |src| ['⊘', pf_field_source_sentence(src), src.permission_set] } %>
     <% reasons << ['⚠', t('.field_unconfigured', behaviour: t("permission_forge.ui.unconfigured.#{PermissionForge.configuration.unconfigured_field_strategy}", default: t('permission_forge.ui.unconfigured.block'))), nil] if field.unconfigured %>
     <% reasons << ['–', t('.field_capped'), nil] if field.capped %>
     <% reasons << ['◇', t('.field_virtual'), nil] if field.implicit %>

@@ -464,12 +464,18 @@ en:
         added:
           one: Added %{resource} with %{count} field.
           other: Added %{resource} with %{count} fields.
+        added_muting: Added %{resource}. It takes away %{what}.
+        added_muting_nothing: 'Added %{resource}. It mutes nothing yet: choose below
+          what it takes away.'
         columns_added:
           one: Added %{count} column.
           other: Added %{count} columns.
         missing_removed:
           one: Removed %{count} field whose column no longer exists.
           other: Removed %{count} fields whose columns no longer exist.
+        muted_fields:
+          one: "%{count} field"
+          other: "%{count} fields"
         removed: Removed %{resource} from “%{set}”.
       rules:
         created: Added the rule “%{rule}”.
@@ -700,8 +706,6 @@ en:
         action_muted: "%{set} blocks this action."
         action_none: No Permission Set permits this action.
         field_capped: Shown as Read-only because Edit isn't allowed on this resource.
-        field_from: "%{set} shows this field."
-        field_muted: "%{set} hides or masks this field."
         field_none: No Permission Set shows this field.
         field_unconfigured: 'No set configures this column: %{behaviour}.'
         field_variant: Follows the setting of %{base}.
@@ -1378,6 +1382,9 @@ en:
         new_count:
           one: "%{count} new column not configured"
           other: "%{count} new columns not configured"
+        new_count_muting:
+          one: "%{count} column with no setting, so it mutes nothing"
+          other: "%{count} columns with no setting, so they mute nothing"
         new_title: New columns, not configured
         none: None
         remove_missing: Remove missing fields
@@ -1843,6 +1850,8 @@ en:
         disabled: Created-by and edited-by aren't being recorded.
         edited: Last edited by %{updated_by} · %{updated_at}
         history: History
+        unknown_hint_html: "%{unknown}: no actor was named for this change (code run
+          outside a request, such as a runner or a job). Name one with %{method}."
       crud_cell:
         allowed: Allowed
         muted: Muted
@@ -2047,6 +2056,12 @@ en:
         read_access: Read
         view_all: View All
       keep: Keep
+      level_sentences:
+        edit: "%{set} shows this field and lets people edit it."
+        hide: "%{set} hides this field."
+        mask: "%{set} forces this field masked."
+        masked: "%{set} shows this field masked (%{strategy})."
+        read: "%{set} shows this field read-only."
       levels:
         edit: Editable
         hidden: Hidden
