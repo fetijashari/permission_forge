@@ -308,6 +308,7 @@ require_relative 'permission_forge/resource_chain'
 require_relative 'permission_forge/virtual_fields'
 require_relative 'permission_forge/virtual_fields/discovery'
 require_relative 'permission_forge/field_variants'
+require_relative 'permission_forge/timestamp_fields'
 
 require_relative 'permission_forge/concerns/has_active_scope'
 require_relative 'permission_forge/concerns/has_tenant_scoping'

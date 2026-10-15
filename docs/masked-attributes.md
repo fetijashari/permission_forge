@@ -338,7 +338,18 @@ If a column has no matching `ResourceField`, the concern uses the same `config.u
 
 Unknown strategy values fall back to `:block` (fail closed), never pass-through.
 
-Generating fields (`ResourceFieldGenerator`, the admin's "Sync fields", `generate_fields` in the API) gives Rails' timestamps (`created_at`, `updated_at`) a read-only row, so under `:block` they read as stored instead of `nil`. Through 0.14.1 they were in `ignored_fields` and got no row: every reader, admin included, saw `null`. A resource generated before keeps that until you sync its fields; `config.ignored_fields += %w[created_at updated_at]` keeps them without a row.
+### Rails timestamps
+
+Generating fields gives Rails' timestamps (`created_at`, `updated_at`, `created_on`, `updated_on`) a row, so under `:block` a reader who is granted them reads them as stored instead of `nil`. Through 0.14.1 they were in `ignored_fields` and got no row: every reader, admin included, saw `null`. All the paths that generate rows treat them alike — `ResourceFieldGenerator` (also `Resource.grant_full_access!` and `generate_fields` in the API) and the admin's presets, "Add all new" and "Sync fields":
+
+| On a granting Permission Set, the level chosen | A timestamp row |
+|---|---|
+| Editable (Full access, `grant_all: true`), Read-only, Masked | Read-only: read on, edit off, never masked |
+| Hidden ("No access", `grant_all: false`) | Hidden, like every other column: a granting row adds access, so "No access" stays no access |
+
+On a **Muting Permission Set** a timestamp row gets the level chosen, like every other column (read on there means "take read away", so a read-only rule would mute the timestamps for the set's holders). A row you set one by one (the field editor, the API, the console) is never changed.
+
+A resource generated before keeps its fields until you sync them: on an existing install the admin lists `created_at` / `updated_at` as not configured on every resource. Sync them (at the level you want), or keep them out with `config.ignored_fields += %w[created_at updated_at]`, which also stops the admin listing them.
 
 ## Without a current user
 
