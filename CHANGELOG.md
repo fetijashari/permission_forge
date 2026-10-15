@@ -45,6 +45,18 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Changed
 
+- **Development boot warnings also go to standard error.** The cache warnings were logged before `bin/rails server`
+  attaches its console logger (and `bin/rails runner` never does), so they reached `log/development.log` only. In
+  development each is now also written to standard error, once per boot — not when the logger already writes to
+  standard output or error, not while `bin/rails generate` / `destroy` runs, and never in another environment.
+- **`rails -T` descriptions.** `permission_forge:audit` no longer says "Read-only": it changes no permission data and
+  records the run in the audit log (`report.generated`). `permission_forge:cache:clear` says what it does first; the
+  upgrade hint for 0.13 installs comes last.
+- **Cross-set unmasking findings name the masking sets too.** `GdprFieldAuditor`'s `:cross_set_unmasking` finding
+  gains `masked_in` (the names of the granting Permission Sets that mask the field), `rake permission_forge:audit_masks`
+  prints them ("masked in Permission Set Support") and `rake permission_forge:audit` lists them in parentheses after
+  the set that unmasks. The other keys are unchanged.
+
 - **Full access applies no personal-data masks.** `ResourceFieldGenerator.call(grant_all: true)`, and through it
   `Resource.grant_full_access!`, `Services::ResourceWithFieldsBuilder` and the admin API's `generate_fields` with
   `grant_all`, now create every field readable and editable in the clear, also the columns that match
@@ -219,6 +231,24 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   A new row whose label is blank or "Untitled Field" now gets `name.humanize` (`billing_email` → "Billing email") on
   create; a label set later is kept, and existing rows are not changed (rename them in the admin). Resource actions
   have no label default (a blank one already reads as the humanized name).
+- **Auto-applied masking reaches the development server.** With Rails 8's development `:memory_store` (or 7.1/7.2's
+  `:null_store`) and `auto_apply_masked_attributes = :auto`, a `Resource` row created from `bin/rails runner`, a
+  console or a rake task never reached the running server: the token that announces a newly named model lived in each
+  process's own store, so the server served the model's columns in clear while `masked_field?` said `true`, until a
+  restart. In development, with a store that cannot carry the token, each request or job now re-reads the `Resource`
+  names from the database (one query at most every 2 seconds) and masks the model at the server's next request. No
+  other environment runs that query; there the boot now warns (production too) that a model first named in another
+  process stays unmasked until a restart, with the remedies: a shared store, `include
+  PermissionForge::Concerns::MaskedAttributes` in the model with `auto_apply_masked_attributes = false`, or a list of
+  models. The development warning names the effect as well. See
+  [Cache Consistency](docs/configuration.md#cache-consistency).
+- **No unexplained "masking token" warning with a null store.** A store that keeps nothing (`cache_backend = :null`, a
+  `:null_store`, Rails 7.1/7.2's development default) logged "The cache store did not give or keep the masking token"
+  at boot with no cause or remedy. Such a store is no longer asked for the token (the boot warning above explains what
+  it means), and the remaining warning, for a store that fails, says what to do.
+- **A gem that loads `rails/generators` at boot no longer hides the audit-table check.** The boot took any process
+  with `Rails::Generators` loaded for a generator run and skipped the missing-table warning. It now looks for the
+  command `bin/rails generate` / `destroy` loads (`Rails::Command::GenerateCommand` / `DestroyCommand`).
 - **"Created by" names who the audit log names.** A record created by the HTTP Basic admin (or an API client) has
   no `created_by_id` — the column holds a user id — so the footer said "Created by System" and a Permission Set's
   Assignments tab "by System", next to "Last edited by admin (password prompt)" and an audit log that named

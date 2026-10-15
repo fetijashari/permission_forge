@@ -2,9 +2,10 @@
 
 namespace :permission_forge do
   namespace :cache do
-    desc 'Remove every cached permission hash of every user (by key pattern, or every user through the bulk ' \
-         'invalidation) — once the last process of the previous release is gone (0.14), or to revoke everything ' \
-         'cached at once; the cache is cold afterwards. ACTOR=, REASON='
+    # Upgrading from 0.13 or earlier: run it once the last process of the
+    # previous release is gone (it also removes the previous key namespace).
+    desc "Remove every user's cached permissions at once; each user rebuilds on their next request. " \
+         'ACTOR=, REASON= (After an upgrade from 0.13: run it once the old processes are gone.)'
     task clear: :environment do
       task_name = 'permission_forge:cache:clear'
       result = PermissionForge::RakeAudit.changing(task_name) { PermissionForge::Services::PermissionCacheClearer.call }

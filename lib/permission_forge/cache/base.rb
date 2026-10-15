@@ -46,6 +46,16 @@ module PermissionForge
         false
       end
 
+      # Whether the store keeps what is written to it. A store that keeps
+      # nothing (cache_backend = :null, a :null_store) caches no permission
+      # hash, and cannot carry the token MaskingSync tells other processes
+      # about a newly masked model with.
+      #
+      # @return [Boolean]
+      def keeps_entries?
+        true
+      end
+
       # Writes an entry that never expires — not even under a default expiry
       # the store applies to every entry (a Rails cache configured with
       # expires_in). Here a write without a TTL, which is that already.

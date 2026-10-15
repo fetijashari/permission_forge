@@ -142,6 +142,22 @@ module PermissionForge
       end
     end
 
+    # Field test: "Read-only security review" although every run writes report.generated, and
+    # cache:clear opening with "(0.14)" upgrade text on a fresh install.
+    # Task#comment is the first sentence, what rake -T shows.
+    test 'the audit task says it changes no permission data and records the run' do
+      assert_equal 'Security review of the PermissionForge setup: changes no permission data, records the run in ' \
+                   'the audit log', Rake::Task['permission_forge:audit'].comment
+    end
+
+    test 'the cache:clear description leads with what it does, the upgrade hint last' do
+      task = Rake::Task['permission_forge:cache:clear']
+
+      assert_equal "Remove every user's cached permissions at once; each user rebuilds on their next request", task.comment
+      assert task.full_comment.end_with?('(After an upgrade from 0.13: run it once the old processes are gone.)'),
+             task.full_comment
+    end
+
     # --- e-operations #45: erasure and the audit-log label scrub --------------------------------
 
     def labels_naming(user)

@@ -182,28 +182,35 @@ module PermissionForge
       end
 
       # Masks combine with AND, so an unmasked row wins over a masked row of
-      # the same field of the same resource in another Permission Set.
+      # the same field of the same resource in another Permission Set. The
+      # finding names both: the set that unmasks and the sets that mask.
       def audit_cross_set_unmasking(report)
         masking_sets = sets_masking_pii_fields
         granting_fields.where(mask_access: false).preload(resource: :permission_set).find_each do |field|
-          resource = field.resource
-          masked_elsewhere = masking_sets.fetch([resource.name, field.name], []) - [resource.permission_set_id]
-          report << cross_set_finding(resource, field.name) if masked_elsewhere.any?
+          finding = cross_set_finding(field, masking_sets.fetch([field.resource.name, field.name], {}))
+          report << finding if finding
         end
       rescue ActiveRecord::StatementInvalid
         # Tables don't exist yet (pre-migration)
       end
 
-      def cross_set_finding(resource, field_name)
-        { type: :cross_set_unmasking, field_name: field_name, resource_name: resource.name,
-          permission_set: resource.permission_set.name }
+      # @param masking [Hash{Integer => String}] the sets that mask the field, by id
+      # @return [Hash, nil] nil when no other set masks it
+      def cross_set_finding(field, masking)
+        resource = field.resource
+        masked_in = masking.except(resource.permission_set_id).values.sort
+        return if masked_in.empty?
+
+        { type: :cross_set_unmasking, field_name: field.name, resource_name: resource.name,
+          permission_set: resource.permission_set.name, masked_in: masked_in }
       end
 
-      # { [resource name, field name] => ids of the granting sets that mask it }
+      # { [resource name, field name] => { id => name } of the granting sets that mask it }
       def sets_masking_pii_fields
-        masked = granting_fields.where(mask_access: true).preload(:resource).select { |field| gdpr_field?(field.name) }
-        masked.each_with_object({}) do |field, sets|
-          (sets[[field.resource.name, field.name]] ||= []) << field.resource.permission_set_id
+        masked = granting_fields.where(mask_access: true).preload(resource: :permission_set)
+        masked.select { |field| gdpr_field?(field.name) }.each_with_object({}) do |field, sets|
+          resource = field.resource
+          (sets[[resource.name, field.name]] ||= {})[resource.permission_set_id] = resource.permission_set.name
         end
       end
 

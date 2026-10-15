@@ -374,6 +374,119 @@ module PermissionForge
     end
   end
 
+  # A store that cannot carry the token to another process: one that lives in
+  # each process (:memory, a :memory_store — Rails 8's development default) or
+  # keeps nothing (:null, a :null_store — Rails 7.1/7.2's). Field test: a
+  # Customer Resource row created from `bin/rails runner` never reached the
+  # running server, whose pages showed the emails in clear until a restart.
+  class MaskingSyncUnsharedStoreTest < ActiveSupport::TestCase
+    include BootTestHelpers
+    include MaskingSyncTestHelpers
+
+    setup do
+      @model = fresh_model
+      @clock = [1_000.0] # monotonic seconds (on_clock)
+    end
+
+    teardown do
+      use_backend(:memory)
+      MaskingSync.reset!
+      MaskingSync.boot!
+    end
+
+    test 'development with a per-process store masks a model named from another process at the next request' do
+      in_rails_env('development') do
+        booted
+        named_elsewhere(@model, announce: false) # the runner's own store: nothing reaches this one
+
+        Rails.application.executor.wrap { nil }
+
+        assert applied?(@model)
+      end
+    end
+
+    test 'development re-reads the Resource names at most every DATABASE_RECHECK seconds' do
+      in_rails_env('development') do
+        on_clock do
+          booted
+          Rails.application.executor.wrap { nil }
+          named_elsewhere(@model, announce: false)
+
+          assert_equal 0, count_sql { Rails.application.executor.wrap { nil } }, 'within the interval: no query'
+          refute applied?(@model)
+
+          @clock[0] += MaskingSync::DATABASE_RECHECK
+          assert_equal 1, count_sql { Rails.application.executor.wrap { nil } }, 'one query for the names'
+          assert applied?(@model)
+        end
+      end
+    end
+
+    test 'development with a store that keeps nothing re-reads the names too, and asks it for no token' do
+      use_backend(:null)
+      in_rails_env('development') do
+        booted
+        named_elsewhere(@model, announce: false)
+
+        log = capture_rails_log { assert_equal(0, count_store_reads { Rails.application.executor.wrap { nil } }) }
+
+        assert applied?(@model)
+        assert_no_match(/masking token/, log)
+      end
+    end
+
+    # The per-request cost stays what it was outside development: no query.
+    test 'production with a per-process store runs no query per request' do
+      in_rails_env('production') do
+        booted
+
+        assert_equal(0, count_sql { Rails.application.executor.wrap { nil } })
+      end
+    end
+
+    # Rails 7.1's development default: the boot logged "did not give or keep
+    # the masking token" with no cause and no remedy.
+    test 'a store that keeps nothing is asked for no token and logs no token warning' do
+      use_backend(:null)
+
+      log = capture_rails_log do
+        assert booted
+        assert_equal(0, count_store_reads { 3.times { Rails.application.executor.wrap { nil } } })
+      end
+
+      assert_no_match(/masking token/, log)
+      assert_predicate MaskingSync, :synced?
+      assert_equal 0, count_sql { Rails.application.executor.wrap { nil } }, 'in step: no query per request'
+    end
+
+    test 'with a store that keeps nothing the first row for a model is masked in the process that commits it' do
+      use_backend(:null)
+      booted
+
+      create_resource(permission_set: create_permission_set, name: @model.name)
+
+      assert applied?(@model)
+    end
+
+    private
+
+    def booted
+      MaskingSync.reset!
+      MaskingSync.boot!
+    end
+
+    def use_backend(backend)
+      PermissionForge.configuration.cache_backend = backend
+      PermissionForge.configuration.reset_cache_store!
+    end
+
+    # MaskingSync's monotonic clock reads @clock for the block.
+    def on_clock(&)
+      clock = @clock
+      with_singleton_method(MaskingSync, :now, -> { clock[0] }, &)
+    end
+  end
+
   # The migration that creates a model's table runs while the process is up.
   # DDL commits the open transaction on MySQL (its savepoints with it), so
   # this runs outside the fixture transaction and removes what it committed.
