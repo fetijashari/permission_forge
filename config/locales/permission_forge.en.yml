@@ -1253,14 +1253,15 @@ en:
         models: Models
         no_models: No models match.
         note: Fields will be created from the model's columns and virtual fields.
-        note_gdpr: Fields will be created from the model's columns and virtual fields.
-          Privacy defaults are on, so sensitive columns start Masked.
+        note_gdpr: 'Fields will be created from the model''s columns and virtual fields.
+          Privacy defaults are on, so sensitive columns start Masked, except with
+          Full access: then they are only flagged Sensitive, for you to mask.'
         presets:
           block_changes:
             desc: Mutes Create, Edit, Delete and every action.
             title: Block all changes
           full:
-            desc: Read, create, edit and delete. All fields editable.
+            desc: Read, create, edit and delete. All fields editable, none masked.
             title: Full access
           hide_sensitive:
             desc: Hides every column that looks like personal data.
@@ -1338,7 +1339,8 @@ en:
           hide: Add all new as Hidden
           read: Add all new as Read-only
         gdpr_off: Privacy defaults are off.
-        gdpr_on: 'Privacy defaults are on: sensitive columns are added as Masked.'
+        gdpr_on: 'Privacy defaults are on: sensitive columns are added as Masked,
+          except with full access (then they are only flagged Sensitive).'
         ignored_count:
           one: "%{count} ignored"
           other: "%{count} ignored"
@@ -1549,7 +1551,8 @@ en:
             show them.
           name: Filter sensitive values from logs
         gdpr_defaults:
-          desc: Columns that look personal get masked by default when they're added.
+          desc: Columns that look personal get masked by default when they're added,
+            except when they're added with full access.
           name: Privacy defaults
         gdpr_field_patterns:
           desc: Column names matching a pattern are flagged sensitive and get this

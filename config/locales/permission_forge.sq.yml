@@ -1276,15 +1276,17 @@ sq:
         models: Modelet
         no_models: Asnjë model nuk përputhet.
         note: Fushat do të krijohen nga kolonat dhe fushat virtuale të modelit.
-        note_gdpr: Fushat do të krijohen nga kolonat dhe fushat virtuale të modelit.
+        note_gdpr: 'Fushat do të krijohen nga kolonat dhe fushat virtuale të modelit.
           Parazgjedhjet e privatësisë janë aktive, prandaj kolonat e ndjeshme fillojnë
-          si të maskuara.
+          si të maskuara, përveç me Qasje e plotë: atëherë vetëm shënohen si të ndjeshme,
+          që t''i maskoni ju.'
         presets:
           block_changes:
             desc: Hesht Krijo, Ndrysho, Fshi dhe çdo veprim.
             title: Blloko të gjitha ndryshimet
           full:
-            desc: Lexo, krijo, ndrysho dhe fshi. Të gjitha fushat të ndryshueshme.
+            desc: Lexo, krijo, ndrysho dhe fshi. Të gjitha fushat të ndryshueshme,
+              asnjë e maskuar.
             title: Qasje e plotë
           hide_sensitive:
             desc: Fsheh çdo kolonë që duket si e dhënë personale.
@@ -1368,7 +1370,7 @@ sq:
           read: Shto të gjitha të rejat si Vetëm lexim
         gdpr_off: Parazgjedhjet e privatësisë janë joaktive.
         gdpr_on: 'Parazgjedhjet e privatësisë janë aktive: kolonat e ndjeshme shtohen
-          si të maskuara.'
+          si të maskuara, përveç me qasje të plotë (atëherë vetëm shënohen si të ndjeshme).'
         ignored_count:
           one: "%{count} e injoruar"
           other: "%{count} të injoruara"
@@ -1586,7 +1588,8 @@ sq:
             të mos i shfaqin.
           name: Filtro vlerat e ndjeshme nga regjistrat
         gdpr_defaults:
-          desc: Kolonat që duken personale maskohen si parazgjedhje kur shtohen.
+          desc: Kolonat që duken personale maskohen si parazgjedhje kur shtohen, përveç
+            kur shtohen me qasje të plotë.
           name: Parazgjedhjet e privatësisë
         gdpr_field_patterns:
           desc: Emrat e kolonave që përputhen me një model shënohen si të ndjeshëm

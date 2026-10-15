@@ -181,7 +181,8 @@ module PermissionForge
     end
 
     # Creates ResourceFields for columns and virtual fields at a level, applying
-    # privacy defaults (sensitive names start Masked when gdpr_defaults is on).
+    # privacy defaults (see Admin::ColumnFields: under gdpr_defaults sensitive
+    # names start Masked, except at full access).
     def create_fields(columns, level, resource: @resource)
       PermissionForge::Admin::ColumnFields.new(resource, muting: @permission_set.is_muting).create(columns, level)
     end

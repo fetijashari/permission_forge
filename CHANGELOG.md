@@ -29,6 +29,13 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   **Opt out:** generate without `grant_all` and open the other fields, or mask the reported fields afterwards
   (`resource.resource_fields.where(name: %w[name email]).find_each { |f| f.update!(mask_access: true) }`; the stored
   strategy applies).
+- **The admin's "Full access" masks nothing.** Adding a resource with the **Full access** preset, or Sync's "Add all
+  new with full access", now gives every field Editable, also the columns that look like personal data under
+  `gdpr_defaults` (the field test's `Customer.name` started Masked). Those columns keep the **Sensitive** badge and
+  their recommended mask strategy, and Home's Privacy audit lists them as shown unmasked, with **Fix** and **This is
+  intended**. **Read-only** (preset and Sync) still starts them Masked; the muting presets are unchanged. **Opt out:**
+  add the resource with **Read-only** and raise the other fields to Editable, or set the reported fields to Masked
+  from the Fields tab (bulk: filter **Sensitive**, select all, Set to Masked).
 - **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
   `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
   `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`
