@@ -277,6 +277,8 @@ PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant
 
 A name segment is delimited by `_`, the ends of the name, a digit or a camelCase capital: `hotel_id`, `capacity` and `telemetry_enabled` do not match, nor does a stem glued to another word (`homecity`, `telno`); add a pattern for such names.
 
+Detection reads the column name only, the same way for every model (the same patterns are Rails' `filter_parameters`, which know no model). So a flag means "may be personal data": `name` on a company model is flagged like a person's name — and a company's name can itself be personal data (a sole trader's). When a flagged field may be read unmasked, confirm it with **This is intended** on the admin's Home (Privacy audit): it keeps its **Sensitive** badge but leaves the list, and the confirmation is an audit event (`field.sensitive_acknowledged`). `GdprFieldAuditor` and `rake permission_forge:audit_masks` do not read the confirmation and keep reporting the field.
+
 **Extend or override patterns:**
 
 ```ruby

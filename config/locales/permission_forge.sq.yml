@@ -532,6 +532,9 @@ sq:
           other: "%{count} gjëra për t'u rishikuar"
         title: Kërkon vëmendje
       privacy_card:
+        by_name_note: Fushat shënohen sipas emrit të kolonës, prandaj disa mund të
+          mos jenë të dhëna personale (p.sh. emri i një kompanie). Nëse një fushë
+          mund të shihet pa maskë, zgjidhni Kjo është e qëllimshme.
         description: "%{unmasked}, %{unconfigured}."
         fix: Rregullo
         intended: Kjo është e qëllimshme
@@ -1185,8 +1188,8 @@ sq:
           e ndryshueshme si parazgjedhje.'
         pick_person: Zgjidh një person…
         save: Ruaj
-        sensitive: 'Përputhet me modelin e privatësisë “%{pattern}”. Rekomandohet:
-          I maskuar (%{strategy}).'
+        sensitive: 'Përputhet me modelin e privatësisë “%{pattern}”, prandaj mund
+          të jetë e dhënë personale. Rekomandohet: I maskuar (%{strategy}).'
         turned_off: 'Cilësimi për këtë fushë në “%{set}” është i çaktivizuar, prandaj
           nuk zbatohet. Me konfigurimin aktual fusha është: %{behaviour}.'
         turned_off_implicit: 'Cilësimi për këtë fushë në “%{set}” është i çaktivizuar,

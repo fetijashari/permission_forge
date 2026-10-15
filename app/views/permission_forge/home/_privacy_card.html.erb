@@ -19,6 +19,10 @@
       <% if findings.any?(&:unconfigured?) %>
         <p class="pf-card__desc"><%= t('.per_set_note') %></p>
       <% end %>
+      <%# Detection reads column names only: say so where the admin can confirm a field. %>
+      <% if can_ack && unmasked.positive? %>
+        <p class="pf-card__desc"><%= t('.by_name_note') %></p>
+      <% end %>
     </div>
   </div>
   <% shown.each do |finding| %>

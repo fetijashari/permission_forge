@@ -526,6 +526,9 @@ en:
           other: "%{count} things to review"
         title: Needs attention
       privacy_card:
+        by_name_note: Fields are flagged by column name, so some may not be personal
+          data (a company's name, for example). If a field is fine unmasked, choose
+          This is intended.
         description: "%{unmasked}, %{unconfigured}."
         fix: Fix
         intended: This is intended
@@ -1166,7 +1169,8 @@ en:
           readable and editable by default.'
         pick_person: Pick a person…
         save: Save
-        sensitive: 'Matches privacy pattern “%{pattern}”. Recommended: Masked (%{strategy}).'
+        sensitive: 'Matches privacy pattern “%{pattern}”, so it may be personal data.
+          Recommended: Masked (%{strategy}).'
         turned_off: 'The setting for this field in “%{set}” is turned off, so it does
           not apply. With the current configuration the field is: %{behaviour}.'
         turned_off_implicit: 'The setting for this field in “%{set}” is turned off,

@@ -58,6 +58,31 @@ module PermissionForge
         assert_equal %w[email full_address name], findings.reject(&:unconfigured?).map(&:name).sort
       end
 
+      # Detection reads column names only: a company's name is flagged like a
+      # person's. The admin is told a flag may be wrong and confirms the field.
+      test 'a flag may not be personal data: the card says so, and This is intended clears it' do
+        add_customer('full')
+        get pf('/'), params: { privacy: 'all' }
+        assert_includes CGI.unescapeHTML(response.body), t('home.privacy_card.by_name_note')
+
+        get pf("/permission_sets/#{@admin.id}/resources/Customer/fields/name")
+        match = PermissionForge::Admin::SensitiveColumns.new.match('name')
+        sensitive = t('resource_fields.show.sensitive', pattern: match.pattern, strategy: t('ui.mask_strategies.first1_last4'))
+        assert_includes CGI.unescapeHTML(response.body), sensitive
+
+        post pf("/permission_sets/#{@admin.id}/resources/Customer/fields/name/acknowledge")
+        findings = PermissionForge::Admin::AttentionItems.new.privacy_findings.select { |f| f.permission_set == @admin }
+        assert_equal %w[email full_address], findings.map(&:name).sort
+        assert PermissionForge::Admin::SensitiveColumns.new.sensitive?('name'), 'still flagged Sensitive'
+      end
+
+      test 'no note about name-based flags while nothing sensitive is shown unmasked' do
+        add_customer('read')
+        get pf('/'), params: { privacy: 'all' }
+
+        assert_not_includes CGI.unescapeHTML(response.body), t('home.privacy_card.by_name_note')
+      end
+
       test 'the Read-only preset still starts sensitive columns Masked' do
         customer = add_customer('read')
 

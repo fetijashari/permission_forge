@@ -48,6 +48,10 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `DEFAULT_GDPR_FIELD_PATTERNS` get the new alternatives. **Opt out:** put a pattern ahead of the defaults (the first
   matching pattern decides): `config.gdpr_field_patterns = { /\Aemail_address\z/ => 'full' }
   .merge(PermissionForge::Configuration::DEFAULT_GDPR_FIELD_PATTERNS)`.
+- **The admin says a privacy flag may not be personal data.** Detection is unchanged (by column name, for every
+  model: `name` on a company model is still flagged). The field drawer's recommendation now reads "Matches privacy
+  pattern “name”, so it may be personal data", and Home's Privacy audit says that fields are flagged by column name
+  and that **This is intended** takes a field that is fine unmasked off the list. Wording only; nothing to opt out of.
 - **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
   `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
   `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`
