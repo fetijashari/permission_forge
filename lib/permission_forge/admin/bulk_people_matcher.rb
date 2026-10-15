@@ -61,13 +61,16 @@ module PermissionForge
 
       def lookup(token)
         needle = token.downcase
-        return exact(column_if_present('email'), needle) if token.include?('@')
+        return exact(email_columns, needle) if token.include?('@')
 
         exact(name_column, needle) || first_last_match(needle)
       end
 
-      def exact(column, needle)
-        column && first_listed(model.where(model.arel_table[column].lower.eq(needle)))
+      # The first listed person whose value in any of `columns` equals needle.
+      def exact(columns, needle)
+        table = model.arel_table
+        condition = Array(columns).map { |column| table[column].lower.eq(needle) }.reduce(:or)
+        condition && first_listed(model.where(condition))
       end
 
       # The first match that config.user_list holds.
@@ -79,8 +82,9 @@ module PermissionForge
         @directory ||= PeopleDirectory.new(configuration: @configuration)
       end
 
-      def column_if_present(column)
-        column if model.column_names.include?(column)
+      # Every email column the user table has (`email`, `email_address`).
+      def email_columns
+        PersonLabel::EMAIL_ATTRIBUTES.map(&:to_s) & model.column_names
       end
 
       # "Ana Krasniqi" against separate first/last name columns.

@@ -6,6 +6,18 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Users made by Rails 8's `bin/rails generate authentication` show and are found by their email.** That generator
+  names the column `email_address`, and PermissionForge only read `email`: a person without a name column showed as
+  "User #2" in the admin, searching people by email found nobody, "Paste emails or names" in bulk assignment reported
+  existing people as not found, and the cached profile (`permissions_hash[:profile][:email]`) was empty. The admin
+  labels, people search and bulk matching now read `email`, then `email_address` (bulk matching tries every such
+  column the table has), and the default `profile_builder` and the one the install generator writes fill the
+  profile's `email` key from `email_address` when there is no `email`. An existing generated initializer keeps its
+  `profile_builder`: add `|| user.try(:email_address)` to its `email:` to get the same. Users with an `email` column
+  see no change.
+
 ## [0.14.1] - 2026-10-14
 
 ### Security

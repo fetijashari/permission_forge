@@ -27,8 +27,8 @@ module PermissionForge
     # virtual attribute or a Ruby method (e.g., `"#{first_name} #{last_name}"`)
     # rather than a real column, so a SQL ORDER BY would fail.
     #
-    # The User class must respond to `:name` and `:email` (as method or column)
-    # for display labels. Override to scope or sort however you like:
+    # The User class must respond to `:name` and/or `:email` (or Rails 8's
+    # `:email_address`), as method or column, for display labels. Override to scope or sort however you like:
     #   config.user_list_resolver = -> { User.active.order(:last_name, :first_name) }
     attr_accessor :user_list_resolver
 
@@ -45,8 +45,8 @@ module PermissionForge
     # Receives the user, returns a String (the human-readable part).
     # The combobox automatically appends ` #<id>` so the JS can extract the id.
     #
-    # Default: tries name, full_name, display_name (in that order), then email,
-    # then a localized fallback. Override for full control:
+    # Default: tries name, full_name, display_name (in that order), then email
+    # (or email_address), then a localized fallback. Override for full control:
     #   config.user_label_formatter = ->(u) { "#{u.last_name}, #{u.first_name} <#{u.email}>" }
     attr_accessor :user_label_formatter
 
@@ -597,7 +597,8 @@ module PermissionForge
           id: user.id,
           uuid: user.try(:uuid),
           name: user.try(:name),
-          email: user.try(:email)
+          # `email`, else Rails 8's `email_address` (Admin::PersonLabel::EMAIL_ATTRIBUTES)
+          email: Admin::PersonLabel::EMAIL_ATTRIBUTES.lazy.filter_map { |attr| user.try(attr) }.first
         }
       }
     end
