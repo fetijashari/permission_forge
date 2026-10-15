@@ -16,6 +16,10 @@ module PermissionForge
     include PermissionForge::Concerns::InvalidatesManagedActions
     include PermissionForge::Concerns::RecordsAuditEvents
 
+    # Its name is configuration, not personal data: #inspect shows it even
+    # when filter_parameters (the GDPR patterns) hide a `name` (InspectionFilters).
+    PermissionForge::InspectionFilters.show_configuration_names(self)
+
     permission_set_user_lookup :via_resource
 
     # optional: as declared since 0.13 (the foreign key holds); stated, so the

@@ -238,6 +238,13 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Fixed
 
+- **The console shows the gem's own configuration names.** With `filter_parameters_integration` the GDPR pattern
+  `\Aname\z` (meant for people's names) reached the gem's models through `ActiveRecord::Base.filter_attributes`, so
+  `#inspect` printed `name: [FILTERED]` for a Permission Set, a Permission Set Group, a Resource, a field, an action
+  and a rule. Each of these models now sets its own `filter_attributes`: the application's filters, unable to match
+  `name`, `label` or `field_name` (configuration), still hiding whatever else they matched (a rule's `field_value`, a
+  description). `AuditEvent` hides `actor_label` and `record_label`, which name people, whenever the application's
+  filters hide a `name`. Request-parameter logging, SQL bind logging and the host's models are unchanged.
 - **A response key two fields map to reads by the stricter of them.** With custom `field_variant_mappings` that send
   two fields to one name (`supplier_id` and `supplier_ref` both to `supplier_key`) and a model without that name,
   `FiltersResponseAttributes` read a serializer's `supplier_key` by the first field's entry, so a hidden second field

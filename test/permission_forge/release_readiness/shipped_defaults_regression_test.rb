@@ -93,6 +93,14 @@ module PermissionForge
         assert_match(/name: \[FILTERED\], email: \[FILTERED\]/, result['customer_inspect'])
       end
 
+      # Field test round 3: the GDPR pattern `\Aname\z` hid the gem's own
+      # configuration names (`name: [FILTERED]` on a Permission Set).
+      test 'SHIP-Q5b the gem models show their configuration names; audit labels naming people stay filtered' do
+        assert_match(/name: "Sales rep"/, result['set_inspect'])
+        assert_match(/name: "email", label: "Email"/, result['field_inspect'])
+        assert_match(/actor_label: \[FILTERED\], .*record_label: \[FILTERED\]/, result['audit_event_inspect'])
+      end
+
       test 'SHIP-DEFAULTS the generated initializer closes the fail-open defaults for new installs' do
         assert_equal 'deny', result['generated_action_guard_nil_user_strategy']
         # Q8: the safe subset, written explicitly; config.preset = :strict is offered commented.

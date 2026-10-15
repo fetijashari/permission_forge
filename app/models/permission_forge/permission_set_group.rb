@@ -14,6 +14,10 @@ module PermissionForge
     include PermissionForge::Concerns::PermissionsRegenerator
     include PermissionForge::Concerns::RecordsAuditEvents
 
+    # Its name is configuration, not personal data: #inspect shows it even
+    # when filter_parameters (the GDPR patterns) hide a `name` (InspectionFilters).
+    PermissionForge::InspectionFilters.show_configuration_names(self)
+
     # Deleting a group detaches its sets (detach_permission_sets) — not
     # `dependent: :nullify`, whose UPDATE runs no callbacks and so leaves no
     # audit event. A set removed from the collection (`delete`, `ids=`, `=`,
