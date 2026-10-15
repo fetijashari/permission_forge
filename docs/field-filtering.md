@@ -119,6 +119,39 @@ Pass params you have already permitted (`customer_params.to_h`, or the permitted
 
 Without a current user `PermitsAttributes` returns `{}`: every key is dropped. A key the user may not edit is dropped whatever its value — a Hash or an Array under it is a value (a json column), never looked into. The resource may be a record or a model class.
 
+### Telling the user what was not saved
+
+Dropping is silent: the update succeeds with the keys that were kept, and a scaffold then says "Customer was successfully updated." although `status` and `notes` were ignored. Pass `report: true` to learn what was dropped. The call then answers a `PermitsAttributes::Result` instead of the Hash: `params` (the same filtered Hash), `dropped` (the paths of the dropped keys: `status`, `supplier_attributes.secret`, `lines_attributes.*.price`; never their values), `dropped?` and `dropped_fields` (the top-level keys, for a message). Without `report:` the return value is the Hash, as before.
+
+```ruby
+def update
+  result = PermissionForge::Services::PermitsAttributes.call(
+    resource: @customer, permitted_params: customer_params, report: true
+  )
+
+  if @customer.update(result.params)
+    notice = 'Customer was successfully updated.'
+    notice += " Not saved: #{result.dropped_fields.join(', ')}." if result.dropped?
+    redirect_to @customer, notice: notice
+  else
+    render :edit, status: :unprocessable_entity
+  end
+end
+```
+
+Translate the message as you do your others. Better still, do not offer what will be dropped: render a field the user may not edit as read-only text (or leave it out when they may not read it) by asking the same permissions the filter uses:
+
+```erb
+<% access = Current.user&.field_permissions(:Customer, :status) || {} %>
+<% if access[:edit_access] %>
+  <%= form.text_field :status %>
+<% elsif access[:read_access] %>
+  <p><%= @customer.status %></p>  <%# masked by MaskedAttributes when the field is masked %>
+<% end %>
+```
+
+`field_permissions` returns `nil` for a field without a row; `PermitsAttributes` drops such a key too.
+
 ## Filtering in Serializers
 
 > **Note:** Since v0.9.0, models with the `MaskedAttributes` concern applied (the default via `config.auto_apply_masked_attributes` for every model with a `Resource` record) already filter and mask direct attribute reads and the `attributes` / `as_json` / `serializable_hash` output — see [masked-attributes.md](masked-attributes.md). The manual pattern below is only needed when auto-apply is disabled.

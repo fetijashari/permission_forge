@@ -20,6 +20,11 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `api_auth` that set `@admin = true` on the controller (see Deprecated). A refusal answers 403 with a body (it had
   none) and is recorded as `api.auth_failed` with reason `stats_not_authorized`; while the lambda is unset the 403
   names it. See [Dashboard Stats](docs/admin-api.md#dashboard-stats).
+- **`PermitsAttributes.call(..., report: true)` says what was dropped.** It answers a `PermitsAttributes::Result`:
+  `params` (the filtered Hash, as before), `dropped` (the paths of the dropped keys, never values), `dropped?` and
+  `dropped_fields` (the top-level keys), so a controller can say "Not saved: status, notes" instead of a silent
+  success. The paths are collected whether or not `params.filtered` is heard. Without `report:` the return value is the
+  Hash, unchanged. See [Telling the user what was not saved](docs/field-filtering.md#telling-the-user-what-was-not-saved).
 - **Bulk assignment reports the ids it skipped.** `POST …/users/bulk` answers `skipped` next to `assigned`, `revoked`
   and `invalidated`: the requested ids that name nobody `user_list_resolver` lists (`[99]`; `[]` when none), so a typo
   in an automated list no longer goes unnoticed. An id outside the resolver and an unknown one read the same.
