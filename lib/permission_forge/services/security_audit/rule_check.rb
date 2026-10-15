@@ -24,10 +24,17 @@ module PermissionForge
           PermissionForge::PermissionSetRule.active
         end
 
+        # The advice follows the setting: with auto_query_scoping on, rules
+        # are all that is missing.
         def no_rules
+          advice = if configuration.auto_query_scoping_enabled?
+                     'otherwise add rules (auto_query_scoping is on, so a filter rule applies to every query).'
+                   else
+                     'otherwise add rules and enable auto_query_scoping.'
+                   end
           finding(:info, :no_rules, 'No record rules are in use',
                   'Anyone with read access to a resource sees every record of it. That is fine if your app ' \
-                  'limits records itself; otherwise add rules and enable auto_query_scoping.')
+                  "limits records itself; #{advice}")
         end
 
         def unenforced

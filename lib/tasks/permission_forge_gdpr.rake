@@ -43,9 +43,11 @@ namespace :permission_forge do
   # request id, reason and data of every audit event, the *_by_id columns on
   # rows the person created, edited or reviewed, and the person's own record
   # in the app. Assignments in other tenants stay when a tenant is current.
+  # rake -T shows a description up to its first full stop: the first sentence
+  # carries no abbreviation ("Article 17", not "Art. 17").
   desc "Remove a user's assignments, group memberships and cached permissions, and clear their name labels " \
-       'in the audit log (supports GDPR Art. 17). Ids and other event data stay. USER_ID required; DRY_RUN=true ' \
-       'by default.'
+       'in the audit log (supports GDPR Article 17). Ids and other event data stay. USER_ID required; ' \
+       'DRY_RUN=true by default.'
   task erasure: :environment do
     user_id = ENV.fetch('USER_ID', nil)
     dry_run = ENV.fetch('DRY_RUN', 'true') == 'true'
@@ -71,11 +73,15 @@ namespace :permission_forge do
       puts "  Permission set assignments: #{result[:assignments_count]}"
       puts "  Group assignments: #{result[:group_assignments_count]}"
       puts "  Permission sets: #{result[:permission_sets].join(', ')}" if result[:permission_sets].any?
+      puts "  Audit log name labels to clear: #{result[:actor_labels_to_clear]} as actor, " \
+           "#{result[:record_labels_to_clear]} as subject (plus those on the events the erasure writes)"
       puts "\nRun with DRY_RUN=false to execute."
     else
       puts "Erasure complete for user #{user_id}:"
       puts "  Assignments removed: #{result[:assignments_removed]}"
       puts "  Group assignments removed: #{result[:group_assignments_removed]}"
+      puts "  Audit log name labels cleared: #{result[:actor_labels_cleared]} as actor, " \
+           "#{result[:record_labels_cleared]} as subject"
       puts "  Cache cleared: #{result[:cache_cleared]}"
       puts "  Assignments remaining in other tenants: #{result[:assignments_remaining_elsewhere]}"
       puts '  Kept: audit event ids, ip, request id, reason and data; *_by_id columns; the user record itself.'

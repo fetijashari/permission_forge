@@ -13,6 +13,8 @@ FAIL_ON=high bin/rails permission_forge:audit      # exit 1 on any High or Criti
 kamal app exec -i "bin/rails permission_forge:audit"
 ```
 
+`FAIL_ON` takes `critical`, `high`, `medium`, `low` or `info`, in any case (`FAIL_ON=HIGH` is `high`). When a finding of that severity or worse exists, the task prints `Failing: N finding(s) at or above <level>` on stderr (FORMAT=json output on stdout stays parseable) and exits 1. Any other value stops the task before the review runs, with the list of levels on stderr, and exit 2. The text report ends with "No permission data was changed", and says that the run is recorded in the audit log (`report.generated`) when the log records.
+
 Findings are rated Critical / High / Medium / Low / Info and grouped by check:
 
 | Check | Looks at |
@@ -65,7 +67,7 @@ The other checks report these findings (the id is the `code` of the finding; the
 | `rule` | `unusable_rule_values` | Medium or Low | Rules in effect that match nothing (described above). |
 | `rule` | `bypassed_rules` | Low | Rules ignored because of View All / Modify All. |
 | `rule` | `text_operator_on_ids` | Low | `contains`, `starts_with` or `ends_with` on an id column. |
-| `rule` | `no_rules` | Info | No record rules are in use; when it fires, it is the only `rule` finding. |
+| `rule` | `no_rules` | Info | No record rules are in use; when it fires, it is the only `rule` finding. Its advice follows `auto_query_scoping`: add rules, and enable the setting only while it is off. |
 | `integrity` | `duplicate_fields` | High | Two field rows for one field of a resource (an unmasked duplicate unmasks the field). |
 | `integrity` | `duplicate_actions` | Medium | Two action rows for one action of a resource. |
 | `integrity` | `dependency_violations` | Low | Rows that skip a required permission (edit without read, delete without read, mask without read, Modify All without View All). |
@@ -103,7 +105,7 @@ The `audit_trail` check (`Services::SecurityAuditChecks::AuditTrailCheck`) reads
 **`FAIL_ON` consequences when you upgrade.** `FAIL_ON=<level>` exits 1 when a finding of that severity or worse exists.
 - `FAIL_ON=high` now also fails on an app that has not run the upgrade migration (`audit_table_missing`), on `audit_off`, and on a self-granted assignment.
 - `FAIL_ON=medium` or `low` now also fails on a default install that uses HTTP Basic auth without `audit_actor_resolver` (`audit_shared_basic_auth`) and on an app with the API enabled and no `audit_actor_resolver` (`audit_anonymous_api`), until you set it, and on any app that has `unknown`-actor change events in the last 30 days (`audit_unknown_actors`) and on `audit_changes_unrecorded`. `FAIL_ON=low` also fails on `audit_hook_failures_logged`.
-- The two Info findings fail a build only under `FAIL_ON=info`, or under a `FAIL_ON` value the task does not recognise (a typo, or `HIGH` in capitals), which counts as `info`. Both fire on a default install (`audit_runtime_events` is `[:denied]` and `audit_retention_period` is `nil`), so `FAIL_ON=info` always fails there until you store more groups and set a retention period.
+- The two Info findings fail a build only under `FAIL_ON=info`. (Up to 0.14 a `FAIL_ON` value the task did not recognise, a typo or `HIGH` in capitals, counted as `info`; from 0.15 capitals are read as the level and anything else exits 2.) Both fire on a default install (`audit_runtime_events` is `[:denied]` and `audit_retention_period` is `nil`), so `FAIL_ON=info` always fails there until you store more groups and set a retention period.
 
 In code: `PermissionForge::Services::SecurityAudit.call` returns a report with `#findings`, `#counts`, `#at_least(:high)` and `#to_h`. To add a check, pass `checks:` to `SecurityAudit.call`, or override `SecurityAudit.checks`.
 

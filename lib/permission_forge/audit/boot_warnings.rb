@@ -7,10 +7,16 @@ module PermissionForge
     # process, by Audit.verify_table!) with the text of .missing_table; this
     # adds auditing switched off and one shared login for every change.
     #
+    # Not while a generator runs (`bin/rails generate permission_forge:install`
+    # boots the app before it writes the migration that creates the table):
+    # the table is checked again, and the warning logged, the first time an
+    # event is recorded.
+    #
     # @api private
     module BootWarnings
-      def self.call(configuration = PermissionForge.configuration)
-        PermissionForge::Audit.verify_table!
+      # @param generating [Boolean] whether a Rails generator is running
+      def self.call(configuration = PermissionForge.configuration, generating: generator_running?)
+        PermissionForge::Audit.verify_table! unless generating
 
         if configuration.audit_events == false
           Rails.logger&.warn '[PermissionForge] SECURITY warning: audit_events is false, so permission changes ' \
@@ -41,6 +47,14 @@ module PermissionForge
                  end
         "[PermissionForge] audit_events is :auto but the table '#{table}' was not found: no audit events are " \
           "recorded until #{remedy}. Changes still work."
+      end
+
+      # `bin/rails generate` and `bin/rails destroy` load Rails::Generators
+      # before they boot the app; a server or a console does not.
+      #
+      # @return [Boolean]
+      def self.generator_running?
+        defined?(Rails::Generators::Base) ? true : false
       end
 
       # @return [Boolean] whether a permission_forge migration in the app's

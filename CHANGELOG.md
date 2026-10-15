@@ -36,6 +36,16 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
   raising. **Opt out:** run the task with `THRESHOLD_DAYS=90`, and call
   `Services::StaleAssignmentAuditor.call(threshold_days: 90)`.
+- **`rake permission_forge:audit` refuses a `FAIL_ON` it does not know.** A typo counted as `info` and failed the build
+  on any finding; the task now prints the levels on stderr and exits 2 before the review runs (as `stale_assignments`
+  does with a bad `THRESHOLD_DAYS`). Levels are read in any case (`FAIL_ON=HIGH` is `high`). **Opt out:** none needed
+  for a valid level; `FAIL_ON=info` keeps failing on every finding.
+- **`rake permission_forge:audit_masks` names the Permission Set and the suggested strategy.** An unmasked field is
+  reported once per set, and the lines looked like duplicates; "matches pattern 'first1_last4'" named the mask the
+  pattern suggests, not the pattern. The lines now read `[UNMASKED] Customer.name (Permission Set: Support) — personal
+  data, not masked (suggested strategy: 'first1_last4')` and `[UNMAPPED] Customer.phone — personal data, no active
+  ResourceField (suggested strategy: 'last4')`. A CI step that greps `[UNMASKED] Customer.name` still matches; one that
+  matches the rest of the old line must change. The report's Hash keys are unchanged.
 
 ### Fixed
 
@@ -87,6 +97,22 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   access (the other way round for a Muting Permission Set; `Admin::EditableLock.expiry_choices`). A person's Assign
   drawer lists a locked set that cannot take holders as disabled with a "Locked" badge and a note, instead of leaving it
   out.
+- **`rake permission_forge:audit` says why `FAIL_ON` fails the build**: `Failing: N finding(s) at or above <level>` on
+  stderr before the exit 1 (FORMAT=json output on stdout stays parseable).
+- **The security audit's footer no longer says "Read-only: nothing was changed"**: every run writes a
+  `report.generated` audit event. It says "No permission data was changed", and that the run is recorded in the audit
+  log (`report.generated`) when the log records.
+- **The `no_rules` finding's advice follows `auto_query_scoping`.** It said "enable auto_query_scoping" also when it
+  was on (under `config.preset = :strict`).
+- **`bin/rails -T permission_forge` shows the erasure task's description whole.** It stopped at "(supports GDPR Art";
+  the description says "Article 17".
+- **The erasure task reports the audit-log label scrub.** The dry run prints how many name labels it would clear (as
+  actor, as subject), the real run how many it cleared, as `erasure.performed` records them.
+  `Services::DataSubjectErasure` returns them: `actor_labels_to_clear` / `record_labels_to_clear` in a dry run,
+  `actor_labels_cleared` / `record_labels_cleared` otherwise.
+- **No "run the upgrade generator" warning while `bin/rails generate permission_forge:install` runs.** The generator
+  boots the app before it writes the migration that creates the audit table, and the boot told a fresh install to run
+  `permission_forge:upgrade`. While a generator runs the boot skips the check; the first audit event checks again.
 
 ### Documentation
 

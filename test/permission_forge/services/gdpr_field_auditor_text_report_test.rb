@@ -57,16 +57,26 @@ module PermissionForge
         end
       end
 
-      test 'keeps the lines existing CI output already had' do
+      # e-operations #37: the same field unmasked in three sets printed three
+      # identical lines, and "matches pattern 'email'" named the suggested
+      # strategy. The line still starts with what CI output had.
+      test 'keeps the start of the lines existing CI output already had, names the set and the suggested strategy' do
         text = GdprFieldAuditor::TextReport.new(
-          [{ type: :unmasked_field, resource_name: 'Customer', field_name: 'email', suggested_strategy: 'email' },
+          [{ type: :unmasked_field, resource_name: 'Customer', field_name: 'email', suggested_strategy: 'email',
+             permission_set: 'Support' },
+           { type: :unmasked_field, resource_name: 'Customer', field_name: 'email', suggested_strategy: 'email',
+             permission_set: 'Marketing' },
            { type: :unmapped_column, resource: 'Customer', column: 'phone', pattern_matched: 'last4' },
            { type: :implicit_virtual_grant, permission_set: 'Support', resource_name: 'Customer',
              field_name: 'full_address', suggested_strategy: 'full' }]
         ).to_s
 
-        assert_includes text, "  [UNMASKED] Customer.email — matches pattern 'email'"
-        assert_includes text, "  [UNMAPPED] Customer.phone — matches pattern 'last4', no active ResourceField"
+        assert_includes text, '  [UNMASKED] Customer.email (Permission Set: Support) — personal data, not masked ' \
+                              "(suggested strategy: 'email')"
+        assert_includes text, '  [UNMASKED] Customer.email (Permission Set: Marketing) — '
+        assert_includes text, '  [UNMAPPED] Customer.phone — personal data, no active ResourceField ' \
+                              "(suggested strategy: 'last4')"
+        assert_not_includes text, 'matches pattern'
         assert_includes text, "  [VIRTUAL] Support › Customer.full_address — matches a GDPR pattern (suggested mask: 'full'), " \
                               'no active ResourceField, readable and editable by default'
       end

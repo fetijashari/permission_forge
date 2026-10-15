@@ -5,8 +5,11 @@ module PermissionForge
     module SecurityAuditChecks
       # Plain-text rendering of a SecurityAudit::Report for terminals and logs.
       class TextReport
-        def initialize(report)
+        # @param logged [Boolean, nil] whether the audit log records this run
+        #   (report.generated); nil asks Audit.enabled?
+        def initialize(report, logged: nil)
           @report = report
+          @logged = logged
         end
 
         def to_s
@@ -38,7 +41,16 @@ module PermissionForge
         def footer
           return 'No findings.' if @report.findings.empty?
 
-          'Read-only: nothing was changed. FORMAT=json for machine output; FAIL_ON=high to fail CI.'
+          "#{unchanged} FORMAT=json for machine output; FAIL_ON=high to fail CI."
+        end
+
+        # The report changes no permission data, but its run is an audit
+        # event (RakeAudit.reporting) whenever the log records.
+        def unchanged
+          logged = @logged.nil? ? PermissionForge::Audit.enabled? : @logged
+          return 'No permission data was changed.' unless logged
+
+          'No permission data was changed; this run is recorded in the audit log (report.generated).'
         end
       end
     end

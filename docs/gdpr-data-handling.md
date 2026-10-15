@@ -217,7 +217,9 @@ PermissionForge::Services::ConsentWithdrawalHandler.call(
   user: user, consent_flag: 'marketing_consent', dry_run: true
 )
 
-# Preview erasure of a user's permission data (Art. 17); a dry run writes no event
+# Preview erasure of a user's permission data (Art. 17); a dry run writes no event. It counts the
+# audit-log name labels the run would clear (actor_labels_to_clear, record_labels_to_clear); a real
+# run returns actor_labels_cleared / record_labels_cleared, which the rake task prints
 PermissionForge::Services::DataSubjectErasure.call(user: user, dry_run: true)
 
 # What the audit log holds about a person

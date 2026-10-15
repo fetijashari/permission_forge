@@ -43,6 +43,17 @@ module PermissionForge
         assert_empty hardened.at_least(:medium)
       end
 
+      # a-onboarding #54 / e-operations #67: under :strict (auto_query_scoping on) the
+      # finding still said "enable auto_query_scoping".
+      test 'no_rules advises enabling auto_query_scoping only while it is off' do
+        off = item_for(audit(auto_query_scoping: :off), :no_rules)
+        assert_match 'otherwise add rules and enable auto_query_scoping.', off.detail
+
+        on = item_for(audit(auto_query_scoping: :filter_only), :no_rules)
+        assert_match 'otherwise add rules (auto_query_scoping is on', on.detail
+        assert_no_match(/enable auto_query_scoping/, on.detail)
+      end
+
       test 'action rows that share a name on one resource are reported' do
         resource = create_resource(permission_set: create_permission_set(name: 'Sales'), name: 'Customer', read_access: true)
         create_resource_action(resource: resource, name: 'export', is_permitted: false)
@@ -313,7 +324,10 @@ module PermissionForge
 
         text = SecurityAuditChecks::TextReport.new(report).to_s
         assert_match '[CRITICAL] The admin UI has no authentication', text
-        assert_match 'Read-only: nothing was changed', text
+        assert_match 'No permission data was changed; this run is recorded in the audit log (report.generated).', text
+        assert_no_match(/Read-only: nothing was changed/, text)
+        unlogged = SecurityAuditChecks::TextReport.new(report, logged: false).to_s
+        assert_match 'No permission data was changed. FORMAT=json', unlogged
       end
     end
   end

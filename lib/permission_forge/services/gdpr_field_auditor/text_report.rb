@@ -5,7 +5,12 @@ module PermissionForge
     class GdprFieldAuditor
       # Plain-text rendering of a GdprFieldAuditor report for terminals and
       # logs. One line per finding, whatever its type, so the count in the
-      # header is the number of lines below it.
+      # header is the number of lines below it. An unmasked field names its
+      # Permission Set after the "[UNMASKED] Resource.field" a CI script may
+      # look for: the same field unmasked in three sets is three findings. The
+      # strategy a finding carries (suggested_strategy, and pattern_matched of
+      # an unmapped column) is the mask the matching pattern recommends, so the
+      # line calls it the suggested strategy.
       #
       # @api private
       class TextReport
@@ -13,12 +18,12 @@ module PermissionForge
 
         LINES = {
           unmasked_field: lambda { |finding|
-            "[UNMASKED] #{finding[:resource_name]}.#{finding[:field_name]} " \
-              "— matches pattern '#{finding[:suggested_strategy]}'"
+            "[UNMASKED] #{finding[:resource_name]}.#{finding[:field_name]} (Permission Set: #{finding[:permission_set]}) " \
+              "— personal data, not masked (suggested strategy: '#{finding[:suggested_strategy]}')"
           },
           unmapped_column: lambda { |finding|
             "[UNMAPPED] #{finding[:resource]}.#{finding[:column]} " \
-              "— matches pattern '#{finding[:pattern_matched]}', no active ResourceField"
+              "— personal data, no active ResourceField (suggested strategy: '#{finding[:pattern_matched]}')"
           },
           implicit_virtual_grant: lambda { |finding|
             "[VIRTUAL] #{finding[:permission_set]} › #{finding[:resource_name]}.#{finding[:field_name]} " \

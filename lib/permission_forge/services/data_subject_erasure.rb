@@ -26,7 +26,8 @@ module PermissionForge
     #
     # @example Full erasure
     #   result = DataSubjectErasure.call(user: user)
-    #   # => { assignments_removed: 3, group_assignments_removed: 1, cache_cleared: true, callback_invoked: true }
+    #   # => { assignments_removed: 3, group_assignments_removed: 1, actor_labels_cleared: 2,
+    #   #      record_labels_cleared: 6, cache_cleared: true, callback_invoked: true, ... }
     #
     # `cache_cleared` is false when the cache store did not confirm the
     # removal (it is unreachable, say): the assignments are gone, but the
@@ -39,7 +40,8 @@ module PermissionForge
     #
     # @example Dry run (inspect without removing)
     #   result = DataSubjectErasure.call(user: user, dry_run: true)
-    #   # => { assignments_count: 3, group_assignments_count: 1, permission_sets: [...], dry_run: true }
+    #   # => { assignments_count: 3, group_assignments_count: 1, permission_sets: [...],
+    #   #      actor_labels_to_clear: 2, record_labels_to_clear: 4, dry_run: true }
     #
     # The audit log (docs/audit-log.md): the rows are destroyed through their
     # callbacks, so each assignment writes its own `assignment.revoked`
@@ -77,6 +79,9 @@ module PermissionForge
     class DataSubjectErasure
       include Concerns::AuditedOperation
       include Concerns::AcrossTenants
+
+      # The name labels erasure clears, by the count they are reported under.
+      LABELS = { actor_labels: :actor_label, record_labels: :record_label }.freeze
 
       # Erases a user's permission data (GDPR Art. 17).
       # @return [Hash] see {#call}
@@ -119,7 +124,7 @@ module PermissionForge
         counts.merge!(remaining_elsewhere)
         scrubbed = scrub_labels
         record_summary(sets, groups, counts, scrubbed)
-        counts
+        counts.merge(actor_labels_cleared: scrubbed[:actor_labels], record_labels_cleared: scrubbed[:record_labels])
       end
 
       # What the person still has in other tenants (nothing is removed there).
@@ -149,12 +154,22 @@ module PermissionForge
       # basic auth login that shares the id is somebody else), and recorded
       # in `erasure.performed`.
       def scrub_labels
-        events = scrubbed_events
-        id = @user.id.to_s
         {
-          actor_labels: events.where(actor_type: 'user', actor_id: id).where.not(actor_label: nil).update_all(actor_label: nil),
-          record_labels: events.where(subject_user_id: id).where.not(record_label: nil).update_all(record_label: nil)
+          actor_labels: labelled(:actor_labels).update_all(actor_label: nil),
+          record_labels: labelled(:record_labels).update_all(record_label: nil)
         }
+      end
+
+      # The events whose label names the person: as the actor (an actor of
+      # type 'user', in actor_label) or as the subject (in record_label).
+      def labelled(kind)
+        id = @user.id.to_s
+        events = if kind == :actor_labels
+                   scrubbed_events.where(actor_type: 'user', actor_id: id)
+                 else
+                   scrubbed_events.where(subject_user_id: id)
+                 end
+        events.where.not(LABELS.fetch(kind) => nil)
       end
 
       # With a tenant current (a tenant admin), that tenant's events only: a
@@ -293,11 +308,17 @@ module PermissionForge
         Rails.error.report(e, handled: true, source: 'permission_forge.data_subject_erasure')
       end
 
+      # The label counts (actor_labels_to_clear, record_labels_to_clear) are of
+      # the events there now — none on an app whose audit table is not there
+      # yet; the events the erasure itself writes (assignment.revoked, ...) are
+      # cleared as well.
       def dry_run_result
+        table = PermissionForge::AuditEvent.table_exists?
         {
           assignments_count: permission_set_assignments.count,
           group_assignments_count: group_assignments.count,
           permission_sets: permission_set_assignments.includes(:permission_set).filter_map { |psu| psu.permission_set&.name },
+          **LABELS.keys.to_h { |kind| [:"#{kind}_to_clear", table ? labelled(kind).count : 0] },
           dry_run: true
         }
       end

@@ -78,7 +78,7 @@ The audit gains an `audit_trail` check ([security-audit.md](security-audit.md)).
 - `FAIL_ON=high`: an app that has not run the migration (`audit_table_missing`, High), or has `audit_events = false` (`audit_off`), or holds self-granted access (`audit_self_granted`).
 - `FAIL_ON=medium` or `low`: also a default install using HTTP Basic auth without `audit_actor_resolver` (`audit_shared_basic_auth`, Medium) or with the API enabled and no resolver (`audit_anonymous_api`, Medium) until you set the resolver, any app with `unknown`-actor change events in the last 30 days (`audit_unknown_actors`, Medium), and `audit_change_failure_strategy` other than `:raise` (`audit_changes_unrecorded`, Medium).
 - `FAIL_ON=low`: also `audit_hook_failure_strategy = :log` (`audit_hook_failures_logged`, Low).
-- The Info findings fail a build only under `FAIL_ON=info` or an unrecognised `FAIL_ON` value, which counts as `info`.
+- The Info findings fail a build only under `FAIL_ON=info` or (up to 0.14) an unrecognised `FAIL_ON` value, which counted as `info`. From 0.15 `FAIL_ON` is read in any case and an unrecognised value exits 2.
 
 ## UUID or string keys
 
