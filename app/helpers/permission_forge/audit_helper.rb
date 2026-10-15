@@ -99,11 +99,15 @@ module PermissionForge
       !event.nil? && event.actor_type.to_s == 'unknown' && event.actor_label.blank?
     end
 
-    # Where "Unknown" comes from, said the same way wherever it shows (the
-    # record footer, the event page).
-    def pf_audit_unknown_actor_hint
-      t('permission_forge.shared.audit_footer.unknown_hint_html', unknown: pf_audit_actor_type_label('unknown'),
-                                                                  method: tag.code('PermissionForge.with_audit_actor'))
+    # Where "Unknown" comes from, said the same way wherever it shows. The
+    # record footer names it first ("Unknown: no actor was named…"); the event
+    # page shows it right above as the actor (`named: false`), so the
+    # explanation does not repeat the word.
+    def pf_audit_unknown_actor_hint(named: true)
+      method = tag.code('PermissionForge.with_audit_actor')
+      return t('permission_forge.audit_events.show.unknown_actor_html', method: method) unless named
+
+      t('permission_forge.shared.audit_footer.unknown_hint_html', unknown: pf_audit_actor_type_label('unknown'), method: method)
     end
 
     def pf_audit_actor_type_label(type)

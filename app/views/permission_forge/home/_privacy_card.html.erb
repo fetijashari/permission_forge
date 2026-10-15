@@ -19,9 +19,13 @@
       <% if findings.any?(&:unconfigured?) %>
         <p class="pf-card__desc"><%= t('.per_set_note') %></p>
       <% end %>
-      <%# Detection reads column names only: say so where the admin can confirm a field. %>
+      <%# Detection reads column names only: say so where the admin can confirm a field, and
+          name the button only when a row offers it (a locked set's rows do not). %>
       <% if can_ack && unmasked.positive? %>
-        <p class="pf-card__desc"><%= t('.by_name_note') %></p>
+        <p class="pf-card__desc">
+          <%= t('.by_name_note') %>
+          <%= t('.intended_note') if shown.any?(&:acknowledgeable?) %>
+        </p>
       <% end %>
     </div>
   </div>
@@ -58,7 +62,7 @@
         <% else %>
           <%= pf_modal_link t('.fix'), field_path, kind: 'drawer', class: 'pf-btn pf-btn--sm' %>
         <% end %>
-        <% if can_ack && !finding.unconfigured? && !finding.locked? %>
+        <% if can_ack && finding.acknowledgeable? %>
           <%= form_with url: permission_forge.acknowledge_permission_set_resource_field_path(finding.permission_set, resource.name, finding.name),
                         method: :post, class: 'pf-reason-form' do %>
             <input type="hidden" name="return_to" value="<%= permission_forge.root_path %>">

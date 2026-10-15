@@ -155,6 +155,9 @@ sq:
         snapshot_destroyed: Regjistrimi siç ishte kur u hoq.
         source: Ku
         title: Ngjarje auditimi %{event}
+        unknown_actor_html: Për këtë ndryshim nuk u emërtua asnjë aktor (kod i ekzekutuar
+          jashtë një kërkese, si një runner ose një punë në sfond). Emërtojeni me
+          %{method}.
         uuid: Id e ngjarjes
         value: Vlera
         what: Çfarë
@@ -565,11 +568,12 @@ sq:
         title: Kërkon vëmendje
       privacy_card:
         by_name_note: Fushat shënohen sipas emrit të kolonës, prandaj disa mund të
-          mos jenë të dhëna personale (p.sh. emri i një kompanie). Nëse një fushë
-          mund të shihet pa maskë, zgjidhni Kjo është e qëllimshme.
+          mos jenë të dhëna personale (p.sh. emri i një kompanie).
         description: "%{unmasked}, %{unconfigured}."
         fix: Rregullo
         intended: Kjo është e qëllimshme
+        intended_note: Nëse një fushë mund të shihet pa maskë, zgjidhni Kjo është
+          e qëllimshme.
         per_set_note: Çdo rresht shikon një Grup lejesh më vete. Një person që ka
           edhe një grup tjetër që e konfiguron fushën ndjek atë grup.
         show_all: Shfaq të %{count}

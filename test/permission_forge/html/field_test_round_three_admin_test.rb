@@ -255,7 +255,7 @@ module PermissionForge
           unknown = t('audit_log.actor_types.unknown')
           assert_not_includes who_card.text.squish, "#{unknown} · #{unknown}"
           assert_equal 'PermissionForge.with_audit_actor', who_card.at_css('code').text
-          assert_match(/no actor was named for this change/, who_card.text)
+          assert_match(/no actor was named for this change/i, who_card.text)
           link = who_card.css('a').find { |a| a.text == t('audit_events.show.all_unknown_actor') }
           assert link
           assert_includes link['href'], 'actor_type=unknown'

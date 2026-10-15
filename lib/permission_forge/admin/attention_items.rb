@@ -23,6 +23,11 @@ module PermissionForge
         # field, Resource or Permission Set holds: refused (EditableLock), so
         # Home offers neither "Fix" nor "This is intended" for it.
         def locked? = !EditableLock.locked_record(field, resource).nil?
+
+        # Home offers "This is intended" for it: a field that is shown unmasked
+        # and can be changed (acknowledging needs the column, see
+        # .acknowledgement_supported?).
+        def acknowledgeable? = !unconfigured? && !locked?
       end
 
       TidyFinding = Struct.new(:permission_set, :kind, :people_count, keyword_init: true) do

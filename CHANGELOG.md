@@ -265,7 +265,9 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **The Assignments grid's column headers line up with their cells.** Each row was its own grid, so the
   content-sized actions column took a different width in the header (empty) than in the rows, and "Until 14 Nov"
   sat under "Assigned". The Assignments and Permission Sets tables now share one grid between head and rows
-  (CSS subgrid); at phone width the end-date menu, "Reason" and "Remove" wrap inside their cell.
+  (CSS subgrid). When the card is narrower than the table (a phone), each Assignments row stacks instead of scrolling
+  sideways, where "Reason" was cut off: the person, the dates, then the end-date menu, "Reason" and "Remove", which
+  wrap inside the row.
 - **Home's privacy audit no longer offers "Fix" for a field of a locked Permission Set.** The field drawer refuses
   every change to a locked set's (or Resource's, or field's) fields, including a mask, so "Fix" opened a drawer with
   nothing to do and "This is intended" was offered when only the set was locked. Such a finding now shows the Locked
@@ -276,7 +278,15 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   preview now sits under the level control, no wider than it.
 - **The audit event page explains an unknown actor.** An event with no actor read "Unknown · Unknown" with an "All
   events by this actor" link. It now names Unknown once, gives the same explanation as the record footer (no actor
-  was named; `PermissionForge.with_audit_actor`), and the link reads "All events with no known actor".
+  was named; `PermissionForge.with_audit_actor`) without repeating "Unknown:" in front of it, and the link reads "All
+  events with no known actor".
+- **Home's privacy audit says "choose This is intended" only when a row offers that button.** The note under the
+  card's title told the admin to choose "This is intended" even when every finding was in a locked Permission Set and
+  offered only "View field". The note keeps its first sentence (fields are flagged by column name); the second shows
+  only while a listed finding has the button (`AttentionItems::SensitiveFinding#acknowledgeable?`).
+- **Effective access: the Why panel of a field hidden by a Muting Permission Set reads "⊘ Hidden by muting".** The
+  field's row said so, but its Why panel showed "∅ Hidden", the badge of a field no set grants. Row and panel now
+  draw the same badge (`pf_effective_field_badge`, by `EffectiveAccess::FieldOutcome#hidden_by_muting?`).
 - **A rule naming a missing column denies instead of raising.** A rule whose field name is not a column of its table
   (`onwer_id` on `Customer`, saved through the API or the model, or a column renamed since) reached the database, so
   every `find_by` / `find_by!` / `permission_scoped` (and every query under `auto_query_scoping`) of each holder of

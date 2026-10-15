@@ -91,6 +91,18 @@ module PermissionForge
                  (content_tag(:span, pf_ui(suffix_key), class: 'pf-chip__suffix') if suffix_key)].compact, ' ')
     end
 
+    # A field's level on the Effective access tab (an EffectiveAccess::FieldOutcome),
+    # the same in its row and its Why panel: hidden by a Muting Permission Set reads
+    # "⊘ Hidden by muting", never the neutral "∅ Hidden" of a field no set grants.
+    # `sample: true` adds a masked value's preview (the Why panel).
+    def pf_effective_field_badge(field, sample: false)
+      muted = field.hidden_by_muting?
+      return pf_level_badge('muted', label: t('permission_forge.people.effective_tab.hidden_by_muting')) if muted
+
+      masked = field.level == 'masked'
+      pf_level_badge(field.level, strategy: (field.mask_strategy if masked), sample_for: (field.name if masked && sample))
+    end
+
     # Effective/configured field level badge ("•• Masked · j***@acme.com").
     def pf_level_badge(level, strategy: nil, sample_for: nil, label: nil)
       level = level.to_s
