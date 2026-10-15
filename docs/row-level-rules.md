@@ -274,7 +274,7 @@ The engine registers both errors in `config.action_dispatch.rescue_responses` as
 
 What the response looks like depends on Rails' error pages, not on the gem:
 
-- **Production** (`consider_all_requests_local = false`): `ActionDispatch::PublicExceptions` renders `public/403.html` (or `public/403.<locale>.html`). **Rails apps ship no `public/403.html`**, so an HTML request gets a 403 with an empty body until you add one or rescue the error. A JSON request gets `{"status":403,"error":"Forbidden"}`.
+- **Production** (`consider_all_requests_local = false`): `ActionDispatch::PublicExceptions` renders `public/403.html` (or `public/403.<locale>.html`). **Rails apps ship no `public/403.html`**, so an HTML request gets a 403 with an empty body, and the browser shows its own error page, until you add one or rescue the error. Add it next to the `public/404.html` Rails generated (a copy with the text changed is enough). A JSON request gets `{"status":403,"error":"Forbidden"}`.
 - **Development**: the debug page, with status 403.
 - **Request tests**: under `config.action_dispatch.show_exceptions = :rescuable` (what a Rails 7.1+ app generates in `config/environments/test.rb`) the test now gets the 403 response, as it gets a 404 for `RecordNotFound`: a test that wrapped the request in `assert_raises` asserts `assert_response :forbidden` instead. Under `:none` the error still raises in the test.
 
@@ -300,13 +300,23 @@ class ApplicationController < ActionController::Base
   end
 
   rescue_from PermissionForge::ActionNotAuthorizedError do |error|
-    # error.resource => "Customer", error.action => "export",
+    # error.resource => "Customer", error.action => "index" (the action key, not a sentence),
     # error.controller_path => "customers",
-    # error.reason => :action_denied (:nil_user_denied when nobody is signed in)
-    redirect_back fallback_location: root_path, alert: t('errors.not_allowed', action: error.action)
+    # error.reason => :crud_denied, :action_denied, ... (:nil_user_denied when nobody is signed in)
+    signed_out = error.reason == :nil_user_denied
+    target = signed_out ? new_session_path : root_path # your sign-in page; a page every user may open
+    if request.path == target
+      head :forbidden # never redirect to the page that was just refused: the browser would loop
+    else
+      redirect_to target, alert: t(signed_out ? 'errors.sign_in_first' : 'errors.not_allowed')
+    end
   end
 end
 ```
+
+Do not answer a denial with `redirect_back fallback_location: root_path`. When the refused page is the root itself (a guarded `index` mounted at `root`, visited by someone who is not signed in, or who may not read it), the fallback sends the browser back to the page that was just refused: it loops until the browser gives up (`ERR_TOO_MANY_REDIRECTS`), and every hop writes an `action.denied` event. The handler above sends a signed-out visitor to sign in (Devise: `new_user_session_path`; on an action opened with Rails 8's `allow_unauthenticated_access`, a signed-in visitor also reads as signed out unless the session is resumed: see [Callback order](controller-actions.md#callback-order)) and anyone else to a page they may open, and answers 403 when the refused page is that page. `new_session_path` must not be guarded for signed-out visitors: with the guard in `ApplicationController`, Rails 8's `SessionsController` maps to its `Session` model and is refused like any other action under `action_guard_nil_user_strategy = :deny`, so exclude it (`config.controller_discovery_exclude += %w[sessions passwords]`).
+
+Write the message yourself. `error.action` is the key that was checked (`index`, `export`), so "You may not index customers" is what interpolating it gives; `errors.not_allowed` above is your own translation key ("You are not allowed to open that page."), and `error.resource` names the model if you want it in the text.
 
 A JSON API (`ActionController::API`):
 

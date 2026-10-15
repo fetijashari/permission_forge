@@ -42,16 +42,30 @@ class ApplicationController < ActionController::Base
     # error.controller_path => "customers"
     # error.reason          => :action_denied (:nil_user_denied when nobody is signed in)
     respond_to do |format|
-      format.html { redirect_back fallback_location: root_path, alert: 'You are not allowed to do that.' }
+      format.html do
+        signed_out = error.reason == :nil_user_denied
+        target = signed_out ? new_session_path : root_path # your sign-in page; a page every user may open
+        if request.path == target
+          head :forbidden # never redirect to the page that was just refused: the browser would loop
+        else
+          redirect_to target, alert: t(signed_out ? 'errors.sign_in_first' : 'errors.not_allowed')
+        end
+      end
       format.json { head :forbidden }
     end
   end
 end
 ```
 
+Not `redirect_back fallback_location: root_path`: when the refused action is the root page, that
+redirects to it again, forever (`ERR_TOO_MANY_REDIRECTS`, one `action.denied` event per hop). Write
+the message yourself: `error.action` is a key (`index`), not a sentence. Keep the sign-in page out
+of the guard (Rails 8's `SessionsController` maps to its `Session` model):
+[Handling Denials](row-level-rules.md#handling-denials) explains both.
+
 Without a `rescue_from` the request answers **403 Forbidden**: the engine registers the error in
 `config.action_dispatch.rescue_responses`. In production Rails renders `public/403.html`, which Rails apps do
-not ship, so an HTML request gets an empty 403 page until you add one or rescue the error. See
+not ship, so an HTML request gets an empty 403 page until you add `public/403.html` or rescue the error. See
 [Handling Denials](row-level-rules.md#handling-denials) for the default, how to change it, and HTML and JSON
 handlers for this error and the row-level `NotAuthorizedError`.
 

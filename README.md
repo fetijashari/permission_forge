@@ -195,6 +195,12 @@ user = User.first # the person who gets the set
 PermissionForge::PermissionSetUser.create!(permission_set: pset, user: user)
 ```
 
+Only `name` has a field row here. A column with no row is refused by the default
+`unconfigured_field_strategy = :block`: its getter returns `nil` and `as_json` keeps the key as `null` (a Hidden row,
+read off, leaves the key out). `PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)`, or the
+admin's "Sync fields with model", gives every column a row (Hidden; timestamps read-only; columns that look like personal
+data readable and masked, under the default `gdpr_defaults`); then open the ones the set should read.
+
 Each change invalidates the cached permissions of the users it affects; the next read rebuilds them. The admin UI
 (mounted at `/permissions` in [Installation](#installation)) does the same through forms.
 
@@ -205,6 +211,7 @@ wrap it to say who and why: `PermissionForge.with_audit_actor(user: admin, reaso
 ### 5. Check permissions at runtime
 
 ```ruby
+user = User.first # the person you assigned in step 4
 user.can_read?('Customer')   # => true
 user.can_delete?('Customer') # => false
 user.permissions_for(:Customer)

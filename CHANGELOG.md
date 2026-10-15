@@ -279,6 +279,22 @@ Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authent
   `audit_actor_resolver` that maps the credential `api_auth` verified (never a caller-chosen header).
 - [Admin API](docs/admin-api.md#permission-set-group-users-group-membership--grants-nothing): the group-member
   endpoints say that membership is organisational and grants none of the group's sets.
+- [Handling denials](docs/row-level-rules.md#handling-denials) and [Controller actions](docs/controller-actions.md#2-answer-denied-requests):
+  the HTML handler sample used `redirect_back fallback_location: root_path`, which loops (`ERR_TOO_MANY_REDIRECTS`, one
+  `action.denied` event per hop) when the refused page is the root. It now sends a signed-out visitor
+  (`:nil_user_denied`) to sign in and anyone else to a page they may open, answers 403 when the refused page is that
+  page, and writes its own message instead of interpolating the action key ("not allowed to index customers"). Also:
+  keep Rails 8's `SessionsController` out of the guard, and add a `public/403.html`, which Rails apps do not ship.
+- [Getting started](docs/getting-started.md#wiring-a-scaffold): `as_json` leaves out a field with a Hidden row, but a
+  column with no row is serialized as `null` under the default `unconfigured_field_strategy = :block` (it said hidden
+  fields are left out); how to give every column a row. The jbuilder example's `only:` keeps the scaffold's columns
+  (`phone`, `owner_id` were missing). The README Quick Start says the same about its single field row, and its step 5
+  defines `user`.
+- [Field filtering](docs/field-filtering.md#telling-the-user-what-was-not-saved): an unchanged form posts every field
+  back, so "Not saved: …" named every field the user may not edit; the form renders such fields disabled (not
+  submitted) and leaves out the ones they may not read.
+- Getting started and the generated initializer's `config.preset = :strict` comment: a seed's `find_or_create_by!` run
+  with nobody signed in creates a duplicate on every run under the preset.
 
 ## [0.14.1] - 2026-10-14
 

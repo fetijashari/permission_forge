@@ -22,11 +22,11 @@ PermissionForge.configure do |config|
   #   mask_virtual_attributes = :auto, extra_fields_default_access = :unconfigured,
   #   and the three settings above.
   # What it costs: with nil_user_strategy :deny and auto_query_scoping :filter_only,
-  # code that runs with no current user (jobs, mailers, seeds, webhooks, the
-  # console, sign-in lookups on a user model that includes PermissionScopedFindable)
-  # sees no protected rows, and a belongs_to presence check on a protected parent
-  # fails ("must exist"). Run such code with a user, or inside
-  # PermissionForge.without_permission_scope { }, where nobody signed in gets no rules:
+  # code that runs with no current user (jobs, mailers, seeds, webhooks, the console,
+  # sign-in lookups on a user model that includes PermissionScopedFindable) sees no
+  # protected rows (a seed's find_or_create_by! adds a duplicate on every run), and a
+  # belongs_to presence check on a protected parent fails ("must exist"). Run such code
+  # with a user, or inside PermissionForge.without_permission_scope { }, where nobody signed in gets no rules:
   # never around code an anonymous request reaches. Never include PermissionScopedFindable in the user model.
   # config.preset = :strict
 

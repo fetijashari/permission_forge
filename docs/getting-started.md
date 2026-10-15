@@ -77,6 +77,8 @@ PermissionForge.configure do |config|
 end
 ```
 
+> **Seeds under `config.preset = :strict`.** Code that runs with nobody signed in (seeds, jobs, the console) then sees no protected rows, so an idempotent seed such as `Customer.find_or_create_by!(name: 'Acme')` finds nothing and creates a duplicate on every run. Run it with a user, or inside `PermissionForge.without_permission_scope { }`: see [Presets](./configuration.md#presets).
+
 Configure PermissionForge in `config/initializers` only. Its models (`PermissionForge::PermissionSet`, ...) are autoloaded by your application right after the initializers, so an initializer must not name one at the top level (the boot fails with a `NameError` that says so): reference them from a method, from `Rails.application.config.to_prepare`, or from your models, controllers, jobs and rake tasks. `user_class`, `audit_user_class` and `tenant_model` are read as the models load; a change made later is logged and does not reach a loaded class. The generated initializer is short on purpose: every other option, with its default, is in the [Configuration guide](./configuration.md).
 
 ### What does `current_user_resolver` mean?
@@ -225,13 +227,15 @@ A controller made by `bin/rails generate scaffold` needs two changes before the 
   ```
 
   Or turn on [query scoping](./query-scoping.md) (`auto_query_scoping = :filter_only`) so that `all` and `find` are scoped too.
-- **JSON views.** The scaffold's jbuilder partial calls `json.extract!`, which calls each getter: a field the user may not read comes out as `"notes": null`, so a client cannot tell hidden from empty. `as_json` leaves hidden fields out (`omit_hidden_in_attributes_hash`, the default), so build the partial from it:
+- **JSON views.** The scaffold's jbuilder partial calls `json.extract!`, which calls each getter: a field the user may not read comes out as `"notes": null`, so a client cannot tell hidden from empty. `as_json` leaves out a field whose row is **Hidden** (read off; `omit_hidden_in_attributes_hash`, the default), so build the partial from it. `only:` is the column list the scaffold's `json.extract!` line had (here a `Customer` scaffold with `name`, `email`, `phone`, `status`, `notes` and `owner:references`), so the JSON keeps its shape:
 
   ```ruby
   # app/views/customers/_customer.json.jbuilder
-  json.merge! customer.as_json(only: %i[id name email status notes created_at updated_at])
+  json.merge! customer.as_json(only: %i[id name email phone status notes owner_id created_at updated_at])
   json.url customer_url(customer, format: :json)
   ```
+
+  A column with **no row at all** is not left out. The default `unconfigured_field_strategy = :block` refuses it too, but `as_json` keeps its key with `null` (see [Unconfigured fields](./masked-attributes.md#unconfigured-fields)). Step 5 creates rows for `name` and `email` only, so `phone`, `status`, `notes`, `owner_id` and the timestamps come out as `null`. Give every column a row, so that each one is either readable or left out: the admin's **Sync fields with model** ("Add all new as Hidden", "… as Read-only" or "… with full access"), or in a console `PermissionForge::Services::ResourceFieldGenerator.call(resource: customer_resource)`. The generator adds a row for each column that has none: Hidden, except `created_at` / `updated_at` (read-only) and, under `gdpr_defaults` (on by default), columns that look like personal data (readable, masked); `grant_all: true` makes them all readable and editable. Then open the fields the set should read.
 
 The forms still offer every field: see [Telling the user what was not saved](./field-filtering.md#telling-the-user-what-was-not-saved) for rendering a field read-only and saying which keys `PermitsAttributes` dropped. And with nobody signed in the model layer restricts nothing by default: see the [hardening checklist](../README.md#production-hardening-checklist).
 

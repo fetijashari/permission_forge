@@ -141,18 +141,22 @@ def update
 end
 ```
 
-Translate the message as you do your others. Better still, do not offer what will be dropped: render a field the user may not edit as read-only text (or leave it out when they may not read it) by asking the same permissions the filter uses:
+Translate the message as you do your others.
+
+`dropped` lists every key the user may not edit **that the request sent**, changed or not. An unchanged scaffold form posts every field back, so the message above says "Not saved: email, phone, status, notes, owner_id" after an edit that touched only `name`, and on create it names the blank fields nobody filled in. Do not post what will be dropped: render a field the user may not edit as a disabled input (browsers do not submit disabled inputs, so `dropped` then holds only keys a client sent on purpose), and leave out a field they may not read, by asking the same permissions the filter uses:
 
 ```erb
+<%# app/views/customers/_form.html.erb %>
 <% access = Current.user&.field_permissions(:Customer, :status) || {} %>
-<% if access[:edit_access] %>
-  <%= form.text_field :status %>
-<% elsif access[:read_access] %>
-  <p><%= @customer.status %></p>  <%# masked by MaskedAttributes when the field is masked %>
+<% if access[:read_access] %>
+  <div>
+    <%= form.label :status %>
+    <%= form.text_field :status, disabled: !access[:edit_access] %>  <%# masked by MaskedAttributes when the field is masked %>
+  </div>
 <% end %>
 ```
 
-`field_permissions` returns `nil` for a field without a row; `PermitsAttributes` drops such a key too.
+`field_permissions` returns `nil` for a field without a row; the form then leaves it out, and `PermitsAttributes` would drop it too. Repeat the block for each field, or wrap it in a helper.
 
 ## Filtering in Serializers
 
