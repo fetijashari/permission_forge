@@ -79,8 +79,10 @@ module PermissionForge
           held = findings.any? { |item| item.people_count.positive? }
           finding(held ? :high : :medium, :missing_rule_columns, 'Rules naming a column or association that does not exist',
                   'The field name of these rules is not a column of their table, or their association path names an ' \
-                  'association their model does not have or one a join cannot be built through (polymorphic, a class ' \
-                  'that cannot be loaded) — a typo, or a column or association since renamed or removed. Such a rule ' \
+                  'association their model does not have (or an empty segment) or one a join cannot be built through ' \
+                  '(polymorphic, a scope that takes the record — also along a :through —, a :through, :source or ' \
+                  'inverse_of naming nothing, a class that cannot be loaded) — a typo, or a column or association ' \
+                  'since renamed or removed. Such a rule ' \
                   'matches nothing: everyone it applies to is denied every record of the resource. Correct the rule ' \
                   'or remove it (see "Using the wrong field name" in docs/row-level-rules.md).',
                   items: findings.map { |item| unusable_item(item.rule) })

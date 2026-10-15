@@ -133,8 +133,10 @@ module PermissionForge
     end
 
     # A path ActiveRecord cannot join (Operators::RulePath: no such
-    # association, a polymorphic one, a class that cannot be loaded) would
-    # make the rule match nothing — the join raises. Skipped when the model
+    # association, an empty segment, or one no join can be built through —
+    # the message names the cause: polymorphic, a record-dependent scope, a
+    # broken :through / inverse_of, a class that cannot be loaded) would make
+    # the rule match nothing — the join raises. Skipped when the model
     # cannot be loaded.
     def validate_field_accessor_path
       problem = PermissionForge::Operators::RuleProblem.of_path(self)

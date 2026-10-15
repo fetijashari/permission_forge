@@ -19,6 +19,8 @@ module PermissionForge
 
     # "Stauts is not a column of Customer"
     def pf_rule_problem_text(problem)
+      return pf_rule_problem_cause_text(problem) if problem.cause
+
       model = problem.model
       pf_ui("rules.problems.#{problem.kind}", name: pf_attribute_label(model, problem.name),
                                               model: pf_resource_label(model.name))
@@ -27,6 +29,16 @@ module PermissionForge
     # "Matches nothing: Stauts is not a column of Customer"
     def pf_rule_problem_line(problem)
       "#{pf_ui('rules.matches_nothing')}: #{pf_rule_problem_text(problem)}"
+    end
+
+    # A path problem with a cause (Operators::RuleProblem#cause): an empty
+    # segment ("The relationship path has an empty step …"), or why the
+    # relationship cannot be followed ("Subject is a polymorphic relationship
+    # of Comment: …"), by RuleProblem#key.
+    def pf_rule_problem_cause_text(problem)
+      model = problem.model
+      pf_ui("rules.problems.#{problem.key}", name: pf_attribute_label(model, problem.name),
+                                             model: pf_resource_label(model.name))
     end
 
     # The rule a one-line summary shows: one that matches nothing first.

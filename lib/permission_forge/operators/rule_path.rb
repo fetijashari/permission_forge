@@ -16,22 +16,40 @@ module PermissionForge
     # the path {#broken?}:
     #
     # - :unknown_association — the model has no association of that name
-    #   (a typo: `ownr`);
+    #   (a typo: `ownr`), or the segment is empty (`parent..owner`; cause
+    #   :empty_segment);
     # - :unjoinable_association — the association is there, but no join can
-    #   be built through it: a polymorphic belongs_to, a scope that takes the
-    #   record, a :through or inverse_of naming an association that does not
-    #   exist, a class that cannot be loaded.
+    #   be built through it; {#cause} says why (UNJOINABLE_CAUSES).
     #
     # Everything ActiveRecord joins — has_many / has_one / belongs_to,
     # :through, has_and_belongs_to_many, a scoped association — is followed.
     # A rule whose path is broken matches nothing (PermissionRuleApplier):
     # the join would raise.
     #
+    # A model file that raises a ScriptError (SyntaxError, LoadError) while
+    # it loads is not a broken path: the error propagates, from the applier
+    # too (the query raises; it never answers). An admin-facing caller that
+    # only describes the path (RuleProblem.of_path, RuleColumn.for_rule)
+    # treats it as "cannot tell".
+    #
     # @example
     #   path = RulePath.follow(Customer, %w[supplier owner])
     #   path.models  # => [Customer, Supplier, User]
     #   RulePath.follow(Customer, %w[ownr]).reason # => :unknown_association
     class RulePath
+      # Why an association is there but cannot be joined (#cause of an
+      # :unjoinable_association path), in the order they are checked:
+      #
+      # - :invalid_definition — its :through, :source or inverse_of names an
+      #   association that is not there (Reflection#check_validity! raises);
+      # - :polymorphic — a polymorphic belongs_to: no one class to join;
+      # - :record_dependent_scope — its scope, or one along its :through
+      #   (the through association's or the source's), takes the record
+      #   (`->(record) { … }`): a join has no record to give it;
+      # - :class_not_loadable — its class (or one along its :through) cannot
+      #   be loaded: no such constant, or its file raised while it loaded.
+      UNJOINABLE_CAUSES = %i[invalid_definition polymorphic record_dependent_scope class_not_loadable].freeze
+
       # @return [Array<Class>] the rule's model, then the model of each
       #   association on the path; empty when the path is broken
       attr_reader :models
@@ -41,6 +59,9 @@ module PermissionForge
       attr_reader :owner
       # @return [Symbol, nil] :unknown_association or :unjoinable_association
       attr_reader :reason
+      # @return [Symbol, nil] :empty_segment for an empty segment, one of
+      #   UNJOINABLE_CAUSES for an :unjoinable_association, else nil
+      attr_reader :cause
 
       # @param model [Class] the rule's model
       # @param association_chain [Array<String>] the rule's field_accessor_path, split
@@ -51,11 +72,12 @@ module PermissionForge
         end
       end
 
-      def initialize(models, segment = nil, owner = nil, reason = nil)
+      def initialize(models, segment: nil, owner: nil, reason: nil, cause: nil)
         @models = models
         @segment = segment
         @owner = owner
         @reason = reason
+        @cause = cause
       end
 
       def broken?
@@ -70,24 +92,67 @@ module PermissionForge
         return self if broken?
 
         owner = models.last
-        reflection = owner._reflect_on_association(name)
-        return RulePath.new([], name, owner, :unknown_association) unless reflection
+        at = { segment: name, owner: owner }
+        return RulePath.new([], **at, reason: :unknown_association, cause: :empty_segment) if name.empty?
 
-        joined = joined_class(reflection)
-        joined ? RulePath.new(models + [joined], nil, nil, nil) : RulePath.new([], name, owner, :unjoinable_association)
+        reflection = owner._reflect_on_association(name)
+        return RulePath.new([], **at, reason: :unknown_association) unless reflection
+
+        cause = RulePath.unjoinable_cause(reflection)
+        return RulePath.new([], **at, reason: :unjoinable_association, cause: cause) if cause
+
+        RulePath.new(models + [reflection.klass])
       end
 
-      private
+      class << self
+        # Where ActiveRecord would raise building a join through the
+        # reflection, why (UNJOINABLE_CAUSES); nil when it builds one. A raise
+        # of any kind counts: it would be raised in the holders' queries.
+        # check_validity! and check_eager_loadable! are what JoinDependency
+        # asks of the reflection itself; a :through also evaluates the scopes
+        # along its chain (record_dependent?).
+        #
+        # @param reflection [ActiveRecord::Reflection::AbstractReflection]
+        # @return [Symbol, nil] one of UNJOINABLE_CAUSES
+        def unjoinable_cause(reflection)
+          failure(:invalid_definition) { reflection.check_validity! } ||
+            (:polymorphic if reflection.polymorphic?) ||
+            failure(:record_dependent_scope) { reflection.check_eager_loadable! } ||
+            failure(:class_not_loadable) { reflection.klass } ||
+            (:record_dependent_scope if record_dependent?(reflection))
+        end
 
-      # The class a join through the reflection reaches, or nil where
-      # ActiveRecord would raise building it. A raise of any kind counts:
-      # it would be raised in the holders' queries.
-      def joined_class(reflection)
-        reflection.check_validity!
-        reflection.check_eager_loadable!
-        reflection.klass unless reflection.polymorphic?
-      rescue StandardError
-        nil
+        private
+
+        # nil when the block raises nothing (what it answers is not looked
+        # at). When it raises: `cause` for what a definition or a check raises
+        # (an ActiveRecordError, ArgumentError or NoMethodError), else
+        # :class_not_loadable — a constant that is not there (NameError), or
+        # whatever a model file raised as it loaded.
+        def failure(cause)
+          yield
+          nil
+        rescue NoMethodError, ArgumentError, ActiveRecord::ActiveRecordError
+          cause
+        rescue StandardError
+          :class_not_loadable
+        end
+
+        # Whether a scope along the reflection's join chain takes the record:
+        # the reflection's own, the :through association's (and so on along
+        # the chain), and the source's of each :through. A chain that cannot
+        # be walked counts: the join would raise walking it.
+        def record_dependent?(reflection)
+          reflection.chain.any? do |link|
+            takes_record?(link.scope) || (link.through_reflection? && record_dependent?(link.source_reflection))
+          end
+        rescue StandardError
+          true
+        end
+
+        def takes_record?(scope)
+          !scope.nil? && !scope.arity.zero?
+        end
       end
     end
   end

@@ -9,6 +9,11 @@ module PermissionForge
     #
     # `invalidated` counts the users whose invalidation the cache store
     # confirmed; a failure is reported through `config.on_cache_failure`.
+    # A store that lives in this process only (Cache::Base#process_local?:
+    # an in-memory store) confirms for this process alone: a run from a rake
+    # task leaves the web and job processes' entries until they restart or
+    # expire (cache_ttl), and `cleanup.expired_assignments` says
+    # `process_local: true`.
     #
     # @example Dry run (inspect without removing)
     #   result = ExpiredAssignmentCleaner.call(dry_run: true)
@@ -113,7 +118,8 @@ module PermissionForge
         def to_h
           { 'operation' => 'cleanup_expired_assignments', 'removed' => rows.size,
             'invalidated' => (user_ids & confirmed_user_ids).size, **bounded_user_ids,
-            'set_uuids' => sets.map(&:uuid).uniq, 'set_names' => sets.map(&:name).uniq, 'dry_run' => false }
+            'set_uuids' => sets.map(&:uuid).uniq, 'set_names' => sets.map(&:name).uniq, 'dry_run' => false,
+            'process_local' => PermissionForge.cache.process_local? }
         end
 
         private

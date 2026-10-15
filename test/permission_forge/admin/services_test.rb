@@ -305,6 +305,15 @@ module PermissionForge
         PermissionForge.configuration.auto_query_scoping = old
       end
 
+      # Field test round 5 (d #49): the audit listed a typo'd Resource's rules
+      # under rule/unenforced_rules as well as integrity/unknown_models.
+      test 'rules of a Resource named after no model the app can load are not flagged' do
+        typo = create_resource(permission_set: create_permission_set(name: 'Typo'), name: 'Custmer', read_access: true)
+        create_permission_set_rule(permission_set: typo.permission_set, resource: typo)
+
+        assert_empty AttentionItems.new.unenforced_rules
+      end
+
       test 'rules bypassed by View All, on muting sets or on turned-off sets are not flagged' do
         bypassed = create_resource(permission_set: create_permission_set(name: 'All'), read_access: true, view_all: true)
         create_permission_set_rule(permission_set: bypassed.permission_set, resource: bypassed)

@@ -29,6 +29,13 @@ module PermissionForge
       # every other one — MySQL, SQLite — `Flag` is the column `flag`.
       EXACT_NAMES = %w[PostgreSQL PostGIS].freeze
 
+      # What makes a rule's column or path "cannot tell" for a caller that
+      # only describes it (for_rule, RuleProblem.of_path — the admin, the
+      # audit, the model's checks): anything raised while the models are
+      # loaded or asked, a model file's SyntaxError or LoadError included.
+      # The applier's own walk does not rescue them (RulePath).
+      UNTELLABLE = [StandardError, ScriptError].freeze
+
       # @return [ActiveRecord::ConnectionAdapters::Column, nil]
       attr_reader :column
       # @return [Hash, nil] label => stored value, when the model declares the column an enum
@@ -61,10 +68,11 @@ module PermissionForge
         # The column a rule row names, looked up the way PermissionRuleApplier
         # looks it up: in the model its Resource is named after and along its
         # association path (join rules only). nil when that cannot be told —
-        # the Resource names no model, the model cannot be loaded, the path
-        # cannot be followed, a table along it does not exist (asking a missing
-        # table for its columns fails the statement, and with it a transaction)
-        # or the database cannot be asked.
+        # the Resource names no model, the model cannot be loaded (its file
+        # raises anything as it loads: UNTELLABLE), the path cannot be
+        # followed, a table along it does not exist (asking a missing table
+        # for its columns fails the statement, and with it a transaction) or
+        # the database cannot be asked.
         #
         # @param rule [PermissionForge::PermissionSetRule]
         # @return [RuleColumn, nil]
@@ -74,7 +82,7 @@ module PermissionForge
 
           models = models_along(model, rule.join_rule? ? path_segments(rule.field_accessor_path) : [])
           find(rule.field_name, models) if models.any? && models.all?(&:table_exists?)
-        rescue NameError, ArgumentError, ActiveRecord::ActiveRecordError
+        rescue *UNTELLABLE
           nil
         end
 

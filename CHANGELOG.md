@@ -25,7 +25,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   nothing, so a typo went unnoticed. The audit now lists the rows in effect whose name is none of: a column of the
   model's table (read again before it is listed), an attribute or `alias_attribute`, a declared or discovered virtual
   field, a public reader or writer, or a configured variant (`field_variant_mappings`) of one of those or of another
-  row of the Resource. Low when a muting set holds one (it mutes nothing it was meant to), otherwise Info; set,
+  row of the Resource — on the model or on a loaded single-table-inheritance subclass of it (a row on the base Resource
+  reaches the subclass's records). Low when a muting set holds one (it mutes nothing it was meant to), otherwise Info; set,
   resource, field and people per row; Resources whose model the app cannot load are skipped. Saving still accepts
   such a name: `FiltersResponseAttributes` filters any key of a hash, so a key only a serializer computes is
   configured by a row of its name — declare it in `extra_fields_for_permissions` to say it is meant.
@@ -93,8 +94,10 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   rule could only ever raise (and now matches nothing); write it past the model if you must.
 - **A join rule whose association path cannot be joined does not save.** `PermissionSetRule` adds "names ownr, which
   is not an association of Customer" on `field_accessor_path` (the segment and the model it was looked up in), or
-  "names subject, an association of Comment that a rule cannot join (polymorphic, or its class cannot be loaded)"
-  (en, sq, mk), so the JSON API answers its field-keyed 422 instead of 201. Checked when the Resource's model loads,
+  one that says why no join can be built through it — "names subject, a polymorphic association of Comment: a rule
+  cannot join it", "… whose class cannot be loaded", "… whose scope (or one along its :through) takes the record …",
+  "… whose :through, :source or inverse_of names an association that is not there" — or "has an empty association
+  name" for `parent..owner` (en, sq, mk; `Operators::RuleProblem#cause` / `#key`), so the JSON API answers its field-keyed 422 instead of 201. Checked when the Resource's model loads,
   for a new join rule and when its path, join type or resource changes (an existing row stays editable in its other
   attributes); a filter rule's path is never joined and never checked. Every association ActiveRecord joins —
   `has_many`, `has_one`, `belongs_to`, `has_and_belongs_to_many`, `:through`, scoped — is accepted
@@ -188,7 +191,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   pattern suggests, not the pattern. The lines now read `[UNMASKED] Customer.name (Permission Set: Support) — personal
   data, not masked (suggested strategy: 'first1_last4')` and `[UNMAPPED] Customer.phone — personal data, no active
   ResourceField (suggested strategy: 'last4')`. A CI step that greps `[UNMASKED] Customer.name` still matches; one that
-  matches the rest of the old line must change. The report's Hash keys are unchanged.
+  matches the rest of the old line must change. The report's Hash keys are unchanged. **Opt out:** none — match on
+  `[UNMASKED] <Model>.<field>` (or read `Services::GdprFieldAuditor.call`'s Hash) instead of the whole line.
 - **The production boot warning about an in-process cache also covers a `:memory_store`.** It fired only for
   `cache_backend = :memory`; `cache_backend = :rails_cache` over a `Rails.cache` that is a `:memory_store` (or a
   `MemoryStore` instance as `cache_backend`) is as inconsistent across Puma workers and is now warned about too. The
@@ -294,6 +298,27 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   (`/api/unknown`, a `POST`, `PATCH` or `DELETE` on the read-only `audit_events`) answered Rails' HTML 404 page; it is
   now `{"error":{"status":404,"messages":"No API endpoint answers this path and method"}}`, after the same guards as
   every endpoint (a disabled API stays a bodiless 404, a refused `api_auth` a 401). **Opt out:** none.
+
+- **`erasure.performed` and `cleanup.expired_assignments` say when the cache work stayed in one process.** Run from
+  rake (or a console) on an in-memory store (`cache_backend = :memory`, or `Rails.cache` a `:memory_store`, as in
+  development), `rake permission_forge:erasure` printed "Cache cleared: true" and the clean-up "invalidated 1 user(s)"
+  while the running server kept the person's cached permissions. Both events now carry `process_local` (`true` when the
+  store lives in the running process only, else `false`), their audit-log sentence then adds "the cached permissions
+  were cleared in its own process only (an in-memory store): the web and job processes kept theirs" (en, sq, mk), and
+  both tasks append "(in this rake process only: …)" to that line — as `cache.cleared` does. **Opt out:** none needed:
+  on a shared store (Redis, Solid Cache, Memcached, file) the output is unchanged; a script that matches the whole
+  erasure line `Cache cleared: true` should match its start.
+- **No boot checks or warnings while a generator boots the app.** `bin/rails generate permission_forge:install` boots
+  the app before it writes the initializer, and that boot logged six `[PermissionForge]` lines to
+  `log/development.log` describing the defaults (the in-memory cache, HTTP Basic Auth without credentials, masking not
+  complete) next to an initializer that configures otherwise. While `bin/rails generate` / `destroy` runs
+  (`BootChecks.generator_running?`) the boot checks, their warnings and the "Added N GDPR patterns" line are skipped;
+  `validate_gdpr_explicit_choice!` still raises. **Opt out:** none — the next server, console or task boot checks and
+  warns about the configuration the app has.
+- **`rule/unenforced_rules` leaves out Resources named after no model.** A Resource named `Custmer` was listed under
+  `integrity/unknown_models` and, with its rules, under `rule/unenforced_rules` (and Home's record-rules card) — there
+  is no query to scope. Only Resources whose model the app can load (`Admin::ModelCatalog#find`) are listed there now.
+  **Opt out:** none; `integrity/unknown_models` still names the Resource.
 
 ### Deprecated
 
@@ -485,6 +510,31 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **An API `permission_set_group_id` that starts with digits no longer names another group.** The integer column cast
   `"12ab…"` (a uuid that starts with digits) to 12, so `PATCH …/permission_sets/:uuid` could move the set into the
   group whose id is 12. Only a string of digits is read as an id now; anything else is a uuid (under `:uuid`) or a 422.
+
+- **`NotAuthorizedError#failure_messages` names only the rules that denied the record.** Rules combine with AND, but
+  the denial was attributed cumulatively — the first rule whose addition removed the record and every rule after it —
+  so a later rule the record satisfies on its own was named too ("Only customers owned by Acme staff." for a customer
+  owned by Acme staff), and a friendly 403 told the user a false reason. Each rule is now checked on its own against
+  the record (on the denial path only, one query per rule), in rule order; should no single rule deny (a custom
+  operator that is not a plain filter), the cumulative attribution is kept, so a denial never names no rule.
+  `message`, `details` and the `access.denied` event's `messages` use the same list. `failure_messages` is new in
+  this release: this corrects the unreleased API to what
+  [Handling Denials](docs/row-level-rules.md#handling-denials) documents.
+- **A join rule through a record-dependent scope reached by `:through` is broken, not accepted.** A path through
+  `has_many :mine_comments, through: :mine_posts` where `mine_posts` (or the source association) has a scope that
+  takes the record (`->(author) { where(state: author.name) }`) saved, and every `find_by` / `permission_scoped` of
+  its holders raised `NoMethodError` when Rails built the join. `Operators::RulePath` now checks every scope along the
+  reflection's chain: such a rule is refused at save, matches nothing when written past the model, and is reported by
+  `missing_rule_columns` and Home, as a record-dependent scope on the association itself already was.
+- **An empty step in a rule's association path no longer breaks the admin.** A path like `parent..owner` (written past
+  the model) made Home and the Rules tab raise (`human_attribute_name('')`); it reads "The relationship path has an
+  empty step (two dots in a row, or a dot at the start)", and saving one says "has an empty association name".
+- **A model file that raises while it loads no longer breaks Home or the Rules tab.** `Operators::RuleProblem` and
+  `Operators::RuleColumn.for_rule` rescued only `NameError`, `ArgumentError` and `ActiveRecordError`: a model (or an
+  association's class) whose file raised a `RuntimeError`, `LoadError` or `SyntaxError` while it loaded made every
+  page that describes rules a 500. Those callers now treat it as "cannot tell" (no problem shown, the save not
+  refused). The applier is unchanged and never answers for such a model: a `StandardError` while the class loads
+  makes the path broken (the rule denies), a `ScriptError` propagates from the query as before.
 
 ### Documentation
 

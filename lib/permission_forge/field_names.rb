@@ -23,6 +23,12 @@ module PermissionForge
   #   the key a serializer computes and FiltersResponseAttributes reads by
   #   its base field (FieldVariants.base_entries).
   #
+  # Any of those on a loaded single-table-inheritance subclass of the model
+  # (one on the same table) counts too: a row on the base Resource reaches
+  # the subclass's records (ResourceChain), so `vip_level`, a method only
+  # VipCustomer defines, is a field of Customer's rows. A subclass not
+  # loaded yet (development, before it is referenced) is not seen.
+  #
   # Nothing is said (.for returns nil) when the model cannot be told: the
   # Resource names no Active Record model this app can load (a Resource
   # shared with another app), an abstract class, a table that does not exist
@@ -49,6 +55,16 @@ module PermissionForge
       new(model, siblings: siblings, configuration: configuration)
     rescue *UNREADABLE
       nil
+    end
+
+    # An attribute, an alias, or a public reader or writer of the model.
+    #
+    # @param model [Class]
+    # @param name [String]
+    # @return [Boolean]
+    def self.declares?(model, name)
+      model.attribute_names.include?(name) || model.attribute_alias?(name) || model.public_method_defined?(name) ||
+        model.public_method_defined?("#{name}=")
     end
 
     # @return [Class] the Resource's model
@@ -80,6 +96,7 @@ module PermissionForge
       @reread = true
       @model.reset_column_information
       @virtual_fields = nil
+      @models = nil
     end
 
     def known?(name)
@@ -87,15 +104,19 @@ module PermissionForge
     end
 
     def own?(name)
-      columns.include?(name) || @model.attribute_names.include?(name) || @model.attribute_alias?(name) ||
-        virtual_fields.include?(name) || @model.public_method_defined?(name) ||
-        @model.public_method_defined?("#{name}=")
+      columns.include?(name) || models.any? { |model| virtual_fields(model).include?(name) || self.class.declares?(model, name) }
     end
 
     def variant?(name)
-      (columns + @model.attribute_names + virtual_fields.names + siblings).uniq.any? do |base|
+      bases = models.flat_map { |model| model.attribute_names + virtual_fields(model).names }
+      (columns + bases + siblings).uniq.any? do |base|
         base != name && @configuration.field_variants_for(base).include?(name)
       end
+    end
+
+    # The model and its loaded subclasses on the same table (STI).
+    def models
+      @models ||= [@model] + @model.descendants.select { |sub| sub.table_name == @model.table_name }
     end
 
     def siblings
@@ -107,8 +128,9 @@ module PermissionForge
       @model.connection.schema_cache.columns_hash(@model.table_name).keys
     end
 
-    def virtual_fields
-      @virtual_fields ||= VirtualFields.new(@model, @configuration)
+    def virtual_fields(model)
+      @virtual_fields ||= {}
+      @virtual_fields[model] ||= VirtualFields.new(model, @configuration)
     end
   end
 end

@@ -174,9 +174,12 @@ module PermissionForge
         PermissionForge::PermissionSetUser.includes(:permission_set, :user)
       end
 
-      # Resources whose rules are in force (View All / Modify All skip them), by id.
+      # Resources whose rules are in force (View All / Modify All skip them),
+      # by id. A Resource named after no model this app can load (`Custmer`)
+      # has no query to scope: the audit's integrity/unknown_models names it.
       def rule_enforced_resources
-        granting_resources.reject(&:rules_bypassed?).index_by(&:id)
+        granting_resources.reject { |resource| resource.rules_bypassed? || @catalog.find(resource.name).nil? }
+                          .index_by(&:id)
       end
 
       def unenforced_rule_scope

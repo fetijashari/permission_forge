@@ -82,7 +82,7 @@ namespace :permission_forge do
       puts "  Group assignments removed: #{result[:group_assignments_removed]}"
       puts "  Audit log name labels cleared: #{result[:actor_labels_cleared]} as actor, " \
            "#{result[:record_labels_cleared]} as subject"
-      puts "  Cache cleared: #{result[:cache_cleared]}"
+      puts "  Cache cleared: #{result[:cache_cleared]}#{PermissionForge::RakeAudit.process_local_note}"
       puts "  Assignments remaining in other tenants: #{result[:assignments_remaining_elsewhere]}"
       puts '  Kept: audit event ids, ip, request id, reason and data; *_by_id columns; the user record itself.'
     end

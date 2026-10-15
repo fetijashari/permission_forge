@@ -107,7 +107,8 @@ module PermissionForge
       arel_matches: 'column.matches(',
       arel_named_function: "Arel::Nodes::NamedFunction.new('COALESCE'",
       schema_cache: 'connection.schema_cache.columns_hash(',
-      association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!'),
+      association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!',
+                                            'reflection.chain.any?', 'link.through_reflection?', 'link.source_reflection'),
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
       sandbox: 'application.sandbox?',
       generator_commands: 'Rails::Command::GenerateCommand',
@@ -162,8 +163,9 @@ module PermissionForge
       arel_matches: 'adapt Operators::Registry (LIKE operators)',
       arel_named_function: 'adapt PermissionSetUser.last_reviewed_column',
       schema_cache: 'adapt Operators::RuleColumn.on',
-      association_join_checks: 'adapt Operators::RulePath#through / #joined_class to what Associations::JoinDependency#build ' \
-                               'checks before it joins (a path it raises for must stay broken, one it joins followed)',
+      association_join_checks: 'adapt Operators::RulePath#through / #unjoinable_cause / #record_dependent? to what ' \
+                               'Associations::JoinDependency#build checks before it joins and the scopes a :through ' \
+                               'evaluates along its chain (a path it raises for must stay broken, one it joins followed)',
       preloader: 'adapt PermissionHashBuilder#preload',
       sandbox: 'adapt OpenTransaction.sandbox?',
       generator_commands: 'adapt BootChecks.generator_running? (GENERATOR_COMMANDS: what `bin/rails generate` loads before it boots)',
@@ -1358,6 +1360,7 @@ module PermissionForge
         belongs_to :phantom, class_name: 'PfCanaryNoSuchModel', optional: true
         has_many :namesakes, ->(record) { where(name: record.name) }, class_name: 'PfCanaryRecord', foreign_key: :parent_id
         has_many :ghosts, through: :nowhere, source: :children
+        has_many :namesake_parents, through: :namesakes, source: :parent
       end
       joins = lambda do |name|
         model.joins(name).to_sql
@@ -1382,6 +1385,22 @@ module PermissionForge
       assert_raises(ArgumentError) { model._reflect_on_association('namesakes').check_eager_loadable! }
       assert_raises(ActiveRecord::ActiveRecordError) { model._reflect_on_association('ghosts').check_validity! }
       assert_raises(NameError) { model._reflect_on_association('phantom').klass }
+      # A record-taking scope along a :through: the through's own check
+      # passes, the join raises (RulePath#record_dependent? walks the chain).
+      through = model._reflect_on_association('namesake_parents')
+      through.check_eager_loadable!
+
+      assert through.through_reflection?
+      assert_equal :parent, through.source_reflection.name
+      assert through.chain.any? { |link| link.scope && !link.scope.arity.zero? }, canary(
+        :association_join_checks, 'a :through reflection\'s chain no longer lists the through association with its scope',
+        RailsInternalsCanary::FIXES[:association_join_checks]
+      )
+      assert_not joins.call(:namesake_parents), canary(
+        :association_join_checks, 'joins now builds a join through a record-taking scope along a :through',
+        RailsInternalsCanary::FIXES[:association_join_checks]
+      )
+
       assert_equal [false] * 4, %i[subject namesakes ghosts phantom].map { |name| joins.call(name) }, canary(
         :association_join_checks, 'joins now builds a join RulePath counts as broken (it matches nothing)',
         RailsInternalsCanary::FIXES[:association_join_checks]

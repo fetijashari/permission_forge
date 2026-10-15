@@ -38,25 +38,32 @@ module PermissionForge
 
     test 'the messages are translated' do
       {
-        sq: ['përmend ownr, që nuk është lidhje e Customer', 'përmend subject, një lidhje e PfRulePathRecord'],
-        mk: ['го именува ownr, што не е асоцијација на Customer', 'го именува subject, асоцијација на PfRulePathRecord']
-      }.each do |locale, (unknown, unjoinable)|
+        sq: ['përmend ownr, që nuk është lidhje e Customer', 'përmend subject, një lidhje polimorfike e PfRulePathRecord',
+             'përmend phantom, një lidhje e PfRulePathRecord klasa e së cilës nuk mund të ngarkohet'],
+        mk: ['го именува ownr, што не е асоцијација на Customer', 'го именува subject, полиморфна асоцијација на PfRulePathRecord',
+             'го именува phantom, асоцијација на PfRulePathRecord чија класа не може да се вчита']
+      }.each do |locale, (unknown, polymorphic, not_loadable)|
         I18n.with_locale(locale) do
           assert_equal [unknown], build_rule(field_accessor_path: 'ownr').tap(&:valid?).errors[:field_accessor_path], locale
           message = path_rule('subject').tap(&:valid?).errors[:field_accessor_path].first
 
-          assert message.start_with?(unjoinable), "#{locale}: #{message}"
+          assert message.start_with?(polymorphic), "#{locale}: #{message}"
+          assert_equal [not_loadable], path_rule('phantom').tap(&:valid?).errors[:field_accessor_path], locale
         end
       end
     end
 
-    test 'a path ActiveRecord cannot join is refused, and one it joins is accepted' do
-      PfRulePathRecord::NOT_JOINED.each do |path, reason|
+    # The message says why (review round 5): not "(polymorphic, or its class
+    # cannot be loaded)" for every association a join cannot be built through.
+    test 'a path ActiveRecord cannot join is refused with its cause, and one it joins is accepted' do
+      PfRulePathRecord::NOT_JOINED.each_key do |path|
         rule = path_rule(path)
+        followed = Operators::RulePath.follow(PfRulePathRecord, path.split('.'))
+        expected = format(Operators::RULE_PROBLEM_MESSAGES.fetch(Operators::RuleProblem.for(rule).key),
+                          association: followed.segment, model: followed.owner.name)
 
         assert_not rule.valid?, path
-        assert_match(reason == :unknown_association ? /which is not an association of/ : /that a rule cannot join/,
-                     rule.errors[:field_accessor_path].first, path)
+        assert_equal [expected], rule.errors[:field_accessor_path], path
       end
       PfRulePathRecord::JOINED.each do |path|
         rule = path_rule(path)
@@ -64,6 +71,59 @@ module PermissionForge
         assert rule.valid?, "#{path}: #{rule.errors.full_messages}"
       end
       assert build_rule(field_accessor_path: 'supplier.owner', field_name: 'deactivated', join_type: 'left_joins').valid?
+    end
+
+    test 'each cause has its own message' do
+      {
+        'subject' => 'names subject, a polymorphic association of PfRulePathRecord: a rule cannot join it',
+        'phantom' => 'names phantom, an association of PfRulePathRecord whose class cannot be loaded',
+        'namesake_children' => 'names namesake_children, an association of PfRulePathRecord whose scope (or one along ' \
+                               'its :through) takes the record: a rule cannot join it',
+        'ghosts' => 'names ghosts, an association of PfRulePathRecord whose :through, :source or inverse_of names an ' \
+                    'association that is not there',
+        'parent..owner' => 'has an empty association name (two dots in a row, or a dot at the start)'
+      }.each do |path, message|
+        assert_equal [message], path_rule(path).tap(&:valid?).errors[:field_accessor_path], path
+      end
+    end
+
+    # A model file that raises as it loads: the admin and the audit describe
+    # the rule ("cannot tell"), they never fail on it; the applier still
+    # never answers for it — a RuntimeError makes the path broken (the rule
+    # denies), a ScriptError propagates as it did.
+    test 'a model file that raises while it loads is "cannot tell" for the admin, never an answer from the applier' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, 'boom.rb'), "raise 'boom while loading'\n")
+        File.write(File.join(dir, 'syntax.rb'), "class PfRulePathSyntaxTarget < ApplicationRecord\n  def x(\nend\n")
+        Object.autoload(:PfRulePathBoomTarget, File.join(dir, 'boom.rb'))
+        Object.autoload(:PfRulePathSyntaxTarget, File.join(dir, 'syntax.rb'))
+        Object.const_set(:PfRulePathLoadFailure, Class.new(ApplicationRecord) do
+          self.table_name = 'pf_rule_path_records'
+          belongs_to :boom, class_name: 'PfRulePathBoomTarget', optional: true
+          belongs_to :syntax, class_name: 'PfRulePathSyntaxTarget', optional: true
+        end)
+        resource = create_resource(permission_set: @permission_set, name: 'PfRulePathLoadFailure', read_access: true)
+
+        boom = build_rule(resource: resource, field_accessor_path: 'boom')
+        assert_equal :unjoinable_class_not_loadable, Operators::RuleProblem.for(boom)&.key
+        syntax = build_rule(resource: resource, field_accessor_path: 'syntax')
+        assert_nil Operators::RuleProblem.for(syntax)
+        assert_nil Operators::RuleColumn.for_rule(syntax)
+        assert syntax.valid?, 'nothing can be told: left to the query'
+
+        rule = { name: 'r', operator: 'equal', field_name: 'id', field_value: '1', join_type: 'joins', failure_message: 'no' }
+        query, = Services::PermissionRuleApplier.call(model_class: PfRulePathLoadFailure, rules: [rule.merge(field_accessor_path: 'boom')],
+                                                      args: [{ id: 1 }], current_user: nil)
+        assert_empty query.to_a
+        assert_raises(SyntaxError) do
+          Services::PermissionRuleApplier.call(model_class: PfRulePathLoadFailure, rules: [rule.merge(field_accessor_path: 'syntax')],
+                                               args: [{ id: 1 }], current_user: nil)
+        end
+      ensure
+        %i[PfRulePathLoadFailure PfRulePathBoomTarget PfRulePathSyntaxTarget].each do |name|
+          Object.send(:remove_const, name) if Object.const_defined?(name, false) || Object.autoload?(name)
+        end
+      end
     end
 
     test 'a filter rule is not checked for its path: it is never joined' do

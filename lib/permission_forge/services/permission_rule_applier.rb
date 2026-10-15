@@ -62,10 +62,10 @@ module PermissionForge
         # Happy path is a single existence check: rule constraints are monotonic
         # (each only removes rows), so if the fully-constrained query still matches
         # the target, no individual rule denied it.
-        return [query, [], []] if @rules.empty? || query.where(*@args).exists?
+        return [query, [], []] if @rules.empty? || matches?(query)
 
-        # Denial path only: attribute the denial to specific rules for the error
-        # message. The extra per-rule queries here run solely when access is denied.
+        # Denial path only: attribute the denial to the rules that deny the
+        # record (one query per rule, solely when access is denied).
         denying = denying_rules
         [query, denying.map { |rule| rule_failure_message(rule) }, denying]
       end
@@ -82,17 +82,30 @@ module PermissionForge
         "[Forbidden by Rule: #{rule[:name]}] with message: #{rule[:failure_message]}"
       end
 
-      # Rebuilds the query rule-by-rule, blaming each rule whose addition removes
-      # the target from the result set (the first denying rule and every rule
-      # after it, matching the original cumulative semantics).
+      # The rules that deny the record each on its own: the model's relation,
+      # that one rule and the args — rules combine with AND, so a rule that
+      # keeps the record on its own did not deny it, whatever the others do.
+      # In rule order. Should no single rule deny (an interplay with a default
+      # scope, say), the cumulative attribution — the first rule whose
+      # addition removes the record, and every rule after it — so a denial
+      # never names no rule.
       def denying_rules
+        denying = @rules.reject { |rule| matches?(build_rule_query(@model_class.where(nil), rule)) }
+        denying.empty? ? cumulatively_denying_rules : denying
+      end
+
+      def cumulatively_denying_rules
         denying = []
         @rules.reduce(@model_class.where(nil)) do |q, rule|
           next_query = build_rule_query(q, rule)
-          denying << rule unless next_query.where(*@args).exists?
+          denying << rule if denying.any? || !matches?(next_query)
           next_query
         end
         denying
+      end
+
+      def matches?(query)
+        query.where(*@args).exists?
       end
 
       def build_rule_query(query, rule)

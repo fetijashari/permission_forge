@@ -22,6 +22,11 @@ module PermissionForge
         attribute :nickname, :string
       end
 
+      # A single-table-inheritance subclass of Customer with a method of its own.
+      class PfFieldNameVipCustomer < Customer
+        def vip_level = 1
+      end
+
       setup do
         @config = PermissionForge::Configuration.new
         @config.user_class = 'User'
@@ -67,6 +72,17 @@ module PermissionForge
         end
 
         assert_nil finding(audit)
+      end
+
+      # Review round 5: a row on the base Resource reaches the subclass's
+      # records (ResourceChain), so a name only the subclass has is a field.
+      test 'a name a loaded STI subclass on the same table has is a field of the base Resource' do
+        create_resource_field(resource: @resource, name: 'vip_level')
+        create_resource_field(resource: @resource, name: 'vip_levle')
+
+        assert_equal ['Sales › Customer.vip_levle · 0 people'], finding(audit).items
+        assert FieldNames.for('Customer').include?('vip_level')
+        assert_not FieldNames.for('User').include?('vip_level'), 'another model is not a subclass'
       end
 
       test 'rows that are not in effect, and Resources whose model cannot be loaded, are not listed' do

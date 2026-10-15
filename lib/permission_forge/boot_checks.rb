@@ -12,6 +12,14 @@ module PermissionForge
   # runs. Anything else a step raises (a ConfigurationError) still stops the
   # boot.
   #
+  # Nothing is checked or logged while a generator boots the app
+  # (generator_running?): `bin/rails generate permission_forge:install`
+  # boots before it writes the initializer, so its warnings described a
+  # configuration the app was about to stop having (the defaults, e.g.
+  # cache_backend :memory) — the first lines a new user read in
+  # log/development.log. The next server, console or task boot checks the
+  # configuration the app has.
+  #
   # @api private
   module BootChecks
     # Errors that mean "the database is not there (yet)": gone, refused, not
@@ -43,6 +51,8 @@ module PermissionForge
       # @param config [Configuration]
       def run(config)
         config.validate_gdpr_explicit_choice!
+        return MaskingSync.reset! if generator_running?
+
         warn_configuration(config)
         return database_unreachable unless db_available?
 

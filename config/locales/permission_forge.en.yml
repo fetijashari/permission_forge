@@ -210,6 +210,12 @@ en:
         cache_cleared_process_local: "%{actor} cleared the cached permissions of every
           user in its own process only (an in-memory store): the web and job processes
           kept theirs."
+        cleanup_expired_assignments_process_local: "%{actor} removed expired assignments;
+          the cached permissions were cleared in its own process only (an in-memory
+          store): the web and job processes kept theirs."
+        erasure_performed_process_local: "%{actor} erased the permission data of %{person};
+          the cached permissions were cleared in its own process only (an in-memory
+          store): the web and job processes kept theirs."
         field_access_limited: "%{actor} read %{record} with these fields hidden or
           masked: %{fields}."
       sentences:
@@ -2160,9 +2166,19 @@ en:
         only_show: Only show
         or_empty: or %{field} is empty
         problems:
+          empty_association: The relationship path has an empty step (two dots in
+            a row, or a dot at the start)
           missing_column: "%{name} is not a column of %{model}"
           unjoinable_association: "%{name} is a relationship of %{model} that a rule
             cannot follow"
+          unjoinable_class_not_loadable: "%{name} is a relationship of %{model} whose
+            model cannot be loaded"
+          unjoinable_invalid_definition: "%{name} is a relationship of %{model} whose
+            :through, :source or inverse_of names a relationship that is not there"
+          unjoinable_polymorphic: "%{name} is a polymorphic relationship of %{model}:
+            a rule cannot follow it"
+          unjoinable_record_dependent_scope: "%{name} is a relationship of %{model}
+            whose scope depends on the record: a rule cannot follow it"
           unknown_association: "%{name} is not a relationship of %{model}"
         where: where
       rules_count:
@@ -2190,6 +2206,8 @@ en:
       permission_set_rule:
         between_requires_two_values: must contain exactly 2 comma-separated values
           for between operator
+        empty_association: has an empty association name (two dots in a row, or a
+          dot at the start)
         field_value_required: is required for this operator
         in_requires_values: must contain at least 1 comma-separated value
         invalid_field_name: must be a valid column name (letters, numbers, underscores,
@@ -2198,7 +2216,16 @@ en:
         invalid_operator: is not a valid operator
         numeric_or_date_required: must be a numeric or date value for comparison operators
         unjoinable_association: names %{association}, an association of %{model} that
-          a rule cannot join (polymorphic, or its class cannot be loaded)
+          a rule cannot join
+        unjoinable_class_not_loadable: names %{association}, an association of %{model}
+          whose class cannot be loaded
+        unjoinable_invalid_definition: names %{association}, an association of %{model}
+          whose :through, :source or inverse_of names an association that is not there
+        unjoinable_polymorphic: 'names %{association}, a polymorphic association of
+          %{model}: a rule cannot join it'
+        unjoinable_record_dependent_scope: 'names %{association}, an association of
+          %{model} whose scope (or one along its :through) takes the record: a rule
+          cannot join it'
         unknown_association: names %{association}, which is not an association of
           %{model}
         unknown_column: is not a column of %{model}

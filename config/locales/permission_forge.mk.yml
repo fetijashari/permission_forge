@@ -211,6 +211,14 @@ mk:
         cache_cleared_process_local: "%{actor} ги исчисти кешираните дозволи на сите
           корисници само во сопствениот процес (складиште во меморија): веб-процесите
           и процесите за задачи ги задржаа своите."
+        cleanup_expired_assignments_process_local: "%{actor} ги отстрани истечените
+          доделувања; кешираните дозволи беа исчистени само во сопствениот процес
+          (складиште во меморија): веб-процесите и процесите за задачи ги задржаа
+          своите."
+        erasure_performed_process_local: "%{actor} ги избриша податоците за дозволи
+          на %{person}; кешираните дозволи беа исчистени само во сопствениот процес
+          (складиште во меморија): веб-процесите и процесите за задачи ги задржаа
+          своите."
         field_access_limited: "%{actor} го прочита %{record} со овие полиња скриени
           или маскирани: %{fields}."
       sentences:
@@ -2209,9 +2217,19 @@ mk:
         only_show: Прикажи само
         or_empty: или %{field} е празно
         problems:
+          empty_association: Патеката на врски има празен чекор (две точки една по
+            друга, или точка на почетокот)
           missing_column: "%{name} не е колона на %{model}"
           unjoinable_association: "%{name} е врска на %{model} што правило не може
             да ја следи"
+          unjoinable_class_not_loadable: "%{name} е врска на %{model} чиј модел не
+            може да се вчита"
+          unjoinable_invalid_definition: "%{name} е врска на %{model} чиј :through,
+            :source или inverse_of именува врска што не постои"
+          unjoinable_polymorphic: "%{name} е полиморфна врска на %{model}: правило
+            не може да ја следи"
+          unjoinable_record_dependent_scope: "%{name} е врска на %{model} чиј опсег
+            зависи од записот: правило не може да ја следи"
           unknown_association: "%{name} не е врска на %{model}"
         where: каде
       rules_count:
@@ -2239,6 +2257,8 @@ mk:
       permission_set_rule:
         between_requires_two_values: мора да содржи точно 2 вредности одделени со
           запирка за операторот between
+        empty_association: има празно име на асоцијација (две точки една по друга,
+          или точка на почетокот)
         field_value_required: е потребна за овој оператор
         in_requires_values: мора да содржи барем 1 вредност одделена со запирка
         invalid_field_name: мора да биде валидно име на колона (букви, бројки, долни
@@ -2248,8 +2268,16 @@ mk:
         numeric_or_date_required: мора да биде нумеричка или датумска вредност за
           оператори за споредба
         unjoinable_association: го именува %{association}, асоцијација на %{model}
-          што правило не може да ја спои (полиморфна, или нејзината класа не може
-          да се вчита)
+          што правило не може да ја спои
+        unjoinable_class_not_loadable: го именува %{association}, асоцијација на %{model}
+          чија класа не може да се вчита
+        unjoinable_invalid_definition: го именува %{association}, асоцијација на %{model}
+          чиј :through, :source или inverse_of именува асоцијација што не постои
+        unjoinable_polymorphic: 'го именува %{association}, полиморфна асоцијација
+          на %{model}: правило не може да ја спои'
+        unjoinable_record_dependent_scope: 'го именува %{association}, асоцијација
+          на %{model} чиј опсег (или еден по должината на :through) го зема записот:
+          правило не може да ја спои'
         unknown_association: го именува %{association}, што не е асоцијација на %{model}
         unknown_column: не е колона на %{model}
         value_not_expected: не бара вредност за овој оператор

@@ -237,6 +237,53 @@ module PermissionForge
         assert_equal 3, error.details.size, 'details still name every denying rule'
       end
 
+      # Rules combine with AND: a rule that keeps the record on its own did
+      # not deny it, wherever it stands after one that did (field test round
+      # 5: a later rule that matched the row was blamed too).
+      test 'a denial names only the rules that deny the record on their own, in rule order' do
+        create_permission_set_rule(permission_set: @permission_set, resource: @resource, name: 'Owned by me',
+                                   field_name: 'supplier_id', field_value: 'current_user', include_nulls: false,
+                                   failure_message: 'Only your customers.')
+        create_permission_set_rule(permission_set: @permission_set, resource: @resource, name: 'Active only',
+                                   field_name: 'name', field_value: 'active', include_nulls: false,
+                                   failure_message: 'Only active customers.')
+        create_permission_set_rule(permission_set: @permission_set, resource: @resource, name: 'Has a domain',
+                                   field_name: 'domain', operator: 'is_not_null', field_value: '', include_nulls: false,
+                                   failure_message: 'Only customers with a domain.')
+        create_permission_set_rule(permission_set: @permission_set, resource: @resource, name: 'Not the house account',
+                                   field_name: 'name', operator: 'not_equal', field_value: 'house', include_nulls: false,
+                                   failure_message: 'Not the house account.')
+        setup_permissions
+        record = create_customer(supplier_id: @user.id, name: 'dormant', domain: nil)
+
+        error = assert_raises(PermissionScopedFindable::NotAuthorizedError) { Customer.find_by!(id: record.id) }
+
+        assert_equal ['Only active customers.', 'Only customers with a domain.'], error.failure_messages
+        assert_equal ['[Forbidden by Rule: Active only] with message: Only active customers.',
+                      '[Forbidden by Rule: Has a domain] with message: Only customers with a domain.'], error.details
+        assert_audit_event('access.denied', record_id: record.id.to_s, data: { 'messages' => error.details })
+      end
+
+      # Should no rule deny on its own (a custom operator that is not a mere
+      # filter), the denial still names a rule: the first whose addition
+      # removes the record, and every rule after it.
+      test 'a denial no single rule explains falls back to the cumulative attribution, never to no rule' do
+        # inverts what the rules before it constrain: a no-op on its own
+        invert = ->(query, *) { query.to_sql.include?(' WHERE ') ? query.invert_where : query }
+        registry = { 'equal' => PermissionForge::Operators::Registry.fetch('equal'), 'invert' => invert }
+        rules = [{ name: 'Mine', operator: 'equal', field_name: 'name', field_value: 'mine', failure_message: 'a' },
+                 { name: 'Inverted', operator: 'invert', field_name: 'name', field_value: 'x', failure_message: 'b' },
+                 { name: 'Mine again', operator: 'equal', field_name: 'name', field_value: 'mine', failure_message: 'c' }]
+        record = create_customer(name: 'mine')
+
+        _, messages, denying = PermissionForge::Services::PermissionRuleApplier.call(
+          model_class: Customer, rules: rules, args: [{ id: record.id }], current_user: @user, operator_registry: registry
+        )
+
+        assert_equal ['Inverted', 'Mine again'], denying.pluck(:name)
+        assert_equal 2, messages.size
+      end
+
       test 'NotAuthorizedError#failure_messages is empty unless rules denied' do
         klass = PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError
 

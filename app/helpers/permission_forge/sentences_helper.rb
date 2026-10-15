@@ -102,29 +102,31 @@ module PermissionForge
     end
 
     # Labels along a rule's relationship path and the final field, e.g.
-    # ["Organization", "Members", "User"].
+    # ["Organization", "Members", "User"]. The path is walked by
+    # Operators::RulePath (the one walk of a path); one it cannot follow is
+    # labelled from its names (a rule that matches nothing is drawn by
+    # RuleProblemsHelper first).
     def pf_rule_field_labels(model_name, rule)
-      klass = model_name.to_s.safe_constantize
-      labels = rule.field_accessor_path.to_s.split('.').map do |assoc|
-        label = pf_attribute_label(klass, assoc)
-        klass = pf_association_class(klass, assoc)
-        label
-      end
-      labels << pf_attribute_label(klass, rule.field_name)
+      segments = PermissionForge::Operators::RuleColumn.path_segments(rule.field_accessor_path)
+      models = pf_rule_path_models(model_name.to_s.safe_constantize, segments)
+      labels = segments.each_with_index.map { |assoc, index| pf_attribute_label(models[index], assoc) }
+      labels << pf_attribute_label(models[segments.size], rule.field_name)
     end
 
+    # An empty name (a doubled dot in a path) is no attribute:
+    # human_attribute_name raises for it.
     def pf_attribute_label(klass, attribute)
-      klass ? klass.human_attribute_name(attribute) : attribute.to_s.humanize
+      klass && attribute.present? ? klass.human_attribute_name(attribute) : attribute.to_s.humanize
     end
 
-    # Target class of an association, or nil (unknown or polymorphic).
-    def pf_association_class(klass, assoc)
-      reflection = klass&.reflect_on_association(assoc.to_sym)
-      begin
-        reflection&.klass
-      rescue StandardError
-        nil
-      end
+    # The model, then the model of each association on the path; the model
+    # alone when the path cannot be followed (or nothing, without a model).
+    def pf_rule_path_models(klass, segments)
+      return [] unless klass.is_a?(Class) && klass < ActiveRecord::Base
+
+      PermissionForge::Operators::RulePath.follow(klass, segments).models.presence || [klass]
+    rescue *PermissionForge::Operators::RuleColumn::UNTELLABLE
+      [klass]
     end
 
     def pf_rule_value_text(rule)
