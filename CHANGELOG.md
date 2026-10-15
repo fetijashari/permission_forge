@@ -6,6 +6,27 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+### Added
+
+- **`NotAuthorizedError#failure_messages`.** The `failure_message` of each row-level rule that denied the record, as
+  the admin wrote it (in rule order, without blanks and repeats; `[]` when no rule denied), so a host can render a
+  friendly 403 without parsing `message` (`[Forbidden by Rule: <name>] with message: <failure_message>`). `message`
+  and `details` are unchanged. See [Handling Denials](docs/row-level-rules.md#handling-denials).
+
+### Changed
+
+- **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
+  `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
+  `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`
+  (the action guard) in `config.action_dispatch.rescue_responses` as `:forbidden`, as ActiveRecord registers
+  `RecordNotFound` as 404. In production Rails renders `public/403.html`, which Rails apps do not ship: an HTML request
+  gets an empty 403 page until you add one (a JSON request gets `{"status":403,"error":"Forbidden"}`). Like every mapped
+  exception, an unrescued denial is no longer reported to `Rails.error` as unhandled; it stays in the audit log
+  (`access.denied`, `action.denied`). Request tests under `show_exceptions = :rescuable` (the Rails 7.1+ test default)
+  now get the 403 response instead of the raised error. A `rescue_from` in your controllers runs first and keeps
+  deciding, as before. **Opt out:** rescue the errors yourself, or set another status in `config/application.rb`,
+  e.g. `config.action_dispatch.rescue_responses['PermissionForge::ActionNotAuthorizedError'] = :internal_server_error`.
+
 ### Fixed
 
 - **An `expires_at` that is not ISO 8601 is refused.** The API (`POST …/users`, `POST …/users/bulk`) and the admin's

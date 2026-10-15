@@ -16,6 +16,20 @@ module PermissionForge
       g.test_framework :minitest
     end
 
+    # A denial nobody rescues answers 403, not 500: the row-rule refusal of
+    # find_by / find_by! and the action guard's refusal (Rails' exceptions
+    # app renders the status: public/403.html when the host has one, else an
+    # empty body). A host's rescue_from runs first and still decides.
+    #
+    # Set as the gem loads, as ActiveRecord's railtie sets its own: before
+    # ActionDispatch copies the setting into ExceptionWrapper, and before the
+    # host's config/application.rb, whose entry for either name wins. Class
+    # names, not constants: nothing is loaded for this.
+    config.action_dispatch.rescue_responses.merge!(
+      'PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError' => :forbidden,
+      'PermissionForge::ActionNotAuthorizedError' => :forbidden
+    )
+
     # The models (app/models/permission_forge) are autoloaded like any engine
     # model: their class bodies read the configuration after the host's
     # config/initializers, so nothing is re-declared after boot. No engine

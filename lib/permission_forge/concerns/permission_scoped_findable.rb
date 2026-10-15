@@ -107,8 +107,9 @@ module PermissionForge
       # `user` is the user the rules were applied for, `record_id` the id of
       # the record that was denied. `record` is nil when the gem raises: the
       # row the user may not see is not loaded to be handed out with the
-      # error. All three are optional keywords; `NotAuthorizedError.new(details)`
-      # and `raise NotAuthorizedError, details` work as before.
+      # error. They and `failure_messages` are optional keywords;
+      # `NotAuthorizedError.new(details)` and `raise NotAuthorizedError,
+      # details` work as before.
       #
       # `details` keeps whatever was raised with (the gem raises the Array of
       # rule failure messages; a Hash with :message for a missing user).
@@ -116,14 +117,37 @@ module PermissionForge
       # error reporter and `rescue_from` handler expects: the failure
       # messages joined, the :message of a Hash, or the class name.
       #
+      # `failure_messages` is what the denying rules say on their own (each
+      # rule's `failure_message`, as an admin wrote it), for a friendly 403
+      # without parsing `message`.
+      #
+      # Unless the host rescues it, Rails answers this error with 403
+      # Forbidden (the engine registers it in
+      # `config.action_dispatch.rescue_responses`).
+      #
+      # @example A friendly 403
+      #   rescue_from PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError do |error|
+      #     render json: { error: error.failure_messages.first || 'Forbidden' }, status: :forbidden
+      #   end
+      #
       # @api public
       class NotAuthorizedError < StandardError
         # Why the lookup was refused.
         # @return [Hash, nil]
         attr_reader :details, :user, :record, :record_id
 
+        # The `failure_message` of each rule that denied the record, in rule
+        # order, without blanks and repeats (two Permission Sets may carry the
+        # same rule). Empty when no rule denied: nobody signed in under
+        # `nil_user_strategy = :raise`, or an error the host raised without
+        # `failure_messages:`. Rule messages are written by admins: decide
+        # whether they belong in a response.
+        #
+        # @return [Array<String>] frozen
+        attr_reader :failure_messages
+
         NO_DETAILS = Object.new.freeze
-        READERS = %i[user record record_id].freeze
+        READERS = %i[user record record_id failure_messages].freeze
         private_constant :NO_DETAILS, :READERS
 
         # The String a details value reads as.
@@ -136,9 +160,9 @@ module PermissionForge
           end
         end
 
-        # The :message of a Hash, else the Hash without the user, record and
-        # record_id keywords (a user's inspect must not land in an error
-        # tracker), else nothing.
+        # The :message of a Hash, else the Hash without the user, record,
+        # record_id and failure_messages keywords (a user's inspect must not
+        # land in an error tracker), else nothing.
         def self.hash_text(details)
           text = text_for(details[:message] || details['message'])
           return text if text
@@ -148,12 +172,22 @@ module PermissionForge
         end
         private_class_method :hash_text
 
-        # Keywords other than user:, record: and record_id: are details, as
-        # they always were (`new(message: 'x')`); without a positional
+        # The failure_messages: keyword as a frozen Array of distinct,
+        # non-blank Strings.
+        #
+        # @api private
+        # @return [Array<String>]
+        def self.message_list(value)
+          Array(value).filter_map { |text| text.to_s.presence }.uniq.freeze
+        end
+
+        # Keywords other than user:, record:, record_id: and failure_messages:
+        # are details, as they always were (`new(message: 'x')`); without a positional
         # argument every keyword given stays in details too, so a host's
         # `new(record: r, message: 'x')` reads as before.
         def initialize(details = NO_DETAILS, **keywords)
           @user, @record, @record_id = keywords.values_at(:user, :record, :record_id)
+          @failure_messages = self.class.message_list(keywords[:failure_messages])
           if details.equal?(NO_DETAILS)
             details = keywords
           elsif !(extra = keywords.except(*READERS)).empty?
@@ -182,11 +216,11 @@ module PermissionForge
             rules = pf_applicable_rules(current_user, 'find_by')
             next tenant_safe_find_by(*args) unless rules
 
-            query, failure_messages = PermissionForge::Services::PermissionRuleApplier.call(
+            query, failure_messages, denying_rules = PermissionForge::Services::PermissionRuleApplier.call(
               model_class: self, rules: rules, args: args, current_user: current_user
             )
 
-            next deny_or_missing(failure_messages, current_user, *args) if failure_messages.any?
+            next deny_or_missing([failure_messages, denying_rules], current_user, *args) if failure_messages.any?
 
             query.where(*args).take
           end
@@ -236,17 +270,22 @@ module PermissionForge
         # Distinguishes "denied by a rule" from "no such record". find_by must honor
         # its nil contract for a genuinely missing record (matching stock Rails) and
         # only raise NotAuthorizedError when the record exists but rules deny it.
-        def deny_or_missing(failure_messages, current_user, *args)
+        #
+        # `denial` is what the applier answered: the failure messages and the
+        # rules that denied.
+        def deny_or_missing(denial, current_user, *args)
           relation = tenant_safe_relation.where(*args)
           return nil unless relation.exists?
 
+          messages, denying_rules = denial
           record_id = pf_denied_record_id(relation)
           PermissionForge::Audit::Runtime.denied(
             PermissionForge::Audit::Runtime::DENIED, reason: :rule, model: self, via: 'find_by',
                                                      user: current_user, record_id: record_id,
-                                                     data: { 'messages' => failure_messages }
+                                                     data: { 'messages' => messages }
           )
-          raise NotAuthorizedError.new(failure_messages, user: current_user, record_id: record_id)
+          raise NotAuthorizedError.new(messages, user: current_user, record_id: record_id,
+                                                 failure_messages: denying_rules.map { |rule| rule[:failure_message] })
         end
 
         # The id of the row the rules denied, for access.denied and the error:

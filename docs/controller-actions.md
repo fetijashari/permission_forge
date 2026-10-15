@@ -49,7 +49,11 @@ class ApplicationController < ActionController::Base
 end
 ```
 
-Without a `rescue_from` the error becomes a 500 in production.
+Without a `rescue_from` the request answers **403 Forbidden**: the engine registers the error in
+`config.action_dispatch.rescue_responses`. In production Rails renders `public/403.html`, which Rails apps do
+not ship, so an HTML request gets an empty 403 page until you add one or rescue the error. See
+[Handling Denials](row-level-rules.md#handling-denials) for the default, how to change it, and HTML and JSON
+handlers for this error and the row-level `NotAuthorizedError`.
 
 ### 3. Permit the action in a Permission Set
 
