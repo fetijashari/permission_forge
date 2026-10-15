@@ -48,26 +48,56 @@ module PermissionForge
 
       TIMESTAMPS = %w[created_at updated_at].freeze
 
-      test 'timestamps get a read-only, unmasked row, with or without grant_all' do
-        [false, true].each do |grant_all|
-          resource = create_resource(permission_set: create_permission_set(name: "Timestamps #{grant_all}"), name: 'Customer')
-          fields = PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: grant_all)
+      def generated_timestamps(grant_all:, muting: false)
+        set = create_permission_set(name: "Timestamps #{grant_all} #{muting}", is_muting: muting)
+        resource = create_resource(permission_set: set, name: 'Customer')
+        fields = PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: grant_all)
+        TIMESTAMPS.map { |name| fields.find { |row| row.name == name } || flunk("no row for #{name}") }
+      end
 
-          TIMESTAMPS.each do |name|
-            field = fields.find { |row| row.name == name }
-            assert field, "#{name} (grant_all: #{grant_all})"
-            assert field.read_access, "#{name} is readable"
-            assert_not field.edit_access, "#{name} is never editable"
-            assert_not field.mask_access, "#{name} is not masked"
-          end
+      test 'with grant_all the timestamps get a read-only, unmasked row' do
+        generated_timestamps(grant_all: true).each do |field|
+          assert field.read_access, "#{field.name} is readable"
+          assert_not field.edit_access, "#{field.name} is never editable"
+          assert_not field.mask_access, "#{field.name} is not masked"
         end
       end
 
-      test 'a user granted the generated fields reads the timestamps under :block' do
+      test 'without grant_all the timestamps are hidden like every other column' do
+        generated_timestamps(grant_all: false).each do |field|
+          assert_not field.read_access, field.name
+          assert_not field.edit_access, field.name
+          assert_not field.mask_access, field.name
+        end
+      end
+
+      # On a muting set read on means "take read away": a read-only timestamp
+      # row there would mute created_at / updated_at for every holder.
+      test 'on a Muting Permission Set the timestamps follow grant_all like every other column' do
+        assert(generated_timestamps(grant_all: false, muting: true).none? { |field| field.read_access || field.edit_access })
+        assert(generated_timestamps(grant_all: true, muting: true).all? { |field| field.read_access && field.edit_access })
+      end
+
+      test 'generating fields on a muting set leaves the timestamps readable for its holders' do
+        user = create_user
+        granting = create_permission_set(name: 'Granting timestamps')
+        create_resource(permission_set: granting, name: 'Customer', read_access: true)
+        PermissionForge::Services::ResourceFieldGenerator.call(resource: granting.resources.first, grant_all: true)
+        muting = create_permission_set(name: 'Muting nothing', is_muting: true)
+        muted = create_resource(permission_set: muting, name: 'Customer', read_access: false)
+        PermissionForge::Services::ResourceFieldGenerator.call(resource: muted)
+        [granting, muting].each { |set| create_permission_set_user(user: user, permission_set: set) }
+
+        fields = user.permissions_hash.dig(:permissions, :resources, :Customer, :fields)
+        assert fields.dig(:created_at, :read_access)
+        assert fields.dig(:updated_at, :read_access)
+      end
+
+      test 'a user granted the generated fields reads the timestamps under :block, and cannot edit them' do
         user = create_user
         create_permission_set_user(user: user, permission_set: @permission_set)
-        @resource.update!(read_access: true)
-        PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource)
+        @resource.update!(read_access: true, edit_access: true)
+        PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource, grant_all: true)
         user.regenerate_permissions
         created = Time.zone.local(2026, 1, 2, 3, 4, 5)
 
@@ -76,6 +106,7 @@ module PermissionForge
                      AttributeAccessGuard.call(resource_name: :Customer, attribute: :created_at, raw_value: created, user: user)
         assert_equal({ 'created_at' => created },
                      FiltersResponseAttributes.call(attributes: { 'created_at' => created }, resource_name: 'Customer', user: user))
+        assert_not user.permissions_hash.dig(:permissions, :resources, :Customer, :fields, :created_at, :edit_access)
       end
 
       test 'ignored_fields still keeps the timestamps out' do

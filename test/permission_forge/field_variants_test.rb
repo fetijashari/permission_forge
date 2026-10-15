@@ -102,6 +102,46 @@ module PermissionForge
       assert_nil @user.permissions_hash_for(:PfVariantOrder)[:fields][:supplier_uuid], 'no entry in the hash'
     end
 
+    # Custom mappings can send two fields to one variant name: the variant
+    # reads by the strictest of them, whatever order the fields come in.
+    def two_bases_to_one_variant!
+      PermissionForge.configuration.field_variant_mappings = {
+        /_id\z/ => ->(name) { name.sub(/_id\z/, '_key') },
+        /_ref\z/ => ->(name) { name.sub(/_ref\z/, '_key') }
+      }
+    end
+
+    test 'a variant two fields map to gets the strictest of their entries' do
+      two_bases_to_one_variant!
+      open = { read_access: true, edit_access: true, mask_access: false, mask_strategy: 'full' }
+      masked = { read_access: true, edit_access: false, mask_access: true, mask_strategy: 'last4' }
+      hidden = { read_access: false, edit_access: false, mask_access: false, mask_strategy: 'full' }
+
+      assert_equal({ 'supplier_key' => open }, FieldVariants.base_entries(supplier_id: open))
+      [[open, hidden], [hidden, open]].each do |first, second|
+        entry = FieldVariants.base_entries(supplier_id: first, supplier_ref: second)['supplier_key']
+        assert_equal [false, false], [entry[:read_access], entry[:edit_access]], 'one base that hides hides the variant'
+      end
+      [[open, masked], [masked, open]].each do |first, second|
+        entry = FieldVariants.base_entries(supplier_id: first, supplier_ref: second)['supplier_key']
+        assert_equal [true, false, true, 'last4'], entry.values_at(:read_access, :edit_access, :mask_access, :mask_strategy)
+      end
+    end
+
+    test 'a response key two fields map to is hidden when either field is' do
+      two_bases_to_one_variant!
+      PermissionForge.configuration.unconfigured_field_strategy = :pass_through
+      create_resource_field(resource: @orders, name: 'supplier_id', read_access: true)
+      create_resource_field(resource: @orders, name: 'supplier_ref', read_access: false)
+      @user.regenerate_permissions
+
+      result = Services::FiltersResponseAttributes.call(
+        attributes: { 'supplier_id' => 7, 'supplier_key' => 'sup-1234' }, resource_name: 'PfVariantOrder', user: @user
+      )
+
+      assert_equal({ 'supplier_id' => 7 }, result)
+    end
+
     test 'Effective access lists and counts the model fields only, as the engine' do
       create_resource_field(resource: @orders, name: 'owner_id', read_access: true)
       create_resource_field(resource: @orders, name: 'supplier_id', read_access: true)

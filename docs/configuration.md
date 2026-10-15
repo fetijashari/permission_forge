@@ -719,7 +719,7 @@ Your User model needs no `uuid` column: `uuid` is then `nil`, and `permission_se
 
 #### ignored_fields
 
-**Ignored columns.** Columns PermissionForge never manages. They don't appear in field lists and get no generated row (under `unconfigured_field_strategy = :block` a column without a row reads as hidden). The list is frozen: extend it with `config.ignored_fields += %w[internal_flag]`, not `<<`. Since 0.15 the default no longer lists `created_at` / `updated_at`: generating fields gives Rails' timestamps a read-only row instead; `config.ignored_fields += %w[created_at updated_at]` restores the old behaviour.
+**Ignored columns.** Columns PermissionForge never manages. They don't appear in field lists and get no generated row (under `unconfigured_field_strategy = :block` a column without a row reads as hidden). The list is frozen: extend it with `config.ignored_fields += %w[internal_flag]`, not `<<`. Since 0.15 the default no longer lists `created_at` / `updated_at`: generating fields gives Rails' timestamps a row instead, at most read-only on a granting set (see [Rails timestamps](masked-attributes.md#rails-timestamps)); `config.ignored_fields += %w[created_at updated_at]` restores the old behaviour. On an existing install the admin lists the two columns as not configured on every resource until you sync its fields or add them to `ignored_fields`.
 
 #### field_variant_mappings
 

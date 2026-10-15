@@ -8,6 +8,10 @@ module PermissionForge
     # sensitive names. Editable is full access (the "Full access" preset, "Add
     # all new with full access"): nothing is masked, every row keeps the
     # recommended strategy, and the privacy audit still flags the names.
+    # Rails' timestamps are at most Read-only on a granting set
+    # (PermissionForge::TimestampFields).
+    #
+    # @api private
     class ColumnFields
       # Granting levels that privacy defaults turn into Masked for a sensitive name.
       MASKED_BY_PRIVACY_DEFAULTS = %w[read].freeze
@@ -32,8 +36,13 @@ module PermissionForge
         return unless column_level
 
         attrs = FieldLevel.flags_for(column_level, muting: @muting)
+        attrs = attrs.merge(timestamps.overrides(column, read: attrs[:read_access]))
         @resource.resource_fields.create!(attrs.merge(name: column, label: column.humanize, is_active: true, is_editable: true,
                                                       mask_strategy: match&.strategy || 'full'))
+      end
+
+      def timestamps
+        @timestamps ||= PermissionForge::TimestampFields.new(@resource.name.to_s.safe_constantize, muting: @muting)
       end
 
       def muting_level(level, match)

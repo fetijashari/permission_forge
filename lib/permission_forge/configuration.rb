@@ -309,8 +309,9 @@ module PermissionForge
     attr_reader :gdpr_field_patterns
 
     # Not created_at / updated_at (before 0.15 they were here): generated
-    # fields give them a read-only row (ResourceFieldGenerator), so the
-    # default unconfigured_field_strategy (:block) no longer hides them.
+    # fields give them a row, at most read-only on a granting set
+    # (TimestampFields), so the default unconfigured_field_strategy (:block)
+    # no longer hides them from a reader who is granted them.
     DEFAULT_IGNORED_FIELDS = %w[
       id token_digest token_last_digits
       created_by updated_by token password encrypted_password

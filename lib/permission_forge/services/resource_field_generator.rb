@@ -10,7 +10,10 @@ module PermissionForge
       # asked for full access, so no mask is applied: the field is readable
       # and editable in the clear, keeps the recommended mask strategy for
       # when someone masks it, and is still reported as personal data
-      # (GdprFieldAuditor, the admin's privacy audit).
+      # (GdprFieldAuditor, the admin's privacy audit). On a granting set
+      # Rails' timestamps (created_at / updated_at) are at most read-only:
+      # with `grant_all` read on, edit off, unmasked; without it hidden like
+      # every other column (PermissionForge::TimestampFields).
       #
       # @param resource [Resource]
       # @param grant_all [Boolean] grant read and edit, unmasked, on the generated fields
@@ -53,28 +56,21 @@ module PermissionForge
         existing_names = @resource.resource_fields.pluck(:name)
         columns = model_class.column_names - ignored_fields + virtual_field_names(model_class) - existing_names
 
+        timestamps = PermissionForge::TimestampFields.new(model_class, muting: muting?)
         columns.map do |column_name|
           attrs = build_field_attrs(column_name)
-          attrs.merge!(gdpr_default_attrs(column_name)) if PermissionForge.configuration.gdpr_defaults
-          apply_timestamp_access(attrs, model_class, column_name)
-          PermissionForge::ResourceField.create!(attrs)
+          PermissionForge::ResourceField.create!(attrs.merge(timestamps.overrides(column_name, read: attrs[:read_access])))
         end
       end
 
-      def apply_timestamp_access(attrs, model_class, column_name)
-        attrs.merge!(TIMESTAMP_ACCESS) if model_class.all_timestamp_attributes_in_model.include?(column_name)
+      def muting?
+        @resource.permission_set&.is_muting || false
       end
 
-      # Rails' own timestamps (created_at / updated_at, *_on) are metadata
-      # every reader of the record may see and nobody edits: read-only,
-      # whatever grant_all says. Without a row they would be unconfigured,
-      # which unconfigured_field_strategy = :block (the default) hides from
-      # everyone. config.ignored_fields keeps them out (no row) as before.
-      TIMESTAMP_ACCESS = { read_access: true, edit_access: false, mask_access: false }.freeze
-      private_constant :TIMESTAMP_ACCESS
-
+      # The row's attributes; Rails' timestamps are then at most Read-only on
+      # a granting set (PermissionForge::TimestampFields).
       def build_field_attrs(column_name)
-        {
+        attrs = {
           resource: @resource,
           name: column_name,
           label: column_name.humanize,
@@ -83,6 +79,7 @@ module PermissionForge
           read_access: @grant_all,
           edit_access: @grant_all
         }
+        PermissionForge.configuration.gdpr_defaults ? attrs.merge(gdpr_default_attrs(column_name)) : attrs
       end
 
       def ignored_fields

@@ -41,6 +41,12 @@ module PermissionForge
         assert_not @bo.masked_field?(:Customer, :name)
       end
 
+      test 'the Full access preset gives Rails timestamps Read-only, as the generator does' do
+        customer = add_customer('full')
+
+        assert_equal(%w[read read], %w[created_at updated_at].map { |name| level_of(customer, name) })
+      end
+
       test 'after Full access the personal-data columns stay flagged on the Fields tab and on Home' do
         add_customer('full')
         follow_redirect!
