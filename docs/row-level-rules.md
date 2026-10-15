@@ -193,7 +193,7 @@ A rule's `field_value` is text. Before it reaches the database it is turned into
 | time | a time of day, `14:30` or `14:30:00` (`9:05` is fine); on PostgreSQL also whatever PostgreSQL reads | a time of day |
 | an `enum` attribute | one of the enum's labels (`archived`), or the stored value (`1`) | the value the model stores for the label — for a string-backed enum too (`enum :tier, { gold: 'G' }`: `gold` is compared as `G`, where it used to be compared as the text `gold`). A value that is a label always means that label, also when it happens to equal another label's stored value |
 
-**A value the column cannot hold makes the rule match nothing.** `owner_id equal '5_id'` and `active equal 'maybe'` let no record through — on every database, for the negative operators (`not_equal`, `not_in`) too, and `include_nulls` adds no NULL rows to such a rule. The rule denies; it never widens access. The same holds for `between` without exactly two values, for an empty list, and for a list with one element the column cannot hold. `bin/rails permission_forge:audit` lists the rules in effect that match nothing for this reason (`unusable_rule_values`) — worth running after an upgrade.
+**A value the column cannot hold makes the rule match nothing.** `owner_id equal '5_id'` and `active equal 'maybe'` let no record through — on every database, for the negative operators (`not_equal`, `not_in`) too, and `include_nulls` adds no NULL rows to such a rule. The rule denies; it never widens access. The same holds for `between` without exactly two values, for an empty list, and for a list with one element the column cannot hold. `bin/rails permission_forge:audit` lists the rules in effect that match nothing for this reason (`unusable_rule_values`) — worth running after an upgrade. A field name that is not a column of the table matches nothing as well — see [Using the wrong field name](#using-the-wrong-field-name).
 
 Things worth knowing:
 
@@ -485,7 +485,11 @@ Rules are cached in each user's permission hash. Saving a rule through ActiveRec
 
 ### Using the wrong field name
 
-`field_name` must be a real database column (or a column on the joined table). If you misspell it, you'll get an SQL error at runtime.
+`field_name` must be a column of the model's table, or of the table at the end of `field_accessor_path` for a join rule. A name qualified with a table (`suppliers.owner_id`) must be a column of that table.
+
+- **Saving refuses it.** When the Resource's model can be loaded, a rule whose field name is not a column (`onwer_id` on `Customer`) does not save: `field_name` gets the error "is not a column of Customer", and the JSON API answers 422 with `{"field_name": ["is not a column of Customer"]}`. The check runs for a new rule and when its field name, path, join type or resource changes. It is skipped when the column cannot be told at that moment: the model cannot be loaded (or its table does not exist yet), the association path cannot be followed, or the name is qualified with a table that is none of the rule's (an alias your query joins itself). Copying a Permission Set copies an existing rule as it is.
+- **A rule that names a missing column matches nothing.** A rule saved before this check (or written past the model, a column since renamed or dropped) lets no record through to the users it applies to, under every built-in operator — it is not sent to the database, which would reject the query and turn every `find_by` / `permission_scoped` of its holders into a 500. An RLS policy compiles it to `FALSE` as well. `bin/rails permission_forge:audit` lists such rules in effect (`missing_rule_columns`, High when people hold the set). Columns are read from Rails' schema cache: a column added by a migration while the process runs is known after a restart.
+- **What is still left to the database:** a name qualified with a table that is none of the rule's (the query may join it under that name), and a rule under a custom operator (its strategy decides what the name means). If that table or column is not there, the query raises.
 
 ### A value the column cannot hold
 

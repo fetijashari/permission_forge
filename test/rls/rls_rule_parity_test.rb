@@ -91,6 +91,22 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     end
   end
 
+  # Both layers used to raise: the app layer's query and the sync named a
+  # column the table does not have. A name in another case is another name
+  # on PostgreSQL.
+  test 'a column the table does not have selects nothing in both layers, and syncs to a policy that hides every row' do
+    %w[no_such_column onwer_id Flag pf_rule_records.Small_Count].each do |name|
+      { 'equal' => 'true', 'not_equal' => '5', 'not_in' => 'x', 'is_null' => '', 'is_not_null' => '', 'contains' => 'a',
+        'greater_than' => 'current_user' }.each do |operator, value|
+        assert_equal [[], []], compare(name, operator, value, true), "#{name} #{operator}"
+      end
+    end
+    rules = [{ field_name: 'onwer_id', operator: 'equal', field_value: 'current_user' }]
+
+    assert_empty app_layer_rows(rules)
+    assert_empty rows_through_policy(rules)
+  end
+
   test 'the parity matrix is not vacuous' do
     selected = compare(:small_count, 'greater_than', '4.5', false)
     unusable = compare(:small_count, 'not_equal', '5_id', true)

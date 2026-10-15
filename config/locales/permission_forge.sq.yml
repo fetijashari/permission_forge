@@ -2216,6 +2216,7 @@ sq:
         invalid_operator: nuk është operator i vlefshëm
         numeric_or_date_required: duhet të jetë vlerë numerike ose datë për operatorët
           e krahasimit
+        unknown_column: nuk është kolonë e %{model}
         value_not_expected: nuk kërkon vlerë për këtë operator
         value_required: nuk duhet të jetë bosh për këtë operator
       resource:

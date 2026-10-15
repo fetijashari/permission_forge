@@ -78,6 +78,24 @@ module PermissionForge
         end
       end
 
+      # The sync used to fail on such a rule: the policy named a column the
+      # table does not have. The application layer matches nothing for it.
+      test 'a column the table does not have compiles to FALSE, whatever the operator or value' do
+        [%w[no_such_column equal 5], %w[onwer_id equal current_user], %w[no_such_column not_equal x],
+         ['no_such_column', 'in', 'a, b'], %w[no_such_column between 1,2], %w[no_such_column contains a],
+         ['no_such_column', 'is_null', ''], ['no_such_column', 'is_not_null', '']].each do |field, operator, value|
+          assert_equal 'FALSE', compiled(field, operator, value), "#{field} #{operator}"
+          assert_equal 'FALSE', compiled(field, operator, value, include_nulls: true), "#{field} #{operator} +nulls"
+        end
+        assert_not_includes policy_sql_with('onwer_id', 'equal', 'current_user'), 'onwer_id'
+      end
+
+      test 'a name in another case is a missing column only where the database tells case apart' do
+        expected = postgres? ? 'FALSE' : "(#{col('Flag')} = #{quote(true)})"
+
+        assert_equal expected, compiled('Flag', 'equal', 'true')
+      end
+
       test 'a join rule whose field name is not a name is compiled too, not skipped' do
         rule = add_rule('id.', 'equal', 'current_user')
         rule.update_columns(join_type: 'joins', field_accessor_path: 'owner')
@@ -186,6 +204,13 @@ module PermissionForge
           uuid: SecureRandom.uuid, name: 'Compiled', permission_set: @permission_set, resource: @resource,
           field_name: field_name, operator: operator, field_value: field_value, include_nulls: include_nulls, is_active: true
         ).tap { |rule| rule.save!(validate: false) }
+      end
+
+      def policy_sql_with(field_name, operator, field_value)
+        rule = add_rule(field_name, operator, field_value)
+        policy_sql
+      ensure
+        rule&.delete
       end
 
       def policy_sql

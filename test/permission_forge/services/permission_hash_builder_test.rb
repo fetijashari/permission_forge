@@ -258,7 +258,7 @@ module PermissionForge
         create_permission_set_user(user: @user, permission_set: set_b)
         res_b = create_resource(permission_set: set_b, name: 'Customer')
         create_permission_set_rule(permission_set: @permission_set, resource: @resource, name: 'Rule A', field_name: 'supplier_id')
-        create_permission_set_rule(permission_set: set_b, resource: res_b, name: 'Rule B', field_name: 'status')
+        create_permission_set_rule(permission_set: set_b, resource: res_b, name: 'Rule B', field_name: 'domain')
 
         rules = build_hash_with([@permission_set, set_b]).dig(:resources, 'Customer', :permission_set_rules)
         assert_equal 2, rules.size

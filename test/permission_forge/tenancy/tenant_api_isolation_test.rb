@@ -24,7 +24,7 @@ module PermissionForge
           @set_b = create_permission_set(name: 'Bravo set')
           @resource_b = create_resource(permission_set: @set_b, name: 'Supplier')
           @field_b = create_resource_field(resource: @resource_b, name: 'name')
-          @rule_b = create_permission_set_rule(permission_set: @set_b, resource: @resource_b)
+          @rule_b = create_permission_set_rule(permission_set: @set_b, resource: @resource_b, field_name: 'owner_id')
           @assignment_b = create_permission_set_user(user: @user, permission_set: @set_b)
           @group_b = create_permission_set_group(name: 'Bravo group')
         end

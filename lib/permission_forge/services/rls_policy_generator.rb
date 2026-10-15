@@ -38,8 +38,9 @@ module PermissionForge
     #   - Missing session variable follows nil_user_strategy: :bypass allows,
     #     :deny/:raise hides every row.
     #   - A rule's value is typed for its column by the app layer's own
-    #     Operators::ValueTyping; a value the column cannot hold compiles to
-    #     FALSE, as the app layer matches nothing for it (see RlsOperatorSql).
+    #     Operators::ValueTyping; a value the column cannot hold, or a column
+    #     the table does not have, compiles to FALSE, as the app layer matches
+    #     nothing for it (see RlsOperatorSql).
     #   - Join-type rules and dotted field names are NOT translatable — they are
     #     reported in :skipped_rules, never silently dropped. So are the rules
     #     of a Resource named after an STI subclass of the model: a policy is
@@ -70,7 +71,9 @@ module PermissionForge
       # 5: a rule set's membership EXISTS joins its resource row and needs it
       # active; the rules are compiled whatever the row's — or the set's —
       # state (the set's is_active was already read live).
-      GENERATOR_VERSION = 5
+      # 6: a rule naming a column the table does not have compiles to FALSE
+      # (the sync failed on it), as the app layer matches nothing for it.
+      GENERATOR_VERSION = 6
 
       include RlsOperatorSql
 
@@ -273,8 +276,9 @@ module PermissionForge
         @conn.quote_table_name(PermissionForge::Resource.table_name)
       end
 
-      # A value the column cannot hold makes the rule FALSE — the app layer
-      # matches nothing for it, NULL rows included.
+      # A value the column cannot hold, or a column the table does not have,
+      # makes the rule FALSE — the app layer matches nothing for it, NULL rows
+      # included.
       def rule_sql(rule)
         operator, field_name = rule.values_at(:operator, :field_name)
         value = typed_value(operator, rule.field_value, Operators::RuleColumn.find(field_name, [@model_class]))

@@ -146,8 +146,8 @@ module PermissionForge
 
     # --- field_name validation ---
 
-    test 'field_name status is valid' do
-      rule = build_rule(field_name: 'status')
+    test 'field_name domain is valid' do
+      rule = build_rule(field_name: 'domain')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 

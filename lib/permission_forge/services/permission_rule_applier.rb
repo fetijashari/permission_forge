@@ -169,7 +169,11 @@ module PermissionForge
       # of that column makes the rule match nothing, whatever the database
       # would have made of the comparison. A custom operator's value is passed
       # as it is and its strategy runs. A field_name that is not a name
-      # (Operators::RuleColumn.name?) matches nothing under any operator.
+      # (Operators::RuleColumn.name?) matches nothing under any operator, and
+      # one naming a column its table does not have matches nothing under a
+      # built-in operator (Operators::ValueTyping.no_column?) — the database
+      # would reject the query, and every holder would get an error instead
+      # of a denial.
       def build_query(query, quoted_column, rule, models)
         operator = rule[:operator]
         strategy = @operator_registry.fetch(operator)
