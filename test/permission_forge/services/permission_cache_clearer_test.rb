@@ -147,7 +147,7 @@ module PermissionForge
         assert_audit_event('cache.cleared', actor_type: 'system', actor_label: 'ops: TCK-12', reason: 'deploy 0.14',
                                             data: { 'operation' => 'cache_clear', 'strategy' => 'pattern', 'counted' => false })
         assert_equal({ 'operation' => 'cache_clear', 'strategy' => 'pattern', 'counted' => false, 'unconfirmed' => 0,
-                       'tenants' => tenants, 'across_tenants' => true }, tenantless_event.data)
+                       'tenants' => tenants, 'across_tenants' => true, 'process_local' => true }, tenantless_event.data)
       end
 
       test 'by enumeration (a store without delete_matched): every user, once per tenant and once without, through the bulk path' do
@@ -174,7 +174,7 @@ module PermissionForge
         assert_audit_event('cache.cleared', data: { 'strategy' => 'enumerated', 'users' => everyone, 'unconfirmed' => 0 })
         assert_equal({ 'operation' => 'cache_clear', 'strategy' => 'enumerated', 'users' => everyone * (tenants + 1),
                        'tenants' => tenants,
-                       'unconfirmed' => 0, 'across_tenants' => true }, tenantless_event.data)
+                       'unconfirmed' => 0, 'across_tenants' => true, 'process_local' => true }, tenantless_event.data)
       end
 
       test 'enumeration goes through each user\'s own invalidate_permissions where the bulk path must not be used' do
@@ -323,6 +323,26 @@ module PermissionForge
       end
 
       # The event recorded with no tenant, which a tenant's log never shows.
+      test 'every event says whether the clear reached only this process (a memory store) or a shared store' do
+        PermissionCacheClearer.call(actor: 'ops')
+
+        events = AuditEvent.unscoped.where(event: 'cache.cleared').to_a
+        assert events.any?
+        assert(events.all? { |event| event.data['process_local'] == true }, 'the suite\'s memory store lives in this process')
+
+        Dir.mktmpdir do |dir|
+          PermissionForge.configuration.cache_backend = ActiveSupport::Cache::FileStore.new(dir)
+          PermissionForge.configuration.reset_cache_store!
+          before = AuditEvent.unscoped.maximum(:id)
+
+          PermissionCacheClearer.call(actor: 'ops')
+
+          shared = AuditEvent.unscoped.where(event: 'cache.cleared').where('id > ?', before).to_a
+          assert shared.any?
+          assert(shared.all? { |event| event.data['process_local'] == false }, 'a file store is shared by the processes')
+        end
+      end
+
       def tenantless_event
         column = AuditEvent.tenant_column
         AuditEvent.unscoped.where(event: 'cache.cleared').order(:id).to_a.find { |event| event.read_attribute(column).nil? }

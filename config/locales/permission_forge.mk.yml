@@ -208,6 +208,9 @@ mk:
       sentence_variants:
         assignment_revoked_expired: "%{actor} му го отстрани на %{person} сетот на
           дозволи %{set} откако истече на %{date}."
+        cache_cleared_process_local: "%{actor} ги исчисти кешираните дозволи на сите
+          корисници само во сопствениот процес (складиште во меморија): веб-процесите
+          и процесите за задачи ги задржаа своите."
         field_access_limited: "%{actor} го прочита %{record} со овие полиња скриени
           или маскирани: %{fields}."
       sentences:

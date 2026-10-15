@@ -231,6 +231,8 @@ end
 
 A virtual field is configured like a column: give it a `ResourceField` row (Hidden, Masked, Read-only or Editable) in the admin's Fields tab or in code. The row is what `PermitsAttributes` and `FiltersResponseAttributes` enforce; record rules never use virtual fields, because rules are SQL.
 
+A key only your serializer computes (no reader on the model) can be configured the same way: declare it here, then give it a row. A row whose name is nothing the model has — no column, attribute, alias, public method, declared or discovered virtual field, or [variant](#field-variant-mappings) of one of those or of another row — still saves (`FiltersResponseAttributes` filters it as a hash key), but `bin/rails permission_forge:audit` lists it as `unknown_fields` (a typo such as `emial` configures nothing; Low when a muting set holds it, else Info), and the admin's Fields tab shows it as **Column missing**. Declaring the key says it is meant.
+
 ### A virtual field nobody configured
 
 What a declared virtual field gets when a resource has no row for it is set by `config.extra_fields_default_access`:

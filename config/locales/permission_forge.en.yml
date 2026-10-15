@@ -207,6 +207,9 @@ en:
       sentence_variants:
         assignment_revoked_expired: "%{actor} removed %{set} from %{person} after
           it expired on %{date}."
+        cache_cleared_process_local: "%{actor} cleared the cached permissions of every
+          user in its own process only (an in-memory store): the web and job processes
+          kept theirs."
         field_access_limited: "%{actor} read %{record} with these fields hidden or
           masked: %{fields}."
       sentences:

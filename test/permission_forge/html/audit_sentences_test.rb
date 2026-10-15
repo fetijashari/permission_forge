@@ -146,6 +146,24 @@ module PermissionForge
         assert_includes listed, 'Bo Berisha read Customer #42 with these fields hidden or masked: domain, email.'
         assert_includes listed, 'Bo Berisha read Customer #42.'
       end
+
+      test 'a cache clear that reached only its own in-memory store says so; one on a shared store reads as before' do
+        store = lambda do |process_local|
+          PermissionForge::AuditEvent.store!(uuid: SecureRandom.uuid, event: 'cache.cleared', category: 'system',
+                                             actor_type: 'system', actor_label: 'Ops on-call', source: 'rake',
+                                             occurred_at: Time.current,
+                                             data: { 'operation' => 'cache_clear', 'strategy' => 'pattern',
+                                                     'process_local' => process_local })
+        end
+        store.call(true)
+        store.call(false)
+
+        listed = sentences(event: 'cache.cleared')
+
+        assert_includes listed, 'Ops on-call cleared the cached permissions of every user in its own process only ' \
+                                '(an in-memory store): the web and job processes kept theirs.'
+        assert_includes listed, 'Ops on-call cleared the cached permissions of every user.'
+      end
     end
   end
 end

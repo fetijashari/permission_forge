@@ -26,6 +26,13 @@ module PermissionForge
         next unless ended
 
         t('permission_forge.audit_log.sentence_variants.assignment_revoked_expired', **parts, date: pf_date(ended))
+      },
+      # A clear that reached only the clearing process's own in-memory store
+      # (data['process_local']): the running servers kept their entries.
+      'cache.cleared' => lambda { |event, parts|
+        next unless event.data.is_a?(Hash) && event.data['process_local'] == true
+
+        t('permission_forge.audit_log.sentence_variants.cache_cleared_process_local', **parts)
       }
     }.freeze
 

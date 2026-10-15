@@ -20,6 +20,15 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   rule in effect whose column or association is missing — the same rules as the audit's `missing_rule_columns`
   (`AttentionItems#broken_rules`, by `Operators::RuleProblem`) — with why ("Matches nothing: Stauts is not a column of
   Customer"), how many people hold the set, and **Fix rule** (the rule's edit page; **Open rules** for a locked set).
+- **`rake permission_forge:audit` reports fields naming nothing on their model** (`integrity/unknown_fields`). A
+  `ResourceField` named `zzz` (or `emial`) on a `Customer` Resource was saved — 201 through the API — and configured
+  nothing, so a typo went unnoticed. The audit now lists the rows in effect whose name is none of: a column of the
+  model's table (read again before it is listed), an attribute or `alias_attribute`, a declared or discovered virtual
+  field, a public reader or writer, or a configured variant (`field_variant_mappings`) of one of those or of another
+  row of the Resource. Low when a muting set holds one (it mutes nothing it was meant to), otherwise Info; set,
+  resource, field and people per row; Resources whose model the app cannot load are skipped. Saving still accepts
+  such a name: `FiltersResponseAttributes` filters any key of a hash, so a key only a serializer computes is
+  configured by a row of its name — declare it in `extra_fields_for_permissions` to say it is meant.
 
 - **`NotAuthorizedError#failure_messages`.** The `failure_message` of each row-level rule that denied the record, as
   the admin wrote it (in rule order, without blanks and repeats; `[]` when no rule denied), so a host can render a
@@ -92,6 +101,19 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   (`Operators::RulePath` asks what `Associations::JoinDependency#build` asks; a canary watches it). Copying a
   Permission Set copies such a rule as it is. **Opt out:** none — the rule could only ever raise (and now matches
   nothing).
+- **The JSON API answers JSON only.** `GET /api/permission_sets.xml` (any extension but `.json`) answered the JSON list
+  with a 200; it now names no endpoint and gets the API's JSON 404 (`No API endpoint answers this path and method`).
+  No extension and `.json` answer as before. **Opt out:** none.
+- **`cache.cleared` says when the clear reached only its own process.** On an in-memory store (`cache_backend =
+  :memory`, or `Rails.cache` is a `:memory_store`) `rake permission_forge:cache:clear` clears the rake process's
+  store only; the terminal said so, the audit event did not, so the log read as if the servers had been cleared. Each
+  event's data now carries `process_local` (`true` there, `false` for a shared store) and the audit log's sentence
+  says "in its own process only (an in-memory store): the web and job processes kept theirs" (en, sq, mk).
+  **Opt out:** none (an added data key).
+- **`ConsentWithdrawalHandler` answers the same keys for a real run and a dry run.** The real run answered
+  `{ revoked_sets:, invalidated: }` only; it now also answers `affected_sets` (the names of the sets gated on the
+  flag), `affected_assignment_count` and `dry_run: false`, and a dry run also answers `invalidated: false`. Keys are
+  only added. See [GDPR data handling](docs/gdpr-data-handling.md). **Opt out:** none.
 - **Development boot warnings also go to standard error.** The cache warnings were logged before `bin/rails server`
   attaches its console logger (and `bin/rails runner` never does), so they reached `log/development.log` only. In
   development each is now also written to standard error, once per boot — not when the logger already writes to
@@ -513,11 +535,14 @@ Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authent
   makes them read-only. Step 4 says to run its lines in order and fix a failing `create!` first (a later line otherwise
   fails with a `NOT NULL` error); step 5 looks up the person step 4 assigned instead of `User.first`.
 - [Handling denials](docs/row-level-rules.md#handling-denials) and [Controller actions](docs/controller-actions.md#2-answer-denied-requests):
-  a standalone `public/403.html` (a copy of Rails 8's `404.html` keeps its "404 Not Found" artwork, an inline SVG).
-  When the refused page is the one the handler would redirect to, it renders that page with status 403 instead of an
-  empty `head :forbidden`, which left a signed-in person without a Permission Set on the sign-in form after signing in;
-  other formats (JSON, CSV) get an empty 403 through `format.any`. The `sessions` / `passwords` exclusion is shown where
-  the guard is introduced, with its symptom: nobody can sign in and Sign out seems to do nothing.
+  the HTML handlers render a template of the app in its layout (`render 'errors/forbidden', status: :forbidden`, the
+  template shown, with Sign out for a signed-in person) and redirect only a signed-out visitor, to sign in, never to the
+  refused page itself. A signed-in person holding no Permission Set, sent to a guarded root by Rails 8's Turbo sign-in,
+  landed on an empty sign-in form: Turbo reloads the page when a 403 answer to a form submission lacks the layout's
+  tracked assets, and a static page offered no way to sign out. Other formats (JSON, CSV) get an empty 403 through
+  `format.any`. A standalone `public/403.html` (a copy of Rails 8's `404.html` keeps its "404 Not Found" artwork, an
+  inline SVG) covers production when no handler runs. The `sessions` / `passwords` exclusion is shown where the guard
+  is introduced, with its symptoms.
 - [Getting started](docs/getting-started.md#wiring-a-scaffold): the scaffold's HTML partial printed the label of a field
   the user may not read with a blank value; a helper on `field_permissions` skips such fields. The Rails 8 section names
   the symptoms of a guarded sign-in page and of a public action without `resume_session` (a signed-in user is sent back
@@ -527,13 +552,6 @@ Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authent
   `masked_nil_user_bypass`), and the checklist rows that need your code are in no preset.
 - [filter_parameters_integration](docs/configuration.md#filter_parameters_integration) and the GDPR guide: the patterns
   filter every `name` parameter in the app's request logs, the admin's own forms included; how to narrow them.
-- [Handling denials](docs/row-level-rules.md#rescuing-them-yourself) and [Controller actions](docs/controller-actions.md#2-answer-denied-requests):
-  the HTML handlers render a template of the app in its layout (`render 'errors/forbidden', status: :forbidden`, the
-  template shown, with Sign out for a signed-in person) instead of `public/403.html`, and redirect only a signed-out
-  visitor, to sign in. A signed-in person holding no Permission Set, sent to a guarded root by Rails 8's Turbo sign-in,
-  still landed on an empty sign-in form: Turbo reloads the page when a 403 answer to a form submission lacks the
-  layout's tracked assets. The static page also offered no way to sign out (its link led back to the refused root).
-  `public/403.html` stays for the production case where no handler runs.
 - [Getting started](docs/getting-started.md#using-rails-8s-authentication-generator): the symptom of a guarded sign-in
   page with the documented handler (the 403 page where the form should be, also after Sign out) as well as with an
   empty 403. Steps 5 and 6 look up the person they assign by email instead of `User.first`, which may be someone

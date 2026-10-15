@@ -216,6 +216,11 @@ PermissionForge::Services::StaleAssignmentAuditor.call
 PermissionForge::Services::ConsentWithdrawalHandler.call(
   user: user, consent_flag: 'marketing_consent', dry_run: true
 )
+# => { revoked_sets: 0, invalidated: false, affected_sets: ["Marketing"], affected_assignment_count: 1, dry_run: true }
+# The real run (no dry_run:) answers the same keys (affected_sets and affected_assignment_count since 0.15):
+# => { revoked_sets: 1, invalidated: true, affected_sets: ["Marketing"], affected_assignment_count: 1, dry_run: false }
+# affected_sets names every set gated on the flag; invalidated is false when nothing was revoked
+# or the cache store did not confirm the invalidation
 
 # Preview erasure of a user's permission data (Art. 17); a dry run writes no event. It counts the
 # audit-log name labels the run would clear (actor_labels_to_clear, record_labels_to_clear); a real

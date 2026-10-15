@@ -9,11 +9,15 @@ module PermissionForge
     #     user: user,
     #     consent_flag: 'marketing_consent'
     #   )
-    #   # => { revoked_sets: 2, invalidated: true }
+    #   # => { revoked_sets: 2, invalidated: true, affected_sets: ["Marketing Access", "Newsletter"],
+    #   #      affected_assignment_count: 2, dry_run: false }
     #
     # `invalidated` is false when nothing was revoked, and when the cache
     # store did not confirm the invalidation (reported through
-    # `config.on_cache_failure`).
+    # `config.on_cache_failure`). A dry run and a real run answer the same
+    # keys: `affected_sets` (the names of the sets gated on the flag),
+    # `affected_assignment_count` (this person's assignments to them),
+    # `dry_run`; a dry run's `revoked_sets` is 0 and its `invalidated` false.
     #
     # @example Dry run (inspect without revoking)
     #   result = ConsentWithdrawalHandler.call(
@@ -21,7 +25,8 @@ module PermissionForge
     #     consent_flag: 'marketing_consent',
     #     dry_run: true
     #   )
-    #   # => { revoked_sets: 0, affected_sets: ["Marketing Access"], dry_run: true }
+    #   # => { revoked_sets: 0, invalidated: false, affected_sets: ["Marketing Access"],
+    #   #      affected_assignment_count: 1, dry_run: true }
     #
     # The audit log: assignments are destroyed through their callbacks (one
     # `assignment.revoked` each), then ONE `consent.withdrawn` event names the
@@ -59,16 +64,17 @@ module PermissionForge
         @reason = reason
       end
 
-      # @return [Hash] `{ revoked_sets:, invalidated: }` (plus `affected_sets:` and `dry_run:` for a dry run)
+      # @return [Hash] `{ revoked_sets:, invalidated:, affected_sets:, affected_assignment_count:, dry_run: }`
       def call
         validate!
 
         across_tenants do
           affected_sets = consent_gated_sets
           affected_assignments = user_assignments_for(affected_sets)
-          next dry_run_result(affected_sets, affected_assignments) if @dry_run
+          found = found(affected_sets, affected_assignments)
+          next found.merge(revoked_sets: 0, invalidated: false) if @dry_run
 
-          audited(actor: @actor, reason: @reason) { withdraw(affected_assignments) }
+          audited(actor: @actor, reason: @reason) { withdraw(affected_assignments).merge(found) }
         end
       end
 
@@ -122,13 +128,10 @@ module PermissionForge
         PermissionForge::PermissionSetUser.where(user: @user, permission_set: sets)
       end
 
-      def dry_run_result(sets, assignments)
-        {
-          revoked_sets: 0,
-          affected_sets: sets.pluck(:name),
-          affected_assignment_count: assignments.count,
-          dry_run: true
-        }
+      # What the run found before it removed anything: the same keys for a
+      # dry run and a real one.
+      def found(sets, assignments)
+        { affected_sets: sets.pluck(:name), affected_assignment_count: assignments.count, dry_run: @dry_run ? true : false }
       end
     end
   end
