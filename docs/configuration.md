@@ -871,7 +871,7 @@ See [controller-actions.md](controller-actions.md).
 
 #### filter_parameters_integration
 
-**Filter sensitive values from logs.** Adds the privacy patterns to Rails' filter_parameters so logs don't show them. The patterns also reach `ActiveRecord::Base.filter_attributes` (Rails copies `config.filter_parameters` there), so a matching attribute of your models (`name` and `email` included) prints as `[FILTERED]` in `#inspect`, `pretty_print` and error reports.
+**Filter sensitive values from logs.** Adds the privacy patterns to Rails' filter_parameters so logs don't show them. The patterns also reach `ActiveRecord::Base.filter_attributes` (Rails copies `config.filter_parameters` there), so a matching attribute of your models (`name` and `email` included) prints as `[FILTERED]` in `#inspect`, `pretty_print` and error reports. The gem's own configuration models keep the other filters but show their `name`, `label` and `field_name` (a Permission Set's name is not personal data); `AuditEvent#actor_label` and `#record_label`, which hold people's names, are filtered whenever your filters hide a `name`.
 
 **The patterns apply to the whole app, by parameter name.** Rails matches them against every parameter key, at any depth, whatever the form: a bare `name` key is filtered everywhere — a product's, a team's, and the admin's own forms (a Permission Set, a Resource, a field) — so request logs show `"name" => "[FILTERED]"` for values that are not personal data. To narrow it, add the patterns yourself without the one that matches a bare `name`, and filter `name` only under the forms that carry a person's name. Below the `configure` block of `config/initializers/permission_forge.rb`:
 
