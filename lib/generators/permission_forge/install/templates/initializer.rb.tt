@@ -108,15 +108,15 @@ PermissionForge.configure do |config|
   # config.http_basic_auth_enabled = false
   # config.base_controller_class   = '::Admin::BaseController'  # must authenticate admins
   #
-  # Who may grant, revoke, extend or review an assignment, or change a group's
-  # members (admin screens and API). Example: no self-assignment.
+  # Who may grant, revoke, extend or review an assignment, or change a group's members
+  # (admin screens and API). Example: no self-assignment. PermissionForge.current_user is
+  # current_user_resolver's user; under Option A your app's sign-in does not run (nil).
   # config.admin_assignment_authorization = ->(controller, target, user_ids, action) {
-  #   admin = controller.current_user
+  #   admin = PermissionForge.current_user
   #   admin&.admin? && !user_ids.include?(admin.id)
   # }
-  #
   # Who may read the audit log pages, exports and API (nil: anyone with admin access).
-  # config.audit_log_authorization = ->(controller) { controller.current_user&.auditor? }
+  # config.audit_log_authorization = ->(controller) { PermissionForge.current_user&.auditor? }
 
   # ---------------------------------------------------------------------------
   # Audit log (docs/audit-log.md)
@@ -124,7 +124,8 @@ PermissionForge.configure do |config|
   # Every permission change is recorded in the audit_events table, inside the
   # change's own transaction. Each option with its default (an example where that is nil):
   # config.audit_events = :auto                    # true: always; false: never (events are still published)
-  # config.audit_actor_resolver = ->(controller) { controller.current_user }  # nil: current_user_resolver
+  # config.audit_actor_resolver = ->(controller) { Session.find_by(id: controller.request.cookie_jar.signed[:session_id])&.user }
+  #   nil: current_user_resolver, then the Basic auth login; the example names a Rails 8 sign-in under Option A
   # config.audit_request_context = ->(controller) { { request_id: controller.request.request_id, ip: controller.request.remote_ip } }
   # config.audit_change_failure_strategy = :raise  # the change rolls back; or :report, :log
   # config.audit_hook_failure_strategy = :report   # or :log, :raise
@@ -138,9 +139,9 @@ PermissionForge.configure do |config|
   # ---------------------------------------------------------------------------
   # config.api_enabled = true
   # config.api_base_controller_class = '::Api::BaseController'  # your auth chain
-  # config.api_auth = ->(controller) { controller.current_user&.admin? }
-  # config.api_action_authorization = ->(controller, action, record) { controller.current_user&.admin? }
-  # config.api_assignment_authorization = ->(controller, permission_set, user_ids) { controller.current_user&.admin? }
+  # config.api_auth = ->(controller) { PermissionForge.current_user&.admin? }
+  # config.api_action_authorization = ->(controller, action, record) { PermissionForge.current_user&.admin? }
+  # config.api_assignment_authorization = ->(controller, permission_set, user_ids) { PermissionForge.current_user&.admin? }
   #
   # api_auth proves identity only: until both authorization lambdas are set,
   # every API change and assignment is refused (403).

@@ -104,13 +104,36 @@ PermissionForge::Services::ExpiredAssignmentCleaner.call(actor: 'nightly job', r
 
 ## Reviewing permanent assignments
 
-An assignment without `expires_at` is permanent. The Stale list on Home, the person page and `StaleAssignmentAuditor` flag permanent assignments that were not reviewed for `admin_stale_assignment_days` (default 90):
+An assignment without `expires_at` is permanent. The Stale list on Home and the person page flag permanent assignments that were not reviewed for `admin_stale_assignment_days` (default 90), and so does `rake permission_forge:audit` (`stale_assignments`). `StaleAssignmentAuditor` and its rake task take their own threshold (`threshold_days:`, `THRESHOLD_DAYS=`, both 90 by default) and do not read that setting:
 
 - **Review means "Keep"** in the admin (Home, or the person's Access tab). It sets `reviewed_at` and `reviewed_by_id` and writes one `assignment.reviewed` event with the reviewer, the date and the optional reason.
 - **The clock starts at the last review, else at the grant** (`COALESCE(reviewed_at, created_at)`). Editing an assignment (changing its end date, say) is **not** a review any more: before 0.13 the staleness clock was `updated_at`, so any edit reset it. Rows are not backfilled by the upgrade, so after upgrading every permanent assignment counts from its grant date.
 - The labels read "Reviewed by *person* on *date*", "Reviewed on *date*" (the reviewer is not a record, for example under Basic auth) or "Never reviewed".
 - `StaleAssignmentAuditor.call(threshold_days: 90)` rows carry `last_reviewed_at` and `reviewed_by_id`; `days_stale` is counted from the last review; the `last_updated` key is kept for compatibility.
 - A host can forbid reviewing your own access with `admin_assignment_authorization` (action `:review`).
+
+### Rake task: stale assignments
+
+```bash
+bin/rails permission_forge:stale_assignments                    # not reviewed for 90 days
+THRESHOLD_DAYS=30 bin/rails permission_forge:stale_assignments  # your own threshold
+```
+
+The task runs `StaleAssignmentAuditor` and prints one line per stale permanent assignment, with the person's id, the Permission Set (`(set not found)` when it no longer exists) and the days since the last review, else the grant:
+
+```
+Found 2 stale assignment(s) affecting 1 user(s):
+  User 2 — Support (120 days since last review or grant)
+  User 2 — Office network only (95 days since last review or grant)
+
+Consider reviewing these assignments or setting expires_at for time-bound access.
+```
+
+or `No stale assignments found (threshold: 90 days).` It **exits with status 1 when it finds a stale assignment** and 0 otherwise, so a CI job or a cron wrapper can alert on it.
+
+- `THRESHOLD_DAYS` is 90 when not given; it does not follow `admin_stale_assignment_days`, so pass the same number when you changed that setting. The value is read with `to_i`: anything that is not a whole number (`THRESHOLD_DAYS=`, `THRESHOLD_DAYS=abc`) reads as 0, which reports every permanent assignment.
+- It changes nothing. Each run records a `report.generated` event (`data.counts`: `stale`, `users`, `threshold_days`) with the actor from `ACTOR=` (else `rake permission_forge:stale_assignments`).
+- With tenancy on and no tenant set, it covers every tenant.
 
 ### Scheduling Cleanup (Recommended)
 

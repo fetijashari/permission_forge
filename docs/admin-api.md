@@ -36,13 +36,13 @@ Pass a lambda that receives the controller instance and returns `true`/`false`:
 ```ruby
 PermissionForge.configure do |config|
   config.api_enabled = true
-  config.api_auth = lambda { |controller|
-    controller.current_user&.has_role?(:admin)
+  config.api_auth = lambda { |_controller|
+    PermissionForge.current_user&.has_role?(:admin)
   }
 end
 ```
 
-`controller.current_user` (here and in the examples below) exists only when your `api_base_controller_class` defines it (Option B: a base controller with Devise or your own authentication). On the default `::ActionController::Base` there is no `current_user`, and the call raises (a 500): check a header instead, as in the key and token examples below.
+`PermissionForge.current_user` (here and in the examples below) is what your `current_user_resolver` returns: `Current.user` with Rails 8's authentication generator, or whatever you wired it to with Devise. It names someone only when your app's sign-in runs in the request, that is behind an `api_base_controller_class` that authenticates (Option B). On the default `::ActionController::Base` nothing signs the caller in, so it is `nil` and the lambda refuses (403): check a header instead, as in the key and token examples below. Rails 8's generated `request_authentication` redirects to `new_session_path`, which inside the engine does not resolve: override it in that base controller as shown in [Admin UI](admin-ui.md#rails-8-authentication-generator), or answer 401 there for JSON.
 
 The lambda has full access to the controller, so you can check headers, tokens, roles, etc. When it returns a falsy value, the request gets **403 Forbidden** (recorded as `api.auth_failed`).
 
@@ -107,20 +107,13 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 }
 ```
 
-**Success (collection):**
+**Success (collection):** every list endpoint is paginated and answers `meta.pagination` with its page:
 ```json
 {
   "data": [
     { "id": 1, "uuid": "abc-123", "name": "Sales Team" },
     { "id": 2, "uuid": "def-456", "name": "Support Team" }
-  ]
-}
-```
-
-**Success (collection with pagination):**
-```json
-{
-  "data": [...],
+  ],
   "meta": {
     "pagination": {
       "page": 1,
@@ -155,11 +148,13 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 
 **What answers 422.** A failed validation (`messages` is the model's errors, as above), and input the API cannot read:
 
-- a body section that is not an object (`"permission_set": "x"`), or a missing one;
+- a body section that is not an object (`"permission_set": "x"`), or one that is missing or empty (see below);
 - an unreadable `expires_at`;
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
 - a `permission_set_group_id` that names no group of the current tenant;
 - a string longer than its column: `is too long (at most N characters)`. Only columns that declare a limit are checked — a `string` on MySQL is `varchar(255)` (counted in characters) and a `text` holds 65,535 bytes; on PostgreSQL and SQLite the install's `string` and `text` columns declare none, so nothing is checked there. A Permission Set name keeps its own 255-character rule on every database.
+
+**A flat JSON body is accepted where Rails wraps parameters.** With JSON parameter wrapping on, which `config.load_defaults 7.0` and later turn on for every controller (`wrap_parameters_by_default`), Rails copies the keys of a JSON body that are attributes of the endpoint's model under the section name before the API reads it: `POST /api/permission_sets` with `{"name":"Flat payload"}` reads as `{"permission_set":{"name":"Flat payload"}}` and creates the set (201). Only a body sent as `application/json` is wrapped, never one that already has the section. A flat body with none of the model's attributes then gives an empty section, and without wrapping (older defaults, a form-encoded body, `wrap_parameters false` in your `api_base_controller_class`) a missing section stays missing: both answer 422 `param is missing or the value is empty or invalid: permission_set`. Send the section explicitly to be independent of this setting.
 
 NUL bytes are dropped from every attribute hash and name the API reads. A rule with `is_null` / `is_not_null` needs no `field_value` (it is stored as empty).
 
@@ -662,7 +657,7 @@ config.api_base_controller_class = '::Api::BaseController'
 
 ```ruby
 config.api_action_authorization = ->(controller, action, record) {
-  controller.current_user&.admin?
+  PermissionForge.current_user&.admin?
 }
 ```
 
@@ -674,11 +669,11 @@ The lambda receives the controller instance, action name (`:create`, `:update`, 
 
 ```ruby
 config.api_assignment_authorization = ->(controller, target, user_ids) {
-  controller.current_user&.admin?
+  PermissionForge.current_user&.admin?
 }
 ```
 
-Without a `current_user` on your base controller, decide from the authenticated client instead, for example a key with its own scope:
+When nothing signs a user in (no authenticating base controller), decide from the authenticated client instead, for example a key with its own scope:
 
 ```ruby
 config.api_action_authorization = ->(controller, _action, _record) {
@@ -734,11 +729,11 @@ PermissionForge.configure do |config|
   # JSON Admin API
   config.api_enabled = true
   config.api_base_controller_class = '::Api::V1::Admin::BaseController'
-  config.api_auth = ->(controller) { controller.current_user&.has_role?(:admin) }
+  config.api_auth = ->(_controller) { PermissionForge.current_user&.has_role?(:admin) }
   config.api_pagination_handler = ->(scope, page, per_page) { scope.page(page).per(per_page) }
   config.api_record_identifier = :uuid
-  config.api_action_authorization = ->(controller, action, record) { controller.current_user&.admin? }
-  config.api_assignment_authorization = ->(controller, target, user_ids) { controller.current_user&.admin? }
+  config.api_action_authorization = ->(controller, action, record) { PermissionForge.current_user&.admin? }
+  config.api_assignment_authorization = ->(controller, target, user_ids) { PermissionForge.current_user&.admin? }
   config.api_require_authorization = true  # the default: deny mutations while an authorization lambda is unset
 
   # HTML Admin UI (runs alongside the API)
