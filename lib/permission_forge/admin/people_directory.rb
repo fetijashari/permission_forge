@@ -109,6 +109,26 @@ module PermissionForge
           (ids.is_a?(Array) ? ids : [ids]).filter_map { |id| cast_one(id, type) }.uniq
         end
 
+        # The request values that name none of `found` (cast ids, e.g. the
+        # people #find_all returned): each cast to the key type when it can
+        # be (99, not "99"), else as sent, trimmed and without NUL bytes.
+        # Blanks and values that are no id at all (an object, a list) are
+        # left out.
+        #
+        # @return [Array] distinct, in order
+        def self.unmatched(ids, found, configuration: PermissionForge.configuration)
+          model = configuration.user_model
+          type = model.type_for_attribute(model.primary_key)
+          (ids.is_a?(Array) ? ids : [ids]).filter_map do |id|
+            next unless id.is_a?(String) || id.is_a?(Integer)
+
+            cast = cast_one(id, type)
+            next id.to_s.delete("\0").strip.presence if cast.nil?
+
+            cast unless found.include?(cast)
+          end.uniq
+        end
+
         def self.cast_one(id, type)
           return nil unless id.is_a?(String) || id.is_a?(Integer)
 

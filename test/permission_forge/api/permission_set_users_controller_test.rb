@@ -189,6 +189,24 @@ module PermissionForge
         assert_equal 2, json.dig('data', 'invalidated')
       end
 
+      test 'POST bulk reports the ids it skipped: nobody, or outside user_list_resolver' do
+        outside = create_user(name: 'Outside')
+        config = PermissionForge.configuration
+        config.user_list_resolver = -> { config.user_model.where.not(id: outside.id).order(:id) }
+
+        post "#{users_path}/bulk", params: { user_ids: [@user.id, outside.id, 99_999, '99999', 'abc', ' ', { 'x' => 1 }],
+                                             bulk_action: 'assign' }, as: :json
+
+        assert_response :ok
+        data = JSON.parse(response.body)['data']
+        assert_equal 1, data['assigned']
+        assert_equal [outside.id, 99_999, 'abc'], data['skipped']
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: outside.id)
+
+        post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'revoke' }, as: :json
+        assert_equal({ 'assigned' => 0, 'revoked' => 1, 'invalidated' => 1, 'skipped' => [] }, JSON.parse(response.body)['data'])
+      end
+
       test 'POST bulk revokes multiple users' do
         user2 = create_user(name: 'User 2')
         create_permission_set_user(user: @user, permission_set: @ps)

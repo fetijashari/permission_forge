@@ -249,6 +249,10 @@ curl -X PATCH http://localhost:3000/permissions/api/permission_sets/abc-123 \
     }
   }'
 # Response: 200 OK
+# Move the set into a group with "permission_set_group_id": the group's uuid (as
+# the API returns it) or its numeric id; null or "" takes it out of its group.
+# Under api_record_identifier = :id only the numeric id is read. A value that names
+# no group of the current tenant is a 422 {"permission_set_group_id": [...]}.
 
 # Delete a permission set
 DELETE /permissions/api/permission_sets/:uuid
@@ -492,8 +496,10 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
   }'
 # Response: 200 OK — expires_at is optional (time-bound assignments; same formats
 # as above, an unreadable one is a 422 and changes nothing)
-# { "data": { "assigned": 3, "revoked": 0, "invalidated": 3 } }
-# Ids outside config.user_list_resolver (or naming nobody) are skipped.
+# { "data": { "assigned": 3, "revoked": 0, "invalidated": 3, "skipped": [99] } }
+# Ids outside config.user_list_resolver (or naming nobody) are skipped and listed
+# in "skipped" (cast to the user key type, else as sent; [] when none), on assign
+# and revoke alike: someone outside the resolver and an unknown id read the same.
 # "invalidated" counts the users whose assignment changed and whose cached
 # permissions were cleared; a user who already held the set is not counted.
 

@@ -89,19 +89,25 @@ module PermissionForge
         pf_assignment_refused_api?(@permission_set, params[:user_ids], action)
       end
 
+      # The service's counts plus `skipped`: the ids of the request that
+      # name nobody config.user_list_resolver lists.
       def bulk_assignment
-        PermissionForge::Services::BulkPermissionSetAssignment.call(
+        user_ids = bulk_user_ids
+        result = PermissionForge::Services::BulkPermissionSetAssignment.call(
           permission_set: @permission_set,
-          user_ids: bulk_user_ids,
+          user_ids: user_ids,
           action: params[:bulk_action],
           created_by: PermissionForge.current_user,
           expires_at: params[:bulk_action] == 'assign' ? future_expires_at : pf_time_param(:expires_at)
         )
+        # Someone outside user_list_resolver and an id that names no user
+        # read the same: the answer says nothing about who exists.
+        result.merge(skipped: PermissionForge::Admin::PeopleDirectory::Ids.unmatched(params[:user_ids], user_ids))
       end
 
       # The people of the request within config.user_list_resolver
       # (Admin::PeopleDirectory#find_all); an id naming nobody there is
-      # skipped, as an unknown id always was.
+      # skipped (and reported).
       def bulk_user_ids
         PermissionForge::Admin::PeopleDirectory.new.find_all(params[:user_ids]).map(&:id)
       end

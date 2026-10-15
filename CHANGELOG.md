@@ -20,6 +20,13 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `api_auth` that set `@admin = true` on the controller (see Deprecated). A refusal answers 403 with a body (it had
   none) and is recorded as `api.auth_failed` with reason `stats_not_authorized`; while the lambda is unset the 403
   names it. See [Dashboard Stats](docs/admin-api.md#dashboard-stats).
+- **Bulk assignment reports the ids it skipped.** `POST …/users/bulk` answers `skipped` next to `assigned`, `revoked`
+  and `invalidated`: the requested ids that name nobody `user_list_resolver` lists (`[99]`; `[]` when none), so a typo
+  in an automated list no longer goes unnoticed. An id outside the resolver and an unknown one read the same.
+- **`permission_set_group_id` takes the group's uuid.** The API answers with uuids (`api_record_identifier = :uuid`),
+  but `PATCH`/`POST …/permission_sets` read `permission_set_group_id` only as a numeric id: the group's uuid was a 422.
+  Under `:uuid` it now takes the uuid or the id; under `:id`, the id. The value is looked up in the current tenant
+  like every identifier (see Fixed for a uuid that starts with digits).
 
 ### Changed
 
@@ -78,6 +85,9 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Fixed
 
+- **An API `permission_set_group_id` that starts with digits no longer names another group.** The integer column cast
+  `"12ab…"` (a uuid that starts with digits) to 12, so `PATCH …/permission_sets/:uuid` could move the set into the
+  group whose id is 12. Only a string of digits is read as an id now; anything else is a uuid (under `:uuid`) or a 422.
 - **Users made by Rails 8's `bin/rails generate authentication` show and are found by their email.** That generator
   names the column `email_address`, and PermissionForge only read `email`: a person without a name column showed as
   "User #2" in the admin, searching people by email found nobody, "Paste emails or names" in bulk assignment reported

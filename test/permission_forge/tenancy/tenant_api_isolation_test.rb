@@ -131,6 +131,16 @@ module PermissionForge
         assert_response :not_found
       end
 
+      test 'another tenant group is no permission_set_group_id, by uuid or by id' do
+        [@group_b.uuid, @group_b.id].each do |reference|
+          patch "#{BASE}/permission_sets/#{@set_a.uuid}", params: { permission_set: { permission_set_group_id: reference } }
+          assert_response :unprocessable_entity
+          assert_equal [I18n.t('permission_forge.validations.permission_set.group_missing')],
+                       json.dig('error', 'messages', 'permission_set_group_id')
+        end
+        assert_nil @set_a.reload.permission_set_group_id
+      end
+
       private
 
       def json

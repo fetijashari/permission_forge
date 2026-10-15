@@ -75,12 +75,15 @@ module PermissionForge
         @permission_set = find_record(PermissionForge::PermissionSet)
       end
 
+      # permission_set_group_id takes the group's id or, under
+      # api_record_identifier = :uuid, its uuid (BaseController#with_reference_id).
       def permission_set_params
-        pf_require_hash(:permission_set).permit(
+        attrs = pf_require_hash(:permission_set).permit(
           :name, :description, :is_active, :is_editable, :is_muting,
           :requires_session_flag, :allowed_ips, :allowed_hours_start, :allowed_hours_end,
           :permission_set_group_id
         )
+        with_reference_id(attrs, :permission_set_group_id, PermissionForge::PermissionSetGroup)
       end
     end
   end
