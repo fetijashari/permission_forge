@@ -1,8 +1,6 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/fetijashari/permission_forge/main/docs/assets/logo-horizontal-dark.svg">
-    <img alt="PermissionForge" src="https://raw.githubusercontent.com/fetijashari/permission_forge/main/docs/assets/logo-horizontal-light.svg" width="420">
-  </picture>
+  <img alt="PermissionForge" src="https://raw.githubusercontent.com/fetijashari/permission_forge/main/docs/assets/logo-horizontal-light.svg#gh-light-mode-only" width="420">
+  <img alt="PermissionForge" src="https://raw.githubusercontent.com/fetijashari/permission_forge/main/docs/assets/logo-horizontal-dark.svg#gh-dark-mode-only" width="420">
 </p>
 
 <p align="center">
