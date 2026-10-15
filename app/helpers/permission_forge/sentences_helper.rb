@@ -165,8 +165,12 @@ module PermissionForge
       klass.respond_to?(:model_name) ? klass.model_name.human : name.demodulize.titleize
     end
 
-    # Token sentence: Only show [Customers] where [Owner] [is] [the current user], or Owner is empty
+    # Token sentence: Only show [Customers] where [Owner] [is] [the current user], or Owner is empty.
+    # A rule that matches nothing says so, and what it names as written.
     def pf_rule_sentence(rule, model_name = rule.resource&.name)
+      problem = pf_rule_problem(rule)
+      return pf_rule_problem_sentence(rule, problem) if problem
+
       field = pf_rule_field_labels(model_name, rule).join(' › ')
       sentence = safe_join(pf_rule_tokens(rule, model_name, field), ' ')
       sentence = safe_join([sentence, content_tag(:span, ", #{pf_ui('rules.or_empty', field: field)}")]) if pf_rule_nullable?(rule)
@@ -191,6 +195,9 @@ module PermissionForge
     end
 
     def pf_rule_text(rule, model_name = rule.resource&.name)
+      problem = pf_rule_problem(rule)
+      return pf_rule_problem_line(problem) if problem
+
       field = pf_rule_field_labels(model_name, rule).join(' › ')
       text = "#{pf_ui('rules.only_show')} #{pf_resource_plural(model_name)} #{pf_ui('rules.where')} #{field} " \
              "#{pf_operator_label(rule.operator)}"
@@ -201,6 +208,9 @@ module PermissionForge
 
     # Short form used in matrix cells: "Owner is the current user".
     def pf_rule_summary(rule, model_name = rule.resource&.name)
+      problem = pf_rule_problem(rule)
+      return "⊘ #{pf_rule_problem_line(problem)}" if problem
+
       field = pf_rule_field_labels(model_name, rule).join(' › ')
       value = NO_VALUE_OPERATORS.include?(rule.operator) ? nil : pf_rule_value_text(rule)
       [field, pf_operator_label(rule.operator), value].compact.join(' ')

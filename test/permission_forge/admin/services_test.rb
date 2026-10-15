@@ -295,11 +295,12 @@ module PermissionForge
         PermissionForge.configuration.auto_query_scoping = :filter_only
         set = create_permission_set
         filtered = create_resource(permission_set: set, name: 'Customer', read_access: true)
-        joined = create_resource(permission_set: set, name: 'User', read_access: true)
+        joined = create_resource(permission_set: set, name: 'Supplier', read_access: true)
         create_permission_set_rule(permission_set: set, resource: filtered)
-        create_permission_set_rule(permission_set: set, resource: joined, join_type: 'joins', field_accessor_path: 'customer')
+        create_permission_set_rule(permission_set: set, resource: joined, join_type: 'joins', field_accessor_path: 'owner',
+                                   field_name: 'id')
 
-        assert_equal(['User'], AttentionItems.new.unenforced_rules.map { |f| f.resource.name })
+        assert_equal(['Supplier'], AttentionItems.new.unenforced_rules.map { |f| f.resource.name })
       ensure
         PermissionForge.configuration.auto_query_scoping = old
       end

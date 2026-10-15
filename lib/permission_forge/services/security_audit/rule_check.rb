@@ -38,8 +38,13 @@ module PermissionForge
                   "limits records itself; #{advice}")
         end
 
+        # What the admin's Home shows: the same rules (AttentionItems).
+        def attention
+          @attention ||= PermissionForge::Admin::AttentionItems.new(configuration: configuration)
+        end
+
         def unenforced
-          findings = PermissionForge::Admin::AttentionItems.new(configuration: configuration).unenforced_rules
+          findings = attention.unenforced_rules
           return if findings.empty?
 
           held = findings.any? { |item| item.people_count.positive? }
@@ -63,19 +68,22 @@ module PermissionForge
             "#{people_label(item.people_count)}"
         end
 
-        # Rules saved before PermissionSetRule checked the column, or written
-        # past the model (the tables are shared with other applications).
+        # Rules saved before PermissionSetRule checked the column and the
+        # path, or written past the model (the tables are shared with other
+        # applications): the same rules as the admin's Home lists
+        # (AttentionItems#broken_rules, Operators::RuleProblem).
         def missing_columns
-          rules = rules_in_effect.select { |rule| rule_column(rule)&.missing? }
-          return if rules.empty?
+          findings = attention.broken_rules
+          return if findings.empty?
 
-          held = rules.any? { |rule| held?(rule) }
-          finding(held ? :high : :medium, :missing_rule_columns, 'Rules naming a column that does not exist',
-                  'The field name of these rules is not a column of their table (a typo, or a column since renamed ' \
-                  'or removed). Such a rule matches nothing: everyone it applies to is denied every record of the ' \
-                  'resource. Correct the field name or remove the rule (see "Using the wrong field name" in ' \
-                  'docs/row-level-rules.md).',
-                  items: rules.map { |rule| unusable_item(rule) })
+          held = findings.any? { |item| item.people_count.positive? }
+          finding(held ? :high : :medium, :missing_rule_columns, 'Rules naming a column or association that does not exist',
+                  'The field name of these rules is not a column of their table, or their association path names an ' \
+                  'association their model does not have or one a join cannot be built through (polymorphic, a class ' \
+                  'that cannot be loaded) — a typo, or a column or association since renamed or removed. Such a rule ' \
+                  'matches nothing: everyone it applies to is denied every record of the resource. Correct the rule ' \
+                  'or remove it (see "Using the wrong field name" in docs/row-level-rules.md).',
+                  items: findings.map { |item| unusable_item(item.rule) })
         end
 
         def unusable_values
@@ -97,22 +105,15 @@ module PermissionForge
           people_counts.fetch(rule.resource.permission_set_id, 0).positive?
         end
 
-        # Active rules of active resources in active granting sets: the rules
-        # that are applied right now (a muting set's rules never are). Not the
-        # ones View All skips — nobody is denied by those; they are listed
-        # under bypassed_rules.
+        # The rules applied right now (AttentionItems#rules_in_effect).
         def rules_in_effect
-          @rules_in_effect ||= begin
-            resources = PermissionForge::Resource.in_effect.merge(PermissionForge::PermissionSet.granting)
-            active_rules.where(resource_id: resources.select(:id)).includes(resource: :permission_set)
-                        .order(:resource_id, :id).reject { |rule| rule.resource.rules_bypassed? }
-          end
+          attention.rules_in_effect
         end
 
         # Typed the way the application layer types it (Operators::ValueTyping).
         # A model that is not there, or cannot be read, says nothing about the
         # value — that is the integrity check's finding, not one of this check.
-        # A missing column is missing_columns' finding.
+        # A missing column or path is missing_columns' finding.
         def unusable_value?(rule)
           target = rule_column(rule)
           return false if target.nil? || target.missing?
@@ -127,8 +128,8 @@ module PermissionForge
 
         # The column the rule names, found the way PermissionRuleApplier finds
         # it (Operators::RuleColumn.for_rule), once per rule. A rule whose
-        # association path cannot be followed is left out: the engine raises
-        # for it, it does not match nothing.
+        # association path cannot be followed has none (nil): it is
+        # missing_columns' finding.
         def rule_column(rule)
           @rule_columns ||= {}
           return @rule_columns[rule.id] if @rule_columns.key?(rule.id)

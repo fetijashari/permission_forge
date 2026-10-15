@@ -82,16 +82,21 @@ module PermissionForge
         end
       end
 
-      # The value is not typed against the rule's own model when the path leads
-      # nowhere: ActiveRecord raises for the join, whatever the value is.
-      test 'an association path that cannot be followed raises, for a usable value and for an unusable one' do
-        %w[nowhere supplier.nowhere].each do |path|
-          %w[5 x].each do |value|
-            rule = owner_rule(join_type: 'joins', field_accessor_path: path, field_name: 'supplier_id', field_value: value)
+      # ActiveRecord would raise for the join when the query runs — a 500 in
+      # every find_by / permission_scoped of the rule's holders. The rule
+      # matches nothing instead, for a usable value and for an unusable one,
+      # under a built-in operator and a custom one (the join is never built).
+      test 'an association path that cannot be followed matches nothing' do
+        %w[nowhere supplier.nowhere supplier..owner].each do |path|
+          [%w[equal 5], %w[equal x], ['is_null', ''], %w[custom_op 5]].each do |operator, value|
+            rule = owner_rule(join_type: 'joins', field_accessor_path: path, field_name: 'supplier_id',
+                              operator: operator, field_value: value)
 
-            assert_raises(ActiveRecord::ConfigurationError, "#{path} #{value}") { scoped(rule).to_a }
+            assert_empty scoped(rule).to_a, "#{path} #{operator} #{value}"
           end
         end
+        assert_equal [@mine], scoped(owner_rule(join_type: 'joins', field_accessor_path: 'supplier'))
+          .where(id: [@mine.id, @theirs.id]).to_a, 'a path that is followed still joins'
       end
 
       test 'a filter rule has no join, whatever its field_accessor_path says' do

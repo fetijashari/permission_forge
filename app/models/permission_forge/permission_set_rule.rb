@@ -73,6 +73,7 @@ module PermissionForge
     }, allow_blank: true
 
     validate :validate_field_name_segments, if: :field_name_changed?
+    validate :validate_field_accessor_path, if: :path_check_due?
     validate :validate_field_name_column, if: :column_check_due?
     validate :validate_field_value_for_operator
 
@@ -116,6 +117,30 @@ module PermissionForge
       return false if @copied_column && @copied_column == column_parts
 
       new_record? || column_parts != column_parts_was
+    end
+
+    # A join rule's path is checked on a new rule and when the path, the join
+    # type or the model changes; a row that already carries a path that
+    # cannot be followed stays editable in its other attributes (it matches
+    # nothing; the audit reports it). A filter rule's path is never joined.
+    def path_check_due?
+      return false unless join_rule?
+
+      parts = column_parts.drop(1)
+      return false if @copied_column && @copied_column.drop(1) == parts
+
+      new_record? || parts != column_parts_was.drop(1)
+    end
+
+    # A path ActiveRecord cannot join (Operators::RulePath: no such
+    # association, a polymorphic one, a class that cannot be loaded) would
+    # make the rule match nothing — the join raises. Skipped when the model
+    # cannot be loaded.
+    def validate_field_accessor_path
+      problem = PermissionForge::Operators::RuleProblem.of_path(self)
+      return unless problem
+
+      errors.add(:field_accessor_path, problem.validation_message)
     end
 
     # A name the model's table does not have (along the rule's path) would

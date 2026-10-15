@@ -11,6 +11,15 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **`rake permission_forge:audit` reports rules naming a column that does not exist** (`missing_rule_columns`: High
   when people hold the set, otherwise Medium; lists set, resource, field, operator, value and rule). Such a rule
   matches nothing (see Fixed). Run it after upgrading.
+- **`missing_rule_columns` also reports rules whose association path cannot be joined.** A join rule whose
+  `field_accessor_path` names an association its model does not have (`ownr`), or one no join can be built through (a
+  polymorphic `belongs_to`, a scope that takes the record, a `:through` or `inverse_of` naming nothing, a class that
+  cannot be loaded), is listed with the same severity (High when people hold the set). The finding is titled "Rules
+  naming a column or association that does not exist"; its code is unchanged.
+- **Home lists the rules that match nothing.** A "Rules that match nothing" card on the admin's Home lists every active
+  rule in effect whose column or association is missing — the same rules as the audit's `missing_rule_columns`
+  (`AttentionItems#broken_rules`, by `Operators::RuleProblem`) — with why ("Matches nothing: Stauts is not a column of
+  Customer"), how many people hold the set, and **Fix rule** (the rule's edit page; **Open rules** for a locked set).
 
 - **`NotAuthorizedError#failure_messages`.** The `failure_message` of each row-level rule that denied the record, as
   the admin wrote it (in rule order, without blanks and repeats; `[]` when no rule denied), so a host can render a
@@ -73,6 +82,16 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   exist, the path cannot be followed or the name is qualified with a table that is none of the rule's. Copying a
   Permission Set (or a group) copies such a rule as it is: leaving it out would widen the copy. **Opt out:** none — the
   rule could only ever raise (and now matches nothing); write it past the model if you must.
+- **A join rule whose association path cannot be joined does not save.** `PermissionSetRule` adds "names ownr, which
+  is not an association of Customer" on `field_accessor_path` (the segment and the model it was looked up in), or
+  "names subject, an association of Comment that a rule cannot join (polymorphic, or its class cannot be loaded)"
+  (en, sq, mk), so the JSON API answers its field-keyed 422 instead of 201. Checked when the Resource's model loads,
+  for a new join rule and when its path, join type or resource changes (an existing row stays editable in its other
+  attributes); a filter rule's path is never joined and never checked. Every association ActiveRecord joins —
+  `has_many`, `has_one`, `belongs_to`, `has_and_belongs_to_many`, `:through`, scoped — is accepted
+  (`Operators::RulePath` asks what `Associations::JoinDependency#build` asks; a canary watches it). Copying a
+  Permission Set copies such a rule as it is. **Opt out:** none — the rule could only ever raise (and now matches
+  nothing).
 - **Development boot warnings also go to standard error.** The cache warnings were logged before `bin/rails server`
   attaches its console logger (and `bin/rails runner` never does), so they reached `log/development.log` only. In
   development each is now also written to standard error, once per boot — not when the logger already writes to
@@ -296,6 +315,21 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   An RLS policy compiles such a rule to `FALSE` (the sync failed on it); `RlsPolicyGenerator::GENERATOR_VERSION` is 6,
   so run `bin/rails permission_forge:rls:sync` after upgrading. See
   [Using the wrong field name](docs/row-level-rules.md#using-the-wrong-field-name).
+- **A rule whose association path cannot be joined denies instead of raising.** A join rule whose
+  `field_accessor_path` names no association (`ownr` instead of `owner`, saved through the API with a 201) made every
+  `find_by` / `find_by!` / `permission_scoped` of each holder of its Permission Set raise
+  `ActiveRecord::ConfigurationError` ("Can't join 'Customer' to association named 'ownr'") — a 500 in the host app —
+  and the audit did not list it. Such a rule — and one through a polymorphic `belongs_to`, a record-dependent scope, a
+  broken `:through` / `inverse_of` or a class that cannot be loaded — now matches nothing under every operator: the
+  join is never built. Paths ActiveRecord joins are unchanged. RLS policies are unchanged (join rules are reported as
+  skipped, never compiled), so `GENERATOR_VERSION` stays 6.
+- **The admin no longer draws a rule that matches nothing as a working rule.** A rule naming a missing column read
+  "Only show Customers where Stauts is active, or Stauts is empty" on the Rules tab. The Rules tab, the delete
+  confirmation, the field page, the rule preview, a person's effective access (and its Records cell, which now
+  summarises such a rule first) and the Permission Set's records summary now say "⊘ Matches nothing" and why ("Stauts
+  is not a column of Customer", "Ownr is not a relationship of Customer") with the rule as stored, never "or empty";
+  the rule's edit page opens with a banner saying so (a rule written with `update_column` is still `valid?` — the
+  checks run when what it names changes — so the page shows what the row holds) (en, sq, mk).
 - **The console shows the gem's own configuration names.** With `filter_parameters_integration` the GDPR pattern
   `\Aname\z` (meant for people's names) reached the gem's models through `ActiveRecord::Base.filter_attributes`, so
   `#inspect` printed `name: [FILTERED]` for a Permission Set, a Permission Set Group, a Resource, a field, an action

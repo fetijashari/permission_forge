@@ -52,6 +52,18 @@ module PermissionForge
         end
       end
 
+      # An active rule in effect that matches nothing because it names a
+      # column or an association that is not there (Operators::RuleProblem):
+      # everyone it applies to is denied every record of its resource.
+      BrokenRuleFinding = Struct.new(:rule, :problem, :people_count, keyword_init: true) do
+        def resource = rule.resource
+        def permission_set = rule.resource.permission_set
+
+        # The rule, its Resource or its Permission Set is locked: Home opens
+        # the Rules tab instead of the rule's edit page (which refuses it).
+        def locked? = !EditableLock.locked_record(rule).nil?
+      end
+
       def self.acknowledgement_supported?
         PermissionForge::ResourceField.column_names.include?('sensitive_acknowledged_at')
       rescue StandardError
@@ -66,8 +78,8 @@ module PermissionForge
       end
 
       def total
-        [audit_findings.size, privacy_findings.size, unenforced_rules.size, ending_soon.size, expired.size, stale.size,
-         tidy.size].sum
+        [audit_findings.size, broken_rules.size, privacy_findings.size, unenforced_rules.size, ending_soon.size,
+         expired.size, stale.size, tidy.size].sum
       end
 
       def all_good?
@@ -96,6 +108,29 @@ module PermissionForge
           counts = unenforced_rule_scope.where(resource_id: enforced.keys).group(:resource_id).count
           findings = counts.map { |id, count| RulesFinding.build(enforced.fetch(id), count, people_counts) }
           findings.sort_by { |finding| [finding.permission_set.name, finding.resource.name] }
+        end
+      end
+
+      # Rules in effect that name a column or an association that is not
+      # there — the audit's missing_rule_columns finding, the same rules.
+      def broken_rules
+        @broken_rules ||= rules_in_effect.filter_map do |rule|
+          problem = PermissionForge::Operators::RuleProblem.for(rule)
+          next unless problem
+
+          BrokenRuleFinding.new(rule: rule, problem: problem, people_count: people_counts.fetch(rule.resource.permission_set_id, 0))
+        end
+      end
+
+      # Active rules of active resources in active granting sets: the rules
+      # that are applied right now (a muting set's rules never are). Not the
+      # ones View All skips — nobody is denied by those.
+      def rules_in_effect
+        @rules_in_effect ||= begin
+          resources = PermissionForge::Resource.in_effect.merge(PermissionForge::PermissionSet.granting)
+          PermissionForge::PermissionSetRule.active.where(resource_id: resources.select(:id))
+                                            .includes(resource: :permission_set).order(:resource_id, :id)
+                                            .reject { |rule| rule.resource.rules_bypassed? }
         end
       end
 

@@ -107,6 +107,7 @@ module PermissionForge
       arel_matches: 'column.matches(',
       arel_named_function: "Arel::Nodes::NamedFunction.new('COALESCE'",
       schema_cache: 'connection.schema_cache.columns_hash(',
+      association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!'),
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
       sandbox: 'application.sandbox?',
       generator_commands: 'Rails::Command::GenerateCommand',
@@ -161,6 +162,8 @@ module PermissionForge
       arel_matches: 'adapt Operators::Registry (LIKE operators)',
       arel_named_function: 'adapt PermissionSetUser.last_reviewed_column',
       schema_cache: 'adapt Operators::RuleColumn.on',
+      association_join_checks: 'adapt Operators::RulePath#through / #joined_class to what Associations::JoinDependency#build ' \
+                               'checks before it joins (a path it raises for must stay broken, one it joins followed)',
       preloader: 'adapt PermissionHashBuilder#preload',
       sandbox: 'adapt OpenTransaction.sandbox?',
       generator_commands: 'adapt BootChecks.generator_running? (GENERATOR_COMMANDS: what `bin/rails generate` loads before it boots)',
@@ -1345,6 +1348,44 @@ module PermissionForge
       assert_equal [:string, 'email'], [columns['email'].type, columns['email'].name],
                    canary(:schema_cache, 'a Column no longer answers name / type',
                           'Operators::ValueCasters pick a caster by column type: adapt RuleColumn')
+    end
+
+    canary_test :association_join_checks,
+                '_reflect_on_association / check_validity! / check_eager_loadable! / polymorphic? / klass: what joins checks' do
+      model = canary_model('PfCanaryJoinModel') do
+        belongs_to :parent, class_name: 'PfCanaryRecord', optional: true
+        belongs_to :subject, polymorphic: true, optional: true
+        belongs_to :phantom, class_name: 'PfCanaryNoSuchModel', optional: true
+        has_many :namesakes, ->(record) { where(name: record.name) }, class_name: 'PfCanaryRecord', foreign_key: :parent_id
+        has_many :ghosts, through: :nowhere, source: :children
+      end
+      joins = lambda do |name|
+        model.joins(name).to_sql
+        true
+      rescue StandardError
+        false
+      end
+
+      assert_nil model._reflect_on_association('nowhere')
+      assert_not joins.call(:nowhere)
+
+      parent = model._reflect_on_association('parent')
+      parent.check_validity!
+      parent.check_eager_loadable!
+
+      assert_not parent.polymorphic?
+      assert_equal [PfCanaryRecord, true], [parent.klass, joins.call(:parent)], canary(
+        :association_join_checks, 'an association joins builds was not found, or a check refused it',
+        RailsInternalsCanary::FIXES[:association_join_checks]
+      )
+      assert model._reflect_on_association('subject').polymorphic?
+      assert_raises(ArgumentError) { model._reflect_on_association('namesakes').check_eager_loadable! }
+      assert_raises(ActiveRecord::ActiveRecordError) { model._reflect_on_association('ghosts').check_validity! }
+      assert_raises(NameError) { model._reflect_on_association('phantom').klass }
+      assert_equal [false] * 4, %i[subject namesakes ghosts phantom].map { |name| joins.call(name) }, canary(
+        :association_join_checks, 'joins now builds a join RulePath counts as broken (it matches nothing)',
+        RailsInternalsCanary::FIXES[:association_join_checks]
+      )
     end
 
     canary_test :preloader, 'Associations::Preloader.new(records:, associations:).call: loads the association of the records given' do

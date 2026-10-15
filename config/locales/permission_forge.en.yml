@@ -504,6 +504,17 @@ en:
         'off': Recording is switched off in the initializer (audit_events = false).
           No change is recorded.
         title: The audit log is not recording
+      broken_rules_card:
+        description: 'These record rules name a field or a relationship that does
+          not exist. Each one matches nothing: everyone it applies to is denied every
+          record of the resource.'
+        fix: Fix rule
+        open: Open rules
+        people:
+          one: "%{count} person has this set."
+          other: "%{count} people have this set."
+        rule: "“%{rule}” on %{resource} in “%{set}”"
+        title: Rules that match nothing
       ending_card:
         description: Assignments that end in the next 7 days.
         extend: Extend 30 days
@@ -893,6 +904,9 @@ en:
         pick_field: Pick a field…
         preview: Preview
         preview_empty: Pick a field to see the rule as a sentence.
+        problem_field: Pick the field again to correct it.
+        problem_path: Choose the relationship again to correct it.
+        problem_title: This rule matches nothing
         relationship: Relationship
         remove_step: Remove this relationship step
         save: Save rule
@@ -2139,8 +2153,14 @@ en:
       rules:
         and: and
         current_user: the current user
+        matches_nothing: Matches nothing
         only_show: Only show
         or_empty: or %{field} is empty
+        problems:
+          missing_column: "%{name} is not a column of %{model}"
+          unjoinable_association: "%{name} is a relationship of %{model} that a rule
+            cannot follow"
+          unknown_association: "%{name} is not a relationship of %{model}"
         where: where
       rules_count:
         one: Rules (%{count})
@@ -2174,6 +2194,10 @@ en:
         invalid_join_type: is not a valid join type
         invalid_operator: is not a valid operator
         numeric_or_date_required: must be a numeric or date value for comparison operators
+        unjoinable_association: names %{association}, an association of %{model} that
+          a rule cannot join (polymorphic, or its class cannot be loaded)
+        unknown_association: names %{association}, which is not an association of
+          %{model}
         unknown_column: is not a column of %{model}
         value_not_expected: does not require a value for this operator
         value_required: must not be blank for this operator

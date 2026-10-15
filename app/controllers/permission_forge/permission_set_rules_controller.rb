@@ -52,7 +52,8 @@ module PermissionForge
 
     # What the builder page draws: built here, read by the template.
     def rule_builder
-      @rule_builder ||= PermissionForge::Admin::RuleBuilder.new(form: @form, resource: @resource, model_errors: @model_errors)
+      @rule_builder ||= PermissionForge::Admin::RuleBuilder.new(form: @form, resource: @resource, model_errors: @model_errors,
+                                                                rule: @rule)
     end
 
     def set_resource
