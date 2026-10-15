@@ -12,6 +12,9 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   the admin wrote it (in rule order, without blanks and repeats; `[]` when no rule denied), so a host can render a
   friendly 403 without parsing `message` (`[Forbidden by Rule: <name>] with message: <failure_message>`). `message`
   and `details` are unchanged. See [Handling Denials](docs/row-level-rules.md#handling-denials).
+- **The install generator prints the next steps.** After the files it lists `bin/rails db:migrate` (not with
+  `--skip-migration`), the mount line, where the admin credentials go (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`, or your
+  own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start. `rails destroy` prints none.
 
 ### Changed
 
@@ -46,6 +49,39 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   space, optional `Z` or `±HH:MM`); anything else is a 422 in the API (a 400 in the admin) and assigns nobody. The
   formats are listed in [`docs/admin-api.md`](docs/admin-api.md#expires_at-formats). The values the admin itself sends
   are unchanged.
+- **`rake permission_forge:stale_assignments` refuses a `THRESHOLD_DAYS` it cannot read.** The value was read with
+  `to_i`, so `THRESHOLD_DAYS=`, `abc`, `0` or `-3` became a threshold of 0 (or less) days and reported every permanent
+  assignment, exiting 1. Anything that is not a whole number of days from 1 to 36500 now prints what is expected on
+  stderr and exits 2, without running the report.
+- **The stale-assignment report and the admin agree on the threshold.** Without `THRESHOLD_DAYS` the rake task, and
+  `Services::StaleAssignmentAuditor.call` without `threshold_days:`, now use `config.admin_stale_assignment_days`, as
+  the Home Stale list, the person page and `rake permission_forge:audit` already did; they used a fixed 90 before.
+  Nothing changes unless you set `admin_stale_assignment_days` to something other than 90. Callers that pass
+  `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
+  raising.
+
+### Documentation
+
+Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authentication generator:
+
+- README Installation and the getting-started guide now mount the admin UI and set its credentials; without them there
+  is no admin to open. The README Quick Start defines the `user` it assigns.
+- The initializer template, README and guides no longer call `controller.current_user` / `controller.current_admin` in
+  the authorization examples, which Rails 8's generator does not define (a 500 on the default base controllers):
+  they use `PermissionForge.current_user`, and the `audit_actor_resolver` examples show a Rails 8 and a Devise variant
+  for HTTP Basic auth.
+- [Admin UI](docs/admin-ui.md#rails-8-authentication-generator): with Rails 8's generator as `base_controller_class`, a
+  signed-out visit was a 500 (`new_session_path` does not resolve inside the engine); a complete admin base controller
+  that redirects through `main_app` and checks for an admin.
+- [Controller actions](docs/controller-actions.md#callback-order): the user must be resolved before the guard and any
+  model read; an action opened with `allow_unauthenticated_access` needs `prepend_before_action :resume_session`.
+- [Configuration](docs/configuration.md#how-people-are-labelled-and-searched): how people are labelled, which columns
+  are searched in SQL, and that an Array-returning `user_list_resolver` is searched in Ruby and loads every user.
+- [Admin API](docs/admin-api.md#response-format): a flat JSON body is accepted where Rails wraps parameters (only an
+  empty, missing or non-object section answers 422); the collection sample shows `meta.pagination`.
+- [Assignment expiration](docs/assignment-expiration.md#rake-task-stale-assignments): `rake
+  permission_forge:stale_assignments`, its `THRESHOLD_DAYS`, its output and its exit status 1 when it finds stale
+  assignments.
 
 ## [0.14.1] - 2026-10-14
 

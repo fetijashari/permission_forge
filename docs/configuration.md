@@ -137,7 +137,8 @@ PermissionForge.configure do |config|
   # a PermissionForge::Audit::Actor or { type:, id:, label: }. nil falls back to
   # current_user_resolver, then (admin UI under HTTP Basic) the checked username.
   config.audit_actor_resolver = nil
-  # config.audit_actor_resolver = ->(controller) { controller.current_admin }
+  # Under HTTP Basic auth with Rails 8's authentication generator (its sign-in does not run in the admin):
+  # config.audit_actor_resolver = ->(controller) { Session.find_by(id: controller.request.cookie_jar.signed[:session_id])&.user }
 
   # Request id and IP stored with each event: lambda(controller) returning
   # { request_id:, ip: }. nil stores request.request_id and request.remote_ip.
@@ -172,7 +173,7 @@ PermissionForge.configure do |config|
   # lambda(controller), allowed only when it returns exactly true. nil: anyone
   # who can reach the admin.
   config.audit_log_authorization = nil
-  # config.audit_log_authorization = ->(controller) { controller.current_admin&.auditor? }
+  # config.audit_log_authorization = ->(_controller) { PermissionForge.current_user&.auditor? == true }
 
   # Who may change who holds a Permission Set or belongs to a group, in the admin
   # UI and the API (asked after api_assignment_authorization). 4 arguments:
@@ -184,7 +185,7 @@ PermissionForge.configure do |config|
   # data-subject duties and are not gated by it. nil: no extra check.
   config.admin_assignment_authorization = nil
   # config.admin_assignment_authorization = lambda { |controller, _target, user_ids, _action|
-  #   !user_ids.include?(controller.current_admin&.id) # nobody assigns themselves
+  #   !user_ids.include?(PermissionForge.current_user&.id) # nobody assigns themselves
   # }
 
   # Fields to skip when auto-generating resource fields
@@ -614,6 +615,15 @@ The preset takes `:strict`, `:compat` or their String; anything else raises `Per
 
 Return a real boolean from every hook (`current_user&.admin? == true`, `.exists?`), never a relation.
 
+## How people are labelled and searched
+
+**Labels** (`Admin::PersonLabel`). With `user_label_formatter` set, a person's name is what it returns (blank falls through to the next step). Otherwise the first non-blank of `name`, `full_name`, `display_name`, then `first_name` + `last_name` (or `firstname` + `lastname`) joined with a space, then the email (`email`, else `email_address`, the column Rails 8's `bin/rails generate authentication` creates), then `User #<id>`. Each can be a column or a method: a column is read as stored (`read_attribute_before_type_cast`, so masking on your User model never garbles the admin), and the public reader is used for a method or a blank column. The email, when the user has one, is shown under the name.
+
+**Search** depends on what `user_list_resolver` returns:
+
+- **A relation** (the default `user_model.order(:id)`, or any `ActiveRecord::Relation`): search runs in SQL. It looks at whichever of the columns in `Admin::PeopleCandidates::Relation::SEARCH_COLUMNS` your user table has (`name`, `email`, `email_address`, `full_name`, `display_name`, `first_name`, `last_name`, `firstname`, `lastname`, `username`, `login`), case-insensitive and anywhere in the value. Every word of the query must match one of those columns, so "ana kras" finds Ana Krasniqi whether the name is one column or two. A query of digits also matches the id. A name that exists only as a method is not searched (search the columns it is built from), and `user_label_formatter` does not change what is searched.
+- **An Array** (e.g. `-> { User.active.sort_by(&:name) }`): search runs in Ruby over each person's label and email (the label from `user_label_formatter` when set), as one case-insensitive substring of the whole query. The resolver runs each time the admin screens or the API list, search or look up people by id, so **every user it returns is loaded into memory** each time; `user_list_limit` caps only what a picker shows. Prefer a relation for large user tables: order and scope it in SQL (`-> { User.active.order(:last_name, :first_name) }`).
+
 ## Option reference
 
 One entry per option, in the order the admin **Settings** page shows them (its "Configuration docs" links point here). Set these in `config/initializers`. `user_class`, `audit_user_class` and `tenant_model` are read by the models as they load; a change made later does not reach a loaded class (PermissionForge logs a warning).
@@ -662,7 +672,7 @@ One entry per option, in the order the admin **Settings** page shows them (its "
 
 #### user_list_resolver
 
-**People list source.** Which people appear in pickers on these screens, **and which people these screens and the API can reach by id**: a person the resolver leaves out is not found (404) on the person page, erasure, assignment, restore, group membership, bulk assignment and the API's assignment endpoints. Lists of a set's holders still show every holder of the set. With tenancy on and a users table that is not tenant-scoped, scope the resolver to the current tenant's users.
+**People list source.** Which people appear in pickers on these screens (a relation is searched in SQL, an Array in Ruby: see [How people are labelled and searched](#how-people-are-labelled-and-searched)), **and which people these screens and the API can reach by id**: a person the resolver leaves out is not found (404) on the person page, erasure, assignment, restore, group membership, bulk assignment and the API's assignment endpoints. Lists of a set's holders still show every holder of the set. With tenancy on and a users table that is not tenant-scoped, scope the resolver to the current tenant's users.
 
 #### user_list_limit
 
@@ -670,7 +680,7 @@ One entry per option, in the order the admin **Settings** page shows them (its "
 
 #### user_label_formatter
 
-**Person label.** How a person is shown in lists, for example name and email.
+**Person label.** How a person is shown in lists, for example name and email. See [How people are labelled and searched](#how-people-are-labelled-and-searched).
 
 #### profile_builder
 
@@ -999,7 +1009,7 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### admin_stale_assignment_days
 
-**Review assignments after.** Permanent assignments not reviewed for this long appear under Stale assignments.
+**Review assignments after.** Permanent assignments not reviewed for this long appear under Stale assignments. Also the default threshold of `rake permission_forge:stale_assignments` and `StaleAssignmentAuditor`.
 
 #### admin_app_name
 

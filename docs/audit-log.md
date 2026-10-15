@@ -187,8 +187,15 @@ The actor is never taken from parameters or headers. A resolver that raises, or 
 ```ruby
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
-  # Name the signed-in person, not the shared Basic-auth login.
-  config.audit_actor_resolver = ->(controller) { controller.current_admin }
+  # Under HTTP Basic auth your app's sign-in does not run in the admin: name the
+  # person signed in to your app, not the shared Basic-auth login.
+  # Rails 8's authentication generator:
+  config.audit_actor_resolver = ->(controller) {
+    Session.find_by(id: controller.request.cookie_jar.signed[:session_id])&.user
+  }
+  # Devise: ->(controller) { controller.request.env['warden']&.user(:user) }
+  # Behind your own admin controller (base_controller_class) leave it nil:
+  # current_user_resolver already names the signed-in user.
 
   # A token API: name the client yourself.
   # config.audit_actor_resolver = ->(controller) {
@@ -264,10 +271,10 @@ All ten options live in `PermissionForge::Configuration::AuditSettings`; the Set
 ```ruby
 PermissionForge.configure do |config|
   config.audit_events = :auto
-  config.audit_actor_resolver = ->(controller) { controller.current_admin }
   config.audit_runtime_events = %i[denied bypass]
   config.audit_retention_period = 2.years
-  config.audit_log_authorization = ->(controller) { controller.current_admin&.auditor? }
+  # PermissionForge.current_user: current_user_resolver's user (set behind your base_controller_class)
+  config.audit_log_authorization = ->(_controller) { PermissionForge.current_user&.auditor? == true }
 end
 ```
 

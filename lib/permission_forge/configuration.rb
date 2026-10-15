@@ -160,7 +160,8 @@ module PermissionForge
 
     # Lambda that receives the controller instance and returns true/false for auth.
     # When nil and API enabled, all requests return 401 (safe default).
-    # Example: ->(controller) { controller.current_user&.has_role?(:admin) }
+    # Example (PermissionForge.current_user is current_user_resolver's user, set when
+    # api_base_controller_class signs the caller in): ->(_controller) { PermissionForge.current_user&.admin? }
     attr_accessor :api_auth
 
     # Base controller class for API controllers (default: "::ActionController::Base").
@@ -208,8 +209,8 @@ module PermissionForge
 
     # Lambda for action-level authorization on API mutation endpoints (clone, etc.).
     # Receives (controller, action_name, record) and should return true/false.
-    # When nil, no extra authorization is performed (backward-compatible).
-    # Example: ->(controller, action, record) { controller.current_user&.admin? }
+    # When nil, every mutation is refused while api_require_authorization is true (the default).
+    # Example: ->(controller, action, record) { PermissionForge.current_user&.admin? }
     attr_accessor :api_action_authorization
 
     # Lambda for authorization checks on user-to-permission-set assignments

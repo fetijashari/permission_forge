@@ -143,7 +143,7 @@ PermissionForge includes built-in RESTful JSON endpoints. Enable with:
 
 ```ruby
 config.api_enabled = true
-config.api_auth = ->(controller) { controller.current_user&.has_role?(:admin) }
+config.api_auth = ->(_controller) { PermissionForge.current_user&.has_role?(:admin) } # set when api_base_controller_class signs the caller in
 config.api_record_identifier = :uuid
 # Authorization hooks (api_auth proves identity, these prove admin-ness):
 config.api_action_authorization = ->(controller, action, record) { ... }      # gates create/update/destroy/clone
