@@ -147,14 +147,21 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   has passed (`"2020-01-01"`, yesterday, a minute ago) created an assignment that granted nothing, answered 201/200. It
   is now a 422 (`{"expires_at": ["must be in the future"]}`) and nobody is assigned. A bulk `revoke` ignores
   `expires_at`; the admin's Undo still restores a removed assignment with the end it had. **Opt out:** none.
-- **Generated fields give `created_at` / `updated_at` a read-only row.** They were in the default `ignored_fields`, so
-  generating fields made no row for them and, under the default `unconfigured_field_strategy = :block`, every reader
-  (admin included) saw `null` timestamps. `ignored_fields` no longer lists them by default, and
-  `ResourceFieldGenerator` (also the admin's "Sync fields" and the API's `generate_fields`) creates their rows with
-  read on, edit off and no mask, whatever `grant_all` says. Existing resources change only when you sync their fields;
-  the admin then lists the two columns as not configured. Treating timestamps as readable without a row was not chosen:
-  it would carve an exception into `:block` for every resource, rows or not. **Opt out:**
-  `config.ignored_fields += %w[created_at updated_at]`.
+- **Generated fields give `created_at` / `updated_at` a row, at most read-only.** They were in the default
+  `ignored_fields`, so generating fields made no row for them and, under the default
+  `unconfigured_field_strategy = :block`, every reader (admin included) saw `null` timestamps. `ignored_fields` no
+  longer lists them by default, and every path that generates rows gives Rails' timestamps one, with one definition
+  (`TimestampFields`): `ResourceFieldGenerator` (also `Resource.grant_full_access!` and the API's `generate_fields`)
+  and the admin's presets, "Add all new" and "Sync fields". On a granting Permission Set a level that grants read
+  (Editable / Full access / `grant_all: true`, Read-only, Masked) gives them read on, edit off and no mask; a level
+  that grants nothing (Hidden, "No access", `grant_all: false`) leaves them hidden like every other column, since a
+  granting row adds access. On a Muting Permission Set they get the level chosen, like every other column. Treating
+  timestamps as readable without a row was not chosen: it would carve an exception into `:block` for every resource,
+  rows or not. **What an existing install sees:** nothing changes for its resources until their fields are synced, but
+  right after the upgrade the admin lists `created_at` / `updated_at` as not configured on every existing resource
+  (`ModelCatalog` no longer ignores them). Sync each resource's fields at the level you want, or keep the old
+  behaviour. **Opt out:** `config.ignored_fields += %w[created_at updated_at]` (no rows, and the admin stops listing
+  them).
 - **A refusing `api_auth` answers 401 Unauthorized instead of 403.** A wrong or missing token is a failed
   authentication: clients that refresh credentials on 401 did not on the 403. The body is
   `{"error":{"status":401,"messages":"Not authenticated"}}`; the `api.auth_failed` event keeps its reason
@@ -175,6 +182,21 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Fixed
 
+- **A response key two fields map to reads by the stricter of them.** With custom `field_variant_mappings` that send
+  two fields to one name (`supplier_id` and `supplier_ref` both to `supplier_key`) and a model without that name,
+  `FiltersResponseAttributes` read a serializer's `supplier_key` by the first field's entry, so a hidden second field
+  left the key readable. It now reads by the strictest of the fields' entries: read only if every one reads, edit only
+  if every one edits, masked if any masks (with that field's strategy). The default mappings never send two fields to
+  one name. **Opt out:** none.
+- **`PermitsAttributes.call(..., report: true)` with no model reports every key as dropped.** With `resource: nil`
+  every key is dropped, but the `Result` said nothing was (`dropped == []`), with or without a user. `params.filtered`
+  is still not published for it (there is no model to name).
+- **A field row created without a label is labelled with its humanized name.** A `ResourceField` created through the
+  API or a console without a label took the install migration's column default, "Untitled Field", and the admin
+  (Home's privacy audit, the Fields tab) showed that instead of the field; generated rows already had `name.humanize`.
+  A new row whose label is blank or "Untitled Field" now gets `name.humanize` (`billing_email` → "Billing email") on
+  create; a label set later is kept, and existing rows are not changed (rename them in the admin). Resource actions
+  have no label default (a blank one already reads as the humanized name).
 - **"Created by" names who the audit log names.** A record created by the HTTP Basic admin (or an API client) has
   no `created_by_id` — the column holds a user id — so the footer said "Created by System" and a Permission Set's
   Assignments tab "by System", next to "Last edited by admin (password prompt)" and an audit log that named

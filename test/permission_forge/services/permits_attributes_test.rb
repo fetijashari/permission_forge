@@ -99,6 +99,18 @@ module PermissionForge
         assert_equal %w[name email], result.dropped
       end
 
+      test 'report: true with no model to filter for lists every key, with or without a user' do
+        [@user, nil].each do |user|
+          Current.user = user
+          result = PermitsAttributes.call(resource: nil, permitted_params: { name: 'x', email: 'e' }, report: true)
+
+          assert_equal({}, result.params)
+          assert_equal %w[name email], result.dropped, "user: #{user.inspect}"
+        end
+        assert_equal({}, PermitsAttributes.call(resource: nil, permitted_params: { name: 'x' }))
+        assert_equal [], PermitsAttributes.call(resource: nil, permitted_params: {}, report: true).dropped
+      end
+
       test 'report: true collects the dropped keys even when nobody listens to params.filtered' do
         PermissionForge::Audit.send(:emitting) do # nothing is instrumented while emitting
           assert_not PermissionForge::Audit.instrument?(PermitsAttributes::EVENT)

@@ -18,6 +18,13 @@ module PermissionForge
 
     permission_set_user_lookup :via_resource
 
+    # The install migration's column default for label: a row created
+    # without one (the API, the console) would show it everywhere the admin
+    # names the field.
+    UNTITLED_LABEL = 'Untitled Field'.freeze
+
+    before_validation :default_label, on: :create
+
     # optional: as declared since 0.13 (the foreign key holds); stated, so the
     # host's belongs_to_required_by_default decides nothing here.
     belongs_to :resource, class_name: 'PermissionForge::Resource', optional: true
@@ -61,6 +68,15 @@ module PermissionForge
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
     private
+
+    # A new row without a label (blank, or the column default) is labelled
+    # as generated rows are: the humanized name. Only on create: a label an
+    # admin set later is never replaced.
+    def default_label
+      return if name.blank? || (label.present? && label != UNTITLED_LABEL)
+
+      self.label = name.to_s.humanize
+    end
 
     def mask_access?
       mask_access == true

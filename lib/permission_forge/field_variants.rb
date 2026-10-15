@@ -37,16 +37,36 @@ module PermissionForge
     UNREADABLE = [ActiveRecord::ActiveRecordError].freeze
 
     # The entries of the configured fields by the names of their variants
-    # (`owner_uuid` → the `owner_id` entry; the first field wins a name two
-    # map to), to read a name that has no entry of its own.
+    # (`owner_uuid` → the `owner_id` entry), to read a name that has no entry
+    # of its own. A name two fields map to (custom field_variant_mappings)
+    # gets the strictest of their entries (.strictest): a variant is never
+    # more readable than any of its bases.
     #
     # @param fields [Hash] a resource's field entries, by name
     # @return [Hash{String => Hash}]
     def self.base_entries(fields, configuration = PermissionForge.configuration)
-      fields.each_with_object({}) do |(base, entry), by_variant|
-        configuration.field_variants_for(base).each { |variant| by_variant[variant] ||= entry }
+      bases = fields.each_with_object({}) do |(base, entry), by_variant|
+        configuration.field_variants_for(base).each { |variant| (by_variant[variant] ||= []) << entry }
       end
+      bases.transform_values { |entries| strictest(entries) }
     end
+
+    # One entry from several: read only if every entry reads, edit only if
+    # every entry edits, masked if any entry masks (with the first masking
+    # entry's strategy).
+    #
+    # @param entries [Array<Hash>] field entries of the permission hash
+    # @return [Hash]
+    def self.strictest(entries)
+      return entries.first if entries.one?
+
+      masking = entries.find { |entry| entry[:mask_access] }
+      entries.first.merge(read_access: entries.all? { |entry| entry[:read_access] },
+                          edit_access: entries.all? { |entry| entry[:edit_access] },
+                          mask_access: !masking.nil?,
+                          mask_strategy: (masking || entries.first)[:mask_strategy])
+    end
+    private_class_method :strictest
 
     # @param resource_name [String, Symbol] the Resource's name (a model's class name)
     # @param configuration [Configuration]

@@ -79,21 +79,27 @@ module PermissionForge
       private
 
       def filter
-        if @user.blank?
-          report_dropped('nil_user') { @permitted_params.each_pair { |key, _| dropped(key) } } if nil_user_report?
-          return {}
-        end
-        return {} if resource_class.nil?
+        return drop_everything if resource_class.nil? || @user.blank?
         return {} if @permitted_params.blank?
 
         report_dropped('field_access') { filter_for(resource_class, @permitted_params) }
+      end
+
+      # Every key is dropped: nobody is signed in (published as nil_user), or
+      # there is no model to filter for (reported only: params.filtered
+      # names the model).
+      def drop_everything
+        if @permitted_params.present? && (@report || PermissionForge::Audit.instrument?(EVENT))
+          report_dropped('nil_user') { @permitted_params.each_pair { |key, _| dropped(key) } }
+        end
+        {}
       end
 
       # Runs the filter, collecting the dropped paths in @dropped only when
       # the caller asked for a report or params.filtered is stored or heard,
       # and publishes them to the latter.
       def report_dropped(reason)
-        instrumented = PermissionForge::Audit.instrument?(EVENT)
+        instrumented = !resource_class.nil? && PermissionForge::Audit.instrument?(EVENT)
         return yield unless instrumented || @report
 
         @dropped = []
@@ -101,10 +107,6 @@ module PermissionForge
         result = yield
         publish_dropped(reason) if instrumented && !@dropped.empty?
         result
-      end
-
-      def nil_user_report?
-        !resource_class.nil? && @permitted_params.present? && (@report || PermissionForge::Audit.instrument?(EVENT))
       end
 
       def publish_dropped(reason)
