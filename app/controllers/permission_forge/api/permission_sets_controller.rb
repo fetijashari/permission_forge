@@ -45,8 +45,9 @@ module PermissionForge
         return if performed?
 
         # As the admin's Duplicate: an editable copy, outside a locked group.
+        # Names are unique per tenant: the default one is numbered when taken.
         cloned = PermissionForge::Admin::PermissionSetFactory.duplicate(
-          @permission_set, name: pf_text_param(:name).presence || "#{@permission_set.name} (Copy)"
+          @permission_set, name: pf_text_param(:name).presence || PermissionForge::PermissionSet.unique_name("#{@permission_set.name} (Copy)")
         )
         render_created(cloned, serializer_for(:permission_set))
       end

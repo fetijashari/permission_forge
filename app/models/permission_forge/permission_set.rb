@@ -35,6 +35,11 @@ module PermissionForge
     validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },
                      if: -> { new_record? || will_save_change_to_name? }
     validates :name, length: { maximum: 255 }
+    # Unique within its tenant, ignoring case — what the admin's "New
+    # Permission Set" form refuses. Checked for a new row and on a rename
+    # only: two sets that share a name from before 0.15 stay valid in their
+    # other attributes until one is renamed.
+    validate :name_unique_in_tenant, if: -> { name.present? && (new_record? || will_save_change_to_name?) }
     # A group id must name a group (of this tenant): optional, but never dangling.
     validates :permission_set_group,
               presence: { message: ->(*) { I18n.t('permission_forge.validations.permission_set.group_missing') } },
@@ -56,6 +61,48 @@ module PermissionForge
     }
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
+
+    # Sets named `name`, ignoring case and surrounding spaces (compared by
+    # the database on both sides), so "Sales " and "sales" are one name.
+    #
+    # @param name [String]
+    # @return [ActiveRecord::Relation]
+    def self.named(name)
+      column = "#{connection.quote_table_name(table_name)}.#{connection.quote_column_name('name')}"
+      where("LOWER(TRIM(#{column})) = LOWER(TRIM(?))", name.to_s)
+    end
+
+    # Whether a set of the current tenant is named `name` (any case).
+    #
+    # @param name [String]
+    # @return [Boolean]
+    def self.name_taken?(name)
+      named(name).exists?
+    end
+
+    # `base`, else "`base` 2", "`base` 3", ... — the first name no set of the
+    # current tenant uses.
+    #
+    # @param base [String]
+    # @return [String]
+    def self.unique_name(base)
+      candidate = base
+      suffix = 2
+      while name_taken?(candidate)
+        candidate = "#{base} #{suffix}"
+        suffix += 1
+      end
+      candidate
+    end
+
+    # The default name of a copy of the set named `name`: "`name` (copy)",
+    # numbered when taken.
+    #
+    # @param name [String]
+    # @return [String]
+    def self.copy_name(name)
+      unique_name(I18n.t('permission_forge.permission_sets.copy_name', name: name))
+    end
 
     def active?
       is_active
@@ -88,6 +135,29 @@ module PermissionForge
     end
 
     private
+
+    def name_unique_in_tenant
+      return unless same_name_in_tenant.exists?
+
+      errors.add(:name, :taken, message: I18n.t('permission_forge.validations.permission_set.name_taken'))
+    end
+
+    # The other sets of this record's tenant (not the ambient one) with its
+    # name. Without tenancy (or on a table with no tenant column): every set.
+    def same_name_in_tenant
+      scope = self.class.unscoped.named(name)
+      scope = scope.where.not(id: id) if persisted?
+      column = uniqueness_tenant_column
+      column ? scope.where(column => self[column]) : scope
+    end
+
+    def uniqueness_tenant_column
+      configuration = PermissionForge.configuration
+      return unless configuration.tenant_enabled? && self.class.tenant_scoping_applied?
+
+      column = configuration.resolved_tenant_column.to_s
+      column if self.class.column_names.include?(column)
+    end
 
     # InvalidatesManagedActions: a new set has no resources yet and the index
     # holds no set names, so only switching a set on or off changes what is

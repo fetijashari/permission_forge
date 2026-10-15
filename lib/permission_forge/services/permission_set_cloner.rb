@@ -22,9 +22,11 @@ module PermissionForge
         new(permission_set, attrs, unlock: unlock).call
       end
 
+      # Without a name the copy is named "<name> (copy)", numbered when taken
+      # (names are unique per tenant: PermissionSet.copy_name).
       def initialize(permission_set, attrs, unlock: false)
         @permission_set = permission_set
-        @attrs = attrs
+        @attrs = attrs.key?(:name) || attrs.key?('name') ? attrs : attrs.merge(name: PermissionForge::PermissionSet.copy_name(permission_set.name))
         @unlock = unlock
       end
 

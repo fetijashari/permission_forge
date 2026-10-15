@@ -2157,6 +2157,7 @@ sq:
       name_blank: nuk mund të jetë bosh
       permission_set:
         group_missing: duhet të jetë një grupim ekzistues i grupeve të lejeve
+        name_taken: përdoret tashmë nga një Grup lejesh tjetër
       permission_set_rule:
         between_requires_two_values: duhet të përmbajë saktësisht 2 vlera të ndara
           me presje për operatorin between

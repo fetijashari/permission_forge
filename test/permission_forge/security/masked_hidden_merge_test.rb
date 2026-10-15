@@ -28,7 +28,8 @@ module PermissionForge
       # The user's sets, created so that they merge in the given order.
       def grant_in_order(*field_rows)
         field_rows.each_with_index do |attrs, index|
-          set = create_permission_set(name: "Set #{index}", created_at: Time.current - (field_rows.size - index).minutes)
+          name = PermissionForge::PermissionSet.unique_name("Set #{index}")
+          set = create_permission_set(name: name, created_at: Time.current - (field_rows.size - index).minutes)
           create_permission_set_user(user: @user, permission_set: set)
           resource = create_resource(permission_set: set, name: 'Customer', read_access: true)
           create_resource_field(resource: resource, name: 'email', label: 'Email', **attrs)

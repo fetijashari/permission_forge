@@ -141,7 +141,7 @@ module PermissionForge
       end
 
       def holder_set(user, name, rows, **attrs)
-        set = create_permission_set(name: name, **attrs)
+        set = create_permission_set(name: PermissionForge::PermissionSet.unique_name(name), **attrs)
         create_permission_set_user(user: user, permission_set: set, **rows[:assignment].to_h)
         set
       end

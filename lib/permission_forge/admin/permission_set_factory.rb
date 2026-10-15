@@ -22,21 +22,11 @@ module PermissionForge
         clone_unlocked(source, attrs)
       end
 
-      # Case-insensitive.
-      def self.name_taken?(name)
-        PermissionForge::PermissionSet.where('LOWER(name) = ?', name.downcase).exists?
-      end
+      # Case-insensitive, in the current tenant (PermissionSet.name_taken?).
+      def self.name_taken?(name) = PermissionForge::PermissionSet.name_taken?(name)
 
       # `base`, else "`base` 2", "`base` 3", ... — the first free name.
-      def self.unique_name(base)
-        candidate = base
-        suffix = 2
-        while name_taken?(candidate)
-          candidate = "#{base} #{suffix}"
-          suffix += 1
-        end
-        candidate
-      end
+      def self.unique_name(base) = PermissionForge::PermissionSet.unique_name(base)
 
       # Every copied row is created unlocked, so its create event holds the
       # state it has (no second, unaudited write).

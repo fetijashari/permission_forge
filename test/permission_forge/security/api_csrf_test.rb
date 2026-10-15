@@ -122,9 +122,9 @@ module PermissionForge
           ->(c) { c.request.env['pf.identity'] == 'admin' } => { env: { 'pf.identity' => 'admin' } },
           ->(c) { ActionController::HttpAuthentication::Basic.has_basic_credentials?(c.request) } =>
             { headers: { 'Authorization' => basic } }
-        }.each do |auth, options|
+        }.each_with_index do |(auth, options), index|
           PermissionForge.configuration.api_auth = auth
-          post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'forged' } }, **options
+          post "#{ROOT}/api/permission_sets", params: { permission_set: { name: "forged #{index}" } }, **options
           assert_response :created
         end
       end

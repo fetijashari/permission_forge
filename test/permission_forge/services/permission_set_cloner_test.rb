@@ -82,7 +82,8 @@ module PermissionForge
 
         cloned = PermissionSetCloner.call(permission_set: ps)
 
-        assert_equal 'Default Attrs', cloned.name
+        # Names are unique per tenant: a clone without a name is a copy.
+        assert_equal I18n.t('permission_forge.permission_sets.copy_name', name: 'Default Attrs'), cloned.name
         assert cloned.persisted?
       end
     end

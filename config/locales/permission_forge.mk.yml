@@ -2158,6 +2158,7 @@ mk:
       name_blank: не смее да биде празно
       permission_set:
         group_missing: мора да биде постоечка група на сетови на дозволи
+        name_taken: веќе се користи од друг сет на дозволи
       permission_set_rule:
         between_requires_two_values: мора да содржи точно 2 вредности одделени со
           запирка за операторот between
