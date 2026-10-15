@@ -361,7 +361,7 @@ module PermissionForge
         )
         create_permission_set_rule(
           permission_set: @muting_set, resource: @muting_resource,
-          name: 'Muting Rule', field_name: 'status'
+          name: 'Muting Rule', field_name: 'domain'
         )
 
         rules = build_hash.dig(:resources, 'Customer', :permission_set_rules)

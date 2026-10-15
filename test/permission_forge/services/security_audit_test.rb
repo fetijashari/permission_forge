@@ -26,7 +26,8 @@ module PermissionForge
 
       # A rule as the table can hold it, whatever the validations say today.
       def rule_with(resource, **attrs)
-        rule = create_permission_set_rule(permission_set: resource.permission_set, resource: resource, include_nulls: false)
+        rule = create_permission_set_rule(permission_set: resource.permission_set, resource: resource, include_nulls: false,
+                                          field_name: 'id')
         rule.update_columns(attrs)
         rule
       end
@@ -228,7 +229,49 @@ module PermissionForge
         report = audit
 
         assert_not_includes codes(report), :unusable_rule_values
+        assert_equal ['Legacy › Customer.no_such_column equal "x": No column · 0 people'],
+                     item_for(report, :missing_rule_columns).items, 'only the column the table does not have'
         assert_includes item_for(report, :unknown_models).items, 'FreightCost'
+      end
+
+      # Saved before PermissionSetRule checked the column (or past it): the
+      # rule matches nothing, so its holders are denied every record.
+      test 'a rule naming a column its table does not have is a high finding while people hold the set' do
+        set = create_permission_set(name: 'Sales')
+        resource = create_resource(permission_set: set, read_access: true)
+        create_permission_set_user(user: create_user, permission_set: set)
+        through_supplier = { join_type: 'joins', field_accessor_path: 'supplier' }
+        rule_with(resource, name: 'Owner', field_name: 'onwer_id', field_value: 'current_user')
+        rule_with(resource, name: 'Qualified', field_name: 'customers.onwer_id', operator: 'is_null', field_value: '')
+        rule_with(resource, name: 'Joined', field_name: 'domain', field_value: 'x', **through_supplier)
+        rule_with(resource, name: 'Typed', field_name: 'supplier_id', field_value: '5_id')
+        rule_with(resource, name: 'Fine', field_name: 'owner_id', field_value: '5', **through_supplier)
+        rule_with(resource, name: 'Alias', field_name: 'elsewhere.onwer_id', field_value: '5')
+
+        report = audit
+        finding = item_for(report, :missing_rule_columns)
+
+        assert_equal :high, finding.severity
+        assert_equal 'rule', finding.check
+        assert_match 'matches nothing', finding.detail
+        assert_equal ['Sales › Customer.onwer_id equal "current_user": Owner · 1 person',
+                      'Sales › Customer.customers.onwer_id is_null "": Qualified · 1 person',
+                      'Sales › Customer.supplier.domain equal "x": Joined · 1 person'], finding.items
+        assert_equal ['Sales › Customer.supplier_id equal "5_id": Typed · 1 person'],
+                     item_for(report, :unusable_rule_values).items, 'a missing column is not also an unusable value'
+      end
+
+      test 'a rule naming a missing column weighs less when nobody holds the set, and is no finding when not in effect' do
+        sales = create_permission_set(name: 'Sales')
+        rule_with(create_resource(permission_set: sales, read_access: true), name: 'Owner', field_name: 'onwer_id', field_value: '5')
+
+        assert_equal :medium, item_for(audit, :missing_rule_columns).severity
+
+        muting = create_permission_set(name: 'Muting', is_muting: true)
+        rule_with(create_resource(permission_set: muting), name: 'Not applied', field_name: 'onwer_id', field_value: '5')
+        sales.resources.first.permission_set_rules.update_all(is_active: false)
+
+        assert_not_includes codes(audit), :missing_rule_columns
       end
 
       # Only the rule check runs here: asked for the columns of a missing

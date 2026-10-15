@@ -210,13 +210,17 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   as in the application layer.
 - **A policy is never wider than the application layer.** Where the application layer's
   query raises — a string operator on a number, date or boolean column — the rule compiles
-  to `FALSE`. A field name that is not a name (`owner_id.`) compiles to `FALSE` as well.
+  to `FALSE`. A field name that is not a name (`owner_id.`) compiles to `FALSE` as well, and
+  so does one that is not a column of the table (`onwer_id`), which the application layer
+  denies too (see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name)).
 - **What a rule compiles to also depends on the model** — the column's type, an enum's
   stored values. Re-sync after changing either; the drift report covers the compiled SQL.
 - **After upgrading the gem,** `rake permission_forge:rls:status` reports drift whenever the
   generated SQL changed between versions (`RlsPolicyGenerator::GENERATOR_VERSION`, part of
   the stored digest). Run `rake permission_forge:rls:sync` once after the upgrade. Until you
   do, the old policies stay in force.
+  - **Version 6:** a rule whose field name is not a column of the table compiles to
+    `FALSE`; the sync used to fail at that table.
   - **Version 5 (0.14):** the view_all bypass requires the resource row to be active and,
     with tenancy on, in the row's tenant (rows with a NULL tenant get no bypass); a rule set
     is compiled whatever its set's and resource row's state, and its membership check

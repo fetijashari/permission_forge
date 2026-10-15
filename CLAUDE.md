@@ -202,7 +202,7 @@ Composition concern that includes 3 focused sub-concerns:
 - **`PermissionSetGroupCloner.call(permission_set_group:, attrs:)`** — deep-clones a group with all its permission sets
 - **`ResourceWithFieldsBuilder.call(permission_set:, resource_name:)`** — creates a resource with full CRUD access + auto-generated fields
 - **`DashboardStats.call`** — aggregates dashboard statistics from permission models
-- **`SecurityAudit.call(configuration:, checks:, environment:)`** — read-only security review behind `rake permission_forge:audit` (`FORMAT=json`, `FAIL_ON=high`). One class per check in `services/security_audit/` (`config`, `privilege`, `assignment`, `rule` — also rules that match nothing, `unusable_rule_values` — `integrity`, `personal_data`, `action`, `audit_trail`), listed in `SecurityAudit.checks`; returns a `Report` of `Finding`s (critical → info)
+- **`SecurityAudit.call(configuration:, checks:, environment:)`** — read-only security review behind `rake permission_forge:audit` (`FORMAT=json`, `FAIL_ON=high`). One class per check in `services/security_audit/` (`config`, `privilege`, `assignment`, `rule` — also rules that match nothing, `unusable_rule_values`, and rules naming a missing column, `missing_rule_columns` — `integrity`, `personal_data`, `action`, `audit_trail`), listed in `SecurityAudit.checks`; returns a `Report` of `Finding`s (critical → info)
 
 ---
 
@@ -218,7 +218,7 @@ Composition concern that includes 3 focused sub-concerns:
 ### ValueTyping
 - `ValueTyping.call(operator, value, rule_column)` types a rule's value by the operator's shape (`SHAPES`: single, list, pair, LIKE pattern) and returns `UNUSABLE` when the column cannot hold it or the field name is not a name — the applier then returns `none`, the RLS generator compiles `FALSE`
 - `ValueCasters::BY_TYPE` has one caster per column type (adding a type = one entry); `ValueCasters::POSTGRESQL` holds the only database-specific ones (date/time text that is not ISO 8601 left as written, `real` in single precision); column types without a caster (arrays, uuid, json) are left to the database
-- `RuleColumn.find(field_name, models)` resolves a field name the way the database does (schema columns, so `ignored_columns` count; any case on MySQL and SQLite; a schema or database prefix; the classes along the association path); `RuleColumn.models_along` is the one walk of an association path (applier and audit)
+- `RuleColumn.find(field_name, models)` resolves a field name the way the database does (schema columns, so `ignored_columns` count; any case on MySQL and SQLite; a schema or database prefix; the classes along the association path); `RuleColumn.models_along` is the one walk of an association path (applier and audit); `RuleColumn.for_rule(rule)` is the one lookup of a rule row's column (validation and audit). `#missing?` (a table of the rule's without that column) is `UNUSABLE` under a built-in operator (`ValueTyping.no_column?`: the applier returns `none`, RLS compiles `FALSE`, the model refuses it on save); a table that is none of the rule's (`UNKNOWN`: an alias the query joins) and a custom operator stay with the database
 - `current_user` is substituted only where one value is compared (`ValueTyping.current_user?`), never inside a list or range
 - `PermissionSetRule.filter_join_type?` is the one definition of "a filter on the model's own table" (nothing, blank, `filter`) — the applier, the default scope and the RLS generator all ask it
 

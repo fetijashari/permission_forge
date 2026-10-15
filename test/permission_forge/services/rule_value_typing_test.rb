@@ -482,14 +482,64 @@ module PermissionForge
         end
       end
 
-      test 'on PostgreSQL a name in another case is another name: the database rejects it' do
+      # A column in another case is a column the table does not have: it
+      # matches nothing. A table in another case is no table of the rule's,
+      # and is left to the database, which rejects it.
+      test 'on PostgreSQL a name in another case is another name' do
         skip 'MySQL and SQLite have no case in column names (the test before)' unless POSTGRES
 
-        %w[Flag FLAG pf_rule_records.FLAG PF_RULE_RECORDS.flag].each do |name|
-          assert_raises(ActiveRecord::StatementInvalid, name) do
-            PfRuleRecord.transaction(requires_new: true) { labels(name, 'equal', 'true') }
-          end
+        %w[Flag FLAG pf_rule_records.FLAG].each do |name|
+          assert_empty labels(name, 'equal', 'true'), name
+          assert_empty labels(name, 'not_equal', 'true', include_nulls: true), name
         end
+        assert_raises(ActiveRecord::StatementInvalid) do
+          PfRuleRecord.transaction(requires_new: true) { labels('PF_RULE_RECORDS.flag', 'equal', 'true') }
+        end
+      end
+
+      # The database would reject the query: every find_by / permission_scoped
+      # of the rule's holders raised (a 500). Like a value the column cannot
+      # hold, the rule now denies.
+      test 'a column the table does not have matches nothing, under every built-in operator' do
+        operators = { 'equal' => '5', 'not_equal' => '5', 'less_than' => '5', 'greater_than' => '5',
+                      'less_than_or_equal' => '5', 'greater_than_or_equal' => '5',
+                      'in' => '5, 0', 'not_in' => 'x', 'between' => '0,5', 'contains' => 'a', 'not_contains' => 'a',
+                      'starts_with' => 'a', 'ends_with' => 'a', 'is_null' => '', 'is_not_null' => '' }
+
+        assert_equal PermissionForge::Operators::Constants::OPERATORS.sort, operators.keys.sort
+        %w[no_such_column onwer_id pf_rule_records.no_such_column].each do |name|
+          operators.each do |operator, value|
+            assert_empty labels(name, operator, value), "#{name} #{operator}"
+            assert_empty labels(name, operator, value, include_nulls: true), "#{name} #{operator} +nulls"
+          end
+          assert_empty labels(name, 'equal', 'current_user'), "#{name} current_user"
+        end
+      end
+
+      test 'a column the table at the end of a join path does not have matches nothing' do
+        join = { join_type: 'joins', field_accessor_path: 'owner' }
+
+        assert_empty labels('no_such_column', 'equal', 'x', **join)
+        assert_empty labels('users.no_such_column', 'not_equal', 'x', **join)
+        assert_empty labels('nope', 'is_null', '', join_type: 'left_joins', field_accessor_path: 'owner')
+        # The column is looked up on the joined table, not the rule's own.
+        assert_empty labels('small_count', 'equal', '5', **join)
+        assert_equal %w[five], labels('users.id', 'equal', @user.id.to_s, **join)
+      end
+
+      # Where the columns cannot be told, the rule is left to the database as before.
+      test 'a table that is none of the rule\'s, or a custom operator, is still left to the database' do
+        assert_raises(ActiveRecord::StatementInvalid) do
+          PfRuleRecord.transaction(requires_new: true) { labels('elsewhere.flag', 'equal', 'true') }
+        end
+        custom = PermissionForge::Operators::Registry.strategies.merge(
+          'equal' => PermissionForge::Operators::Registry.strategies.fetch('equal'),
+          'anything' => ->(query, _column, _rule, value) { query.where(label: value) }
+        )
+
+        assert_equal %w[five], scoped(registry: custom, field_name: 'no_such_column', operator: 'anything', field_value: 'five')
+          .pluck(:label)
+        assert_empty scoped(registry: custom, field_name: 'no_such_column', operator: 'equal', field_value: 'five')
       end
 
       test 'a column the model ignores is typed like any other' do
@@ -674,19 +724,22 @@ module PermissionForge
         }
         registry = custom_registry('in' => spy, 'not_in' => spy, 'between' => spy)
 
-        { 'small_count' => [1, 2], 'amount' => [1, 2], 'label' => %w[1 2], 'no_such_column' => %w[1 2],
-          'elsewhere.small_count' => %w[1 2] }.each do |column, expected|
+        { 'small_count' => [1, 2], 'amount' => [1, 2], 'label' => %w[1 2], 'elsewhere.small_count' => %w[1 2] }.each do |column, expected|
           %w[in not_in].each do |operator|
             scoped(registry:, field_name: column, operator: operator, field_value: ' 1 , 2 ').to_a
 
             assert_equal expected, seen[column], "#{column} #{operator}"
           end
         end
-        { 'small_count' => [1, 2], 'label' => %w[1 2], 'no_such_column' => [1, 2] }.each do |column, expected|
+        { 'small_count' => [1, 2], 'label' => %w[1 2], 'elsewhere.small_count' => [1, 2] }.each do |column, expected|
           scoped(registry:, field_name: column, operator: 'between', field_value: '1,2').to_a
 
           assert_equal expected, seen[column], "#{column} between"
         end
+        %w[in not_in between].each do |operator|
+          assert_empty scoped(registry:, field_name: 'no_such_column', operator: operator, field_value: '1,2')
+        end
+        assert_not seen.key?('no_such_column'), 'a column the table does not have never reaches the strategy'
       end
 
       test 'a built-in strategy called without a typed value reads the rule text, as before' do

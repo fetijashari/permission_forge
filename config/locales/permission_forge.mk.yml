@@ -2212,6 +2212,7 @@ mk:
         invalid_operator: не е валиден оператор
         numeric_or_date_required: мора да биде нумеричка или датумска вредност за
           оператори за споредба
+        unknown_column: не е колона на %{model}
         value_not_expected: не бара вредност за овој оператор
         value_required: не смее да биде празно за овој оператор
       resource:

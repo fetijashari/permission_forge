@@ -69,11 +69,53 @@ module PermissionForge
     }, allow_blank: true
 
     validate :validate_field_name_segments, if: :field_name_changed?
+    validate :validate_field_name_column, if: :column_check_due?
     validate :validate_field_value_for_operator
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
+    # What a rule's column is looked up by (Operators::RuleColumn.for_rule).
+    COLUMN_ATTRIBUTES = %w[field_name field_accessor_path join_type resource_id].freeze
+
+    # A copy (Services::Clonable) names what its original names. A rule
+    # written before its column was checked is copied as it is: it matches
+    # nothing, as the original does — leaving it out would widen the copy's
+    # access, refusing it would fail the clone. `rake permission_forge:audit`
+    # reports both.
+    def initialize_dup(other)
+      super
+      @copied_column = column_parts
+    end
+
     private
+
+    def column_parts
+      [field_name, field_accessor_path, join_type]
+    end
+
+    # On a new rule and when what it names changes: a row that already names
+    # a missing column stays editable in its other attributes (it matches
+    # nothing; the audit reports it).
+    def column_check_due?
+      return false if @copied_column && @copied_column == column_parts
+
+      new_record? || changed.intersect?(COLUMN_ATTRIBUTES)
+    end
+
+    # A name the model's table does not have (along the rule's path) would
+    # make the rule match nothing — the database rejects the comparison. Only
+    # checked when the column can be told (Operators::RuleColumn.for_rule): a
+    # model that cannot be loaded now, or a name qualified with a table that
+    # is none of the rule's (an alias the query joins), is left to the query.
+    def validate_field_name_column
+      return if field_name.blank? || errors[:field_name].any?
+
+      target = PermissionForge::Operators::RuleColumn.for_rule(self)
+      return unless target&.missing?
+
+      errors.add(:field_name, I18n.t('permission_forge.validations.permission_set_rule.unknown_column',
+                                     model: target.model.name, default: 'is not a column of %<model>s'))
+    end
 
     def valueless_operator?
       PermissionForge::Operators::Validations.valueless?(operator)

@@ -71,7 +71,7 @@ module PermissionForge
       # @param target [Operators::RuleColumn] the column the rule names
       # @return [Object] a typed literal, an Array of them, a SessionUser, or UNUSABLE
       def typed_value(operator, value, target)
-        return UNUSABLE if target.malformed? || unmatchable?(operator, target.column)
+        return UNUSABLE if Operators::ValueTyping.no_column?(operator, target) || unmatchable?(operator, target.column)
         return session_user(operator, target) if Operators::ValueTyping.current_user?(operator, value)
 
         Operators::ValueTyping.call(operator, value, target)
@@ -100,7 +100,7 @@ module PermissionForge
       private
 
       # A LIKE operator on a column PostgreSQL cannot match a pattern with. (A
-      # column the model does not have fails the sync, as it fails the query.)
+      # column the model does not have is UNUSABLE, as in the app layer.)
       def unmatchable?(operator, column)
         return false unless column && Operators::ValueTyping::SHAPES[operator] == :pattern
 

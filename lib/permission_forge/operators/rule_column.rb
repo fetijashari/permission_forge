@@ -16,9 +16,14 @@ module PermissionForge
     # text after all. A lookup that is more generous than the database costs
     # nothing: the database then rejects the name itself.
     #
-    # When the table is none of the rule's, or has no such column, nothing is
-    # known and the value is left as it is. A field_name that is not a name
-    # ({.name?}) is {#malformed?}: such a rule matches nothing.
+    # When the table is none of the rule's, nothing is known ({UNKNOWN}) and
+    # the value is left as it is: the name may be a table the query joins
+    # itself (an association's alias, a default scope's join) — the database
+    # resolves it or rejects it. A table of the rule's that has no such column
+    # is {#missing?}: the database would reject the query, so a built-in
+    # operator matches nothing for it (ValueTyping.no_column?). A field_name
+    # that is not a name ({.name?}) is {#malformed?}: such a rule matches
+    # nothing.
     class RuleColumn
       # Adapters whose database compares a quoted name as it is written. On
       # every other one — MySQL, SQLite — `Flag` is the column `flag`.
@@ -28,6 +33,8 @@ module PermissionForge
       attr_reader :column
       # @return [Hash, nil] label => stored value, when the model declares the column an enum
       attr_reader :enum
+      # @return [Class, nil] the model whose table the name was looked up in; nil when no table was
+      attr_reader :model
 
       class << self
         # A field name is one name, or several joined by dots. An empty one
@@ -51,6 +58,26 @@ module PermissionForge
           model ? on(model, name) : UNKNOWN
         end
 
+        # The column a rule row names, looked up the way PermissionRuleApplier
+        # looks it up: in the model its Resource is named after and along its
+        # association path (join rules only). nil when that cannot be told —
+        # the Resource names no model, the model cannot be loaded, the path
+        # cannot be followed, a table along it does not exist (asking a missing
+        # table for its columns fails the statement, and with it a transaction)
+        # or the database cannot be asked.
+        #
+        # @param rule [PermissionForge::PermissionSetRule]
+        # @return [RuleColumn, nil]
+        def for_rule(rule)
+          model = rule_model(rule)
+          return unless model
+
+          models = models_along(model, rule.join_rule? ? rule.field_accessor_path.to_s.split('.') : [])
+          find(rule.field_name, models) if models.any? && models.all?(&:table_exists?)
+        rescue NameError, ArgumentError, ActiveRecord::ActiveRecordError
+          nil
+        end
+
         # The rule's own model, then the model of each association on its path;
         # a plain field_name is a column of the last one.
         #
@@ -68,6 +95,12 @@ module PermissionForge
 
         private
 
+        # The model the rule's Resource is named after, when it is one.
+        def rule_model(rule)
+          model = rule.resource&.name.to_s.safe_constantize
+          model if model.is_a?(Class) && model < ActiveRecord::Base && !model.abstract_class?
+        end
+
         # The model a table name stands for; without one, the model the rule ends on.
         def table_model(table, models)
           return models.last unless table
@@ -78,7 +111,7 @@ module PermissionForge
         def on(model, name)
           connection = model.connection
           column = column_named(connection.schema_cache.columns_hash(model.table_name), name, exact_names?(model))
-          new(column, column && model.defined_enums[column.name], connection.adapter_name)
+          new(column, column && model.defined_enums[column.name], connection.adapter_name, model)
         end
 
         def column_named(columns, name, exact)
@@ -94,19 +127,26 @@ module PermissionForge
         end
       end
 
-      def initialize(column, enum, adapter_name)
+      def initialize(column, enum, adapter_name, model = nil)
         @column = column
         @enum = enum
         @adapter_name = adapter_name
+        @model = model
       end
 
-      # Nothing is known about the column: no table of the rule, or no such column.
+      # Nothing is known about the column: the name's table is none of the rule's.
       UNKNOWN = new(nil, nil, nil).freeze
       # The rule's field_name is not a name.
       MALFORMED = new(nil, nil, nil).freeze
 
       def malformed?
         equal?(MALFORMED)
+      end
+
+      # The name's table is one of the rule's ({#model}), and it has no such
+      # column: the database would reject a query that compares it.
+      def missing?
+        !model.nil? && column.nil?
       end
 
       # The caster for the column's type, on the database it is in.

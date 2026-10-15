@@ -38,7 +38,7 @@ module PermissionForge
         assert_select '#pf-card-rules', count: 0
 
         create_permission_set_rule(permission_set: @set, resource: @resource, name: 'Via supplier',
-                                   join_type: 'joins', field_accessor_path: 'supplier')
+                                   join_type: 'joins', field_accessor_path: 'supplier', field_name: 'owner_id')
         get @rules_tab
         assert_select '.pf-banner--warn', text: /follow a relationship/
       ensure

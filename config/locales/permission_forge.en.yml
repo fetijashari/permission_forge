@@ -2162,6 +2162,7 @@ en:
         invalid_join_type: is not a valid join type
         invalid_operator: is not a valid operator
         numeric_or_date_required: must be a numeric or date value for comparison operators
+        unknown_column: is not a column of %{model}
         value_not_expected: does not require a value for this operator
         value_required: must not be blank for this operator
       resource:

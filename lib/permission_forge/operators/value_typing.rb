@@ -23,8 +23,9 @@ module PermissionForge
     # Only the built-in operators are typed, each by the shape of its value
     # ({SHAPES}). A custom operator's value is returned as it came, and a
     # column nothing is known about leaves the value to the database. A rule
-    # whose field_name is not a name (RuleColumn#malformed?) has no column to
-    # compare with: its value is UNUSABLE whatever the operator.
+    # with no column to compare with ({.no_column?}) is UNUSABLE: one whose
+    # field_name is not a name, whatever the operator, and one that names a
+    # column its table does not have, under a built-in operator.
     module ValueTyping
       UNUSABLE = ValueCasters::UNUSABLE
       CURRENT_USER = 'current_user'
@@ -50,10 +51,22 @@ module PermissionForge
       # @return [Object] what the operator's strategy binds: one value, an Array
       #   for `in` / `not_in` / `between`, or {UNUSABLE}
       def call(operator, value, target)
-        return UNUSABLE if target.malformed?
+        return UNUSABLE if no_column?(operator, target)
 
         shape = SHAPES[operator]
         shape ? send(shape, value, target) : value
+      end
+
+      # Whether the rule has no column to compare with: its field_name is not a
+      # name (RuleColumn#malformed?), or — under a built-in operator — it names
+      # a column its table does not have (RuleColumn#missing?), which the
+      # database would reject. A custom operator's strategy decides what it
+      # does with the name, so a missing column is left to it.
+      #
+      # @param operator [String] the rule's operator
+      # @param target [RuleColumn] the column the rule names
+      def no_column?(operator, target)
+        target.malformed? || (target.missing? && Constants::OPERATORS.include?(operator))
       end
 
       # `current_user` stands for the user's id wherever one value is compared.

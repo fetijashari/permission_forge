@@ -8,6 +8,10 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Added
 
+- **`rake permission_forge:audit` reports rules naming a column that does not exist** (`missing_rule_columns`: High
+  when people hold the set, otherwise Medium; lists set, resource, field, operator, value and rule). Such a rule
+  matches nothing (see Fixed). Run it after upgrading.
+
 - **`NotAuthorizedError#failure_messages`.** The `failure_message` of each row-level rule that denied the record, as
   the admin wrote it (in rule order, without blanks and repeats; `[]` when no rule denied), so a host can render a
   friendly 403 without parsing `message` (`[Forbidden by Rule: <name>] with message: <failure_message>`). `message`
@@ -48,6 +52,15 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   the set that unmasks. The other keys are unchanged.
 
 ### Changed
+
+- **A rule whose field name is not a column of its model does not save.** `PermissionSetRule` adds "is not a column
+  of Customer" on `field_name` (en, sq, mk) when the Resource's model loads and the name is no column of its table —
+  along `field_accessor_path` for a join rule — so the JSON API answers its field-keyed 422 instead of 201, and the
+  admin shows the message. Checked for a new rule and when the field name, path, join type or resource changes, so an
+  existing row stays editable in its other attributes; skipped when the model cannot be loaded, its table does not
+  exist, the path cannot be followed or the name is qualified with a table that is none of the rule's. Copying a
+  Permission Set (or a group) copies such a rule as it is: leaving it out would widen the copy. **Opt out:** none — the
+  rule could only ever raise (and now matches nothing); write it past the model if you must.
 
 - **Development boot warnings also go to standard error.** The cache warnings were logged before `bin/rails server`
   attaches its console logger (and `bin/rails runner` never does), so they reached `log/development.log` only. In
@@ -216,6 +229,16 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   warning once per process through `PermissionForge.deprecator`; once it is set, `@admin` is ignored. Removed in 0.16.
 
 ### Fixed
+
+- **A rule naming a missing column denies instead of raising.** A rule whose field name is not a column of its table
+  (`onwer_id` on `Customer`, saved through the API or the model, or a column renamed since) reached the database, so
+  every `find_by` / `find_by!` / `permission_scoped` (and every query under `auto_query_scoping`) of each holder of
+  its Permission Set raised `ActiveRecord::StatementInvalid` — a 500 in the host app. Under every built-in operator it
+  now matches nothing, like a value the column cannot hold: its holders are denied every record of the resource. A
+  name qualified with a table that is none of the rule's and a custom operator's rule are still left to the database.
+  An RLS policy compiles such a rule to `FALSE` (the sync failed on it); `RlsPolicyGenerator::GENERATOR_VERSION` is 6,
+  so run `bin/rails permission_forge:rls:sync` after upgrading. See
+  [Using the wrong field name](docs/row-level-rules.md#using-the-wrong-field-name).
 
 - **A response key two fields map to reads by the stricter of them.** With custom `field_variant_mappings` that send
   two fields to one name (`supplier_id` and `supplier_ref` both to `supplier_key`) and a model without that name,

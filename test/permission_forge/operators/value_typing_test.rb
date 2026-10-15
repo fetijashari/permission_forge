@@ -371,6 +371,35 @@ module PermissionForge
         assert_same UNUSABLE, ValueTyping.call('equal', 'maybe', RuleColumn.find('flag', [PfRuleSlimRecord]))
       end
 
+      test 'a column the table does not have is missing: no value is usable with it under a built-in operator' do
+        ['no_such_column', 'pf_rule_records.no_such_column', "#{table_qualifier}.pf_rule_records.nope"].each do |name|
+          target = RuleColumn.find(name, [PfRuleRecord])
+
+          assert_predicate target, :missing?, name
+          assert_not_predicate target, :malformed?, name
+          assert_equal PfRuleRecord, target.model, name
+          Constants::OPERATORS.each do |operator|
+            assert_same UNUSABLE, ValueTyping.call(operator, '5', target), "#{name} #{operator}"
+            assert ValueTyping.no_column?(operator, target), "#{name} #{operator}"
+          end
+          assert_equal '5', ValueTyping.call('my_custom_operator', '5', target), 'a custom operator decides itself'
+        end
+        assert_equal User, RuleColumn.find('nope', [Customer, Supplier, User]).model
+        assert_equal Supplier, RuleColumn.find('suppliers.nope', [Customer, Supplier, User]).model
+      end
+
+      test 'a column that is there, or a table that is none of the rule\'s, is not missing' do
+        found = RuleColumn.find('flag', [PfRuleRecord])
+
+        assert_not_predicate found, :missing?
+        assert_equal PfRuleRecord, found.model
+        [RuleColumn.find('elsewhere.flag', [PfRuleRecord]), RuleColumn.find('flag', []), RuleColumn.find('flag.', [PfRuleRecord])].each do |target|
+          assert_not_predicate target, :missing?
+          assert_nil target.model
+        end
+        assert_equal '5', ValueTyping.call('equal', '5', RuleColumn::UNKNOWN), 'nothing known: left to the database'
+      end
+
       test 'a field name with an empty segment is not a name, and no value is usable with it' do
         ['flag.', '.flag', 'pf_rule_records.flag.', 'pf_rule_records..flag', '.', '..', '', nil].each do |name|
           target = RuleColumn.find(name, [PfRuleRecord])
