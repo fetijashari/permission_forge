@@ -70,6 +70,64 @@ module PermissionForge
         assert_nil json.dig('data', 'expires_at')
       end
 
+      # --- expires_at: ISO 8601 only (Time.zone.parse read "tuesday" as today 00:00) ---
+
+      UNREADABLE_EXPIRY = ['tuesday', 'next tuesday-ish', '2026-13-45', 'banana', '2030-02-30', '2030-10-22T24:00',
+                           '2030-10-22T10', '2030-10-22 10:00 +0200', '22/10/2030', '1761127200'].freeze
+
+      test 'an expires_at that is not ISO 8601 is a 422 and assigns nobody, single and bulk' do
+        UNREADABLE_EXPIRY.each do |value|
+          post users_path, params: { user_id: @user.id, expires_at: value }, as: :json
+          assert_response :unprocessable_entity, value
+          assert_match(/expires_at/, JSON.parse(response.body).dig('error', 'messages'), value)
+
+          post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'assign', expires_at: value }, as: :json
+          assert_response :unprocessable_entity, value
+        end
+
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
+      end
+
+      test 'a number for expires_at is a 422' do
+        post users_path, params: { user_id: @user.id, expires_at: 1_761_127_200 }, as: :json
+
+        assert_response :unprocessable_entity
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
+      end
+
+      test 'every accepted expires_at form is stored as the time it names, single and bulk' do
+        accepted_expiry_forms.each do |value, expected|
+          post users_path, params: { user_id: @user.id, expires_at: value }, as: :json
+          assert_response :created, value
+          assert_equal expected, PermissionForge::PermissionSetUser.find_by!(user_id: @user.id).expires_at, value
+          PermissionForge::PermissionSetUser.where(user_id: @user.id).destroy_all
+
+          post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'assign', expires_at: value }, as: :json
+          assert_response :ok, value
+          assert_equal expected, PermissionForge::PermissionSetUser.find_by!(user_id: @user.id).expires_at, value
+          PermissionForge::PermissionSetUser.where(user_id: @user.id).destroy_all
+        end
+      end
+
+      test 'a date or a time without an offset is read in Time.zone' do
+        in_zone('Europe/Berlin') do
+          post users_path, params: { user_id: @user.id, expires_at: '2030-07-01' }, as: :json
+          assert_response :created
+          assert_equal Time.utc(2030, 6, 30, 22, 0), PermissionForge::PermissionSetUser.find_by!(user_id: @user.id).expires_at
+
+          PermissionForge::PermissionSetUser.where(user_id: @user.id).destroy_all
+          post users_path, params: { user_id: @user.id, expires_at: '2030-07-01 10:00' }, as: :json
+          assert_equal Time.utc(2030, 7, 1, 8, 0), PermissionForge::PermissionSetUser.find_by!(user_id: @user.id).expires_at
+        end
+      end
+
+      test 'a blank expires_at is a permanent assignment' do
+        post users_path, params: { user_id: @user.id, expires_at: '' }, as: :json
+
+        assert_response :created
+        assert_nil PermissionForge::PermissionSetUser.find_by!(user_id: @user.id).expires_at
+      end
+
       # --- Bulk operations ---
 
       test 'POST bulk assigns multiple users' do
@@ -108,6 +166,38 @@ module PermissionForge
         }
 
         assert_response :unprocessable_entity
+      end
+
+      private
+
+      def users_path = "/permission_forge/api/permission_sets/#{@ps.uuid}/users"
+
+      # The app's time zone for the block. use_zone first: it restores the
+      # zone it read on entry.
+      def in_zone(name, &)
+        previous = Time.zone_default
+        Time.use_zone(name) do
+          Time.zone_default = ActiveSupport::TimeZone[name]
+          yield
+        ensure
+          Time.zone_default = previous
+        end
+      end
+
+      # value → the time it names (a date alone: the beginning of that day in
+      # Time.zone; no offset: read in Time.zone).
+      def accepted_expiry_forms
+        {
+          '2030-10-22' => Time.zone.local(2030, 10, 22),
+          '2030-10-22T10:00' => Time.zone.local(2030, 10, 22, 10, 0),
+          '2030-10-22 10:00' => Time.zone.local(2030, 10, 22, 10, 0),
+          '2030-10-22T10:00:30' => Time.zone.local(2030, 10, 22, 10, 0, 30),
+          '2030-10-22T10:00:30.25' => Time.zone.local(2030, 10, 22, 10, 0, 30.25),
+          '2030-10-22T10:00:00Z' => Time.utc(2030, 10, 22, 10, 0),
+          '2030-10-22T10:00+02:00' => Time.utc(2030, 10, 22, 8, 0),
+          '2030-10-22T10:00:00.5-05:30' => Time.utc(2030, 10, 22, 15, 30, 0.5),
+          ' 2030-10-22T10:00:00Z ' => Time.utc(2030, 10, 22, 10, 0)
+        }
       end
     end
   end

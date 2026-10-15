@@ -6,6 +6,17 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An `expires_at` that is not ISO 8601 is refused.** The API (`POST …/users`, `POST …/users/bulk`) and the admin's
+  Undo after a removal read `expires_at` with `Time.zone.parse`, which takes any text with a recognisable fragment:
+  `"tuesday"` or `"next tuesday-ish"` became today 00:00 and was answered 201 with an assignment that had already ended,
+  and `"2030-02-30"` became 2 March. `expires_at` is now read only as an ISO 8601 date (`2026-10-22`, the beginning of
+  that day in `Time.zone`, as before) or date and time (`2026-10-22T10:00`, optional seconds and fraction, `T` or one
+  space, optional `Z` or `±HH:MM`); anything else is a 422 in the API (a 400 in the admin) and assigns nobody. The
+  formats are listed in [`docs/admin-api.md`](docs/admin-api.md#expires_at-formats). The values the admin itself sends
+  are unchanged.
+
 ## [0.14.1] - 2026-10-14
 
 ### Security

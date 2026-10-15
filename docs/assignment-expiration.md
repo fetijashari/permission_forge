@@ -38,6 +38,8 @@ POST /api/permission_sets/:identifier/users/bulk
 { "user_ids": [1, 2, 3], "bulk_action": "assign", "expires_at": "2026-04-01T00:00:00Z" }
 ```
 
+`expires_at` is ISO 8601: a date (`2026-04-01`, the beginning of that day in `Time.zone`) or a date and time with an optional offset (`2026-04-01T00:00:00Z`). Anything else is a 422 — see [`expires_at` formats](admin-api.md#expires_at-formats).
+
 ### Via Admin UI
 
 - **Assign a Permission Set** (from Home, People, a person's page or a set's Assignments tab) offers end-date presets: *1 day*, *1 week*, *30 days*, *End of month*, *Custom date* or *No expiry*. Dates are calendar days; access lasts through the end of the chosen day.

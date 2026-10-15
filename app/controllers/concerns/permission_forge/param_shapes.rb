@@ -18,6 +18,11 @@ module PermissionForge
       value.is_a?(String) ? value.delete("\0").strip : ''
     end
 
+    # The time an ISO 8601 String names, in Time.zone: see IsoTime.
+    #
+    # @return [ActiveSupport::TimeWithZone, nil] nil for anything else
+    def self.time(value) = IsoTime.parse(value)
+
     # `value` with NUL bytes removed from every String in it, however deep.
     #
     # @return [Object] a new Parameters / Array, or the value itself
@@ -70,18 +75,77 @@ module PermissionForge
       Array.wrap(params[key]).filter_map { |value| PermissionForge::Admin::RecordId.cast(value) }
     end
 
-    # The time params[key] names, nil when it is blank.
+    # The time params[key] names (an ISO 8601 date or date-time, IsoTime),
+    # nil when it is blank.
     #
-    # @raise [ActionController::BadRequest] for a value that is no time:
-    #   a date that cannot be read must never become "no end date"
+    # @raise [ActionController::BadRequest] for anything else ("tuesday",
+    #   "2026-13-45"): a date that cannot be read must never become "no end
+    #   date", nor a time somebody did not mean
     def pf_time_param(key)
       value = params[key]
       return nil if value.blank?
 
-      time = Time.zone.parse(value.to_s) if value.is_a?(String)
-      time || raise(ActionController::BadRequest, "#{key} is not a time")
-    rescue ArgumentError
-      raise ActionController::BadRequest, "#{key} is not a time"
+      ParamShapes.time(value) || raise(ActionController::BadRequest, "#{key} is not an ISO 8601 date or time")
+    end
+
+    # The ISO 8601 forms a time parameter is read in, and nothing else
+    # (Time.zone.parse reads "tuesday" as today 00:00):
+    #
+    # - a date, `2026-10-22`: the beginning of that day in Time.zone;
+    # - a date and a time of day, `2026-10-22T10:00`, with optional seconds
+    #   and fraction (`10:00:00`, `10:00:00.5`), `T` or one space between
+    #   them, and an optional offset, `Z` or `+02:00`; without one the time
+    #   is read in Time.zone.
+    #
+    # Every field must exist on the calendar and the clock (no 2026-02-30,
+    # no 24:00, no leap second).
+    #
+    # @api private
+    module IsoTime
+      FORMAT = /\A(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})
+                (?:[T\x20](?<hour>\d{2}):(?<minute>\d{2})(?::(?<second>\d{2})(?:\.(?<fraction>\d{1,9}))?)?
+                   (?<offset>Z|[+-]\d{2}:\d{2})?)?\z/x
+
+      # @return [ActiveSupport::TimeWithZone, nil] nil for a value that is not
+      #   one of the forms above
+      def self.parse(value)
+        match = FORMAT.match(value.strip) if value.is_a?(String)
+        fields = match && fields_of(match)
+        offset = match && match[:offset]
+        at(fields, offset) if fields && valid_offset?(offset)
+      end
+
+      # [year, month, day, hour, minute, seconds with fraction], nil when a
+      # field is off the calendar or the clock.
+      def self.fields_of(match)
+        date = match.values_at(:year, :month, :day).map(&:to_i)
+        clock = match.values_at(:hour, :minute, :second).map(&:to_i)
+        return unless Date.valid_date?(*date) && valid_clock?(*clock)
+
+        [*date, *clock.first(2), clock.last + fraction_of(match[:fraction])]
+      end
+
+      def self.valid_clock?(hour, minute, second)
+        hour < 24 && minute < 60 && second < 60
+      end
+
+      # nil (no offset) and Z are valid; ±HH:MM within a day.
+      def self.valid_offset?(offset)
+        return true if offset.nil? || offset == 'Z'
+
+        offset[1, 2].to_i < 24 && offset[4, 2].to_i < 60
+      end
+
+      def self.fraction_of(digits)
+        digits ? Rational(digits.to_i, 10**digits.size) : 0
+      end
+
+      def self.at(fields, offset)
+        return Time.zone.local(*fields) unless offset
+
+        Time.new(*fields, offset == 'Z' ? '+00:00' : offset).in_time_zone
+      end
+      private_class_method :fields_of, :valid_clock?, :valid_offset?, :fraction_of, :at
     end
   end
 end
