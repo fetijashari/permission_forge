@@ -110,7 +110,7 @@ module PermissionForge
       end
 
       def stale_days
-        @configuration.admin_stale_assignment_days || 90
+        @configuration.admin_stale_assignment_days || Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS
       end
 
       # --- Permission Sets to tidy up -----------------------------------------

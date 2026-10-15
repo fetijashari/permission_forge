@@ -270,7 +270,7 @@ Two errors refuse access. This section is the one place for both; [Controller Ac
 
 ### The default: 403 Forbidden
 
-The engine registers both errors in `config.action_dispatch.rescue_responses` as `:forbidden`, so a denial your app does not rescue answers **403**, the way Rails answers 404 for `ActiveRecord::RecordNotFound`. Through 0.14.1 it was a 500.
+The engine registers both errors in `config.action_dispatch.rescue_responses` as `:forbidden`, so a denial your app does not rescue answers **403**, the way Rails answers 404 for `ActiveRecord::RecordNotFound`. Through 0.14.1 it was a 500. Rails looks the status up by the exact class name, so only these two classes are mapped: a subclass your app defines answers 500 unless you register it too.
 
 What the response looks like depends on Rails' error pages, not on the gem:
 

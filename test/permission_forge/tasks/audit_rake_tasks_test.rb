@@ -184,7 +184,7 @@ module PermissionForge
 
     # Read with to_i, these were 0 days: every permanent assignment reported.
     test 'stale_assignments refuses a THRESHOLD_DAYS that is not a number of days' do
-      ['', 'abc', '-3', '0', '1.5', '36501'].each do |given|
+      ['', 'abc', '-3', '0', '1.5', '36501', '1_0'].each do |given|
         ENV['THRESHOLD_DAYS'] = given
         Rake::Task['permission_forge:stale_assignments'].reenable
 

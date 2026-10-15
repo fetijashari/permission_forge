@@ -6,6 +6,10 @@ module PermissionForge
     #
     # @api public
     module AdminUiSettings
+      # The default of admin_stale_assignment_days, and the threshold used
+      # wherever that setting is nil (the one definition of the fallback).
+      DEFAULT_STALE_ASSIGNMENT_DAYS = 90
+
       # Lambda returning the model classes offered in "Add a resource".
       # nil (default) eager-loads app/models and lists every concrete
       # ActiveRecord model with a table, excluding PermissionForge's own.
@@ -20,7 +24,8 @@ module PermissionForge
 
       # Assignments not reviewed for this many days appear under
       # "Stale assignments" on the admin home page; also the default threshold
-      # of StaleAssignmentAuditor and rake permission_forge:stale_assignments. Default: 90.
+      # of StaleAssignmentAuditor and rake permission_forge:stale_assignments. Default: 90
+      # (DEFAULT_STALE_ASSIGNMENT_DAYS, also used when it is set to nil).
       attr_accessor :admin_stale_assignment_days
 
       # Name of the host app shown under the logo (e.g. "Acme CRM").
@@ -60,7 +65,7 @@ module PermissionForge
       def set_admin_ui_defaults
         @admin_model_resolver = nil
         @admin_session_flags = {}
-        @admin_stale_assignment_days = 90
+        @admin_stale_assignment_days = DEFAULT_STALE_ASSIGNMENT_DAYS
         @admin_app_name = nil
         @admin_back_url = nil
         @admin_docs_url = 'https://github.com/fetijashari/permission_forge/blob/main/docs/configuration.md'

@@ -59,8 +59,8 @@ module PermissionForge
       end
 
       # The toast's Undo posts the end date the admin itself wrote
-      # (TimeWithZone#iso8601, with the zone's offset): each preset and a
-      # custom date come back to the second, also outside UTC.
+      # (TimeWithZone#iso8601(6), with the zone's offset): each preset and a
+      # custom date come back exactly (23:59:59.999999), also outside UTC.
       test 'every end date the assign form sets survives remove and the toast undo' do
         previous = Time.zone_default
         # use_zone first: it restores the zone it read on entry.
@@ -149,11 +149,12 @@ module PermissionForge
         assignment = assign_with_end_date(expiry, custom_date)
         ends = assignment.expires_at
         action, fields = remove_and_read_undo(assignment)
-        assert_match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\z/, fields['expires_at'], 'written with the zone offset')
+        assert_match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}[+-]\d{2}:\d{2}\z/, fields['expires_at'],
+                     'written with microseconds and the zone offset')
 
         post action, params: fields
         restored = PermissionForge::PermissionSetUser.find_by!(user: @bo, permission_set: assignment.permission_set_id)
-        assert_equal ends.to_i, restored.expires_at.to_i, "#{expiry}: #{fields['expires_at']}"
+        assert_equal ends, restored.expires_at, "#{expiry}: #{fields['expires_at']}"
       end
 
       def remove_and_read_undo(assignment)

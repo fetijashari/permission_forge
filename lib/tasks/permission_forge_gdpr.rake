@@ -8,7 +8,9 @@ namespace :permission_forge do
   task stale_assignments: :environment do
     task_name = 'permission_forge:stale_assignments'
     threshold = ENV.fetch('THRESHOLD_DAYS', nil)&.then do |given|
-      days = Integer(given.strip, 10, exception: false)
+      digits = given.strip
+      # ASCII digits only: Integer() would also take Ruby's underscores ("1_0").
+      days = Integer(digits, 10) if digits.match?(/\A[0-9]+\z/)
       next days if days&.between?(1, 36_500)
 
       message = "THRESHOLD_DAYS must be a whole number of days from 1 to 36500 (got #{given.inspect}). " \

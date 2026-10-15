@@ -84,7 +84,12 @@ module PermissionForge
         assert_equal 0, StaleAssignmentAuditor.call(threshold_days: 50)[:stale_count], 'an explicit threshold wins'
 
         PermissionForge.configuration.admin_stale_assignment_days = nil
-        assert_equal StaleAssignmentAuditor::DEFAULT_THRESHOLD_DAYS, StaleAssignmentAuditor.call[:threshold_days]
+        assert_equal 90, StaleAssignmentAuditor.call[:threshold_days]
+      end
+
+      test 'the setting and every fallback share one 90-day default' do
+        assert_equal 90, Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS
+        assert_equal 90, Configuration.new.admin_stale_assignment_days
       end
 
       test 'includes days_stale in assignment details' do

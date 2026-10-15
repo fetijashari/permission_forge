@@ -598,8 +598,8 @@ module PermissionForge
           id: user.id,
           uuid: user.try(:uuid),
           name: user.try(:name),
-          # `email`, else Rails 8's `email_address` (Admin::PersonLabel::EMAIL_ATTRIBUTES)
-          email: Admin::PersonLabel::EMAIL_ATTRIBUTES.lazy.filter_map { |attr| user.try(attr) }.first
+          # The first present of `email`, Rails 8's `email_address` (Admin::PersonLabel::EMAIL_ATTRIBUTES)
+          email: Admin::PersonLabel::EMAIL_ATTRIBUTES.lazy.filter_map { |attr| user.try(attr).presence }.first
         }
       }
     end

@@ -29,6 +29,13 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   now get the 403 response instead of the raised error. A `rescue_from` in your controllers runs first and keeps
   deciding, as before. **Opt out:** rescue the errors yourself, or set another status in `config/application.rb`,
   e.g. `config.action_dispatch.rescue_responses['PermissionForge::ActionNotAuthorizedError'] = :internal_server_error`.
+- **The stale-assignment report and the admin agree on the threshold.** Without `THRESHOLD_DAYS` the rake task, and
+  `Services::StaleAssignmentAuditor.call` without `threshold_days:`, now use `config.admin_stale_assignment_days`, as
+  the Home Stale list, the person page and `rake permission_forge:audit` already did; they used a fixed 90 before.
+  Nothing changes unless you set `admin_stale_assignment_days` to something other than 90. Callers that pass
+  `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
+  raising. **Opt out:** run the task with `THRESHOLD_DAYS=90`, and call
+  `Services::StaleAssignmentAuditor.call(threshold_days: 90)`.
 
 ### Fixed
 
@@ -38,9 +45,9 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   existing people as not found, and the cached profile (`permissions_hash[:profile][:email]`) was empty. The admin
   labels, people search and bulk matching now read `email`, then `email_address` (bulk matching tries every such
   column the table has), and the default `profile_builder` and the one the install generator writes fill the
-  profile's `email` key from `email_address` when there is no `email`. An existing generated initializer keeps its
-  `profile_builder`: add `|| user.try(:email_address)` to its `email:` to get the same. Users with an `email` column
-  see no change.
+  profile's `email` key from `email_address` when `email` is missing or blank. An existing generated initializer keeps
+  its `profile_builder`: change its `email:` to `user.try(:email).presence || user.try(:email_address)` to get the
+  same. Users with an `email` column see no change.
 - **An `expires_at` that is not ISO 8601 is refused.** The API (`POST …/users`, `POST …/users/bulk`) and the admin's
   Undo after a removal read `expires_at` with `Time.zone.parse`, which takes any text with a recognisable fragment:
   `"tuesday"` or `"next tuesday-ish"` became today 00:00 and was answered 201 with an assignment that had already ended,
@@ -53,12 +60,6 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `to_i`, so `THRESHOLD_DAYS=`, `abc`, `0` or `-3` became a threshold of 0 (or less) days and reported every permanent
   assignment, exiting 1. Anything that is not a whole number of days from 1 to 36500 now prints what is expected on
   stderr and exits 2, without running the report.
-- **The stale-assignment report and the admin agree on the threshold.** Without `THRESHOLD_DAYS` the rake task, and
-  `Services::StaleAssignmentAuditor.call` without `threshold_days:`, now use `config.admin_stale_assignment_days`, as
-  the Home Stale list, the person page and `rake permission_forge:audit` already did; they used a fixed 90 before.
-  Nothing changes unless you set `admin_stale_assignment_days` to something other than 90. Callers that pass
-  `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
-  raising.
 
 ### Documentation
 

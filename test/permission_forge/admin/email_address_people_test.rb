@@ -130,6 +130,12 @@ module PermissionForge
         assert_equal 'new@acme.test', install_template_configuration.profile_builder.call(person)[:email]
       end
 
+      test 'the generated profile_builder skips a blank email for the email_address' do
+        person = TwoEmailPerson.create!(email: '', email_address: 'old@acme.test')
+
+        assert_equal 'old@acme.test', install_template_configuration.profile_builder.call(person)[:email]
+      end
+
       test 'the generated initializer reads every email attribute' do
         template = render_install_template('initializer.rb.tt')
 
@@ -142,6 +148,12 @@ module PermissionForge
         assert_equal 'bob@acme.test', builder.call(@bob)[:email]
         assert_equal 'new@acme.test', builder.call(BothEmails.new(1, 'new@acme.test', 'old@acme.test'))[:email]
         assert_nil builder.call(Struct.new(:id).new(1))[:email]
+      end
+
+      test 'the default profile_builder skips a blank email for the email_address' do
+        person = TwoEmailPerson.create!(email: '', email_address: 'old@acme.test')
+
+        assert_equal 'old@acme.test', Configuration.new.profile_builder.call(person)[:email]
       end
     end
   end
