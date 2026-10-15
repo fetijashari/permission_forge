@@ -473,12 +473,18 @@ sq:
         added:
           one: U shtua %{resource} me %{count} fushë.
           other: U shtua %{resource} me %{count} fusha.
+        added_muting: U shtua %{resource}. Heq %{what}.
+        added_muting_nothing: 'U shtua %{resource}. Ende nuk heq asgjë: zgjidhni më
+          poshtë çfarë heq.'
         columns_added:
           one: U shtua %{count} kolonë.
           other: U shtuan %{count} kolona.
         missing_removed:
           one: U hoq %{count} fushë, kolona e së cilës nuk ekziston më.
           other: U hoqën %{count} fusha, kolonat e të cilave nuk ekzistojnë më.
+        muted_fields:
+          one: "%{count} fushë"
+          other: "%{count} fusha"
         removed: U hoq %{resource} nga “%{set}”.
       rules:
         created: U shtua rregulli “%{rule}”.
@@ -713,8 +719,6 @@ sq:
         action_muted: "%{set} e bllokon këtë veprim."
         action_none: Asnjë Grup lejesh nuk e lejon këtë veprim.
         field_capped: Shfaqet si Vetëm lexim sepse Ndrysho nuk lejohet për këtë burim.
-        field_from: "%{set} e shfaq këtë fushë."
-        field_muted: "%{set} e fsheh ose e maskon këtë fushë."
         field_none: Asnjë Grup lejesh nuk e shfaq këtë fushë.
         field_unconfigured: 'Asnjë grup nuk e konfiguron këtë kolonë: %{behaviour}.'
         field_variant: Ndjek cilësimin e %{base}.
@@ -1412,6 +1416,9 @@ sq:
         new_count:
           one: "%{count} kolonë e re e pakonfiguruar"
           other: "%{count} kolona të reja të pakonfiguruara"
+        new_count_muting:
+          one: "%{count} kolonë pa cilësim, prandaj nuk heq asgjë"
+          other: "%{count} kolona pa cilësim, prandaj nuk heqin asgjë"
         new_title: Kolona të reja, të pakonfiguruara
         none: Asnjë
         remove_missing: Hiq fushat që mungojnë
@@ -1892,6 +1899,9 @@ sq:
         disabled: Nuk regjistrohet kush krijoi dhe kush ndryshoi.
         edited: Ndryshuar së fundi nga %{updated_by} · %{updated_at}
         history: Historiku
+        unknown_hint_html: "%{unknown}: për këtë ndryshim nuk u emërtua asnjë aktor
+          (kod i ekzekutuar jashtë një kërkese, si një runner ose një punë në sfond).
+          Emërtojeni me %{method}."
       crud_cell:
         allowed: Lejohet
         muted: I heshtur
@@ -2098,6 +2108,12 @@ sq:
         read_access: Lexo
         view_all: Shiko të gjitha
       keep: Mbaje
+      level_sentences:
+        edit: "%{set} e shfaq këtë fushë dhe lejon ndryshimin e saj."
+        hide: "%{set} e fsheh këtë fushë."
+        mask: "%{set} e detyron maskimin e kësaj fushe."
+        masked: "%{set} e shfaq këtë fushë të maskuar (%{strategy})."
+        read: "%{set} e shfaq këtë fushë vetëm për lexim."
       levels:
         edit: I ndryshueshëm
         hidden: I fshehur

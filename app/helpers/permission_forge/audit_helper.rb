@@ -92,6 +92,13 @@ module PermissionForge
       pf_audit_actor_type_label(type)
     end
 
+    # An event that named no actor (code outside a request with no
+    # PermissionForge.with_audit_actor, or an actor resolver that failed):
+    # pf_audit_actor_name reads it as the actor type "Unknown".
+    def pf_audit_unknown_actor?(event)
+      !event.nil? && event.actor_type.to_s == 'unknown' && event.actor_label.blank?
+    end
+
     def pf_audit_actor_type_label(type)
       t("permission_forge.audit_log.actor_types.#{type}", default: type.to_s.humanize)
     end

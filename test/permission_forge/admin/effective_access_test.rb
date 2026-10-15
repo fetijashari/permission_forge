@@ -50,6 +50,37 @@ module PermissionForge
         assert_equal :blocked, res.actions.to_h.fetch('export').state
       end
 
+      # The WHY panel words each set's say by its level (b-admin-ui round 2 #62).
+      test 'each set that grants or mutes a field comes with its own level' do
+        support = create_permission_set(name: 'Support')
+        create_resource_field(resource: create_resource(permission_set: support), name: 'email', read_access: true)
+        create_permission_set_user(user: @user, permission_set: support)
+        contractors = create_permission_set(name: 'Contractors', is_muting: true)
+        muted = create_resource(permission_set: contractors, read_access: false, edit_access: false)
+        create_resource_field(resource: muted, name: 'email', mask_access: true, read_access: false, edit_access: false)
+        create_resource_field(resource: muted, name: 'name', read_access: true, edit_access: true)
+        create_permission_set_user(user: @user, permission_set: contractors)
+
+        email = field('email')
+        name = field('name')
+
+        assert_equal([[support, 'read', 'full'], [@sales, 'masked', 'email']],
+                     email.grants.map { |s| [s.permission_set, s.level, s.mask_strategy] })
+        assert_equal email.granted_by, email.grants.map(&:permission_set)
+        assert_equal([[contractors, 'mask']], email.mutes.map { |s| [s.permission_set, s.level] })
+        assert_equal([[contractors, 'hide']], name.mutes.map { |s| [s.permission_set, s.level] })
+        assert_equal name.blocked_by, name.mutes.map(&:permission_set)
+      end
+
+      test 'a set that masks a field and mutes Read on the resource hides it' do
+        contractors = create_permission_set(name: 'Contractors', is_muting: true)
+        muted = create_resource(permission_set: contractors, read_access: true, edit_access: false)
+        create_resource_field(resource: muted, name: 'email', mask_access: true, read_access: false, edit_access: false)
+        create_permission_set_user(user: @user, permission_set: contractors)
+
+        assert_equal([[contractors, 'hide']], field('email').mutes.map { |s| [s.permission_set, s.level] })
+      end
+
       test 'expired assignments and inactive sets give nothing' do
         other = create_user
         old = create_permission_set(name: 'Old')

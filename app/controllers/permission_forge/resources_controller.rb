@@ -17,7 +17,6 @@ module PermissionForge
     }.freeze
     # Field level each preset gives the model's columns (nil = no fields).
     PRESET_LEVELS = { 'full' => 'edit', 'read' => 'read', 'nothing' => 'hidden', 'hide_sensitive' => 'hide_sensitive' }.freeze
-
     before_action :set_permission_set
     before_action :set_resource, except: %i[new create]
     before_action :reject_locked_set, only: %i[new create review apply sync destroy confirm_destroy]
@@ -163,8 +162,7 @@ module PermissionForge
     end
 
     def added_notice(resource)
-      t('permission_forge.flash.resources.added', resource: helpers.pf_resource_label(resource),
-                                                  count: resource.resource_fields.size)
+      helpers.pf_added_resource_notice(resource, muting: @permission_set.is_muting)
     end
 
     def build_resource(model, preset)

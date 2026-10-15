@@ -12,6 +12,7 @@ module PermissionForge
     # (ExtraFieldDefaults). A row in any set wins, whatever the set order.
     class EffectiveFields
       FieldOutcome = EffectiveAccess::FieldOutcome
+      FieldSource = EffectiveAccess::FieldSource
 
       # What FiltersResponseAttributes does with a column no set mentions
       # (any other strategy hides it).
@@ -133,8 +134,9 @@ module PermissionForge
         return unconfigured_outcome(name, virtual) if entry.nil?
 
         implicit = entry[:extra].present?
+        grants = granting_sources(entry)
         FieldOutcome.new(
-          name: name, mask_strategy: entry[:mask_strategy], granted_by: granting_sources(entry),
+          name: name, mask_strategy: entry[:mask_strategy], granted_by: grants.map(&:permission_set), grants: grants,
           unconfigured: false, virtual: virtual || implicit, implicit: implicit, variant_of: entry[:variant_of],
           **level_attrs(entry), **muting_attrs(entry)
         )
@@ -147,26 +149,37 @@ module PermissionForge
         { level: capped ? 'read' : level, capped: capped }
       end
 
+      # One FieldSource per muting set; a set that both masks and hides the
+      # field (its own row, and Read muted on the resource) hides it.
       def muting_attrs(entry)
-        mutes = entry[:mutes] || []
-        { blocked_by: mutes.map(&:first).uniq, blocked_level: mutes.last&.last }
+        sources = muting_sources(entry)
+        { blocked_by: sources.map(&:permission_set), blocked_level: entry[:mutes]&.last&.last, mutes: sources }
       end
 
-      # Sets that make the field readable, most open first. A set that lists
-      # the field as Hidden grants nothing and, like the engine, has no say in
-      # the mask. An implicit entry exists only when no set configured the
-      # field, so no set is credited for it: the level comes from the
-      # virtual-field default.
+      def muting_sources(entry)
+        (entry[:mutes] || []).group_by(&:first).map { |ps, rows| muting_source(ps, rows.map(&:last)) }
+      end
+
+      def muting_source(permission_set, levels)
+        FieldSource.new(permission_set: permission_set, level: levels.include?('hide') ? 'hide' : 'mask')
+      end
+
+      # The sets that make the field readable, one FieldSource each at its
+      # most open level, most open first. A set that lists the field as
+      # Hidden grants nothing and, like the engine, has no say in the mask.
+      # An implicit entry exists only when no set configured the field, so no
+      # set is credited for it: the level comes from the virtual-field default.
       def granting_sources(entry)
         return [] if entry[:extra]
 
         entry[:sources].select { |_, lvl, _| FieldLevel.rank(lvl) >= 1 }
-                       .sort_by { |_, lvl, _| -FieldLevel.rank(lvl) }.map(&:first).uniq
+                       .sort_by { |_, lvl, _| -FieldLevel.rank(lvl) }.uniq(&:first)
+                       .map { |ps, lvl, strategy| FieldSource.new(permission_set: ps, level: lvl, mask_strategy: strategy) }
       end
 
       def unconfigured_outcome(name, virtual)
-        FieldOutcome.new(name: name, level: unconfigured_level, mask_strategy: 'full', granted_by: [],
-                         blocked_by: [], capped: false, unconfigured: true, virtual: virtual, implicit: false)
+        FieldOutcome.new(name: name, level: unconfigured_level, mask_strategy: 'full', granted_by: [], grants: [],
+                         blocked_by: [], mutes: [], capped: false, unconfigured: true, virtual: virtual, implicit: false)
       end
 
       def unconfigured_level

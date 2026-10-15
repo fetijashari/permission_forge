@@ -254,6 +254,24 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   part (`dave@acme.test` is "DA"; it was "DT"). In a Muting Permission Set a field without a setting reads "Not
   configured · Mutes nothing", and its drawer says the set takes nothing away from it, instead of "Blocked by
   default" and a link to `unconfigured_field_strategy`, which only decides for granting sets.
+- **Adding a resource to a Muting Permission Set says what it takes away.** With "Leave everything unchanged" the toast
+  read "Added Customer with 0 fields" and the page warned "⚠ Sync fields with model · 8 new columns not configured",
+  although a column with no setting in a Muting Permission Set takes nothing away. The toast now says "Added Customer.
+  It mutes nothing yet: choose below what it takes away." (or what the preset took away: "It takes away Create, Edit,
+  and Delete."), and the sync panel is shown as information ("8 columns with no setting, so they mute nothing"). It
+  still warns when a configured field's column is gone, and for granting sets as before
+  (`Admin::FieldRows#sync_warning?`).
+- **The savebar of a Permission Set only shows up on its other tabs once there is something to save.** The
+  Assignments tab said "Assigning or revoking applies immediately" above "No unsaved changes · Review and save". On
+  every tab but Resources the bar is hidden while nothing joined to it (the set's name, description, group, Active)
+  has changed; without JavaScript it stays, as the way to save those.
+- **Effective access says how each Permission Set shows a field.** The WHY panel of a field said "✓ Sales rep shows
+  this field." when Sales rep shows it masked. It now reads by level: "shows this field masked (Email)", "shows this
+  field read-only", "shows this field and lets people edit it", and for Muting Permission Sets "hides this field" or
+  "forces this field masked" (`Admin::EffectiveAccess::FieldSource`, `FieldOutcome#grants` / `#mutes`).
+- **A footer that reads "Unknown" says why.** A record created or changed by code with no audit actor (a runner, a
+  job) read "Last edited by Unknown" with nothing more. The footer keeps the audit log's name, "Unknown", and adds
+  that no actor was named for the change and that `PermissionForge.with_audit_actor` names one.
 - **The rule builder's preview follows "the current user".** Ticking it left the preview at "Only show Customers
   where Owner is …." (with a doubled period) until the rule was saved. The preview is now the sentence the saved rule
   shows, and `pf_admin.js` keeps its value in step with the box and the value input; without JavaScript it changes on

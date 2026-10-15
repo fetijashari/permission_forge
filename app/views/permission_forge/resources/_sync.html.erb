@@ -2,10 +2,12 @@
 <% missing = @rows.missing_fields %>
 <% ignored = @rows.ignored_columns %>
 <% sensitive = PermissionForge::Admin::SensitiveColumns.new %>
-<details class="pf-sync" <%= 'open' if params[:sync] %>>
+<%# A Muting Permission Set's columns with no setting mute nothing: that is information, not a warning. %>
+<% warn = @rows.sync_warning? %>
+<details class="pf-sync<%= ' pf-sync--info' unless warn %>" <%= 'open' if params[:sync] %>>
   <summary>
-    <span>⚠ <%= t('.title') %></span>
-    <span class="pf-fw-500"><%= [(t('.new_count', count: fresh.size) if fresh.any?), (t('.missing_count', count: missing.size) if missing.any?),
+    <span><%= warn ? '⚠' : '↻' %> <%= t('.title') %></span>
+    <span class="pf-fw-500"><%= [((muting ? t('.new_count_muting', count: fresh.size) : t('.new_count', count: fresh.size)) if fresh.any?), (t('.missing_count', count: missing.size) if missing.any?),
                                  (t('.ignored_count', count: ignored.size) if ignored.any?)].compact.join(' · ') %></span>
     <span class="pf-btn pf-btn--xs pf-ml-auto"><%= t('.review') %></span>
   </summary>
