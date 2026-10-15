@@ -32,9 +32,10 @@ in — see [Callback order](#callback-order).
 > **Included in `ApplicationController`, the guard also runs on your sign-in pages.** Rails 8's
 > `SessionsController` maps to the generator's `Session` model, so under
 > `action_guard_nil_user_strategy = :deny` (what new installs get) a signed-out visitor is refused
-> the sign-in form. Nobody can sign in, and **Sign out seems to do nothing**: it ends the session,
-> then lands on the refused sign-in page (with a handler that answers an empty 403, Turbo keeps the
-> old page, "Signed in as …" still in the header). Exclude them in the initializer:
+> the sign-in form. Nobody can sign in, and Sign out ends the session, then lands on the refused
+> sign-in page: with the handler below, the 403 page ("Sign in to see it") where the form should be;
+> with a handler that answers an empty 403, **Sign out seems to do nothing** (Turbo keeps the old page,
+> "Signed in as …" still in the header). Exclude them in the initializer:
 >
 > ```ruby
 > config.controller_discovery_exclude += %w[sessions passwords]
@@ -54,13 +55,11 @@ class ApplicationController < ActionController::Base
     # error.reason          => :action_denied (:nil_user_denied when nobody is signed in)
     respond_to do |format|
       format.html do
-        signed_out = error.reason == :nil_user_denied
-        target = signed_out ? new_session_path : root_path # your sign-in page; a page every user may open
-        if request.path == target
-          # Never redirect to the page that was just refused (the browser would loop): show the 403 page.
-          render file: Rails.public_path.join('403.html'), status: :forbidden, layout: false
+        if error.reason == :nil_user_denied && request.path != new_session_path # your sign-in page
+          redirect_to new_session_path, alert: t('errors.sign_in_first')
         else
-          redirect_to target, alert: t(signed_out ? 'errors.sign_in_first' : 'errors.not_allowed')
+          # The 403 page in place: never a redirect to the page that was just refused (the browser would loop).
+          render 'errors/forbidden', status: :forbidden # a template of your app, in its layout
         end
       end
       format.any { head :forbidden } # JSON, CSV, ...: a 403 without HTML
@@ -69,13 +68,15 @@ class ApplicationController < ActionController::Base
 end
 ```
 
-Not `redirect_back fallback_location: root_path`: when the refused action is the root page, that
-redirects to it again, forever (`ERR_TOO_MANY_REDIRECTS`, one `action.denied` event per hop). When
-the refused page is the one the handler would send the visitor to, it renders `public/403.html`
-(add it: [Handling Denials](row-level-rules.md#handling-denials) has a page to start from) with
-status 403, not an empty `head :forbidden`: a signed-in person who holds no Permission Set, sent to a
-guarded root after signing in, would otherwise stay on the filled-in sign-in form, as if signing in
-had failed. Write the message yourself: `error.action` is a key (`index`), not a sentence.
+Only a signed-out visitor is redirected, to sign in, and never from the sign-in page itself. Not
+`redirect_back fallback_location: root_path`: when the refused action is the root page, that
+redirects to it again, forever (`ERR_TOO_MANY_REDIRECTS`, one `action.denied` event per hop).
+Everyone else gets the 403 page in place, rendered as a template in your layout, not
+`public/403.html`: a signed-in person who holds no Permission Set, sent to a guarded root by Rails 8's
+Turbo sign-in, sees it under your header with a way to sign out, where a static page (or an empty
+`head :forbidden`) leaves them on the sign-in form, as if signing in had failed.
+[Handling Denials](row-level-rules.md#rescuing-them-yourself) has the template and why. Write the
+message yourself: `error.action` is a key (`index`), not a sentence.
 
 Without a `rescue_from` the request answers **403 Forbidden**: the engine registers the error in
 `config.action_dispatch.rescue_responses`. In production Rails renders `public/403.html`, which Rails apps do

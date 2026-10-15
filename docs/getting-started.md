@@ -169,8 +169,9 @@ PermissionForge::ResourceField.create!(
   edit_access: false  # Can see email but not change it
 )
 
-# 4. Assign a user to this permission set
-user = User.first  # or however you find your user
+# 4. Assign a user to this permission set. Look the person up by email: User.first may be
+#    someone else (the checks below and Step 6 use this same person)
+user = User.find_by!(email_address: 'bob@example.com') # the person who gets the set (`email:` on a Devise app)
 PermissionForge::PermissionSetUser.create!(
   permission_set: sales_pset,
   user: user
@@ -186,9 +187,11 @@ puts user.can_delete?('Customer') # => false
 
 ## Step 6: Verify It Works
 
+Check the person Step 5 assigned. `User.first` may be someone else, who holds no Permission Set (one you assigned in the admin, for example): every check below then answers `false` and `{}`, with nothing to say why.
+
 ```ruby
 # In the console:
-user = User.first
+user = User.find_by!(email_address: 'bob@example.com') # the person you assigned in Step 5
 
 # Check resource-level permissions
 user.can_read?('Customer')   # => true
@@ -287,13 +290,13 @@ Restart the server with `PF_ADMIN_USER` and `PF_ADMIN_PASSWORD` set and open `ht
 
 If your app was set up with `bin/rails generate authentication`, the generated `current_user_resolver` already reads its `Current.user`, so it needs no change. Three things to know:
 
-- **The guard in `ApplicationController` guards the sign-in page too.** The generator's `SessionsController` maps to its `Session` model, so with `ControllerActionGuard` included in `ApplicationController` and `action_guard_nil_user_strategy = :deny` (what the install generator writes), a signed-out visitor is refused the sign-in form. The symptom: nobody can sign in, and **Sign out seems to do nothing** (the session ends, but the redirect lands on the refused sign-in page, so the page stays as it was, "Signed in as …" still in the header). Leave the sign-in pages out of the guard in the initializer:
+- **The guard in `ApplicationController` guards the sign-in page too.** The generator's `SessionsController` maps to its `Session` model, so with `ControllerActionGuard` included in `ApplicationController` and `action_guard_nil_user_strategy = :deny` (what the install generator writes), a signed-out visitor is refused the sign-in form. The symptom: nobody can sign in, and Sign out ends the session but lands on the refused sign-in page. With the [Handling Denials](./row-level-rules.md#rescuing-them-yourself) handler that page is the 403 page ("You are not allowed to see this page. Sign in to see it.") where the form should be; with a handler that answers an empty 403, **Sign out seems to do nothing**: the page stays as it was, "Signed in as …" still in the header. Leave the sign-in pages out of the guard in the initializer:
 
   ```ruby
   config.controller_discovery_exclude += %w[sessions passwords]
   ```
 
-  See [Handling Denials](./row-level-rules.md#handling-denials) for a handler that never loops.
+  See [Handling Denials](./row-level-rules.md#rescuing-them-yourself) for a handler that never loops and shows the 403 page in your layout, so that a signed-in person who holds no Permission Set reads why (and can sign out) instead of landing back on the sign-in form.
 - **Public actions.** `allow_unauthenticated_access` skips `require_authentication`, which is what resumes the session, so on those actions `Current.user` is `nil` even for a signed-in visitor. The symptom on a guarded public action: a signed-in user who opens it is refused as signed out, and with the [Handling Denials](./row-level-rules.md#handling-denials) handler lands back on the sign-in form with its "sign in first" alert (`errors.sign_in_first`), although they are signed in. If the guard is skipped there, row-level rules and masking follow the nil-user strategies (the default `:bypass` restricts nothing). The fix: add `prepend_before_action :resume_session, only: ...` for the same actions (see [Callback order](./controller-actions.md#callback-order)).
 - **Your own admin controller.** An admin controller that inherits from your `ApplicationController` (`base_controller_class`, Option B) also inherits the generated `request_authentication`, which redirects to `new_session_path`. That path does not resolve inside the engine, so a signed-out visit to `/permissions` is a 500. Override it to use `main_app.new_session_path`: see [Admin UI](./admin-ui.md#rails-8-authentication-generator).
 

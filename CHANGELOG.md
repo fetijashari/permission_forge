@@ -483,6 +483,17 @@ Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authent
   `masked_nil_user_bypass`), and the checklist rows that need your code are in no preset.
 - [filter_parameters_integration](docs/configuration.md#filter_parameters_integration) and the GDPR guide: the patterns
   filter every `name` parameter in the app's request logs, the admin's own forms included; how to narrow them.
+- [Handling denials](docs/row-level-rules.md#rescuing-them-yourself) and [Controller actions](docs/controller-actions.md#2-answer-denied-requests):
+  the HTML handlers render a template of the app in its layout (`render 'errors/forbidden', status: :forbidden`, the
+  template shown, with Sign out for a signed-in person) instead of `public/403.html`, and redirect only a signed-out
+  visitor, to sign in. A signed-in person holding no Permission Set, sent to a guarded root by Rails 8's Turbo sign-in,
+  still landed on an empty sign-in form: Turbo reloads the page when a 403 answer to a form submission lacks the
+  layout's tracked assets. The static page also offered no way to sign out (its link led back to the refused root).
+  `public/403.html` stays for the production case where no handler runs.
+- [Getting started](docs/getting-started.md#using-rails-8s-authentication-generator): the symptom of a guarded sign-in
+  page with the documented handler (the 403 page where the form should be, also after Sign out) as well as with an
+  empty 403. Steps 5 and 6 look up the person they assign by email instead of `User.first`, which may be someone
+  holding no set.
 
 ## [0.14.1] - 2026-10-14
 
