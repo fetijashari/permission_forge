@@ -11,6 +11,9 @@ en:
           they are refused while it is unset and config.api_require_authorization
           is on
         assignment_not_authorized: Assignment not authorized
+        body_unreadable: The request body could not be read. Send valid JSON with
+          Content-Type application/json.
+        boolean_invalid: must be true or false
         bulk_action_invalid: must be assign or revoke
         expires_at_past: must be in the future
         field_generation_failed: Could not generate fields for this resource
@@ -24,6 +27,7 @@ en:
         tenant_required: No tenant is set for this request. The admin API serves one
           tenant at a time.
         unauthorized: Not authenticated
+        user_ids_missing: must name at least one user
     assignments:
       confirm_destroy:
         body: "%{name} will lose access to %{resources}, unless another Permission

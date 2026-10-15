@@ -184,6 +184,29 @@ module PermissionForge
         assert_equal 1, cloned.resources.count
         assert_equal 1, cloned.resources.first.resource_fields.count
       end
+
+      # The admin's Duplicate and the cloners name a copy "<name> (copy)"
+      # (permission_sets.copy_name); the API said "(Copy)" in English.
+      test 'POST clone without a name names the copy as the admin does, numbered when taken, in the request locale' do
+        ps = create_permission_set(name: 'Original')
+        names = Array.new(2) do
+          post "/permission_forge/api/permission_sets/#{ps.uuid}/clone"
+          assert_response :created
+          response.parsed_body.dig('data', 'name')
+        end
+        assert_equal ['Original (copy)', 'Original (copy) 2'], names
+
+        post "/permission_forge/api/permission_sets/#{ps.uuid}/clone", headers: { 'HTTP_ACCEPT_LANGUAGE' => 'sq' }
+        assert_equal I18n.t('permission_forge.permission_sets.copy_name', name: 'Original', locale: :sq),
+                     response.parsed_body.dig('data', 'name')
+
+        group = create_permission_set_group(name: 'Team')
+        post "/permission_forge/api/permission_set_groups/#{group.uuid}/clone", headers: { 'HTTP_ACCEPT_LANGUAGE' => 'mk' }
+        assert_equal I18n.t('permission_forge.permission_sets.copy_name', name: 'Team', locale: :mk),
+                     response.parsed_body.dig('data', 'name')
+      ensure
+        I18n.locale = I18n.default_locale
+      end
     end
   end
 end

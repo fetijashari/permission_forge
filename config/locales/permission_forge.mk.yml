@@ -9,6 +9,9 @@ mk:
         assignment_authorization_missing: Доделувањата преку API бараат config.api_assignment_authorization;
           се одбиваат додека не е поставено и config.api_require_authorization е вклучено
         assignment_not_authorized: Доделувањето не е авторизирано
+        body_unreadable: Содржината на барањето не може да се прочита. Испратете валиден
+          JSON со Content-Type application/json.
+        boolean_invalid: мора да биде true или false
         bulk_action_invalid: мора да биде assign или revoke
         expires_at_past: мора да биде во иднина
         field_generation_failed: Не може да се генерираат полиња за овој ресурс
@@ -22,6 +25,7 @@ mk:
         tenant_required: Ова барање нема закупец. API-то за администрација служи по
           еден закупец.
         unauthorized: Не сте автентицирани
+        user_ids_missing: мора да наведе барем еден корисник
     assignments:
       confirm_destroy:
         body: "%{name} ќе го изгуби пристапот до %{resources}, освен ако друг сет

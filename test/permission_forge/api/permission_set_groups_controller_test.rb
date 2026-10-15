@@ -83,7 +83,7 @@ module PermissionForge
 
         assert_response :created
         json = JSON.parse(response.body)
-        assert_equal 'My Group (Copy)', json.dig('data', 'name')
+        assert_equal 'My Group (copy)', json.dig('data', 'name')
       end
     end
   end

@@ -36,6 +36,11 @@ module PermissionForge
       end
     end
 
+    # What a boolean parameter is read as: JSON's true and false, their
+    # strings, and 1 / 0 as a number or a string (see #pf_boolean_param).
+    BOOLEANS = { true => true, 'true' => true, 1 => true, '1' => true,
+                 false => false, 'false' => false, 0 => false, '0' => false }.freeze
+
     # The time an ISO 8601 String names, in Time.zone: see IsoTime.
     #
     # @return [ActiveSupport::TimeWithZone, nil] nil for anything else
@@ -91,6 +96,17 @@ module PermissionForge
     # not digits is dropped.
     def pf_id_list(key)
       Array.wrap(params[key]).filter_map { |value| PermissionForge::Admin::RecordId.cast(value) }
+    end
+
+    # params[key] as true or false (BOOLEANS); false when it is absent or null.
+    #
+    # @raise [InvalidParam] for anything else ("yes", "", 2, a list): a value
+    #   that cannot be read must never be taken for false
+    def pf_boolean_param(key)
+      value = params[key]
+      return false if value.nil?
+
+      BOOLEANS.fetch(value) { raise InvalidParam.new(key, I18n.t('permission_forge.api.errors.boolean_invalid')) }
     end
 
     # The time params[key] names (an ISO 8601 date or date-time, IsoTime),

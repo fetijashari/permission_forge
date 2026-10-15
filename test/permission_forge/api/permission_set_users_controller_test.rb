@@ -166,6 +166,35 @@ module PermissionForge
         assert_equal 1, JSON.parse(response.body).dig('data', 'revoked')
       end
 
+      test 'a bulk revoke ignores an expires_at it cannot read' do
+        create_permission_set_user(user: @user, permission_set: @ps)
+        post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'revoke', expires_at: 'tuesday' }, as: :json
+
+        assert_response :ok
+        assert_equal 1, JSON.parse(response.body).dig('data', 'revoked')
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
+      end
+
+      test 'a bulk request that names nobody is a 422 keyed by user_ids, recorded like the other 422s' do
+        create_permission_set_user(user: @user, permission_set: @ps)
+        expected = { 'user_ids' => [I18n.t('permission_forge.api.errors.user_ids_missing')] }
+
+        [{}, { user_ids: [] }, { user_ids: '' }, { user_ids: [''] }, { user_ids: [' ', nil] }].each do |ids|
+          %w[assign revoke].each do |action|
+            assert_no_difference -> { PermissionForge::AuditEvent.unscoped.count }, "#{ids} #{action}" do
+              post "#{users_path}/bulk", params: ids.merge(bulk_action: action), as: :json
+            end
+            assert_response :unprocessable_entity, "#{ids} #{action}"
+            assert_equal expected, JSON.parse(response.body).dig('error', 'messages'), "#{ids} #{action}"
+          end
+        end
+        assert PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
+
+        # An unknown bulk_action is answered first, as before.
+        post "#{users_path}/bulk", params: { bulk_action: 'invalid' }, as: :json
+        assert_equal ['bulk_action'], JSON.parse(response.body).dig('error', 'messages').keys
+      end
+
       test 'a blank expires_at is a permanent assignment' do
         post users_path, params: { user_id: @user.id, expires_at: '' }, as: :json
 

@@ -135,6 +135,41 @@ module PermissionForge
         assert_equal [true, false, true, 'email'], fields.fetch('email').values_at('read_access', 'edit_access', 'mask_access', 'mask_strategy')
         assert_equal [false, false, false], fields.fetch('domain').values_at('read_access', 'edit_access', 'mask_access')
       end
+
+      # A JSON true (or 1) used to read as false: 201 with fields without edit.
+      test 'POST generate_fields reads grant_all as a JSON boolean, 1 or their strings' do
+        { true => true, 'true' => true, 1 => true, '1' => true,
+          false => false, 'false' => false, 0 => false, '0' => false, nil => false }.each do |value, editable|
+          fields = generate_fields_with(grant_all: value).index_by { |field| field['name'] }
+          assert_response :created, value.inspect
+          assert_equal editable, fields.fetch('name')['edit_access'], value.inspect
+        end
+      end
+
+      test 'POST generate_fields refuses a grant_all it cannot read with a 422 keyed by grant_all' do
+        resource = create_resource(permission_set: @ps, name: 'Customer')
+        expected = { 'grant_all' => [I18n.t('permission_forge.api.errors.boolean_invalid')] }
+
+        ['yes', 'TRUE', '', 2, 1.5, [true], { 'a' => 1 }].each do |value|
+          assert_no_difference -> { resource.resource_fields.count } do
+            post "#{resources_path}/#{resource.uuid}/generate_fields", params: { grant_all: value }, as: :json
+          end
+          assert_response :unprocessable_entity, value.inspect
+          assert_equal expected, JSON.parse(response.body).dig('error', 'messages'), value.inspect
+        end
+      end
+
+      private
+
+      def resources_path = "/permission_forge/api/permission_sets/#{@ps.uuid}/resources"
+
+      # Generates the fields of a fresh Customer resource with `params` as JSON.
+      def generate_fields_with(params)
+        PermissionForge::Resource.where(permission_set: @ps).find_each(&:destroy!)
+        resource = create_resource(permission_set: @ps, name: 'Customer')
+        post "#{resources_path}/#{resource.uuid}/generate_fields", params: params, as: :json
+        JSON.parse(response.body)['data']
+      end
     end
   end
 end

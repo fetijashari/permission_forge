@@ -12,17 +12,22 @@ module PermissionForge
       # readable and editable, unmasked; without it, no access (under
       # gdpr_defaults, personal-data columns readable and masked). It passes
       # the same gates as the admin UI's "Sync fields": the authorization
-      # hook, then the lock on the resource and its set.
+      # hook, then the lock on the resource and its set. grant_all is read
+      # by ParamShapes#pf_boolean_param (true, "true", 1, "1"; absent, false,
+      # "false", 0, "0"): anything else is a 422 keyed by grant_all, never
+      # fields without edit.
       def generate_fields
         guard_mutation!(:generate_fields, @resource)
         return if performed?
 
         fields = PermissionForge::Services::ResourceFieldGenerator.call(
           resource: @resource,
-          grant_all: %w[true 1].include?(params[:grant_all])
+          grant_all: pf_boolean_param(:grant_all)
         )
         data = PermissionForge::Api::Serializers::ResourceFieldSerializer.collection(fields)
         render json: { data: data }, status: :created
+      rescue ParamShapes::InvalidParam
+        raise # rendered by BaseController like every input error
       rescue StandardError => e
         # Log the internal detail; return a generic message so model/column names
         # and adapter errors are not leaked to API clients.
