@@ -391,9 +391,10 @@ module PermissionForge
     end
 
     # Field-name variants produced by the configured mappings (e.g. `user_id`
-    # -> `user_uuid`, `price_cents` -> `price`). Shared by the granting and
-    # muting phases of PermissionHashBuilder so they always cover the same
-    # names.
+    # -> `user_uuid`, `price_cents` -> `price`), whatever the model. What a
+    # field row applies to is PermissionForge::FieldVariants: these, kept to
+    # the names the Resource's model has (shared by the granting and muting
+    # phases of PermissionHashBuilder and the admin).
     #
     # @param field_name [String, Symbol]
     # @return [Array<String>]

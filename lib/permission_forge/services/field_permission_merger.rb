@@ -52,17 +52,20 @@ module PermissionForge
       end
       private_class_method :merge_mask
 
-      def initialize(fields:, resource:, configuration: PermissionForge.configuration)
+      # @param variants [FieldVariants] the field variants of the resource's
+      #   model (PermissionHashBuilder shares one per resource name)
+      def initialize(fields:, resource:, configuration: PermissionForge.configuration,
+                     variants: FieldVariants.new(resource.name, configuration))
         @fields = fields
         @resource = resource
-        @configuration = configuration
+        @variants = variants
       end
 
       def call
         @resource.resource_fields.select(&:is_active).each do |field|
           next unless field.is_active
 
-          compute_field_variants(field.name).each { |variant| set_field_permissions(variant, field) }
+          @variants.call(field.name).each { |variant| set_field_permissions(variant, field) }
           set_field_permissions(field.name, field)
         end
 
@@ -70,10 +73,6 @@ module PermissionForge
       end
 
       private
-
-      def compute_field_variants(field_name)
-        @configuration.field_variants_for(field_name)
-      end
 
       def set_field_permissions(field_name, field)
         self.class.merge_row(@fields[field_name] ||= {}, field)

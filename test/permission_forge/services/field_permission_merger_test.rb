@@ -1,4 +1,5 @@
 require 'test_helper'
+require_relative '../field_variant_models'
 
 module PermissionForge
   module Services
@@ -89,13 +90,15 @@ module PermissionForge
         assert_equal({ read_access: true, edit_access: false, mask_access: true, mask_strategy: 'email' }, entry)
       end
 
-      test 'writes the variants the given configuration maps a field to' do
-        create_resource_field(resource: @resource, name: 'supplier_id', read_access: true)
+      test 'writes the variants the given configuration maps a field to, when the model has them' do
+        orders = create_resource(permission_set: @set, name: 'PfVariantOrder', read_access: true)
+        create_resource_field(resource: orders, name: 'owner_id', read_access: true)
+        create_resource_field(resource: orders, name: 'supplier_id', read_access: true)
         plain = PermissionForge::Configuration.new
         plain.field_variant_mappings = {}
 
-        assert_includes merge.keys, 'supplier_uuid'
-        assert_not_includes merge(configuration: plain).keys, 'supplier_uuid'
+        assert_equal %w[owner_id owner_uuid supplier_id], merge(orders).keys.sort, 'PfVariantOrder has no supplier_uuid'
+        assert_equal %w[owner_id supplier_id], merge(orders, configuration: plain).keys.sort
       end
     end
   end

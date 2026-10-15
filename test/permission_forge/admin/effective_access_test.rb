@@ -1,5 +1,6 @@
 require 'test_helper'
 require_relative '../virtual_field_models'
+require_relative '../field_variant_models'
 
 module PermissionForge
   module Admin
@@ -155,26 +156,39 @@ module PermissionForge
       end
 
       test 'variants inherit the base field setting' do
-        create_resource_field(resource: @customer, name: 'supplier_id', read_access: true)
+        orders = create_resource(permission_set: @sales, name: 'PfVariantOrder', read_access: true)
+        create_resource_field(resource: orders, name: 'owner_id', read_access: true)
 
-        assert_equal 'supplier_id', field('supplier_uuid').variant_of
+        assert_equal 'owner_id', field('owner_uuid', outcome('PfVariantOrder')).variant_of
       end
 
-      # A variant tie (customer_id -> customer_uuid next to a customer_uuid row)
-      # goes to the older row in both. The literal row is created first, so on
+      # owner_id -> owner_uuid is a variant on PfVariantOrder (it has the
+      # column); Customer has no supplier_uuid, so supplier_id brings no
+      # field: the list and its count are the model's (field test #41, #67).
+      test 'no variant field for a name the model does not have, in the engine or here' do
+        create_resource_field(resource: @customer, name: 'supplier_id', read_access: true)
+
+        assert_not engine_resource[:fields].key?('supplier_uuid')
+        assert_nil field('supplier_uuid')
+        assert_field_parity('supplier_id row')
+      end
+
+      # A variant tie (owner_id -> owner_uuid next to an owner_uuid row) goes
+      # to the older row in both. The literal row is created first, so on
       # SQLite (rows come back in index, i.e. name, order) an unsorted read
-      # would let customer_id win.
+      # would let owner_id win.
       test 'a variant tie shows the mask strategy the engine uses' do
         tie = create_permission_set(name: 'Tie')
-        resource = create_resource(permission_set: tie, name: 'Supplier', read_access: true)
-        create_resource_field(resource: resource, name: 'customer_uuid', read_access: true, mask_access: true, mask_strategy: 'email')
-        create_resource_field(resource: resource, name: 'customer_id', read_access: true, mask_access: true, mask_strategy: 'last4')
+        resource = create_resource(permission_set: tie, name: 'PfVariantOrder', read_access: true)
+        create_resource_field(resource: resource, name: 'owner_uuid', read_access: true, mask_access: true, mask_strategy: 'email')
+        create_resource_field(resource: resource, name: 'owner_id', read_access: true, mask_access: true, mask_strategy: 'last4')
         create_permission_set_user(user: @user, permission_set: tie)
 
-        engine = engine_resource('Supplier')
+        engine = engine_resource('PfVariantOrder')
 
-        assert_equal 'email', engine[:fields]['customer_uuid'][:mask_strategy], 'the older row wins in the engine'
-        assert_equal 'email', field('customer_uuid', outcome('Supplier')).mask_strategy
+        assert_equal 'email', engine[:fields]['owner_uuid'][:mask_strategy], 'the older row wins in the engine'
+        assert_equal 'email', field('owner_uuid', outcome('PfVariantOrder')).mask_strategy
+        assert_field_parity('variant tie', 'PfVariantOrder')
       end
 
       test 'records: View All wins over rules, rules otherwise' do

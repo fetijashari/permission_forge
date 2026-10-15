@@ -52,6 +52,18 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   line reads "Using an in-process permission cache in production" (it said "in-process MemoryCache"): update a log
   alert that matches the old text. **Opt out:** use a store the workers share.
 
+- **A field variant gets a permission-hash entry only when the model has that name.** The default
+  `field_variant_mappings` (`_id` → `_uuid`, `_cents` → base name) added an entry for every mapped name, so a
+  `Customer` with an `owner_id` row and no `owner_uuid` column had an `owner_uuid` entry, and the admin's Effective
+  access listed a field "Owner uuid" and counted it ("6 of 6 fields visible" for five fields). A variant is now added
+  (and muted) only when the Resource's model has it: a column or `attribute`, an `alias_attribute`, a public reader or
+  writer (`delegate :uuid, to: :owner, prefix: true`), or a declared virtual field; a model this app cannot load keeps
+  every variant, as before. The hash format is unchanged — it has fewer keys. `permissions_hash_for(:Customer)[:fields]
+  [:owner_uuid]` and `user.field_permissions(:Customer, :owner_uuid)` now answer `nil` for a name the model does not
+  have. `FiltersResponseAttributes` still reads such a key in a serializer's hash (`owner_uuid` computed in a view) by
+  the entry of the field it is a variant of, so API responses filter as before. **Opt out:** none needed; if your code
+  reads the entry of a computed variant, give the model the reader (or declare it in `extra_fields_for_permissions`).
+
 ### Fixed
 
 - **"Created by" names who the audit log names.** A record created by the HTTP Basic admin (or an API client) has

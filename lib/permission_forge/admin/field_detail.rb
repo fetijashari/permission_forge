@@ -55,9 +55,10 @@ module PermissionForge
         field&.mask_strategy || row.match&.strategy || DEFAULT_STRATEGY
       end
 
-      # Other columns that follow this one (`_id` → `_uuid`, `_cents` → base name).
+      # Other names of the model that follow this one (`_id` → `_uuid`,
+      # `_cents` → base name), as the engine applies them (FieldVariants).
       def variants
-        @variants ||= @configuration.field_variants_for(key)
+        @variants ||= FieldVariants.new(resource.name, @configuration).call(key)
       end
 
       # The edit level needs edit access on the Resource, except in a muting set.

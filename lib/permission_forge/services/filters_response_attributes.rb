@@ -96,8 +96,11 @@ module PermissionForge
         @result
       end
 
+      # A key with no entry of its own that is a field's variant (a
+      # serializer's `owner_uuid` next to an `owner_id` row) follows that
+      # field (FieldVariants.base_entries).
       def process_field(key, value)
-        field = field_permissions[key.to_sym]
+        field = field_permissions[key.to_sym] || variant_entries[key.to_s]
 
         if field.nil?
           include_field, masked_value = handle_unconfigured_field(key, value)
@@ -132,6 +135,10 @@ module PermissionForge
         # Unknown strategy keys fall back to :block (fail closed), never pass-through.
         strategy = UNCONFIGURED_FIELD_STRATEGIES.fetch(strategy_key, UNCONFIGURED_FIELD_STRATEGIES[:block])
         strategy.call(@resource_name, key, value)
+      end
+
+      def variant_entries
+        @variant_entries ||= PermissionForge::FieldVariants.base_entries(field_permissions)
       end
 
       # The user's field entries for the resource: those of the model the

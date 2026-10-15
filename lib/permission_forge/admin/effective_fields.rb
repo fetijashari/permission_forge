@@ -43,8 +43,9 @@ module PermissionForge
         resource.resource_fields.select(&:is_active)
       end
 
+      # The engine's variants (FieldVariants): only names the model has.
       def variants_of(name)
-        @configuration.field_variants_for(name)
+        (@variants ||= FieldVariants.new(@sources.name, @configuration)).call(name)
       end
 
       def merge_granting_fields

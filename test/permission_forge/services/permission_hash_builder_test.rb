@@ -1,4 +1,5 @@
 require 'test_helper'
+require_relative '../field_variant_models'
 
 module PermissionForge
   module Services
@@ -55,14 +56,19 @@ module PermissionForge
         assert_equal [], rules
       end
 
-      test 'creates _uuid variant for _id fields' do
-        create_resource_field(
-          resource: @resource, name: 'supplier_id', label: 'Supplier',
-          read_access: true, edit_access: false
-        )
+      test 'creates _uuid variant for _id fields the model has' do
+        orders = create_resource(permission_set: @permission_set, name: 'PfVariantOrder', read_access: true)
+        create_resource_field(resource: orders, name: 'owner_id', label: 'Owner', read_access: true, edit_access: false)
+        fields = build_hash.dig(:resources, 'PfVariantOrder', :fields)
+        assert fields.key?('owner_uuid')
+        assert fields['owner_uuid'][:read_access]
+      end
+
+      test 'no _uuid variant entry for a name the model does not have' do
+        create_resource_field(resource: @resource, name: 'supplier_id', label: 'Supplier', read_access: true)
         fields = build_hash.dig(:resources, 'Customer', :fields)
-        assert fields.key?('supplier_uuid')
-        assert fields['supplier_uuid'][:read_access]
+        assert fields.key?('supplier_id')
+        assert_not fields.key?('supplier_uuid'), 'Customer has no supplier_uuid'
       end
 
       test 'includes rules when they exist' do

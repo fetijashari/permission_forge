@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require_relative '../field_variant_models'
 
 module PermissionForge
   module Services
@@ -99,9 +100,9 @@ module PermissionForge
         user = create_user
         set = create_permission_set
         create_permission_set_user(user: user, permission_set: set)
-        resource = create_resource(permission_set: set, name: 'Customer', read_access: true)
-        create_resource_field(resource: resource, name: 'customer_id', mask_access: true, mask_strategy: 'last4')
-        create_resource_field(resource: resource, name: 'customer_uuid', mask_access: true, mask_strategy: 'email')
+        resource = create_resource(permission_set: set, name: 'PfVariantOrder', read_access: true)
+        create_resource_field(resource: resource, name: 'owner_id', mask_access: true, mask_strategy: 'last4')
+        create_resource_field(resource: resource, name: 'owner_uuid', mask_access: true, mask_strategy: 'email')
         2.times { |i| create_permission_set_rule(permission_set: set, resource: resource, name: "rule #{i}") }
         2.times { |i| create_resource_action(resource: resource, name: "action_#{i}") }
 
@@ -115,7 +116,7 @@ module PermissionForge
         end
 
         assert_equal expected, PermissionHashBuilder.call(user: user, permission_sets: reversed)
-        assert_equal 'last4', expected.dig(:resources, 'Customer', :fields, 'customer_uuid', :mask_strategy), 'the older row wins'
+        assert_equal 'last4', expected.dig(:resources, 'PfVariantOrder', :fields, 'owner_uuid', :mask_strategy), 'the older row wins'
       end
 
       private

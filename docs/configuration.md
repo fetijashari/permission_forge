@@ -721,7 +721,7 @@ Your User model needs no `uuid` column: `uuid` is then `nil`, and `permission_se
 
 #### field_variant_mappings
 
-**Linked field variants.** A field's setting also applies to these related column names.
+**Linked field variants.** A field's setting also applies to these related names, where the model has them (a column or attribute, an alias, a public reader or writer, or a declared virtual field). See [Field Variant Mappings](field-filtering.md#field-variant-mappings).
 
 #### extra_fields_method
 

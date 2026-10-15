@@ -56,7 +56,9 @@ module PermissionForge
 
         assert_not @user.can_read?(:Customer)
         fields = @user.permissions_hash_for(:Customer)[:fields]
-        assert_equal %i[email full_address contact_count name supplier_id supplier_uuid].sort, fields.keys.sort
+        # Customer has no supplier_uuid: no variant entry, but filtered's
+        # supplier_uuid key follows supplier_id (FieldVariants.base_entries)
+        assert_equal %i[email full_address contact_count name supplier_id].sort, fields.keys.sort
         fields.each do |name, entry|
           assert_equal [false, false], entry.values_at(:read_access, :edit_access), name
         end

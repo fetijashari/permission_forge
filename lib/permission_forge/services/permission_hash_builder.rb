@@ -123,7 +123,7 @@ module PermissionForge
 
         add_source_permission_set(resource_data[:source_permission_sets], permission_set)
         merge_resource_permissions(resource_data[:permissions], resource)
-        FieldPermissionMerger.call(fields: resource_data[:fields], resource: resource)
+        FieldPermissionMerger.call(fields: resource_data[:fields], resource: resource, variants: field_variants(resource))
         merge_resource_actions(resource_data[:actions], resource)
         merge_permission_set_rules(resource_data[:permission_set_rules], resource)
       end
@@ -275,10 +275,16 @@ module PermissionForge
           # _cents, etc.), matching the variants the granting phase writes — otherwise
           # a muting set that revokes `user_id` would leave `user_uuid` readable.
           mute_single_field(fields, field.name, field)
-          PermissionForge.configuration.field_variants_for(field.name).each do |variant|
+          field_variants(resource).call(field.name).each do |variant|
             mute_single_field(fields, variant, field)
           end
         end
+      end
+
+      # The field variants of a resource's model (FieldVariants), one lookup
+      # per resource name for the whole build.
+      def field_variants(resource)
+        (@field_variants ||= {})[resource.name] ||= PermissionForge::FieldVariants.new(resource.name)
       end
 
       # A row that mutes read mutes edit too: a field nobody may read is not
