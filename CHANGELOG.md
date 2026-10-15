@@ -146,7 +146,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **The API refuses an `expires_at` that is not after now.** A single assignment or a bulk `assign` with an end that
   has passed (`"2020-01-01"`, yesterday, a minute ago) created an assignment that granted nothing, answered 201/200. It
   is now a 422 (`{"expires_at": ["must be in the future"]}`) and nobody is assigned. A bulk `revoke` ignores
-  `expires_at`; the admin's Undo still restores a removed assignment with the end it had. **Opt out:** none.
+  `expires_at`, also one that is not ISO 8601 (a revoke removes the assignments whatever their end); the admin's Undo
+  still restores a removed assignment with the end it had. **Opt out:** none.
 - **Generated fields give `created_at` / `updated_at` a read-only row.** They were in the default `ignored_fields`, so
   generating fields made no row for them and, under the default `unconfigured_field_strategy = :block`, every reader
   (admin included) saw `null` timestamps. `ignored_fields` no longer lists them by default, and
@@ -166,6 +167,27 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `api_action_authorization` / `api_assignment_authorization` is unset, a change or an assignment answered "Action not
   authorized" / "Assignment not authorized", the same text as a real denial. It now names the missing option ("API
   changes need config.api_action_authorization; …"); a lambda's refusal keeps its message. **Opt out:** none.
+- **`generate_fields` reads `grant_all` as a boolean.** Only the strings `"true"` and `"1"` granted: a JSON `true`
+  (or `1`) answered 201 with fields without edit. `true`, `"true"`, `1` and `"1"` now grant; `false`, `"false"`, `0`,
+  `"0"`, `null` and no `grant_all` do not; anything else (`"yes"`, `""`, `2`) is a 422
+  `{"grant_all": ["must be true or false"]}` and creates no field. **Opt out:** none; send one of the values above.
+- **A bulk assignment that names nobody is a 422.** `POST …/users/bulk` without `user_ids` (missing, `[]`, `""` or
+  only blanks) answered 200 with nothing done; it is now `{"user_ids": ["must name at least one user"]}`, on `assign`
+  and `revoke`, and records no event, like the other 422s. Ids that name nobody are still reported in `skipped`.
+  **Opt out:** none.
+- **A request body the API cannot parse is a 400 in the API's envelope.** Invalid JSON sent as `application/json`
+  answered Rails' own `{"status":400,"error":"Bad Request"}` (or raised where exceptions are not shown); it is now
+  `{"error":{"status":400,"messages":"The request body could not be read. …"}}`, in the `Accept-Language` locale.
+  Rails parses the body before `api_auth` runs, so this 400 can come before a 401; a disabled API stays a 404.
+  **Opt out:** none.
+- **An API clone without a name is named as the admin's Duplicate names it.** `POST …/permission_sets/:id/clone`
+  and `POST …/permission_set_groups/:id/clone` named the copy `"<name> (Copy)"` in English; they now use
+  `permission_sets.copy_name`, `"<name> (copy)"` in the request's locale (`(kopje)`, `(копија)`), a set's copy
+  numbered when taken, as the admin and the cloners do. **Opt out:** send `name`.
+- **An unknown `permission_set_group_id` is a 422 keyed by `permission_set_group_id`.** A value that names no group of
+  the current tenant was a validation error under `permission_set_group`; the API now answers
+  `{"permission_set_group_id": ["…"]}`, the parameter the request sent, before anything is saved. **Opt out:** none;
+  a client that read `messages.permission_set_group` reads `messages.permission_set_group_id`.
 
 ### Deprecated
 

@@ -11,6 +11,9 @@ sq:
           refuzohen sa kohë që nuk është vendosur dhe config.api_require_authorization
           është aktiv
         assignment_not_authorized: Caktimi nuk është i autorizuar
+        body_unreadable: Përmbajtja e kërkesës nuk mund të lexohet. Dërgoni JSON të
+          vlefshëm me Content-Type application/json.
+        boolean_invalid: duhet të jetë true ose false
         bulk_action_invalid: duhet të jetë assign ose revoke
         expires_at_past: duhet të jetë në të ardhmen
         field_generation_failed: Fushat për këtë burim nuk mund të gjenerohen
@@ -24,6 +27,7 @@ sq:
         tenant_required: Kjo kërkesë nuk ka qiramarrës. API-ja e administrimit shërben
           një qiramarrës në një kohë.
         unauthorized: Nuk jeni i autentikuar
+        user_ids_missing: duhet të emërtojë të paktën një përdorues
     assignments:
       confirm_destroy:
         body: "%{name} do të humbasë qasjen në %{resources}, përveç nëse një Grup

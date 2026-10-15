@@ -80,17 +80,29 @@ module PermissionForge
         raise ParamShapes::InvalidParam.new(:expires_at, I18n.t('permission_forge.api.errors.expires_at_past'))
       end
 
-      # An unknown bulk_action is a 422 ({ "bulk_action": [...] }) before
-      # anything is changed.
+      # An unknown bulk_action, and a request that names nobody, are a 422
+      # ({ "bulk_action": [...] }, { "user_ids": [...] }) before anything is
+      # changed: a 200 that did nothing would hide a broken payload.
       def bulk_refused?
         action = BULK_ACTIONS.fetch(params[:bulk_action].to_s) do
           raise ParamShapes::InvalidParam.new(:bulk_action, I18n.t('permission_forge.api.errors.bulk_action_invalid'))
         end
+        require_user_ids!
         pf_assignment_refused_api?(@permission_set, params[:user_ids], action)
       end
 
+      # user_ids missing, [], "" or only blanks. Ids that name nobody are
+      # not refused: they are reported as `skipped`.
+      def require_user_ids!
+        return unless Array.wrap(params[:user_ids]).all?(&:blank?)
+
+        raise ParamShapes::InvalidParam.new(:user_ids, I18n.t('permission_forge.api.errors.user_ids_missing'))
+      end
+
       # The service's counts plus `skipped`: the ids of the request that
-      # name nobody config.user_list_resolver lists.
+      # name nobody config.user_list_resolver lists. A revoke ignores
+      # expires_at (it removes the assignments whatever their end), also
+      # one that cannot be read.
       def bulk_assignment
         user_ids = bulk_user_ids
         result = PermissionForge::Services::BulkPermissionSetAssignment.call(
@@ -98,7 +110,7 @@ module PermissionForge
           user_ids: user_ids,
           action: params[:bulk_action],
           created_by: PermissionForge.current_user,
-          expires_at: params[:bulk_action] == 'assign' ? future_expires_at : pf_time_param(:expires_at)
+          expires_at: (future_expires_at if params[:bulk_action] == 'assign')
         )
         # Someone outside user_list_resolver and an id that names no user
         # read the same: the answer says nothing about who exists.

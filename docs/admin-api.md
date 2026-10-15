@@ -172,15 +172,27 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 { "error": { "status": 422, "messages": { "expires_at": ["is not an ISO 8601 date or time"] } } }
 { "error": { "status": 422, "messages": { "permission_set": ["is missing, empty or not an object"] } } }
 { "error": { "status": 422, "messages": { "bulk_action": ["must be assign or revoke"] } } }
+{ "error": { "status": 422, "messages": { "user_ids": ["must name at least one user"] } } }
+{ "error": { "status": 422, "messages": { "grant_all": ["must be true or false"] } } }
 { "error": { "status": 422, "messages": { "base": ["Could not generate fields for this resource"] } } }
 ```
 
-The messages follow the request's locale. Through 0.14.1 an input error answered `messages` as one string (`"expires_at is not an ISO 8601 date or time"`, `"param is missing or the value is empty or invalid: permission_set"`). Other statuses (401, 403, 404) keep a string.
+The messages follow the request's locale. Through 0.14.1 an input error answered `messages` as one string (`"expires_at is not an ISO 8601 date or time"`, `"param is missing or the value is empty or invalid: permission_set"`). Other statuses (400, 401, 403, 404) keep a string.
+
+**A body that cannot be parsed is a 400.** A request sent as `application/json` whose body is not valid JSON (`{"permission_set": {"name": "x"`) answers, in the envelope:
+
+```json
+{ "error": { "status": 400, "messages": "The request body could not be read. Send valid JSON with Content-Type application/json." } }
+```
+
+Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 can come before a 401; while the API is disabled it stays a 404 without a body. The message follows the `Accept-Language` header (a `locale` parameter in the unreadable body cannot be read). Through 0.14.1 Rails answered its own `{"status":400,"error":"Bad Request"}`.
 
 **What answers 422.** A failed validation (`messages` is the model's errors, as above), and input the API cannot read:
 
 - a body section that is not an object (`"permission_set": "x"`), or one that is missing or empty (see below);
 - an `expires_at` that is not one of the [ISO 8601 forms below](#expires_at-formats) (`"tuesday"`, `"2026-13-45"`, `"22/10/2026"`, a number);
+- a `grant_all` that is not `true`, `false`, `1`, `0` or one of their strings (`"yes"`, `""`, `2`): see [generate_fields](#resources-nested-under-permission-set);
+- a bulk assignment without `user_ids` (missing, `[]`, `""` or only blanks): see [Bulk User Assignment](#bulk-user-assignment);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
 - a `permission_set_group_id` that names no group of the current tenant;
 - a string longer than its column: `is too long (at most N characters)`. Only columns that declare a limit are checked — a `string` on MySQL is `varchar(255)` (counted in characters) and a `text` holds 65,535 bytes; on PostgreSQL and SQLite the install's `string` and `text` columns declare none, so nothing is checked there. A Permission Set name keeps its own 255-character rule on every database.
@@ -285,11 +297,13 @@ POST /permissions/api/permission_sets/:uuid/clone
 
 curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/clone \
   -H "Content-Type: application/json" \
-  -d '{ "name": "Sales Team (Copy)" }'
+  -d '{ "name": "Sales Team (copy)" }'
 # Response: 201 Created — returns the cloned permission set
 # The copy and its rows are editable, like the admin's Duplicate. A copy of a
 # set in a locked group is created outside the group (permission_set_group_id: null).
-# Without "name" (or with one that is not text), the name is "<name> (Copy)".
+# Without "name" (or with one that is not text), the copy is named as the
+# admin's Duplicate names it: "<name> (copy)" in the request's locale,
+# numbered when taken ("<name> (copy) 2"). Through 0.14.1: "<name> (Copy)".
 ```
 
 #### Resources (nested under permission set)
@@ -339,10 +353,12 @@ POST /permissions/api/permission_sets/:ps_uuid/resources/:uuid/generate_fields
 
 curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resources/def-456/generate_fields \
   -H "Content-Type: application/json" \
-  -d '{ "grant_all": "true" }'
+  -d '{ "grant_all": true }'
 # Response: 201 Created — returns array of generated fields
-# grant_all is read only as the string "true" or "1" (a JSON true, or a body
-# sent without the Content-Type header, generates read-only fields)
+# grant_all: true, "true", 1 or "1" grants; false, "false", 0, "0", null or no
+# grant_all does not. Anything else ("yes", "", 2) is a 422
+# {"grant_all": ["must be true or false"]} and creates nothing. Through 0.14.1
+# only "true" and "1" granted: a JSON true created fields without edit.
 # With grant_all every field is readable and editable, unmasked — also the
 # personal-data columns under gdpr_defaults (their recommended mask_strategy
 # is returned, mask_access is false). Without it, under gdpr_defaults, those
@@ -379,6 +395,8 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
     }
   }'
 # Response: 201 Created
+# "label" is what the admin shows; a missing or blank label defaults to the
+# humanized name ("email_address" → "Email address")
 # mask_strategy options: "full", "email", "last4", "first1_last4",
 #                        plus any keys from config.custom_mask_strategies
 # Duplicate field names within a resource return 422
@@ -454,6 +472,9 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
 #                   "contains", "not_contains", "starts_with", "ends_with",
 #                   "between", "is_null", "is_not_null"
 # "is_null" / "is_not_null" take no field_value (it is stored as empty)
+# include_nulls defaults to TRUE (the column default): a rule created without
+# it also lets through the rows whose field is NULL, for "equal", "not_equal",
+# "in" and "not_in". Send "include_nulls": false to keep them out.
 
 # Update a rule
 PATCH /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
@@ -461,6 +482,8 @@ PATCH /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
 # Delete a rule
 DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
 ```
+
+**Rule attributes** (`permission_set_rule`): `name`, `field_name`, `field_value`, `operator`, `join_type`, `field_accessor_path`, `include_nulls` (default **`true`**: NULL rows pass an `equal`, `not_equal`, `in` or `not_in` rule unless you send `false`; see [The `include_nulls` Flag](row-level-rules.md#the-include_nulls-flag)), `is_active`, `is_editable`, `failure_message`.
 
 A `field_value` is compared in the type of the column the rule names; a value that column cannot hold (`"5_id"` on an integer column) is accepted and makes the rule match nothing. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
 
@@ -526,6 +549,10 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
 # and revoke alike: someone outside the resolver and an unknown id read the same.
 # "invalidated" counts the users whose assignment changed and whose cached
 # permissions were cleared; a user who already held the set is not counted.
+# A request that names nobody (no user_ids, [], "" or only blanks) is a 422
+# {"user_ids": ["must name at least one user"]} on assign and revoke, and
+# changes nothing (through 0.14.1: 200 with nothing done). Like the other
+# 422s it records no audit event.
 
 # Bulk revoke users from a permission set
 POST /permissions/api/permission_sets/:ps_uuid/users/bulk
@@ -537,6 +564,8 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
     "bulk_action": "revoke"
   }'
 # Response: 200 OK
+# A revoke ignores expires_at, also one that is not ISO 8601: it removes the
+# assignments whatever their end.
 ```
 
 #### Permission Set Groups
@@ -567,9 +596,11 @@ POST /permissions/api/permission_set_groups/:uuid/clone
 
 curl -X POST http://localhost:3000/permissions/api/permission_set_groups/abc-123/clone \
   -H "Content-Type: application/json" \
-  -d '{ "name": "Admin Groups (Copy)" }'
+  -d '{ "name": "Admin Groups (copy)" }'
 # Response: 201 Created — returns the cloned group
-# The copied group, its sets and their rows are editable.
+# The copied group, its sets and their rows are editable. Without "name", the
+# group is named "<name> (copy)" in the request's locale, as the admin's
+# Duplicate names it (through 0.14.1: "<name> (Copy)").
 ```
 
 #### Permission Set Group Users (group membership — grants nothing)

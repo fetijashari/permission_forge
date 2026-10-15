@@ -97,6 +97,37 @@ module PermissionForge
         assert_equal 404, json.dig('error', 'status')
         assert_equal 'Record not found', json.dig('error', 'messages')
       end
+
+      # Rails raises ParseError when params are first read (the forgery
+      # check) and answered {"status":400,"error":"Bad Request"} outside the
+      # envelope (or raised, where exceptions are not shown).
+      test 'a body that is not valid JSON is a 400 in the API envelope, in the Accept-Language locale' do
+        assert_no_difference -> { PermissionForge::PermissionSet.count } do
+          post '/permission_forge/api/permission_sets', params: '{"permission_set": {"name": "x"',
+                                                        headers: { 'CONTENT_TYPE' => 'application/json' }
+        end
+        assert_response :bad_request
+        assert_equal({ 'error' => { 'status' => 400, 'messages' => I18n.t('permission_forge.api.errors.body_unreadable', locale: :en) } },
+                     JSON.parse(response.body))
+
+        post '/permission_forge/api/permission_sets', params: '{', headers: { 'CONTENT_TYPE' => 'application/json',
+                                                                              'HTTP_ACCEPT_LANGUAGE' => 'sq' }
+        assert_response :bad_request
+        assert_equal I18n.t('permission_forge.api.errors.body_unreadable', locale: :sq), response.parsed_body.dig('error', 'messages')
+      ensure
+        I18n.locale = I18n.default_locale
+      end
+
+      test 'a body that is not valid JSON on a disabled API stays a bodiless 404' do
+        PermissionForge.configuration.api_enabled = false
+
+        patch '/permission_forge/api/permission_sets/x', params: 'nope', headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        assert_response :not_found
+        assert_empty response.body
+      ensure
+        PermissionForge.configuration.api_enabled = true
+      end
     end
   end
 end

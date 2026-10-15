@@ -54,6 +54,20 @@ module PermissionForge
         render_input_error(e)
       end
 
+      # A body Rails cannot parse (invalid JSON sent as application/json)
+      # raises when params are first read — in the forgery check, before
+      # api_auth — so the 400 is answered in the API's envelope instead of
+      # Rails' own. A disabled API stays a 404. params[:locale] cannot be
+      # read: the header decides.
+      rescue_from ActionDispatch::Http::Parameters::ParseError do
+        verify_api_enabled!
+        next if performed?
+
+        assign_api_locale(extract_locale_from_accept_language)
+        render json: { error: { status: 400, messages: I18n.t('permission_forge.api.errors.body_unreadable') } },
+               status: :bad_request
+      end
+
       private
 
       # Who acts (Audit::ActorResolver: audit_actor_resolver, the signed-in
@@ -69,9 +83,12 @@ module PermissionForge
       end
 
       def set_api_locale
-        locale = params[:locale] || extract_locale_from_accept_language
-        # Always assign a locale (default when none/invalid) so a locale set by
-        # one request can never leak into the next on a reused thread.
+        assign_api_locale(params[:locale] || extract_locale_from_accept_language)
+      end
+
+      # Always assign a locale (default when none/invalid) so a locale set by
+      # one request can never leak into the next on a reused thread.
+      def assign_api_locale(locale)
         I18n.locale = if locale.present? && api_available_locale?(locale)
                         locale
                       else

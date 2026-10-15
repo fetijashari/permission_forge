@@ -190,11 +190,11 @@ module PermissionForge
 
       test 'a clone name that is not text falls back to the default name, and NULs are dropped' do
         post "#{set_path}/clone", params: { name: { 'a' => '1' } }
-        assert_equal 'Seeded (Copy)', response.parsed_body.dig('data', 'name')
+        assert_equal 'Seeded (copy)', response.parsed_body.dig('data', 'name')
         post "#{set_path}/clone", params: { name: "Co\u0000py" }
         assert_equal 'Copy', response.parsed_body.dig('data', 'name')
         post "#{ROOT}/permission_set_groups/#{@group.uuid}/clone", params: { name: ['x'] }
-        assert_equal 'System (Copy)', response.parsed_body.dig('data', 'name')
+        assert_equal 'System (copy)', response.parsed_body.dig('data', 'name')
       end
 
       # --- unlocked records are unaffected ------------------------------------------------
