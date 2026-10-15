@@ -87,16 +87,16 @@ module PermissionForge
                                               data: { 'reason' => 'api_auth_not_configured', 'status' => 401 })
       end
 
-      test 'an API request api_auth refuses records api.auth_failed (403) with who the host knows' do
+      test 'an API request api_auth refuses records api.auth_failed (401) with who the host knows' do
         admin = create_user(name: 'Ada Admin')
         sign_in(admin)
         PermissionForge.configuration.api_auth = ->(_c) { false }
 
         post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'x' } }
 
-        assert_response :forbidden
+        assert_response :unauthorized
         assert_audit_event('api.auth_failed', actor_type: 'user', actor_id: admin.id.to_s,
-                                              data: { 'reason' => 'api_auth_denied', 'status' => 403, 'method' => 'POST' })
+                                              data: { 'reason' => 'api_auth_denied', 'status' => 401, 'method' => 'POST' })
         assert_nil PermissionForge::PermissionSet.find_by(name: 'x')
       end
 
@@ -186,7 +186,7 @@ module PermissionForge
 
         with_quiet_request_log { get "#{ROOT}/api/permission_sets", headers: SPOOF_HEADERS }
 
-        assert_response :forbidden
+        assert_response :unauthorized
         assert_audit_event('api.auth_failed', ip: '10.4.4.4', data: { 'reason' => 'api_auth_denied', 'ip_spoof_suspected' => true })
       end
 

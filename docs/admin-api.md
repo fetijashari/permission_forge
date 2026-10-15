@@ -42,11 +42,11 @@ PermissionForge.configure do |config|
 end
 ```
 
-`PermissionForge.current_user` (here and in the examples below) is what your `current_user_resolver` returns: `Current.user` with Rails 8's authentication generator, or whatever you wired it to with Devise. It names someone only when your app's sign-in runs in the request, that is behind an `api_base_controller_class` that authenticates (Option B). On the default `::ActionController::Base` nothing signs the caller in, so it is `nil` and the lambda refuses (403): check a header instead, as in the key and token examples below. Rails 8's generated `request_authentication` redirects to `new_session_path`, which inside the engine does not resolve: override it in that base controller as shown in [Admin UI](admin-ui.md#rails-8-authentication-generator), or answer 401 there for JSON.
+`PermissionForge.current_user` (here and in the examples below) is what your `current_user_resolver` returns: `Current.user` with Rails 8's authentication generator, or whatever you wired it to with Devise. It names someone only when your app's sign-in runs in the request, that is behind an `api_base_controller_class` that authenticates (Option B). On the default `::ActionController::Base` nothing signs the caller in, so it is `nil` and the lambda refuses (401): check a header instead, as in the key and token examples below. Rails 8's generated `request_authentication` redirects to `new_session_path`, which inside the engine does not resolve: override it in that base controller as shown in [Admin UI](admin-ui.md#rails-8-authentication-generator), or answer 401 there for JSON.
 
-The lambda has full access to the controller, so you can check headers, tokens, roles, etc. When it returns a falsy value, the request gets **403 Forbidden** (recorded as `api.auth_failed`).
+The lambda has full access to the controller, so you can check headers, tokens, roles, etc. When it returns a falsy value, the request gets **401 Unauthorized** with `{"error":{"status":401,"messages":"Not authenticated"}}` (recorded as `api.auth_failed`, reason `api_auth_denied`), so a client that refreshes its token on 401 does so. The gem sends no `WWW-Authenticate` challenge of its own, since only your app knows the scheme: set one in the lambda before refusing, e.g. `controller.response.headers['WWW-Authenticate'] = 'Bearer realm="permissions"'`, and it is kept. 403 is reserved for an authenticated caller that the authorization lambdas below refuse. Through 0.14.1 a refusing `api_auth` answered 403.
 
-`api_auth` only proves who the caller is. Changes and assignments also need `api_action_authorization` and `api_assignment_authorization` (see [Security Considerations](#security-considerations)): until both are set they are refused with 403.
+`api_auth` only proves who the caller is. Changes and assignments also need `api_action_authorization` and `api_assignment_authorization` (see [Security Considerations](#security-considerations)): until both are set they are refused with 403, and the message names the option that is missing.
 
 ```ruby
 # Example: API key authentication
@@ -722,7 +722,7 @@ config.api_assignment_authorization = ->(controller, _target, _user_ids) {
 config.api_require_authorization = true  # default
 ```
 
-While it is `true`, mutation and assignment endpoints return 403 (`api.auth_failed`) whenever the corresponding lambda (`api_action_authorization` / `api_assignment_authorization`) is unset. Setting it to `false` lets every caller that passes `api_auth` create permission sets and assign them to anyone; a boot warning is logged and `rake permission_forge:audit` reports `api_mutations_unguarded` (high) while a lambda is missing.
+While it is `true`, mutation and assignment endpoints return 403 (`api.auth_failed`, `hook: api_require_authorization`) whenever the corresponding lambda (`api_action_authorization` / `api_assignment_authorization`) is unset. The 403 says so (`"API changes need config.api_action_authorization; …"`), unlike a lambda's refusal (`"Action not authorized"`), so the missing configuration is visible from the response. Setting it to `false` lets every caller that passes `api_auth` create permission sets and assign them to anyone; a boot warning is logged and `rake permission_forge:audit` reports `api_mutations_unguarded` (high) while a lambda is missing.
 
 ### Non-Editable Records
 
@@ -736,7 +736,7 @@ With `tenant_model` set, a request that has no current tenant is refused with 40
 
 ### CSRF Posture
 
-API controllers use `protect_from_forgery with: :null_session, prepend: true`: the forgery check is the first callback of the chain, before `api_auth` and before your `api_base_controller_class`'s own callbacks. A mutating request without a valid CSRF token gets an empty session (`request.session`) and an empty cookie jar (`cookies` / `request.cookie_jar`) — and so does everything that reads them during the request, such as a Warden/Devise `current_user` loaded inside the controller. A cross-site form post from a signed-in admin's browser therefore reaches `api_auth` with no session, and an `api_auth` that derives identity from the session or the cookie jar refuses it (403, `api.auth_failed`).
+API controllers use `protect_from_forgery with: :null_session, prepend: true`: the forgery check is the first callback of the chain, before `api_auth` and before your `api_base_controller_class`'s own callbacks. A mutating request without a valid CSRF token gets an empty session (`request.session`) and an empty cookie jar (`cookies` / `request.cookie_jar`) — and so does everything that reads them during the request, such as a Warden/Devise `current_user` loaded inside the controller. A cross-site form post from a signed-in admin's browser therefore reaches `api_auth` with no session, and an `api_auth` that derives identity from the session or the cookie jar refuses it (401, `api.auth_failed`).
 
 On Rails 8.2 and later, Rails can verify a request by the browser's `Sec-Fetch-Site` header instead of the token, and `config.load_defaults 8.2` selects `:header_only`, under which a plain-HTTP request without that header is not checked at all. The admin screens and the API always use `:header_or_legacy_token`, whatever your application sets: a same-origin or same-site request passes on the header without a token (same-site includes your other subdomains: a page on one can post to the admin on another), a cross-site one is refused, and a request without the header needs the CSRF token, as on earlier Rails versions.
 

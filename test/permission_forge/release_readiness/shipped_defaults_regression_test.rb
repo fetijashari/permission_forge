@@ -67,7 +67,7 @@ module PermissionForge
       test 'SHIP-CSRF a forged POST with the admin session cookie is refused by a session-based api_auth' do
         assert_nil result['csrf_error']
         assert_equal 200, result['csrf_admin_session_established']
-        assert_equal 403, result['csrf_forged_post_status']
+        assert_equal 401, result['csrf_forged_post_status']
         assert_equal false, result['csrf_forged_post_created']
         assert_equal 201, result['csrf_post_with_token_status']
         assert_equal true, result['csrf_post_with_token_created']

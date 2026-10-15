@@ -35,6 +35,17 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   has passed (`"2020-01-01"`, yesterday, a minute ago) created an assignment that granted nothing, answered 201/200. It
   is now a 422 (`{"expires_at": ["must be in the future"]}`) and nobody is assigned. A bulk `revoke` ignores
   `expires_at`; the admin's Undo still restores a removed assignment with the end it had. **Opt out:** none.
+- **A refusing `api_auth` answers 401 Unauthorized instead of 403.** A wrong or missing token is a failed
+  authentication: clients that refresh credentials on 401 did not on the 403. The body is
+  `{"error":{"status":401,"messages":"Not authenticated"}}`; the `api.auth_failed` event keeps its reason
+  (`api_auth_denied`) and records `status: 401`. No `WWW-Authenticate` challenge is invented (the gem does not know your
+  scheme): one your `api_auth` sets on `controller.response.headers` is kept. 403 now means an authenticated caller the
+  authorization lambdas refuse, a lock, a missing tenant or `audit_log_authorization`. **Opt out:** none; a client that
+  treated 403 as "bad token" checks 401.
+- **A 403 for a missing authorization lambda says so.** While `api_require_authorization` is on and
+  `api_action_authorization` / `api_assignment_authorization` is unset, a change or an assignment answered "Action not
+  authorized" / "Assignment not authorized", the same text as a real denial. It now names the missing option ("API
+  changes need config.api_action_authorization; …"); a lambda's refusal keeps its message. **Opt out:** none.
 - **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
   `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
   `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`

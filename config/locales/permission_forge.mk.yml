@@ -3,7 +3,11 @@ mk:
   permission_forge:
     api:
       errors:
+        action_authorization_missing: Промените преку API бараат config.api_action_authorization;
+          се одбиваат додека не е поставено и config.api_require_authorization е вклучено
         action_not_authorized: Акцијата не е авторизирана
+        assignment_authorization_missing: Доделувањата преку API бараат config.api_assignment_authorization;
+          се одбиваат додека не е поставено и config.api_require_authorization е вклучено
         assignment_not_authorized: Доделувањето не е авторизирано
         bulk_action_invalid: мора да биде assign или revoke
         expires_at_past: мора да биде во иднина
@@ -15,6 +19,7 @@ mk:
         section_missing: недостасува, празно е или не е објект
         tenant_required: Ова барање нема закупец. API-то за администрација служи по
           еден закупец.
+        unauthorized: Не сте автентицирани
     assignments:
       confirm_destroy:
         body: "%{name} ќе го изгуби пристапот до %{resources}, освен ако друг сет

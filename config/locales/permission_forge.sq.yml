@@ -3,7 +3,13 @@ sq:
   permission_forge:
     api:
       errors:
+        action_authorization_missing: Ndryshimet përmes API-së kërkojnë config.api_action_authorization;
+          refuzohen sa kohë që nuk është vendosur dhe config.api_require_authorization
+          është aktiv
         action_not_authorized: Veprimi nuk është i autorizuar
+        assignment_authorization_missing: Caktimet përmes API-së kërkojnë config.api_assignment_authorization;
+          refuzohen sa kohë që nuk është vendosur dhe config.api_require_authorization
+          është aktiv
         assignment_not_authorized: Caktimi nuk është i autorizuar
         bulk_action_invalid: duhet të jetë assign ose revoke
         expires_at_past: duhet të jetë në të ardhmen
@@ -15,6 +21,7 @@ sq:
         section_missing: mungon, është bosh ose nuk është objekt
         tenant_required: Kjo kërkesë nuk ka qiramarrës. API-ja e administrimit shërben
           një qiramarrës në një kohë.
+        unauthorized: Nuk jeni i autentikuar
     assignments:
       confirm_destroy:
         body: "%{name} do të humbasë qasjen në %{resources}, përveç nëse një Grup

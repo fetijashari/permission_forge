@@ -3,7 +3,13 @@ en:
   permission_forge:
     api:
       errors:
+        action_authorization_missing: API changes need config.api_action_authorization;
+          they are refused while it is unset and config.api_require_authorization
+          is on
         action_not_authorized: Action not authorized
+        assignment_authorization_missing: API assignments need config.api_assignment_authorization;
+          they are refused while it is unset and config.api_require_authorization
+          is on
         assignment_not_authorized: Assignment not authorized
         bulk_action_invalid: must be assign or revoke
         expires_at_past: must be in the future
@@ -15,6 +21,7 @@ en:
         section_missing: is missing, empty or not an object
         tenant_required: No tenant is set for this request. The admin API serves one
           tenant at a time.
+        unauthorized: Not authenticated
     assignments:
       confirm_destroy:
         body: "%{name} will lose access to %{resources}, unless another Permission

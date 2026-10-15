@@ -124,9 +124,8 @@ module PermissionForge
 
       def authorize_action!(action, record)
         authorizer = PermissionForge.configuration.api_action_authorization
-        message = I18n.t('permission_forge.api.errors.action_not_authorized')
         unless authorizer
-          return deny_when_authorization_required(message) do
+          return deny_when_authorization_required(I18n.t('permission_forge.api.errors.action_authorization_missing')) do
             audit_action_refused(action, record, hook: 'api_require_authorization')
           end
         end
@@ -134,7 +133,7 @@ module PermissionForge
         return if authorizer.call(self, action, record)
 
         audit_action_refused(action, record, hook: 'api_action_authorization')
-        render_not_authorized(message)
+        render_not_authorized(I18n.t('permission_forge.api.errors.action_not_authorized'))
       end
 
       # Runs the mutation authorization hook and the is_editable lock for a
@@ -175,9 +174,8 @@ module PermissionForge
       # A refusal records the ids as requested (bounded, Audit::Refusals).
       def authorize_assignment!(permission_set, user_ids)
         authorizer = PermissionForge.configuration.api_assignment_authorization
-        message = I18n.t('permission_forge.api.errors.assignment_not_authorized')
         unless authorizer
-          return deny_when_authorization_required(message) do
+          return deny_when_authorization_required(I18n.t('permission_forge.api.errors.assignment_authorization_missing')) do
             audit_assignment_refused(permission_set, user_ids, hook: 'api_require_authorization')
           end
         end
@@ -185,14 +183,15 @@ module PermissionForge
         return if authorizer.call(self, permission_set, PermissionForge::Admin::PeopleDirectory::Ids.cast(user_ids))
 
         audit_assignment_refused(permission_set, user_ids, hook: 'api_assignment_authorization')
-        render_not_authorized(message)
+        render_not_authorized(I18n.t('permission_forge.api.errors.assignment_not_authorized'))
       end
 
       # When config.api_require_authorization is on, a missing authorization lambda
       # means DENY (403) rather than the backward-compatible silent allow. This
       # prevents "authenticated == full admin" when the host wired api_auth but not
       # the per-action / assignment authorization hooks. The block records the
-      # refusal.
+      # refusal. The message names the missing option (the integrator's fix),
+      # unlike a lambda's denial; it carries nothing from the request.
       def deny_when_authorization_required(message)
         return unless PermissionForge.configuration.api_require_authorization
 

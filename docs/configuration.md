@@ -951,7 +951,7 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### api_auth
 
-**API sign-in.** How API callers prove who they are.
+**API sign-in.** How API callers prove who they are. Called with the controller; a falsy answer is a 401 (`api.auth_failed`, reason `api_auth_denied`). Not set: every request is a 401. What an authenticated caller may change is `api_action_authorization` / `api_assignment_authorization` (403).
 
 #### api_base_controller_class
 

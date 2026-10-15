@@ -428,16 +428,16 @@ module PermissionForge
         assert_response :not_found
       end
 
-      test 'no api_auth is a 401 and a refusing api_auth a 403' do
+      test 'no api_auth is a 401 and a refusing api_auth a 401 too' do
         @config.api_auth = nil
         get BASE
         assert_response :unauthorized
 
         @config.api_auth = ->(_controller) { false }
         get BASE
-        assert_response :forbidden
+        assert_response :unauthorized
         get "#{BASE}/x"
-        assert_response :forbidden
+        assert_response :unauthorized
       end
 
       test 'audit_log_authorization nil lets an authenticated client read' do
@@ -497,7 +497,7 @@ module PermissionForge
 
         get BASE
 
-        assert_response :forbidden
+        assert_response :unauthorized
         refute called
       end
 
