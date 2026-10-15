@@ -55,7 +55,7 @@ module PermissionForge
     end
 
     test 'a Redis store does not warn in development' do
-      store = ActiveSupport::Cache::RedisCacheStore.new(url: 'redis://127.0.0.1:1/15')
+      store = ActiveSupport::Cache::RedisCacheStore.new(url: 'redis://127.0.0.1:1/15', pool: false)
 
       assert_no_match DEVELOPMENT_WARNING, boot_log(env: 'development', backend: store)
     rescue LoadError
