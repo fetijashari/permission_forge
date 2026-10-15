@@ -1,16 +1,29 @@
 # frozen_string_literal: true
 
 namespace :permission_forge do
-  desc 'Find permanent permission assignments not reviewed within threshold (default: 90 days)'
+  # Exits 1 when it finds stale assignments, 2 when THRESHOLD_DAYS is not a
+  # number of days (rather than reading it as 0, which flags everything).
+  desc 'Find permanent permission assignments not reviewed within THRESHOLD_DAYS ' \
+       '(default: config.admin_stale_assignment_days, 90). Exits 1 when it finds any.'
   task stale_assignments: :environment do
-    threshold = ENV.fetch('THRESHOLD_DAYS', 90).to_i
+    task_name = 'permission_forge:stale_assignments'
+    threshold = ENV.fetch('THRESHOLD_DAYS', nil)&.then do |given|
+      days = Integer(given.strip, 10, exception: false)
+      next days if days&.between?(1, 36_500)
+
+      message = "THRESHOLD_DAYS must be a whole number of days from 1 to 36500 (got #{given.inspect}). " \
+                "Usage: rake #{task_name} THRESHOLD_DAYS=90"
+      PermissionForge::RakeAudit.log(task_name, "refused: #{message}")
+      warn message
+      exit 2
+    end
     result = PermissionForge::RakeAudit.reporting(
-      'permission_forge:stale_assignments',
-      counts: ->(r) { { stale: r[:stale_count], users: r[:affected_user_ids].size, threshold_days: threshold } }
+      task_name,
+      counts: ->(r) { { stale: r[:stale_count], users: r[:affected_user_ids].size, threshold_days: r[:threshold_days] } }
     ) { PermissionForge::Services::StaleAssignmentAuditor.call(threshold_days: threshold) }
 
     if result[:stale_count].zero?
-      puts "No stale assignments found (threshold: #{threshold} days)."
+      puts "No stale assignments found (threshold: #{result[:threshold_days]} days)."
     else
       puts "Found #{result[:stale_count]} stale assignment(s) affecting #{result[:affected_user_ids].size} user(s):"
       result[:assignments].each do |a|

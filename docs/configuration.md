@@ -1008,7 +1008,7 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### admin_stale_assignment_days
 
-**Review assignments after.** Permanent assignments not reviewed for this long appear under Stale assignments.
+**Review assignments after.** Permanent assignments not reviewed for this long appear under Stale assignments. Also the default threshold of `rake permission_forge:stale_assignments` and `StaleAssignmentAuditor`.
 
 #### admin_app_name
 

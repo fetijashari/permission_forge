@@ -12,6 +12,19 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `--skip-migration`), the mount line, where the admin credentials go (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`, or your
   own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start. `rails destroy` prints none.
 
+### Fixed
+
+- **`rake permission_forge:stale_assignments` refuses a `THRESHOLD_DAYS` it cannot read.** The value was read with
+  `to_i`, so `THRESHOLD_DAYS=`, `abc`, `0` or `-3` became a threshold of 0 (or less) days and reported every permanent
+  assignment, exiting 1. Anything that is not a whole number of days from 1 to 36500 now prints what is expected on
+  stderr and exits 2, without running the report.
+- **The stale-assignment report and the admin agree on the threshold.** Without `THRESHOLD_DAYS` the rake task, and
+  `Services::StaleAssignmentAuditor.call` without `threshold_days:`, now use `config.admin_stale_assignment_days`, as
+  the Home Stale list, the person page and `rake permission_forge:audit` already did; they used a fixed 90 before.
+  Nothing changes unless you set `admin_stale_assignment_days` to something other than 90. Callers that pass
+  `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
+  raising.
+
 ### Documentation
 
 Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authentication generator:
@@ -32,8 +45,8 @@ Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authent
 - [Admin API](docs/admin-api.md#response-format): a flat JSON body is accepted where Rails wraps parameters (only an
   empty, missing or non-object section answers 422); the collection sample shows `meta.pagination`.
 - [Assignment expiration](docs/assignment-expiration.md#rake-task-stale-assignments): `rake
-  permission_forge:stale_assignments`, its `THRESHOLD_DAYS` (90, independent of `admin_stale_assignment_days`), its
-  output and its exit status 1 when it finds stale assignments.
+  permission_forge:stale_assignments`, its `THRESHOLD_DAYS`, its output and its exit status 1 when it finds stale
+  assignments.
 
 ## [0.14.1] - 2026-10-14
 

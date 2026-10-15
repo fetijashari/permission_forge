@@ -71,6 +71,22 @@ module PermissionForge
         assert_equal 1, result[:stale_count]
       end
 
+      # The same threshold as the admin's Stale list and the security audit.
+      test 'the default threshold follows admin_stale_assignment_days' do
+        psu = create_permission_set_user(user: @user, permission_set: @permission_set)
+        psu.update_columns(created_at: 40.days.ago)
+        PermissionForge.configuration.admin_stale_assignment_days = 30
+
+        result = StaleAssignmentAuditor.call
+
+        assert_equal 30, result[:threshold_days]
+        assert_equal 1, result[:stale_count]
+        assert_equal 0, StaleAssignmentAuditor.call(threshold_days: 50)[:stale_count], 'an explicit threshold wins'
+
+        PermissionForge.configuration.admin_stale_assignment_days = nil
+        assert_equal StaleAssignmentAuditor::DEFAULT_THRESHOLD_DAYS, StaleAssignmentAuditor.call[:threshold_days]
+      end
+
       test 'includes days_stale in assignment details' do
         psu = create_permission_set_user(user: @user, permission_set: @permission_set)
         psu.update_columns(created_at: 120.days.ago)

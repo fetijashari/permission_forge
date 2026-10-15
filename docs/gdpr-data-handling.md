@@ -206,11 +206,11 @@ PermissionForge::PermissionSetUser
 # Cleanup expired
 PermissionForge::Services::ExpiredAssignmentCleaner.call(dry_run: true)
 
-# Permanent assignments not reviewed for 90 days (Art. 5(1)(e)); threshold_days: is not
-# admin_stale_assignment_days. As a rake task that exits 1 when it finds any:
-#   THRESHOLD_DAYS=90 bin/rails permission_forge:stale_assignments
+# Permanent assignments not reviewed for admin_stale_assignment_days (default 90; Art. 5(1)(e)).
+# As a rake task that exits 1 when it finds any (THRESHOLD_DAYS= for another threshold):
+#   bin/rails permission_forge:stale_assignments
 # (see assignment-expiration.md#rake-task-stale-assignments)
-PermissionForge::Services::StaleAssignmentAuditor.call(threshold_days: 90)
+PermissionForge::Services::StaleAssignmentAuditor.call
 
 # Preview consent withdrawal (Art. 7(3)) — removes this person's assignments to the sets gated on the flag
 PermissionForge::Services::ConsentWithdrawalHandler.call(

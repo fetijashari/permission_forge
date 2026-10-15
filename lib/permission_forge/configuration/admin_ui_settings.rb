@@ -19,7 +19,8 @@ module PermissionForge
       attr_accessor :admin_session_flags
 
       # Assignments not reviewed for this many days appear under
-      # "Stale assignments" on the admin home page. Default: 90.
+      # "Stale assignments" on the admin home page; also the default threshold
+      # of StaleAssignmentAuditor and rake permission_forge:stale_assignments. Default: 90.
       attr_accessor :admin_stale_assignment_days
 
       # Name of the host app shown under the logo (e.g. "Acme CRM").
