@@ -109,7 +109,9 @@ module PermissionForge
     # The ISO 8601 forms a time parameter is read in, and nothing else
     # (Time.zone.parse reads "tuesday" as today 00:00):
     #
-    # - a date, `2026-10-22`: the beginning of that day in Time.zone;
+    # - a date, `2026-10-22`: the end of that day in Time.zone
+    #   (23:59:59.999999999), as the admin's end-date presets: an assignment
+    #   that ends on a date lasts through it;
     # - a date and a time of day, `2026-10-22T10:00`, with optional seconds
     #   and fraction (`10:00:00`, `10:00:00.5`), `T` or one space between
     #   them, and an optional offset, `Z` or `+02:00`; without one the time
@@ -130,7 +132,9 @@ module PermissionForge
         match = FORMAT.match(value.strip) if value.is_a?(String)
         fields = match && fields_of(match)
         offset = match && match[:offset]
-        at(fields, offset) if fields && valid_offset?(offset)
+        return unless fields && valid_offset?(offset)
+
+        match[:hour] ? at(fields, offset) : Time.zone.local(*fields.first(3)).end_of_day
       end
 
       # [year, month, day, hour, minute, seconds with fraction], nil when a

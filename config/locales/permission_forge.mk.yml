@@ -6,6 +6,7 @@ mk:
         action_not_authorized: Акцијата не е авторизирана
         assignment_not_authorized: Доделувањето не е авторизирано
         bulk_action_invalid: мора да биде assign или revoke
+        expires_at_past: мора да биде во иднина
         field_generation_failed: Не може да се генерираат полиња за овој ресурс
         forbidden: Забрането
         not_editable: Овој запис не може да се уредува

@@ -38,7 +38,7 @@ POST /api/permission_sets/:identifier/users/bulk
 { "user_ids": [1, 2, 3], "bulk_action": "assign", "expires_at": "2026-04-01T00:00:00Z" }
 ```
 
-`expires_at` is ISO 8601: a date (`2026-04-01`, the beginning of that day in `Time.zone`) or a date and time with an optional offset (`2026-04-01T00:00:00Z`). Anything else is a 422 — see [`expires_at` formats](admin-api.md#expires_at-formats).
+`expires_at` is ISO 8601: a date (`2026-04-01`, the end of that day in `Time.zone`) or a date and time with an optional offset (`2026-04-01T00:00:00Z`). Anything else, and an end that is not after now, is a 422 — see [`expires_at` formats](admin-api.md#expires_at-formats).
 
 ### Via Admin UI
 

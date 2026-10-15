@@ -64,8 +64,20 @@ module PermissionForge
       end
 
       def create_assignment(user)
-        psu = @permission_set.permission_set_users.build(user: user, expires_at: pf_time_param(:expires_at))
+        psu = @permission_set.permission_set_users.build(user: user, expires_at: future_expires_at)
         psu.save ? render_created(psu, serializer_for(:permission_set_user)) : render_validation_errors(psu)
+      end
+
+      # params[:expires_at] (ParamShapes#pf_time_param) for a new
+      # assignment. An end that is not after now would create an assignment
+      # that grants nothing: refused (422) before anybody is assigned. The
+      # admin's Undo restores a removed assignment with the end it had, also
+      # one that has passed, and does not come through here.
+      def future_expires_at
+        expires_at = pf_time_param(:expires_at)
+        return expires_at if expires_at.nil? || expires_at > Time.current
+
+        raise ParamShapes::InvalidParam.new(:expires_at, I18n.t('permission_forge.api.errors.expires_at_past'))
       end
 
       # An unknown bulk_action is a 422 ({ "bulk_action": [...] }) before
@@ -83,7 +95,7 @@ module PermissionForge
           user_ids: bulk_user_ids,
           action: params[:bulk_action],
           created_by: PermissionForge.current_user,
-          expires_at: pf_time_param(:expires_at)
+          expires_at: params[:bulk_action] == 'assign' ? future_expires_at : pf_time_param(:expires_at)
         )
       end
 

@@ -6,6 +6,7 @@ en:
         action_not_authorized: Action not authorized
         assignment_not_authorized: Assignment not authorized
         bulk_action_invalid: must be assign or revoke
+        expires_at_past: must be in the future
         field_generation_failed: Could not generate fields for this resource
         forbidden: Forbidden
         not_editable: This record is not editable

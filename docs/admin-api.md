@@ -446,7 +446,7 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
 # Response: 201 Created — expires_at is optional (time-bound assignment)
 # Assigning a user who is already in the set returns 422 (uniqueness validation)
 # A user_id outside config.user_list_resolver returns 404, as an unknown one does
-# An expires_at that is not ISO 8601 (see below) returns 422 and assigns nobody
+# An expires_at that is not ISO 8601 (see below), or not after now, returns 422 and assigns nobody
 
 # Remove a user from a permission set (:uuid is the assignment's identifier)
 DELETE /permissions/api/permission_sets/:ps_uuid/users/:uuid
@@ -458,13 +458,15 @@ DELETE /permissions/api/permission_sets/:ps_uuid/users/:uuid
 
 | Form | Example | Means |
 |------|---------|-------|
-| a date | `2026-10-22` | the **beginning** of that day (00:00) in the application's `Time.zone`: the assignment has ended when that day starts. To grant through the whole day, send `2026-10-22T23:59:59` or the next day |
+| a date | `2026-10-22` | the **end** of that day (23:59:59.999999) in the application's `Time.zone`: the assignment grants through that whole day, as an end date picked in the admin does. Through 0.14.1 a date meant the beginning of the day |
 | a date and a time of day | `2026-10-22T10:00`, `2026-10-22T10:00:00`, `2026-10-22T10:00:00.5` | that moment in `Time.zone` |
 | the same with an offset | `2026-10-22T10:00:00Z`, `2026-10-22T10:00+02:00` | that moment at that offset (`Z` = UTC) |
 
 Hours and minutes are required once there is a time; seconds and a fraction (up to 9 digits; the database keeps what its column holds, microseconds on most) are optional. The date and the time are separated by `T` or by one space (`2026-10-22 10:00`). An offset is `Z` or `±HH:MM`, written right after the time. Every field must exist on the calendar and on the clock: `2026-02-30`, `24:00` and a leap second (`:60`) are refused. Surrounding white space is ignored; a missing, `null` or empty `expires_at` means the assignment does not end.
 
 Anything else is a 422 and nothing is assigned: `"tuesday"`, `"next tuesday-ish"`, `"2026-13-45"`, `"22/10/2026"`, `"2026-10-22T10"` (no minutes), `"2026-10-22 10:00 +0200"` (an offset needs its colon and no space), week or ordinal dates (`2026-W43-4`), the basic format without separators (`20261022`) and numbers (epoch seconds). Through 0.14.1 any text with a recognisable fragment was read (`"tuesday"` became today 00:00, an assignment that had already ended).
+
+**The end must be after now.** An assignment whose end has passed grants nothing, so a readable `expires_at` that is not after the moment of the request (`"2020-01-01"`, yesterday's date, a time a minute ago) is refused too: `422 {"expires_at": ["must be in the future"]}`, on `POST …/users` and on a bulk `assign`, and nobody is assigned. Today's date is accepted (it means the end of today). A bulk `revoke` ignores `expires_at`. Through 0.14.1 such an assignment was created (201). The admin's Undo after a removal is not a new grant: it restores the assignment with the end it had, also one that has passed.
 
 `GET …/users` lists every holder of the set (each row carries its `user_id`), including people outside `user_list_resolver`: the resolver bounds who can be reached by id, not who is listed.
 

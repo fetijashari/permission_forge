@@ -26,6 +26,15 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   revoke"]}`) or `base` when the error names none (`generate_fields`' failure). The messages follow the request's
   locale. 401, 403 and 404 keep their string. **Opt out:** none; a client that read the string reads
   `messages.values.flatten` instead. See [`docs/admin-api.md`](docs/admin-api.md#response-format).
+- **An API `expires_at` given as a date means the end of that day.** `"2026-10-22"` on `POST …/users` and
+  `POST …/users/bulk` is now 23:59:59.999999 of that day in `Time.zone`, as the admin's end-date presets and its custom
+  date; it was the beginning of the day (00:00), so the assignment had ended when its last day started. A date and time
+  (`2026-10-22T10:00`, with or without an offset) is read as before. **Opt out:** send the moment you mean,
+  `2026-10-22T00:00`.
+- **The API refuses an `expires_at` that is not after now.** A single assignment or a bulk `assign` with an end that
+  has passed (`"2020-01-01"`, yesterday, a minute ago) created an assignment that granted nothing, answered 201/200. It
+  is now a 422 (`{"expires_at": ["must be in the future"]}`) and nobody is assigned. A bulk `revoke` ignores
+  `expires_at`; the admin's Undo still restores a removed assignment with the end it had. **Opt out:** none.
 - **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
   `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
   `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`
@@ -59,8 +68,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **An `expires_at` that is not ISO 8601 is refused.** The API (`POST …/users`, `POST …/users/bulk`) and the admin's
   Undo after a removal read `expires_at` with `Time.zone.parse`, which takes any text with a recognisable fragment:
   `"tuesday"` or `"next tuesday-ish"` became today 00:00 and was answered 201 with an assignment that had already ended,
-  and `"2030-02-30"` became 2 March. `expires_at` is now read only as an ISO 8601 date (`2026-10-22`, the beginning of
-  that day in `Time.zone`, as before) or date and time (`2026-10-22T10:00`, optional seconds and fraction, `T` or one
+  and `"2030-02-30"` became 2 March. `expires_at` is now read only as an ISO 8601 date (`2026-10-22`, now the end of
+  that day in `Time.zone`: see **Changed**) or date and time (`2026-10-22T10:00`, optional seconds and fraction, `T` or one
   space, optional `Z` or `±HH:MM`); anything else is a 422 in the API (a 400 in the admin) and assigns nobody. The
   formats are listed in [`docs/admin-api.md`](docs/admin-api.md#expires_at-formats). The values the admin itself sends
   are unchanged.

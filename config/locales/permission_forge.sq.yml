@@ -6,6 +6,7 @@ sq:
         action_not_authorized: Veprimi nuk është i autorizuar
         assignment_not_authorized: Caktimi nuk është i autorizuar
         bulk_action_invalid: duhet të jetë assign ose revoke
+        expires_at_past: duhet të jetë në të ardhmen
         field_generation_failed: Fushat për këtë burim nuk mund të gjenerohen
         forbidden: E ndaluar
         not_editable: Ky regjistrim nuk mund të redaktohet
