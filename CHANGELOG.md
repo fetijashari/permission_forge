@@ -14,7 +14,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   and `details` are unchanged. See [Handling Denials](docs/row-level-rules.md#handling-denials).
 - **The install generator prints the next steps.** After the files it lists `bin/rails db:migrate` (not with
   `--skip-migration`), the mount line, where the admin credentials go (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`, or your
-  own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start. `rails destroy` prints none.
+  own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start, plus the line that makes
+  `can_*?` work: `include PermissionForge::Concerns::PermissionedUser` in your User model. `rails destroy` prints none.
 - **`config.api_stats_authorization`.** A lambda called with the controller that decides who may read
   `GET /api/stats` while `api_stats_require_admin` is on (the default); a truthy answer allows. It replaces an
   `api_auth` that set `@admin = true` on the controller (see Deprecated). A refusal answers 403 with a body (it had
@@ -35,6 +36,13 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Changed
 
+- **Permission Set names are unique within a tenant, ignoring case and surrounding spaces.** The admin form already
+  refused a second "Sales Team"; the console, seeds, services and the API created one silently, and both then showed
+  as "Sales Team" in every picker. A new set or a rename to a name another set of the same tenant uses is now a
+  validation error (`name_taken`). Two sets that already share a name stay valid until one of them is renamed. A
+  clone without a name (`PermissionSetCloner`, the group clone, `POST …/clone`) gets a numbered copy name ("Sales
+  Team (copy)", "Sales Team (copy) 2"). No migration: the check is a validation. Opt out: none; give duplicates
+  distinct names.
 - **Every API 422 has one shape: field-keyed messages.** Input the API cannot read answered `messages` as one string
   (`"expires_at is not an ISO 8601 date or time"`, `"param is missing or the value is empty or invalid:
   permission_set"`, `"Invalid action: …"`), while a failed validation answered an object. Both are now an object that

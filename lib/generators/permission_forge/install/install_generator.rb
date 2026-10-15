@@ -26,6 +26,7 @@ module PermissionForge
       # Printed after an install (#print_next_steps).
       NEXT_STEPS = [
         'bin/rails db:migrate',
+        'In your User model: include PermissionForge::Concerns::PermissionedUser (can_read?, permissions_hash)',
         'Mount the admin in config/routes.rb: mount PermissionForge::Engine, at: "/permissions"',
         "Admin credentials: uncomment Option A in config/initializers/permission_forge.rb\n     " \
         '(PF_ADMIN_USER, PF_ADMIN_PASSWORD), or use your own admin controller (Option B)',

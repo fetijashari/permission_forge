@@ -458,6 +458,8 @@ This is the one sanctioned mutation of events (`update_all`, recorded by `erasur
 - the person's user record and application data in your app, unless your `on_erasure` callback deletes them;
 - copies outside the table (see [What is not recorded](#what-is-not-recorded)).
 
+**The admin's Audit log page still shows the person's name** while their user record exists. The page names people from your user table, looked up by id when it renders, not from the stored labels, so it reads "Carol Support" on her events although the labels were cleared (the CSV export and `GET /api/audit_events` show the stored, now empty, labels). Once your `on_erasure` callback deletes or anonymises the user record, the page shows the id only.
+
 **`on_erasure:`** runs after the erasure commits. Called outside a transaction, it runs right after the erasure; an error it raises propagates (the erasure stands and is recorded) and the result's `callback_invoked` is `true`. Called inside your own transaction, it runs after your transaction commits, never if it rolls back; the result's `callback_invoked` is then `nil`, and an error it raises is reported through `Rails.error` and the log rather than raised (raising from the commit would skip other after-commit work). Events it writes keep the labels they are given.
 
 ## Protecting the table at database level
