@@ -9,7 +9,8 @@ namespace :permission_forge do
     if result[:removed].zero?
       puts 'No expired assignments found.'
     else
-      puts "Removed #{result[:removed]} expired assignment(s), invalidated #{result[:invalidated]} user(s)."
+      puts "Removed #{result[:removed]} expired assignment(s), invalidated #{result[:invalidated]} " \
+           "user(s)#{PermissionForge::RakeAudit.process_local_note}."
     end
   end
 

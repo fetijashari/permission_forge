@@ -38,6 +38,14 @@ module PermissionForge
     # transaction has committed, and a failure then is reported through
     # `config.on_cache_failure` alone.
     #
+    # `cache_cleared` speaks for the store this process reaches. When that
+    # store lives in this process only (an in-memory store,
+    # Cache::Base#process_local? — `cache_backend = :memory`, or `Rails.cache`
+    # a `:memory_store`), a run from a rake task or a console cleared nothing
+    # in the web and job processes: they keep the person's cached permissions
+    # until they restart or the entries expire (cache_ttl).
+    # `erasure.performed` then says `process_local: true`.
+    #
     # @example Dry run (inspect without removing)
     #   result = DataSubjectErasure.call(user: user, dry_run: true)
     #   # => { assignments_count: 3, group_assignments_count: 1, permission_sets: [...],
@@ -192,7 +200,8 @@ module PermissionForge
                     'record_labels_cleared' => scrubbed[:record_labels] }
         names(sets, 'set').merge(names(groups, 'group'), counts.transform_keys(&:to_s), cleared,
                                  'operation' => 'erasure', 'subject_user_id' => @user.id.to_s,
-                                 'callback_invoked' => !@on_erasure.nil?, 'dry_run' => false)
+                                 'callback_invoked' => !@on_erasure.nil?, 'dry_run' => false,
+                                 'process_local' => PermissionForge.cache.process_local?)
       end
 
       def names(records, kind)

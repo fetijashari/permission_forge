@@ -34,6 +34,25 @@ module PermissionForge
         assert_no_missing_translations
       end
 
+      # Review round 5: why a relationship cannot be followed, by cause; an
+      # empty step of the path never draws a blank name.
+      test 'Home says why a relationship cannot be followed, and names an empty step of the path' do
+        require_relative '../rule_path_models'
+        path_resource = create_resource(permission_set: @set, name: 'PfRulePathRecord', read_access: true)
+        polymorphic = create_permission_set_rule(permission_set: @set, resource: path_resource, name: 'Subject',
+                                                 field_name: 'id', field_value: '1', join_type: 'joins',
+                                                 field_accessor_path: 'parent', include_nulls: false)
+        polymorphic.update_columns(field_accessor_path: 'subject')
+        @via_owner.update_columns(field_accessor_path: 'supplier..owner')
+
+        get pf('/')
+        body = CGI.unescapeHTML(response.body)
+
+        assert_includes body, 'Matches nothing: Subject is a polymorphic relationship of Pf rule path record: a rule cannot follow it'
+        assert_includes body, 'Matches nothing: The relationship path has an empty step (two dots in a row, or a dot at the start)'
+        assert_no_missing_translations
+      end
+
       test 'Home leaves out a rule that is off, and opens the Rules tab for a locked set' do
         @via_owner.update_columns(is_active: false)
         @set.update_columns(is_editable: false)

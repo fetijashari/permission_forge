@@ -39,6 +39,20 @@ module PermissionForge
         Rails.logger&.info("[permission_forge] #{task}: #{message}")
       end
 
+      # What a task that invalidated cached permissions adds to its output
+      # when the store lives in its own process only (an in-memory store,
+      # Cache::Base#process_local?): the running servers kept theirs. Empty
+      # for a shared store.
+      #
+      # @return [String]
+      def process_local_note(cache = PermissionForge.cache)
+        return '' unless cache.process_local?
+
+        ' (in this rake process only: an in-memory store — cache_backend :memory, or :memory_store — lives in ' \
+          'each process, so the web and job processes keep their cached permissions until they restart or the ' \
+          'entries expire (cache_ttl))'
+      end
+
       private
 
       # A report must never fail because its own event cannot be written: the

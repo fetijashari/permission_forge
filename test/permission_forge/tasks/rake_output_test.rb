@@ -187,5 +187,35 @@ module PermissionForge
       assert_predicate event.data['record_labels_cleared'], :positive?
       assert_equal [0, 0], labels_naming(@user)
     end
+
+    # --- e-operations #82: an erasure or clean-up from rake on an in-memory store ----------------
+
+    test 'an erasure on an in-memory store says the running servers kept the cached permissions, in output and event' do
+      ENV.update('USER_ID' => @user.id.to_s, 'DRY_RUN' => 'false', 'ACTOR' => 'dpo')
+
+      out, = run_task('permission_forge:erasure')
+
+      assert_includes out, 'Cache cleared: true (in this rake process only: an in-memory store'
+      assert_includes out, 'the web and job processes keep their cached permissions'
+      assert_audit_event('erasure.performed', subject_user_id: @user.id.to_s, data: { 'process_local' => true })
+    end
+
+    test 'a clean-up on an in-memory store says so; on a shared store neither task adds anything' do
+      PermissionForge::PermissionSetUser.find_by!(user: @user).update!(expires_at: 1.day.from_now)
+      travel_to(2.days.from_now) do
+        out, = run_task('permission_forge:cleanup_expired_assignments')
+
+        assert_includes out, 'invalidated 1 user(s) (in this rake process only: an in-memory store'
+        assert_audit_event('cleanup.expired_assignments', data: { 'process_local' => true })
+      end
+
+      PermissionForge.configuration.cache_backend = :null
+      PermissionForge.configuration.reset_cache_store!
+      ENV.update('USER_ID' => @user.id.to_s, 'DRY_RUN' => 'false', 'ACTOR' => 'dpo')
+      out, = run_task('permission_forge:erasure')
+
+      assert_includes out, "Cache cleared: true\n"
+      assert_audit_event('erasure.performed', subject_user_id: @user.id.to_s, data: { 'process_local' => false })
+    end
   end
 end

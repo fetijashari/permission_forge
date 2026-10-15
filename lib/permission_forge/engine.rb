@@ -66,7 +66,11 @@ module PermissionForge
         new_filters = PermissionForge.gdpr_filter_parameters
         app.config.filter_parameters += new_filters
 
-        Rails.logger.info "[PermissionForge] Added #{new_filters.size} GDPR patterns to filter_parameters."
+        # Not while a generator boots the app (BootChecks): the install
+        # generator's boot predates the initializer it writes.
+        unless PermissionForge::BootChecks.generator_running?
+          Rails.logger.info "[PermissionForge] Added #{new_filters.size} GDPR patterns to filter_parameters."
+        end
       end
     end
 

@@ -107,6 +107,26 @@ module PermissionForge
       assert_includes applied, 'Supplier', 'the masking step after the failed one must still run'
     end
 
+    # Field test round 5 (a #120): the install generator's own boot logged
+    # warnings about the defaults (cache_backend :memory, Basic Auth without
+    # credentials) next to the initializer it had just written.
+    test 'BootChecks.run checks and logs nothing while a generator boots the app' do
+      PermissionForge.configuration.cache_backend = :memory
+      PermissionForge.configuration.http_basic_auth_enabled = true
+      create_resource(permission_set: create_permission_set, name: 'Supplier')
+
+      log = with_singleton_method(PermissionForge::BootChecks, :generator_running?, -> { true }) do
+        with_singleton_method(PermissionForge::BootChecks, :db_available?, -> { flunk 'pinged the database' }) do
+          with_singleton_method(PermissionForge::MaskingSync, :boot!, -> { flunk 'synced masking' }) do
+            capture_rails_log { PermissionForge::BootChecks.run(PermissionForge.configuration) }
+          end
+        end
+      end
+
+      assert_not_includes log, '[PermissionForge]'
+      assert_not PermissionForge::MaskingSync.synced?, 'the first request or job applies masking'
+    end
+
     test 'a configuration error still stops the boot' do
       error = Class.new(PermissionForge::ConfigurationError)
       raising = -> { raise error, 'misconfigured' }

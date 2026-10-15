@@ -22,11 +22,11 @@ module PermissionForge
       end
 
       test 'every path ActiveRecord raises for is broken, at the segment it raises for' do
-        PfRulePathRecord::NOT_JOINED.each do |path, reason|
+        PfRulePathRecord::NOT_JOINED.each do |path, (reason, cause)|
           followed = RulePath.follow(PfRulePathRecord, path.split('.'))
 
           assert followed.broken?, path
-          assert_equal reason, followed.reason, path
+          assert_equal [reason, cause], [followed.reason, followed.cause], path
           assert_empty followed.models, path
           assert_raises(StandardError, path) { PfRulePathRecord.joins(nested(path)).to_a }
         end

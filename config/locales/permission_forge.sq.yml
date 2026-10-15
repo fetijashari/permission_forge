@@ -215,6 +215,12 @@ sq:
         cache_cleared_process_local: "%{actor} pastroi lejet e ruajtura në cache të
           të gjithë përdoruesve vetëm në procesin e vet (një ruajtje në memorie):
           proceset e uebit dhe të punëve i mbajtën të tyret."
+        cleanup_expired_assignments_process_local: "%{actor} hoqi caktimet e skaduara;
+          lejet e ruajtura në cache u pastruan vetëm në procesin e vet (një ruajtje
+          në memorie): proceset e uebit dhe të punëve i mbajtën të tyret."
+        erasure_performed_process_local: "%{actor} fshiu të dhënat e lejeve të %{person};
+          lejet e ruajtura në cache u pastruan vetëm në procesin e vet (një ruajtje
+          në memorie): proceset e uebit dhe të punëve i mbajtën të tyret."
         field_access_limited: "%{actor} lexoi %{record} me këto fusha të fshehura
           ose të maskuara: %{fields}."
       sentences:
@@ -2219,9 +2225,19 @@ sq:
         only_show: Shfaq vetëm
         or_empty: ose %{field} është bosh
         problems:
+          empty_association: Shtegu i lidhjeve ka një hap bosh (dy pika njëra pas
+            tjetrës, ose një pikë në fillim)
           missing_column_html: "%{name} nuk është kolonë e %{model}"
           unjoinable_association: "%{name} është lidhje e %{model} që një rregull
             nuk mund ta ndjekë"
+          unjoinable_class_not_loadable: "%{name} është lidhje e %{model}, modeli
+            i së cilës nuk mund të ngarkohet"
+          unjoinable_invalid_definition: "%{name} është lidhje e %{model}, :through,
+            :source ose inverse_of i së cilës përmend një lidhje që nuk ekziston"
+          unjoinable_polymorphic: "%{name} është lidhje polimorfike e %{model}: një
+            rregull nuk mund ta ndjekë"
+          unjoinable_record_dependent_scope: "%{name} është lidhje e %{model}, fusha
+            e së cilës varet nga regjistrimi: një rregull nuk mund ta ndjekë"
           unknown_association_html: "%{name} nuk është lidhje e %{model}"
         where: ku
       rules_count:
@@ -2249,6 +2265,8 @@ sq:
       permission_set_rule:
         between_requires_two_values: duhet të përmbajë saktësisht 2 vlera të ndara
           me presje për operatorin between
+        empty_association: ka një emër bosh lidhjeje (dy pika njëra pas tjetrës, ose
+          një pikë në fillim)
         field_value_required: kërkohet për këtë operator
         in_requires_values: duhet të përmbajë të paktën 1 vlerë të ndarë me presje
         invalid_field_name: duhet të jetë emër i vlefshëm kolone (shkronja, numra,
@@ -2258,7 +2276,16 @@ sq:
         numeric_or_date_required: duhet të jetë vlerë numerike ose datë për operatorët
           e krahasimit
         unjoinable_association: përmend %{association}, një lidhje e %{model} që një
-          rregull nuk mund ta bashkojë (polimorfike, ose klasa e saj nuk mund të ngarkohet)
+          rregull nuk mund ta bashkojë
+        unjoinable_class_not_loadable: përmend %{association}, një lidhje e %{model}
+          klasa e së cilës nuk mund të ngarkohet
+        unjoinable_invalid_definition: përmend %{association}, një lidhje e %{model}
+          :through, :source ose inverse_of i së cilës përmend një lidhje që nuk ekziston
+        unjoinable_polymorphic: 'përmend %{association}, një lidhje polimorfike e
+          %{model}: një rregull nuk mund ta bashkojë'
+        unjoinable_record_dependent_scope: 'përmend %{association}, një lidhje e %{model}
+          fusha e së cilës (ose një përgjatë :through) merr regjistrimin: një rregull
+          nuk mund ta bashkojë'
         unknown_association: përmend %{association}, që nuk është lidhje e %{model}
         unknown_column: nuk është kolonë e %{model}
         value_not_expected: nuk kërkon vlerë për këtë operator

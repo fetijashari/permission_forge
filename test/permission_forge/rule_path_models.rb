@@ -45,13 +45,22 @@ class PfRulePathRecord < ApplicationRecord
                                                                   foreign_key: :parent_id, inverse_of: false, dependent: nil
   has_many :ghosts, through: :nowhere, source: :children
   has_many :strays, class_name: 'PfRulePathRecord', foreign_key: :parent_id, inverse_of: :nowhere, dependent: nil
+  # A record-dependent scope reached through a :through: the intermediate
+  # association's, and the source's.
+  has_many :namesake_children, through: :namesakes, source: :children
+  has_many :parent_namesakes, through: :parent, source: :namesakes
 
   JOINED = %w[owner parent children siblings labelled_children first_child peers parent.owner children.owner
               peers.siblings].freeze
+  # path => [reason, cause]
   NOT_JOINED = {
-    'ownr' => :unknown_association, 'parent.ownr' => :unknown_association, 'parent..owner' => :unknown_association,
-    'subject' => :unjoinable_association, 'phantom' => :unjoinable_association,
-    'namesakes' => :unjoinable_association, 'ghosts' => :unjoinable_association,
-    'strays' => :unjoinable_association, 'parent.subject' => :unjoinable_association
+    'ownr' => [:unknown_association, nil], 'parent.ownr' => [:unknown_association, nil],
+    'parent..owner' => %i[unknown_association empty_segment],
+    'subject' => %i[unjoinable_association polymorphic], 'phantom' => %i[unjoinable_association class_not_loadable],
+    'namesakes' => %i[unjoinable_association record_dependent_scope],
+    'namesake_children' => %i[unjoinable_association record_dependent_scope],
+    'parent_namesakes' => %i[unjoinable_association record_dependent_scope],
+    'ghosts' => %i[unjoinable_association invalid_definition],
+    'strays' => %i[unjoinable_association invalid_definition], 'parent.subject' => %i[unjoinable_association polymorphic]
   }.freeze
 end
