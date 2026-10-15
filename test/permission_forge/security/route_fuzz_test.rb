@@ -169,7 +169,8 @@ module PermissionForge
           ':permission_set_identifier' => @set.uuid, ':resource_identifier' => @resource.uuid,
           ':permission_set_group_identifier' => @group.uuid, ':permission_set_id' => @set.id,
           ':resource_model' => 'Customer', ':model' => 'Customer', ':key' => 'email', ':group_id' => @group.id,
-          ':file' => 'pf_admin.css', ':identifier' => identifier_for(controller), ':id' => id_for(controller)
+          ':file' => 'pf_admin.css', ':identifier' => identifier_for(controller), ':id' => id_for(controller),
+          '(/*path)' => '/no/such/endpoint'
         }.reduce(ROOT + spec) { |path, (name, value)| path.gsub(name, value.to_s) }
       end
     end

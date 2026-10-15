@@ -37,12 +37,23 @@ module PermissionForge
         before = @event.attributes
 
         paths.product(WRITE_VERBS).each do |path, verb|
-          assert_raises(ActionController::RoutingError, "#{verb.upcase} #{path}") do
+          assert_no_audit_route(path, "#{verb.upcase} #{path}") do
             send(verb, "#{ROOT}#{path}", params: { audit_event: { actor_label: 'Mallory' }, event: 'x' }, as: :json)
           end
         end
-        assert_raises(ActionController::RoutingError) { post "#{ROOT}/api/audit_events/#{@event.uuid}", params: { _method: 'delete' } }
+        assert_no_audit_route('/api', 'method override') { post "#{ROOT}/api/audit_events/#{@event.uuid}", params: { _method: 'delete' } }
         assert_equal before, @event.reload.attributes
+      end
+
+      # Under /api the catch-all answers (Api::UnmatchedRoutesController: the
+      # JSON 404, never the audit events controller); in the admin UI there
+      # is no route at all.
+      def assert_no_audit_route(path, label, &)
+        return assert_raises(ActionController::RoutingError, label, &) unless path.start_with?('/api')
+
+        yield
+        assert_response :not_found, label
+        assert_equal 'permission_forge/api/unmatched_routes', controller.controller_path, label
       end
 
       test 'request parameters and headers cannot set the columns of the events a request writes' do

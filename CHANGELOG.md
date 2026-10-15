@@ -77,6 +77,10 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   standard output or error, not while `bin/rails generate` / `destroy` runs, and never in another environment. The
   development masking warning stays in the log (development re-reads the Resource names itself). **Opt out:** none;
   log to standard output (`RAILS_LOG_TO_STDOUT`) to see each warning once.
+- **The development cache warning reads right outside a server.** Every development process prints it, also
+  `db:seed` and `bin/rails runner`, where "this server keeps the permissions it has cached" named a server that was
+  not running. It now says a change made in one process invalidates only that process's cache and that a running
+  server keeps what it cached until `cache_ttl` or a restart; the remedies are unchanged. **Opt out:** none.
 - **`rails -T` descriptions.** `permission_forge:audit` no longer says "Read-only": it changes no permission data and
   records the run in the audit log (`report.generated`). `permission_forge:cache:clear` says what it does first; the
   upgrade hint for 0.13 installs comes last. **Opt out:** none (text only).
@@ -230,6 +234,23 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   the current tenant was a validation error under `permission_set_group`; the API now answers
   `{"permission_set_group_id": ["…"]}`, the parameter the request sent, before anything is saved. **Opt out:** none;
   a client that read `messages.permission_set_group` reads `messages.permission_set_group_id`.
+- **A single assignment or membership with an unusable `user_id` is a 422 keyed by `user_id`.**
+  `POST …/permission_sets/:id/users` and `POST …/permission_set_groups/:id/users` answered 404 `"Record not found"`
+  for a missing `user_id`, for one that is not an id (`"abc"`, `[2]`) and for one that names nobody, which read as if
+  the set or the group were wrong. They now answer `{"user_id": ["is missing"]}`, `["is not a user id"]` or
+  `["names nobody who can be assigned"]`, after the authorization lambdas, and assign nobody. An unknown id and
+  someone `user_list_resolver` leaves out read the same, as in a bulk request's `skipped`; a 404 now always means the
+  set or the group in the path. **Opt out:** none; a client that treated that 404 as "no such person" reads the 422.
+- **A bulk `user_ids` that is not a list is a 422.** `"user_ids": "1,3"` was read as one unknown id and answered 200
+  `{"assigned": 0, "skipped": ["1,3"]}`; a string, a number or an object now answers
+  `{"user_ids": ["must be a list of user ids"]}` and changes nothing. **Opt out:** none; send a JSON list.
+- **A `per_page` or `page` the API cannot read is the default, not 1.** `per_page=abc`, `0` or a negative number gave
+  pages of one row; anything that is not a positive whole number is now `api_default_per_page` (a `page`, the first
+  page). The `api_max_per_page` cap is unchanged. **Opt out:** none; `meta.pagination` says what was used.
+- **Unrouted API calls answer the JSON 404 envelope.** Any other path or method under the API mount
+  (`/api/unknown`, a `POST`, `PATCH` or `DELETE` on the read-only `audit_events`) answered Rails' HTML 404 page; it is
+  now `{"error":{"status":404,"messages":"No API endpoint answers this path and method"}}`, after the same guards as
+  every endpoint (a disabled API stays a bodiless 404, a refused `api_auth` a 401). **Opt out:** none.
 
 ### Deprecated
 
@@ -264,6 +285,13 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   so run `bin/rails permission_forge:rls:sync` after upgrading. See
   [Using the wrong field name](docs/row-level-rules.md#using-the-wrong-field-name).
 
+- **The console shows the gem's own configuration names.** With `filter_parameters_integration` the GDPR pattern
+  `\Aname\z` (meant for people's names) reached the gem's models through `ActiveRecord::Base.filter_attributes`, so
+  `#inspect` printed `name: [FILTERED]` for a Permission Set, a Permission Set Group, a Resource, a field, an action
+  and a rule. Each of these models now sets its own `filter_attributes`: the application's filters, unable to match
+  `name`, `label` or `field_name` (configuration), still hiding whatever else they matched (a rule's `field_value`, a
+  description). `AuditEvent` hides `actor_label` and `record_label`, which name people, whenever the application's
+  filters hide a `name`. Request-parameter logging, SQL bind logging and the host's models are unchanged.
 - **A response key two fields map to reads by the stricter of them.** With custom `field_variant_mappings` that send
   two fields to one name (`supplier_id` and `supplier_ref` both to `supplier_key`) and a model without that name,
   `FiltersResponseAttributes` read a serializer's `supplier_key` by the first field's entry, so a hidden second field

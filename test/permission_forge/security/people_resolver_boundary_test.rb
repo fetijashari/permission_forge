@@ -159,7 +159,7 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSetUser.unscoped.count } do
           post "#{ROOT}/api/permission_sets/#{@set_a.uuid}/users", params: { user_id: @bob.id }
         end
-        assert_response :not_found
+        assert_reads_as_nobody
 
         post "#{ROOT}/api/permission_sets/#{@set_a.uuid}/users", params: { user_id: @ana.id }
         assert_response :created
@@ -169,7 +169,16 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSetGroupUser.unscoped.count } do
           post "#{ROOT}/api/permission_set_groups/#{@group_a.uuid}/users", params: { user_id: @bob.id }
         end
-        assert_response :not_found
+        assert_reads_as_nobody
+      end
+
+      # Someone outside the resolver reads as an id that names nobody: the
+      # same 422 keyed by user_id (through 0.14.1 a 404 that read as if the
+      # set were unknown).
+      def assert_reads_as_nobody
+        assert_response :unprocessable_entity
+        assert_equal({ 'user_id' => [I18n.t('permission_forge.api.errors.user_not_found')] },
+                     JSON.parse(response.body).dig('error', 'messages'))
       end
 
       test 'API bulk assignment skips people outside the resolver' do

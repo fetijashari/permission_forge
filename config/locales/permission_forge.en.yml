@@ -21,13 +21,18 @@ en:
         not_editable: This record is not editable
         not_found: Record not found
         not_iso8601_time: is not an ISO 8601 date or time
+        route_not_found: No API endpoint answers this path and method
         section_missing: is missing, empty or not an object
         stats_authorization_missing: GET /api/stats needs config.api_stats_authorization,
           or config.api_stats_require_admin = false
         tenant_required: No tenant is set for this request. The admin API serves one
           tenant at a time.
         unauthorized: Not authenticated
+        user_id_invalid: is not a user id
+        user_id_missing: is missing
         user_ids_missing: must name at least one user
+        user_ids_not_list: must be a list of user ids
+        user_not_found: names nobody who can be assigned
     assignments:
       confirm_destroy:
         body: "%{name} will lose access to %{resources}, unless another Permission

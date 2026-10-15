@@ -25,6 +25,10 @@ module PermissionForge
     ACTOR_TYPES = PermissionForge::Audit::Actor::TYPES
     SOURCES = PermissionForge::Audit::Source::SOURCES
 
+    # actor_label and record_label name people: #inspect hides them whenever
+    # the application's filters hide a `name` (InspectionFilters).
+    PermissionForge::InspectionFilters.hide_people_labels(self)
+
     # JSON text that works on SQLite, PostgreSQL and MySQL alike; times are
     # written in ISO 8601 (ActiveSupport::JSON), nothing reads as nil.
     #

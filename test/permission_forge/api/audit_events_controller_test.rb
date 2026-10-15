@@ -12,7 +12,7 @@ module PermissionForge
 
       setup do
         @config = PermissionForge.configuration
-        @saved = %i[api_auth api_enabled audit_log_authorization api_record_identifier api_max_per_page
+        @saved = %i[api_auth api_enabled audit_log_authorization api_record_identifier api_max_per_page api_default_per_page
                     api_serializer_overrides].to_h { |name| [name, @config.public_send(name)] }
         @t0 = Time.utc(2026, 3, 1, 12)
         @ids = []
@@ -357,7 +357,7 @@ module PermissionForge
         assert_equal({ 'page' => 2, 'per_page' => 2, 'total_count' => 5 }, body.dig('meta', 'pagination'))
       end
 
-      test 'per_page is capped at api_max_per_page and never below one' do
+      test 'per_page is capped at api_max_per_page; one that is not a positive number is the default' do
         Array.new(3) { make }
         @config.api_max_per_page = 2
 
@@ -365,11 +365,13 @@ module PermissionForge
         assert_equal 2, body.dig('meta', 'pagination', 'per_page')
         assert_operator rows.size, :<=, 2
 
+        @config.api_max_per_page = 100
+        @config.api_default_per_page = 2
         get BASE, params: { per_page: -5 }
-        assert_equal 1, body.dig('meta', 'pagination', 'per_page')
+        assert_equal 2, body.dig('meta', 'pagination', 'per_page')
 
         get BASE, params: { per_page: 'all' }
-        assert_equal 1, body.dig('meta', 'pagination', 'per_page')
+        assert_equal 2, body.dig('meta', 'pagination', 'per_page')
       end
 
       test 'the default cap is 100 rows' do

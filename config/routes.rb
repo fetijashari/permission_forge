@@ -139,5 +139,9 @@ PermissionForge::Engine.routes.draw do
       end
       resources :users, param: :identifier, controller: 'permission_set_group_users', only: %i[index create destroy]
     end
+
+    # Last: any other path or method under /api answers the JSON 404
+    # envelope, not Rails' HTML page (Api::UnmatchedRoutesController).
+    match '(*path)', to: 'unmatched_routes#show', via: %i[get post put patch delete], format: false
   end
 end

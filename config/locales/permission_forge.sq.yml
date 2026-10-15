@@ -21,13 +21,19 @@ sq:
         not_editable: Ky regjistrim nuk mund të redaktohet
         not_found: Regjistrimi nuk u gjet
         not_iso8601_time: nuk është datë ose kohë ISO 8601
+        route_not_found: Asnjë pikë fundore e API-së nuk i përgjigjet këtij shtegu
+          dhe kësaj metode
         section_missing: mungon, është bosh ose nuk është objekt
         stats_authorization_missing: GET /api/stats kërkon config.api_stats_authorization,
           ose config.api_stats_require_admin = false
         tenant_required: Kjo kërkesë nuk ka qiramarrës. API-ja e administrimit shërben
           një qiramarrës në një kohë.
         unauthorized: Nuk jeni i autentikuar
+        user_id_invalid: nuk është id përdoruesi
+        user_id_missing: mungon
         user_ids_missing: duhet të emërtojë të paktën një përdorues
+        user_ids_not_list: duhet të jetë listë id-sh përdoruesish
+        user_not_found: nuk emërton askënd që mund të caktohet
     assignments:
       confirm_destroy:
         body: "%{name} do të humbasë qasjen në %{resources}, përveç nëse një Grup

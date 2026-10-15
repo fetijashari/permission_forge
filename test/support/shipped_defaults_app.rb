@@ -111,7 +111,16 @@ module FilterAttributesChecks
     filtered = ActiveSupport::ParameterFilter.new(ActiveRecord::Base.filter_attributes).filter(PROBE.to_h { |name| [name, 'v'] })
     { filter_attributes_from_host: ActiveRecord::Base.filter_attributes.include?(:passw),
       inspect_filtered_names: filtered.select { |_, value| value == '[FILTERED]' }.keys,
-      customer_inspect: Customer.new(name: 'Jane Doe', email: 'jane@example.test').inspect }
+      customer_inspect: Customer.new(name: 'Jane Doe', email: 'jane@example.test').inspect,
+      **gem_model_checks }
+  end
+
+  # The gem's rows hold configuration names (InspectionFilters): shown,
+  # while the audit log's labels, which name people, stay filtered.
+  def gem_model_checks
+    { set_inspect: PermissionForge::PermissionSet.first&.inspect,
+      field_inspect: PermissionForge::ResourceField.find_by(name: 'email')&.inspect,
+      audit_event_inspect: PermissionForge::AuditEvent.new(actor_label: 'Dan', record_label: 'Eve').inspect }
   end
 end
 

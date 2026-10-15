@@ -258,6 +258,7 @@ module PermissionForge
 end
 
 require_relative 'permission_forge/execution_state'
+require_relative 'permission_forge/inspection_filters'
 require_relative 'permission_forge/model_bindings'
 require_relative 'permission_forge/cache/base'
 require_relative 'permission_forge/cache/memory_cache'
