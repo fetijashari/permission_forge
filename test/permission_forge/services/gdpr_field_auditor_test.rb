@@ -211,6 +211,17 @@ module PermissionForge
         assert_equal(['Off set'], unmasking.map { |r| r[:permission_set] })
       end
 
+      test 'a cross-set finding names the sets that mask the field' do
+        create_resource_field(resource: @resource, name: 'email', read_access: true, mask_access: true, mask_strategy: 'email')
+        unmasking = create_resource(permission_set: create_permission_set(name: 'Managers'), name: 'Customer')
+        create_resource_field(resource: unmasking, name: 'email', read_access: true, mask_access: false)
+
+        finding = GdprFieldAuditor.call.find { |r| r[:type] == :cross_set_unmasking }
+
+        assert_equal 'Managers', finding[:permission_set]
+        assert_equal [@permission_set.name], finding[:masked_in]
+      end
+
       test 'unmapped columns carry no virtual key' do
         email = unmapped.find { |r| r[:column] == 'email' }
 

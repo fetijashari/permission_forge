@@ -47,7 +47,10 @@ module PermissionForge
 
           finding(:medium, :cross_set_unmasking, 'One set unmasks what another masks',
                   'Masks combine with AND: anyone holding both sets sees the full value.',
-                  items: rows.map { |row| "#{row[:permission_set]} › #{row[:resource_name]}.#{row[:field_name]}" })
+                  items: rows.map do |row|
+                    "#{row[:permission_set]} › #{row[:resource_name]}.#{row[:field_name]} " \
+                      "(masked in #{Array(row[:masked_in]).join(', ').presence || 'another set'})"
+                  end)
         end
 
         def unmapped(report)

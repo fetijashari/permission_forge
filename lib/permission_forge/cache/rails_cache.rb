@@ -83,6 +83,12 @@ module PermissionForge
         cache_store.is_a?(ActiveSupport::Cache::MemoryStore)
       end
 
+      # A :null_store keeps nothing (the Rails 7.1/7.2 development default
+      # without `bin/rails dev:cache`).
+      def keeps_entries?
+        !cache_store.is_a?(ActiveSupport::Cache::NullStore)
+      end
+
       # An explicit `expires_in: nil` overrides the store's default expiry.
       def write_permanent(key, value)
         cache_store.write(prefixed_key(key), value, expires_in: nil)

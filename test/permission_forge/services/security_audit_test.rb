@@ -295,6 +295,18 @@ module PermissionForge
         assert_not_includes codes(audit), :unmasked_personal_data
       end
 
+      # Field test: the finding named the set that unmasks, never the sets that mask.
+      test 'cross-set unmasking names the set that unmasks and the sets that mask' do
+        unmasking = create_resource(permission_set: create_permission_set(name: 'Managers'), read_access: true)
+        create_resource_field(resource: unmasking, name: 'email', read_access: true, mask_access: false)
+        %w[Support Sales].each do |name|
+          masking = create_resource(permission_set: create_permission_set(name: name), read_access: true)
+          create_resource_field(resource: masking, name: 'email', read_access: true, mask_access: true, mask_strategy: 'email')
+        end
+
+        assert_equal ['Managers › Customer.email (masked in Sales, Support)'], item_for(audit, :cross_set_unmasking).items
+      end
+
       test 'personal data in a virtual field left on the implicit grant' do
         resource = create_resource(permission_set: create_permission_set(name: 'Sales'), read_access: true)
         finding = item_for(audit, :implicit_virtual_personal_data)

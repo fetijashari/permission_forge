@@ -33,7 +33,17 @@ module PermissionForge
   # Either way a process that has not synced (its boot could not reach the
   # database, a model could not be masked) applies at its next executor
   # run, and a development code reload applies again (`to_prepare`).
-  # The store must be shared (not :memory or :null).
+  #
+  # The token needs a shared store. One that keeps nothing (:null, a
+  # :null_store) is never asked for it: the token would read as lost on
+  # every check. One that lives in each process (:memory, a :memory_store)
+  # reaches no other process. In development, where Rails' default store is
+  # one of these, each executor run re-reads the Resource names from the
+  # database instead, at most every DATABASE_RECHECK seconds (database
+  # recheck): a model named from a console, `bin/rails runner` or a rake task
+  # is masked in the server at its next request. Other environments get no
+  # such query (CacheWarnings warns at boot): a process then masks a model
+  # first named in another one only after a restart.
   #
   # @api private
   module MaskingSync
@@ -44,6 +54,10 @@ module PermissionForge
 
     # Seconds the store is left alone after it did not answer.
     RETRY_PAUSE = 30
+
+    # Development with a store that cannot carry the token: seconds between
+    # two reads of the Resource names (one query each).
+    DATABASE_RECHECK = 2
 
     # One sync (or apply) at a time; one probe of a failing store at a time.
     SYNC_LOCK = Mutex.new
@@ -57,17 +71,21 @@ module PermissionForge
     @announcement_owed = false
     @failing_until = nil
     @failing_store = nil
+    @recheck_after = nil
 
     class << self
       # Executor `to_run`. Row-driven: one store read; applies when another
       # process named a model since this one last synced. The store is not
-      # read while it is failing (RETRY_PAUSE), nor at all for lists: the
-      # token is then unknown (nil), and only a process that has not synced
-      # applies (from the database). Never raises.
+      # read while it is failing (RETRY_PAUSE), nor at all for lists or a
+      # store that keeps nothing: the token is then unknown (nil), and only
+      # a process that has not synced applies (from the database). In
+      # development with a store that cannot carry the token, the Resource
+      # names instead (database_recheck?). Never raises.
       def check!
         return unless MaskedModels.enabled?
+        return recheck_database if database_recheck?
 
-        token = MaskedModels.row_driven? ? answered_token : nil
+        token = token_in_store? ? answered_token : nil
         sync(token) if changed?(token)
       rescue StandardError => e
         Rails.logger&.error("[PermissionForge] auto-applied masking could not be synced — #{e.class}: #{e.message}")
@@ -85,7 +103,7 @@ module PermissionForge
       #   (asked only when it decides something)
       def named!(name)
         return unless MaskedModels.enabled?
-        return apply!(name) unless MaskedModels.row_driven?
+        return apply!(name) unless token_in_store?
 
         masked_here?(name) && yield ? apply!(name) : announce!(name)
       end
@@ -98,7 +116,7 @@ module PermissionForge
       #
       # @return [Boolean] whether every selected model is masked
       def boot!
-        done = sync(MaskedModels.row_driven? ? current_token : nil, always: true)
+        done = sync(token_in_store? ? current_token : nil, always: true)
         unless done
           Rails.logger&.warn('[PermissionForge] Auto-applied masking is not complete at boot (see the warnings ' \
                              'above, or the Resource table cannot be read): it is tried again at each request or job.')
@@ -123,6 +141,7 @@ module PermissionForge
         SYNC_LOCK.synchronize { @token = UNSYNCED }
         @announcement_owed = false
         @failing_until = nil
+        @recheck_after = nil
         MaskedModels.reset_warnings!
       end
 
@@ -138,7 +157,38 @@ module PermissionForge
         !until_time.nil? && now < until_time && PermissionForge.cache.equal?(@failing_store)
       end
 
+      # Whether this process learns of a model named in another one from the
+      # Resource rows (development, a row-driven setting, a store that cannot
+      # carry the token: it keeps nothing or lives in each process). Asks
+      # nothing outside development.
+      #
+      # @return [Boolean]
+      def database_recheck?
+        return false unless Rails.env.development? && MaskedModels.row_driven?
+
+        cache = PermissionForge.cache
+        cache.process_local? || !cache.keeps_entries?
+      end
+
       private
+
+      # Whether the token is read and written: a row-driven setting and a
+      # store that keeps entries, outside a database recheck.
+      #
+      # @return [Boolean]
+      def token_in_store?
+        MaskedModels.row_driven? && PermissionForge.cache.keeps_entries? && !database_recheck?
+      end
+
+      # The database recheck: every model the Resource rows name, at most
+      # every DATABASE_RECHECK seconds — and at each run until it succeeded
+      # once (a process that has not synced).
+      def recheck_database
+        return if synced? && @recheck_after && now < @recheck_after
+
+        @recheck_after = now + DATABASE_RECHECK
+        sync(nil, always: true)
+      end
 
       # Applies the concern to one model in this process.
       def apply!(name)
@@ -237,7 +287,11 @@ module PermissionForge
 
         why = error ? " (#{error.class}: #{error.message})" : ''
         Rails.logger&.warn("[PermissionForge] The cache store did not give or keep the masking token#{why}: auto-applied " \
-                           "masking is not synced with other processes for the next #{RETRY_PAUSE} seconds.")
+                           "masking is not synced with other processes for the next #{RETRY_PAUSE} seconds — a model " \
+                           'a Resource row names in another process is masked here once the store answers. A store ' \
+                           'that is up but loses the token at once cannot sync masking: use a shared store that keeps ' \
+                           'entries, or include PermissionForge::Concerns::MaskedAttributes in the models ' \
+                           '(docs/masked-attributes.md).')
       end
 
       def now

@@ -16,7 +16,10 @@ namespace :permission_forge do
   # Exits 1 when FAIL_ON is given and a finding of that severity or worse
   # exists (saying so on stderr, so FORMAT=json output stays parseable), and 2
   # when FAIL_ON names no severity (before the review runs).
-  desc 'Read-only security review of the PermissionForge setup. FORMAT=json, FAIL_ON=critical|high|medium|low|info'
+  # It changes no permission data; every run is recorded (report.generated)
+  # when the audit log is on.
+  desc 'Security review of the PermissionForge setup: changes no permission data, records the run in the audit log. ' \
+       'FORMAT=json, FAIL_ON=critical|high|medium|low|info'
   task audit: :environment do
     audit = PermissionForge::Services::SecurityAudit
     given = ENV.fetch('FAIL_ON', nil).presence

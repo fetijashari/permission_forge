@@ -10,9 +10,12 @@ module PermissionForge
     include BootTestHelpers
 
     DEVELOPMENT_WARNING = /\[PermissionForge\] Development: the permission cache is .*one per process/
+    MASKING_WARNING = /auto-applied masking \(auto_apply_masked_attributes = :auto\) takes its models from the Resource rows/
 
     teardown do
       PermissionForge.configuration.cache_backend = :memory
+      PermissionForge.configuration.auto_apply_masked_attributes = :auto
+      PermissionForge.configuration.mask_virtual_attributes = false
     end
 
     test 'development with Rails.cache as a :memory_store warns, naming what happens and both remedies' do
@@ -38,6 +41,90 @@ module PermissionForge
       log = boot_log(env: 'development', backend: ActiveSupport::Cache::MemoryStore.new)
 
       assert_match(/cache_backend is an ActiveSupport::Cache::MemoryStore/, log)
+    end
+
+    # Field test: under :auto a Resource row created from `bin/rails runner`
+    # never reached the server through a :memory_store; the warning spoke of
+    # stale permissions only.
+    test 'development with a per-process store names the masking effect and its remedies' do
+      log = boot_log(env: 'development', backend: :rails_cache, rails_cache: ActiveSupport::Cache::MemoryStore.new)
+
+      assert_match MASKING_WARNING, log
+      assert_match(/re-reads the Resource names from the database instead \(one query at most every 2 s\)/, log)
+      assert_match(/in production a process would mask such a model only after a restart/, log)
+      assert_match(/include PermissionForge::Concerns::MaskedAttributes in each model/, log)
+      assert_match(/list the models in config\.auto_apply_masked_attributes/, log)
+      assert_equal 1, log.scan(MASKING_WARNING).size, 'logged once per boot'
+    end
+
+    # Rails 7.1/7.2's development default: no stale permissions, but no token either.
+    test 'development with a store that keeps nothing warns about masking only' do
+      log = boot_log(env: 'development', backend: :rails_cache, rails_cache: ActiveSupport::Cache::NullStore.new)
+
+      assert_match MASKING_WARNING, log
+      assert_match(/one that keeps nothing \(Rails\.cache is a :null_store\)/, log)
+      assert_no_match DEVELOPMENT_WARNING, log
+    end
+
+    test 'no masking warning when the masking settings are lists or off' do
+      PermissionForge.configuration.auto_apply_masked_attributes = ['Customer']
+      assert_no_match(/auto-applied masking/, boot_log(env: 'development', backend: :memory))
+
+      PermissionForge.configuration.auto_apply_masked_attributes = false
+      assert_no_match(/auto-applied masking/, boot_log(env: 'production', backend: :memory))
+    end
+
+    test 'mask_virtual_attributes = :auto alone is named in the masking warning' do
+      PermissionForge.configuration.auto_apply_masked_attributes = false
+      PermissionForge.configuration.mask_virtual_attributes = :auto
+
+      assert_match(/auto-applied masking \(mask_virtual_attributes = :auto\)/, boot_log(env: 'development', backend: :memory))
+    end
+
+    test 'production with a per-process or a null store warns that masking is not announced' do
+      [ActiveSupport::Cache::MemoryStore.new, ActiveSupport::Cache::NullStore.new].each do |store|
+        log = boot_log(env: 'production', backend: :rails_cache, rails_cache: store)
+
+        assert_match(/WARNING: auto-applied masking .* stays unmasked in this process until it restarts/, log, store.class)
+        assert_match(/include PermissionForge::Concerns::MaskedAttributes/, log, store.class)
+      end
+    end
+
+    # The boot logs before `bin/rails server` attaches its console logger,
+    # and `bin/rails runner` never does: the warning was in log/development.log only.
+    test 'development writes each warning to standard error as well, once' do
+      boot_log(env: 'development', backend: :memory)
+
+      assert_equal 1, @stderr.scan(DEVELOPMENT_WARNING).size, @stderr
+      assert_equal 1, @stderr.scan(MASKING_WARNING).size, @stderr
+    end
+
+    test 'nothing on standard error when the logger already writes there' do
+      with_rails_env('development', nil) do
+        PermissionForge.configuration.cache_backend = :memory
+        PermissionForge.configuration.reset_cache_store!
+        out, err = capture_io do
+          logger = Rails.logger
+          Rails.logger = ActiveSupport::Logger.new($stdout)
+          BootChecks.send(:warn_configuration, PermissionForge.configuration)
+        ensure
+          Rails.logger = logger
+        end
+
+        assert_match DEVELOPMENT_WARNING, out, 'logged'
+        assert_empty err
+      end
+    end
+
+    test 'nothing on standard error while a generator runs, nor in test or production' do
+      with_singleton_method(BootChecks, :generator_running?, -> { true }) do
+        assert_match DEVELOPMENT_WARNING, boot_log(env: 'development', backend: :memory)
+        assert_empty @stderr
+      end
+      %w[test production].each do |env|
+        boot_log(env: env, backend: :memory)
+        assert_empty @stderr, env
+      end
     end
 
     test 'development with a shared or a null store does not warn' do
@@ -88,11 +175,16 @@ module PermissionForge
 
     # What the configuration boot warnings log under `env`, with
     # `backend` as cache_backend and, when given, `rails_cache` as Rails.cache.
+    # What it writes to standard error is left in @stderr.
     def boot_log(env:, backend:, rails_cache: nil)
       with_rails_env(env, rails_cache) do
         PermissionForge.configuration.cache_backend = backend
         PermissionForge.configuration.reset_cache_store!
-        capture_rails_log { BootChecks.send(:warn_configuration, PermissionForge.configuration) }
+        log = nil
+        _, @stderr = capture_io do
+          log = capture_rails_log { BootChecks.send(:warn_configuration, PermissionForge.configuration) }
+        end
+        log
       end
     ensure
       PermissionForge.configuration.reset_cache_store!

@@ -37,7 +37,7 @@ module PermissionForge
           },
           cross_set_unmasking: lambda { |finding|
             "[OVERRIDES MASK] #{finding[:permission_set]} › #{finding[:resource_name]}.#{finding[:field_name]} " \
-              '— unmasked here, masked in another Permission Set; a person in both sees the full value'
+              "— unmasked here, masked in #{TextReport.masking_sets(finding)}; a person in both sees the full value"
           }
         }.freeze
 
@@ -46,6 +46,17 @@ module PermissionForge
           "[#{finding[:type].to_s.upcase.tr('_', ' ')}] " \
             "#{finding.except(:type).map { |key, value| "#{key}: #{value}" }.join(', ')}"
         }
+
+        # The Permission Sets a cross-set finding says mask the field (a
+        # finding without them says "another Permission Set").
+        #
+        # @return [String]
+        def self.masking_sets(finding)
+          names = Array(finding[:masked_in])
+          return 'another Permission Set' if names.empty?
+
+          "#{names.one? ? 'Permission Set' : 'Permission Sets'} #{names.join(', ')}"
+        end
 
         def initialize(report)
           @report = report

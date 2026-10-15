@@ -74,7 +74,7 @@ The other checks report these findings (the id is the `code` of the finding; the
 | `integrity` | `unknown_models` | Low | Resources naming models the app does not have. |
 | `personal_data` | `unmasked_personal_data` | Medium | Fields that look like personal data and are readable unmasked, minus fields marked *This is intended* in the admin privacy audit (this finding only). |
 | `personal_data` | `implicit_virtual_personal_data` | Medium | Declared virtual fields that look like personal data, have no active field row and are granted by default (`extra_fields_default_access = :grant`). |
-| `personal_data` | `cross_set_unmasking` | Medium | One set unmasks what another masks (masks combine with AND). |
+| `personal_data` | `cross_set_unmasking` | Medium | One set unmasks what another masks (masks combine with AND). Each item names the set that unmasks and, in parentheses, the sets that mask. |
 | `personal_data` | `unmapped_personal_data` | High when `unconfigured_field_strategy` is `:pass_through` or `:warn`, otherwise Low | Model columns that look like personal data and have no active field row. |
 
 The `action` check covers custom actions and the [controller action guard](controller-actions.md):

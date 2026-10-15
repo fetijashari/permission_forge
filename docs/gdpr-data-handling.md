@@ -175,7 +175,7 @@ Some GDPR checks can be run directly in a Rails console:
 ```ruby
 # Full GDPR field audit — findings are keyed by :type (:unmasked_field,
 # :unmapped_column, :implicit_virtual_grant, :view_all_on_pii_resource,
-# :cross_set_unmasking)
+# :cross_set_unmasking: permission_set unmasks, masked_in lists the sets that mask)
 report = PermissionForge::Services::GdprFieldAuditor.call
 report.each { |finding| puts "#{finding[:type]}: #{finding.except(:type)}" }
 

@@ -72,10 +72,19 @@ module PermissionForge
         PermissionForge::AuditEvent.singleton_class.send(:remove_method, :table_exists?)
       end
 
-      test 'a generator is running once Rails::Generators is loaded' do
+      # A gem that requires rails/generators as it loads made every server boot
+      # look like a generator's: the boot-time table check was skipped.
+      test 'Rails::Generators alone is no generator run' do
         require 'rails/generators'
 
-        assert_predicate BootWarnings, :generator_running?
+        assert_not BootWarnings.generator_running?
+      end
+
+      test 'a generator is running while bin/rails generate or destroy boots the app' do
+        %i[GenerateCommand DestroyCommand].each do |command|
+          with_command_class(command) { assert_predicate BootWarnings, :generator_running?, command }
+          assert_not BootWarnings.generator_running?, "#{command} removed again"
+        end
       end
 
       test 'no table warning when the table exists' do
@@ -113,6 +122,23 @@ module PermissionForge
         warn_setup
 
         assert_no_match(/shared login/, @log.string)
+      end
+
+      private
+
+      # Rails::Command::<name> defined for the block, as `bin/rails generate`
+      # (or destroy) defines it before it boots the app.
+      def with_command_class(name)
+        skip "Rails::Command::#{name} is loaded in this process" if Object.const_defined?("Rails::Command::#{name}", false)
+        added_module = !Rails.const_defined?(:Command, false)
+        Rails.const_set(:Command, Module.new) if added_module
+        Rails::Command.const_set(name, Class.new)
+        begin
+          yield
+        ensure
+          Rails::Command.send(:remove_const, name)
+          Rails.send(:remove_const, :Command) if added_module
+        end
       end
     end
   end

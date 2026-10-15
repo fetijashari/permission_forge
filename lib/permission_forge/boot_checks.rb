@@ -34,6 +34,11 @@ module PermissionForge
       masked_attributes: ->(_config) { MaskingSync.boot! }
     }.freeze
 
+    # The commands `bin/rails generate` and `bin/rails destroy` run: Rails
+    # loads the command's class before it boots the app (canary
+    # :generator_commands).
+    GENERATOR_COMMANDS = %w[Rails::Command::GenerateCommand Rails::Command::DestroyCommand].freeze
+
     class << self
       # @param config [Configuration]
       def run(config)
@@ -42,6 +47,16 @@ module PermissionForge
         return database_unreachable unless db_available?
 
         DATABASE_STEPS.each { |name, step| database_step(name) { step.call(config) } }
+      end
+
+      # Whether this boot is that of a generator (`bin/rails generate` or
+      # `bin/rails destroy`): their command class is loaded; a server, a
+      # console, a runner or a rake task loads its own. Rails::Generators
+      # alone does not say it: a gem may require rails/generators as it loads.
+      #
+      # @return [Boolean]
+      def generator_running?
+        GENERATOR_COMMANDS.any? { |name| Object.const_defined?(name, false) }
       end
 
       # HasTenantScoping silently skips the scope when the gem is absent,
@@ -143,7 +158,7 @@ module PermissionForge
 
       # The boot warnings that only read the configuration.
       def warn_configuration(config)
-        CacheWarnings.warn_process_local_cache(config)
+        CacheWarnings.call(config)
         warn_basic_auth_without_credentials(config)
         warn_api_authorization_gap(config)
         config.tenantless_admin_warning&.then { |message| Rails.logger&.warn(message) }

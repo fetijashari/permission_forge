@@ -49,12 +49,13 @@ module PermissionForge
           "recorded until #{remedy}. Changes still work."
       end
 
-      # `bin/rails generate` and `bin/rails destroy` load Rails::Generators
-      # before they boot the app; a server or a console does not.
+      # `bin/rails generate` or `bin/rails destroy` is booting the app
+      # (BootChecks.generator_running?: its command class is loaded, not
+      # merely Rails::Generators, which a gem may load at boot).
       #
       # @return [Boolean]
       def self.generator_running?
-        defined?(Rails::Generators::Base) ? true : false
+        PermissionForge::BootChecks.generator_running?
       end
 
       # @return [Boolean] whether a permission_forge migration in the app's

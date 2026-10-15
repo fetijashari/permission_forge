@@ -10,6 +10,8 @@ ENV['PARALLEL_WORKERS'] ||= '1'
 require 'test_helper'
 require 'pp'
 require 'tmpdir'
+require 'open3'
+require 'json'
 require 'active_support/cache/redis_cache_store'
 
 # Rails-internals canary: one test per private (`:nodoc:`, private, or
@@ -107,6 +109,7 @@ module PermissionForge
       schema_cache: 'connection.schema_cache.columns_hash(',
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
       sandbox: 'application.sandbox?',
+      generator_commands: 'Rails::Command::GenerateCommand',
       journey_route: Regexp.union('@route.path.spec', '@route.verb', '@route.defaults', '@route.internal'),
       association_target: Regexp.union('association.target.sort_by!', 'association(:user).target', 'return association.target if')
     }.freeze
@@ -160,6 +163,7 @@ module PermissionForge
       schema_cache: 'adapt Operators::RuleColumn.on',
       preloader: 'adapt PermissionHashBuilder#preload',
       sandbox: 'adapt OpenTransaction.sandbox?',
+      generator_commands: 'adapt BootChecks.generator_running? (GENERATOR_COMMANDS: what `bin/rails generate` loads before it boots)',
       journey_route: 'adapt Admin::ControllerCatalog::RoutedAction',
       association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)'
     }.freeze
@@ -1396,6 +1400,28 @@ module PermissionForge
                       'Admin::ControllerCatalog::RoutedAction reads Journey::Route#verb ("GET|POST"), #path.spec ' \
                       '("…(.:format)"), #defaults and #internal (all :nodoc:): adapt it, or the admin lists no (or wrong) host actions'
                     )
+    end
+
+    # In a child process: loading the generate command here would make every
+    # later boot check in this process look like a generator's.
+    canary_test :generator_commands,
+                '`bin/rails generate` / `destroy` load Rails::Command::GenerateCommand / DestroyCommand (:nodoc:); ' \
+                'server, console and runner do not' do
+      script = <<~RUBY
+        require 'json'
+        require 'rails/command'
+        %w[server console runner].each { |name| Rails::Command.find_by_namespace(name) }
+        others = %w[GenerateCommand DestroyCommand].select { |name| Rails::Command.const_defined?(name, false) }
+        generators = %w[generate destroy].map { |name| Rails::Command.find_by_namespace(name)&.name }
+        puts JSON.generate('others' => others, 'generators' => generators)
+      RUBY
+      output, status = Open3.capture2e(RbConfig.ruby, '-e', script)
+      assert status.success?, output
+      result = JSON.parse(output.lines.reverse.find { |line| line.start_with?('{') })
+
+      assert_equal [], result['others'], 'a server, a console or a runner loads no generator command'
+      assert_equal %w[Rails::Command::GenerateCommand Rails::Command::DestroyCommand], result['generators']
+      assert_equal PermissionForge::BootChecks::GENERATOR_COMMANDS, result['generators']
     end
 
     canary_test :sandbox, 'Rails.application.sandbox?: false outside `rails console --sandbox`' do
