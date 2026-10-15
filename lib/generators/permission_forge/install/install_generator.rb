@@ -23,6 +23,15 @@ module PermissionForge
 
       KEY_TYPES = %w[bigint integer uuid string].freeze
       DETECTED_KEY_TYPES = { integer: 'bigint', uuid: 'uuid', string: 'string' }.freeze
+      # Printed after an install (#print_next_steps).
+      NEXT_STEPS = [
+        'bin/rails db:migrate',
+        'Mount the admin in config/routes.rb: mount PermissionForge::Engine, at: "/permissions"',
+        "Admin credentials: uncomment Option A in config/initializers/permission_forge.rb\n     " \
+        '(PF_ADMIN_USER, PF_ADMIN_PASSWORD), or use your own admin controller (Option B)',
+        'bin/rails permission_forge:audit lists what is still open before production'
+      ].freeze
+      QUICK_START_URL = 'https://github.com/fetijashari/permission_forge#quick-start'.freeze
 
       def copy_initializer
         template 'initializer.rb.tt', 'config/initializers/permission_forge.rb'
@@ -32,6 +41,17 @@ module PermissionForge
         return if options[:skip_migration]
 
         migration_template 'migration.rb.tt', 'db/migrate/create_permission_forge_tables.rb'
+      end
+
+      # What the files alone do not do: without a mount and credentials there
+      # is no admin to open. Not printed by `rails destroy`.
+      def print_next_steps
+        return unless behavior == :invoke
+
+        steps = NEXT_STEPS.drop(options[:skip_migration] ? 1 : 0)
+        say "\nPermissionForge is installed. Next steps:"
+        steps.each.with_index(1) { |step, number| say "  #{number}. #{step}" }
+        say "  Quick Start: #{QUICK_START_URL}"
       end
 
       private
