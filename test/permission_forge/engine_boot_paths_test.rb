@@ -40,7 +40,7 @@ module PermissionForge
     # --- the engine only wires hooks -----------------------------------------
 
     test 'the engine carries no boot, masking or warning logic, and nothing reaches into it' do
-      domain = [BootChecks, MaskedModels, MaskingSync, QueryScopingWarnings]
+      domain = [BootChecks, CacheWarnings, MaskedModels, MaskingSync, QueryScopingWarnings]
 
       assert_empty PermissionForge::Engine.singleton_class.ancestors & domain
       # apply_masked_attributes_to_managed_models stays one minor version, as
@@ -235,7 +235,7 @@ module PermissionForge
 
       log = capture_rails_log { hook.call(Rails.application) }
 
-      assert_match(/MemoryCache in production/, log)
+      assert_match(/in-process permission cache in production/, log)
       assert_match(BASIC_AUTH_WARNING, log)
       assert_match(/config\.http_basic_auth_user and config\.http_basic_auth_password/, log)
     ensure
@@ -255,7 +255,7 @@ module PermissionForge
       log = capture_rails_log { hook.call(Rails.application) }
 
       assert_no_match(BASIC_AUTH_WARNING, log)
-      assert_no_match(/MemoryCache in production/, log)
+      assert_no_match(/in-process permission cache in production/, log)
     ensure
       PermissionForge.configuration.http_basic_auth_enabled = false
       PermissionForge.configuration.http_basic_auth_user = nil

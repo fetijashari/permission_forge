@@ -535,6 +535,15 @@ Permission caching is read-through: a cache miss (first access, TTL expiry, evic
 
 On a snapshot database, read the permissions once (`current_user.permissions_hash`, or any authorisation check) before a loop of saves or before a long transaction opens: permissions first read inside a transaction are built once per transaction and not cached — 50 saves on a cold entry build the hash 50 times (350 queries) instead of once (7). The log says so once per process when it keeps happening. Details and the known limits: [architecture.md](architecture.md#inside-a-transaction).
 
+**In development, share the cache between processes.** An invalidation reaches the cache of the process that makes it. Rails 8.0+ generates `config.cache_store = :memory_store` in `config/environments/development.rb` (Rails 7.1 and 7.2: `:memory_store` after `bin/rails dev:cache`, `:null_store` otherwise), and the generated initializer caches through `Rails.cache` — so each process (the server, a console, `bin/rails runner`, a rake task) has a cache of its own. A permission change made from a console, a runner or a rake task (seeds, `permission_forge:cleanup_expired_assignments`, an erasure) invalidates only that process's copy, and the running server keeps serving the permissions it had cached until `cache_ttl` (an hour by default) or a restart; a change made in the server's own admin UI applies at once. The boot logs a warning in development when the permission cache is per process (`cache_backend = :memory`, or a `:memory_store`). Either share the store:
+
+```ruby
+# config/environments/development.rb
+config.cache_store = :file_store, "tmp/cache/store"
+```
+
+or switch caching off in development (`config.cache_backend = :null if Rails.env.development?` in the initializer). A `:null_store` caches nothing, so it has no stale copy either. In production the same applies across Puma workers, which is why `:memory` there gets a boot warning of its own.
+
 **When the cache store is unreachable** nothing is raised and access never widens: requests work with the hash they build. An invalidation that could not be made is reported (`config.on_cache_failure`), and the process that failed makes it when the store answers again — see [architecture.md](architecture.md#when-the-cache-store-fails) for what that does and does not cover.
 
 **Clearing everything.** Use `bin/rails permission_forge:cache:clear` (or `PermissionForge::Services::PermissionCacheClearer.call(actor:, reason:)`). It removes every user's cached permissions in every tenant, by key pattern where the store can (Redis, memory and file stores, checked with canary keys — an in-memory store, `cache_backend = :memory` or `:memory_store`, lives in each process, so the task clears only its own, and says so) and otherwise by invalidating every user, retires the memos of the process that runs it, and is recorded as `cache.cleared`. The cache is cold afterwards: each user rebuilds once on their next request. On Redis the pattern is a glob (`<cache_key_prefix>:user_*`, `<cache_key_prefix>:tenant_*_user_*` and the same under `v2:`), which also removes the invalidation stamps and any key of your own that matches it: keep `cache_key_prefix` to PermissionForge's keys.
@@ -856,6 +865,8 @@ See [controller-actions.md](controller-actions.md).
 #### cache_backend
 
 **Cache store.** Where computed permissions are cached.
+
+Under `:rails_cache` the store is `Rails.cache`: in development that is a per-process `:memory_store` unless you change it, and a change made from a console or rake task does not reach the server — see [Cache Consistency](#cache-consistency).
 
 On Rails 7.1 and 7.2 with connection_pool 3.x, `ActiveSupport::Cache::RedisCacheStore.new(url: …)` raises `ArgumentError` when it builds its connection pool (a Rails/connection_pool incompatibility, not PermissionForge's). Pin `connection_pool` below 3, or pass `pool: false`, until you upgrade Rails.
 

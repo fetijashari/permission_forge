@@ -15,6 +15,15 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **The install generator prints the next steps.** After the files it lists `bin/rails db:migrate` (not with
   `--skip-migration`), the mount line, where the admin credentials go (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`, or your
   own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start. `rails destroy` prints none.
+- **A boot warning in development when the permission cache is per process.** Rails 8.0+ generates
+  `config.cache_store = :memory_store` for development (7.1/7.2: after `bin/rails dev:cache`) and the generated
+  initializer caches through `Rails.cache`, so a permission change made from a console, `bin/rails runner` or a rake
+  task invalidated only that process's cache: the running server kept the old permissions until `cache_ttl` (an hour)
+  and the change looked lost. The development boot now logs what happens and the two remedies
+  (`config.cache_store = :file_store, "tmp/cache/store"` in `config/environments/development.rb`, or
+  `cache_backend = :null` in development) when `cache_backend` is `:memory` or the store is a `MemoryStore`; file,
+  Redis, Solid Cache, Memcached and null stores are not warned about, nor is any other environment. The generated
+  initializer's comment above `cache_backend` and [Cache Consistency](docs/configuration.md#cache-consistency) say so.
 
 ### Changed
 
@@ -36,6 +45,12 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
   raising. **Opt out:** run the task with `THRESHOLD_DAYS=90`, and call
   `Services::StaleAssignmentAuditor.call(threshold_days: 90)`.
+
+- **The production boot warning about an in-process cache also covers a `:memory_store`.** It fired only for
+  `cache_backend = :memory`; `cache_backend = :rails_cache` over a `Rails.cache` that is a `:memory_store` (or a
+  `MemoryStore` instance as `cache_backend`) is as inconsistent across Puma workers and is now warned about too. The
+  line reads "Using an in-process permission cache in production" (it said "in-process MemoryCache"): update a log
+  alert that matches the old text. **Opt out:** use a store the workers share.
 
 ### Fixed
 

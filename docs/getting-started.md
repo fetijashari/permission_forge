@@ -8,7 +8,7 @@ Before you begin, make sure you have:
 - A Rails 7.1+ application
 - Ruby 3.2+
 - A `User` model (any model works, but we'll use `User` in examples; it needs no `uuid` column)
-- A shared cache store for production (Redis, Memcached or Solid Cache through `Rails.cache`); not required for development
+- A shared cache store for production (Redis, Memcached or Solid Cache through `Rails.cache`); in development, `config.cache_store = :file_store, "tmp/cache/store"` lets a change made from a console or rake task reach the running server (Rails' default `:memory_store` is per process; see [Cache Consistency](./configuration.md#cache-consistency))
 
 ## Step 1: Install the Gem
 
@@ -67,7 +67,8 @@ PermissionForge.configure do |config|
   # For production, use Rails.cache (works with Redis, SolidCache, Memcached, ...):
   config.cache_backend = :rails_cache
 
-  # For development/testing, in-memory is fine:
+  # :memory (or Rails' development :memory_store) is per process: a change
+  # made from a console or rake task does not reach a running server.
   # config.cache_backend = :memory
 
   # Closes the remaining fail-open defaults at a cost for code that runs with

@@ -12,7 +12,7 @@ PermissionForge.configure do |config|
   config.action_guard_nil_user_strategy = :deny
   # Conditional Permission Sets fail closed without a request context (see below).
   config.conditional_sets_strict_mode = true
-  # The cache is Rails.cache: use a shared store in production (Redis, Solid Cache, Memcached).
+  # Rails.cache, shared by every process: Redis or Solid Cache in production, :file_store (not :memory_store) in development.
   config.cache_backend = :rails_cache
 
   # config.preset = :strict closes every fail-open default at once

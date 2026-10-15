@@ -143,19 +143,11 @@ module PermissionForge
 
       # The boot warnings that only read the configuration.
       def warn_configuration(config)
-        warn_memory_cache_in_production(config)
+        CacheWarnings.warn_process_local_cache(config)
         warn_basic_auth_without_credentials(config)
         warn_api_authorization_gap(config)
         config.tenantless_admin_warning&.then { |message| Rails.logger&.warn(message) }
         QueryScopingWarnings.warn_unscoped_detection_raise_in_production(config)
-      end
-
-      def warn_memory_cache_in_production(config)
-        return unless Rails.env.production? && config.cache_backend == :memory
-
-        Rails.logger&.warn '[PermissionForge] WARNING: Using in-process MemoryCache in production. ' \
-                           'Permissions will be inconsistent across Puma workers. ' \
-                           'Configure config.cache_backend = :rails_cache with Redis, Memcached, or SolidCache.'
       end
 
       def warn_basic_auth_without_credentials(config)

@@ -1,4 +1,5 @@
 require_relative 'query_scoping_warnings'
+require_relative 'cache_warnings'
 require_relative 'boot_checks'
 require_relative 'masking_sync'
 require_relative 'masked_models'
