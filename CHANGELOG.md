@@ -18,6 +18,17 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Changed
 
+- **Full access applies no personal-data masks.** `ResourceFieldGenerator.call(grant_all: true)`, and through it
+  `Resource.grant_full_access!`, `Services::ResourceWithFieldsBuilder` and the admin API's `generate_fields` with
+  `grant_all`, now create every field readable and editable in the clear, also the columns that match
+  `gdpr_field_patterns` under `gdpr_defaults`. Before, those were created masked (a field test's Admin set read
+  customer names as `G*************tion`). The recommended strategy is still stored in `mask_strategy` (with
+  `mask_access: false`), so masking the field later uses it, and the fields are still flagged: `GdprFieldAuditor` and
+  `rake permission_forge:audit_masks` report them as `unmasked_field`, the admin's Home lists them under "Privacy
+  audit". Without `grant_all` nothing changes (personal-data columns readable and masked, the others without access).
+  **Opt out:** generate without `grant_all` and open the other fields, or mask the reported fields afterwards
+  (`resource.resource_fields.where(name: %w[name email]).find_each { |f| f.update!(mask_access: true) }`; the stored
+  strategy applies).
 - **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
   `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
   `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`

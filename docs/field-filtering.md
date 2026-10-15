@@ -39,7 +39,7 @@ Instead of creating fields one by one, you can auto-generate them:
 # (except ignored fields like id, created_at, password, etc.)
 PermissionForge::Services::ResourceFieldGenerator.call(
   resource: resource,
-  grant_all: false  # Set to true to grant read+edit on all fields
+  grant_all: false  # Set to true to grant read+edit on all fields, unmasked
 )
 ```
 
@@ -52,7 +52,8 @@ PermissionForge::Resource.grant_full_access!(
   permission_set: admin_pset,
   resource_name: 'Customer'
 )
-# Creates resource with all CRUD = true AND all fields with read+edit = true
+# Creates resource with all CRUD = true AND all fields with read+edit = true, unmasked
+# (also the personal-data ones under gdpr_defaults: GdprFieldAuditor still reports them)
 ```
 
 ## Reading Field Permissions
@@ -328,7 +329,7 @@ The hook is called for each configured field during `FiltersResponseAttributes.c
 
 1. **Cache invalidation is automatic for ActiveRecord changes** — saving a `ResourceField` (or any permission record) invalidates the affected users' cached hashes, and the hash rebuilds automatically on the next read (read-through, v0.10.0+). Call `user.invalidate_permissions` or `user.regenerate_permissions` manually only after changes that bypass AR callbacks (`update_all`, `insert_all`, raw SQL) — and note that such changes write no audit event either.
 
-2. **Use `grant_all: true` for admin sets** — saves time when you want full access. Note: with `gdpr_defaults: true`, GDPR-sensitive fields will still be masked even with `grant_all`.
+2. **Use `grant_all: true` for admin sets** — saves time when you want full access. Since 0.15.0 it applies no mask, also with `gdpr_defaults: true` (before, GDPR-sensitive fields were still masked). Run `rake permission_forge:audit_masks` afterwards and mask the personal-data fields the set should not read in the clear; or generate without `grant_all` (sensitive fields start masked, the rest without access) and open what is needed.
 
 3. **Check the ignored_fields config** — fields like `id`, `password`, and `created_at` are excluded by default. Customize the list if needed.
 

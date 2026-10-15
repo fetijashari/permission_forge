@@ -204,7 +204,7 @@ PermissionForge::Services::MaskValue.call('john@example.com', strategy: 'email')
 # => "j***@example.com"
 ```
 
-When `config.gdpr_defaults = true`, `ResourceFieldGenerator` auto-masks PII fields at creation time. Use `GdprFieldAuditor.call` to find unmasked GDPR fields.
+When `config.gdpr_defaults = true`, `ResourceFieldGenerator` auto-masks PII fields at creation time, except with `grant_all: true` (and `Resource.grant_full_access!`), which asks for full access and applies no mask. Use `GdprFieldAuditor.call` to find unmasked GDPR fields.
 
 Since v0.9, the `MaskedAttributes` concern auto-applies to any model with a `Resource` record (`config.auto_apply_masked_attributes`, default `:auto`), so direct AR readers (`customer.email`), `attributes`, and `as_json` are enforced too — `pluck` and raw SQL are not. Unconfigured fields follow `config.unconfigured_field_strategy` (default `:block`, fail closed). Masked values can't be persisted back (`config.masked_write_protection`, default `:skip`). Debug field decisions with `PermissionForge::Concerns::MaskedAttributes.explain(record, :email)` or `.explain_all(record)`.
 
@@ -266,7 +266,8 @@ resource = PermissionForge::Resource.find_or_create_by!(permission_set: permissi
   r.is_active = true
 end
 
-# Auto-generate fields (with GDPR masking if config.gdpr_defaults = true).
+# Auto-generate fields. grant_all: true = read + edit on every field, unmasked;
+# without it, under config.gdpr_defaults, personal-data fields start masked.
 # Note: (resource_id, name) is unique — duplicate field rows are rejected.
 PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: true)
 

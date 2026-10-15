@@ -45,10 +45,11 @@ resource = PermissionForge::Resource.create!(
   edit_access: true, delete_access: true
 )
 
-# Auto-generate field permissions from model columns
+# Auto-generate field permissions from model columns: grant_all gives read and
+# edit on every field, unmasked (personal-data columns included)
 PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: true)
 
-# Or grant full access in one call (creates resource + fields)
+# Or grant full access in one call (creates resource + fields, no masks)
 PermissionForge::Resource.grant_full_access!(permission_set: pset, resource_name: 'Customer')
 
 # Assign a user — takes effect at the user's next permission read
@@ -237,6 +238,8 @@ end
 
 When `config.gdpr_defaults = true` (the default since v0.5.0), the `ResourceFieldGenerator` automatically applies masking to fields matching known privacy-sensitive patterns. This only applies at field **creation** time — it never overwrites admin changes.
 
+Full access is the exception (since 0.15.0): `ResourceFieldGenerator.call(grant_all: true)`, `Resource.grant_full_access!`, `ResourceWithFieldsBuilder`, the API's `generate_fields` with `grant_all` and the admin's "Full access" preset apply no mask. The fields are still flagged as personal data — `GdprFieldAuditor` / `rake permission_forge:audit_masks` report them as `unmasked_field`, and the admin's Home lists them under "Privacy audit" — so you decide, field by field, which to mask (or confirm "This is intended"). The recommended strategy is stored on the row (`mask_strategy`), so masking it later uses the right one.
+
 > **Important:** Masking provides display-level obfuscation only — it does NOT constitute GDPR-compliant anonymization or pseudonymization. See [GDPR Masking Disclaimer](gdpr_masking_disclaimer.md) for details.
 
 ```ruby
@@ -247,10 +250,15 @@ PermissionForge.configure do |config|
 end
 
 # With gdpr_defaults enabled (the default), auto-generated fields get masks applied
+PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)
+# email field → read_access: true, mask_access: true, mask_strategy: 'email'
+# phone field → read_access: true, mask_access: true, mask_strategy: 'last4'
+# name field  → read_access: true, mask_access: true, mask_strategy: 'first1_last4'
+# (other fields: no access)
+
+# Full access applies no mask; the recommended strategy is kept for later
 PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: true)
-# email field → mask_access: true, mask_strategy: 'email'
-# phone field → mask_access: true, mask_strategy: 'last4'
-# name field  → mask_access: true, mask_strategy: 'first1_last4'
+# email field → read_access: true, edit_access: true, mask_access: false, mask_strategy: 'email'
 ```
 
 **Built-in privacy patterns** (`DEFAULT_GDPR_FIELD_PATTERNS`):

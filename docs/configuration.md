@@ -429,7 +429,8 @@ PermissionForge.configure do |config|
   # GDPR / Data Protection
   # ---------------------------------------------------------------------------
 
-  # When true, ResourceFieldGenerator auto-masks PII fields (email, phone, name, etc.)
+  # When true, ResourceFieldGenerator auto-masks PII fields (email, phone, name, etc.),
+  # except when full access is asked for (grant_all: true, grant_full_access!)
   config.gdpr_defaults = true
 
   # When true, raises ConfigurationError at boot if gdpr_defaults was never explicitly set.

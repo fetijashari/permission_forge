@@ -29,6 +29,14 @@ module PermissionForge
         end
       end
 
+      test 'masks nothing, also under gdpr_defaults: the caller asked for full access' do
+        PermissionForge.configuration.gdpr_defaults = true
+        resource = ResourceWithFieldsBuilder.call(permission_set: create_permission_set, resource_name: 'Customer')
+
+        assert_equal [], resource.resource_fields.select(&:mask_access).map(&:name)
+        assert_equal 'email', resource.resource_fields.find_by!(name: 'email').mask_strategy
+      end
+
       test 'associates resource with the given permission set' do
         ps = create_permission_set
 

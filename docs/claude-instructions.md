@@ -16,7 +16,7 @@ stored in database tables and managed in the PermissionForge admin. `User` inclu
    rules. Query through `Model.permission_scoped` (or class-level `find_by`), never a bare `where`.
 2. Resource: create a `PermissionForge::Resource` named after the model in a Permission Set (admin, or
    `PermissionForge::Services::ResourceWithFieldsBuilder.call(permission_set:, resource_name: 'Customer')`,
-   which grants full CRUD and read/edit on every column, personal-data columns masked: narrow it).
+   which grants full CRUD and read/edit on every column, unmasked, personal-data columns included: narrow it).
    The model's first Resource row auto-applies `MaskedAttributes` to it (in every process when the
    cache store is shared).
 3. Fields: every column the user should read needs a field row; with `unconfigured_field_strategy :block`

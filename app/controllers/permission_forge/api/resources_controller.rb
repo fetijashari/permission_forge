@@ -8,9 +8,11 @@ module PermissionForge
       before_action :set_permission_set
       before_action :set_resource, only: %i[show update destroy generate_fields]
 
-      # Grants read (and, with grant_all, edit) on every unconfigured column,
-      # so it passes the same gates as the admin UI's "Sync fields": the
-      # authorization hook, then the lock on the resource and its set.
+      # Creates a field row for every unconfigured column: with grant_all,
+      # readable and editable, unmasked; without it, no access (under
+      # gdpr_defaults, personal-data columns readable and masked). It passes
+      # the same gates as the admin UI's "Sync fields": the authorization
+      # hook, then the lock on the resource and its set.
       def generate_fields
         guard_mutation!(:generate_fields, @resource)
         return if performed?

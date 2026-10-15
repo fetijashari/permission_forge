@@ -72,7 +72,9 @@ module PermissionForge
       view_all || modify_all
     end
 
-    # Grants full CRUD access + all field access for a resource on a permission set.
+    # Grants full CRUD access + read and edit on every field, unmasked (also
+    # the columns that look like personal data, which GdprFieldAuditor and the
+    # admin's privacy audit still report), for a resource on a permission set.
     # Intended for seeds, migrations, or console use only.
     def self.grant_full_access!(permission_set:, resource_name:)
       PermissionForge::Services::ResourceWithFieldsBuilder.call(
