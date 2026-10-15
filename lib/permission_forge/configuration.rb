@@ -308,8 +308,11 @@ module PermissionForge
     # Hash of regex => strategy string for GDPR field pattern matching
     attr_reader :gdpr_field_patterns
 
+    # Not created_at / updated_at (before 0.15 they were here): generated
+    # fields give them a read-only row (ResourceFieldGenerator), so the
+    # default unconfigured_field_strategy (:block) no longer hides them.
     DEFAULT_IGNORED_FIELDS = %w[
-      id created_at updated_at token_digest token_last_digits
+      id token_digest token_last_digits
       created_by updated_by token password encrypted_password
       deleted_at uuid deactivated
     ].freeze

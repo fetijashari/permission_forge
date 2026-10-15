@@ -36,7 +36,8 @@ Instead of creating fields one by one, you can auto-generate them:
 
 ```ruby
 # Creates a ResourceField for every column in the Customer model
-# (except ignored fields like id, created_at, password, etc.)
+# (except ignored fields like id, uuid, password; created_at / updated_at get
+# a read-only row whatever grant_all says)
 PermissionForge::Services::ResourceFieldGenerator.call(
   resource: resource,
   grant_all: false  # Set to true to grant read+edit on all fields
@@ -363,7 +364,7 @@ The hook is called for each configured field during `FiltersResponseAttributes.c
 
 2. **Use `grant_all: true` for admin sets** — saves time when you want full access. Note: with `gdpr_defaults: true`, GDPR-sensitive fields will still be masked even with `grant_all`.
 
-3. **Check the ignored_fields config** — fields like `id`, `password`, and `created_at` are excluded by default. Customize the list if needed.
+3. **Check the ignored_fields config** — fields like `id`, `uuid` and `password` are excluded by default (Rails' timestamps get a read-only row instead). Customize the list if needed.
 
 4. **Field names are case-sensitive** — `Name` and `name` are different fields to the engine. Always use the exact database column name. (On a case-insensitive collation, MySQL's default, the two cannot both be saved on one resource: the second is a validation error.)
 

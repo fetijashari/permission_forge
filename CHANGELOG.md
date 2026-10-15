@@ -52,6 +52,14 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   has passed (`"2020-01-01"`, yesterday, a minute ago) created an assignment that granted nothing, answered 201/200. It
   is now a 422 (`{"expires_at": ["must be in the future"]}`) and nobody is assigned. A bulk `revoke` ignores
   `expires_at`; the admin's Undo still restores a removed assignment with the end it had. **Opt out:** none.
+- **Generated fields give `created_at` / `updated_at` a read-only row.** They were in the default `ignored_fields`, so
+  generating fields made no row for them and, under the default `unconfigured_field_strategy = :block`, every reader
+  (admin included) saw `null` timestamps. `ignored_fields` no longer lists them by default, and
+  `ResourceFieldGenerator` (also the admin's "Sync fields" and the API's `generate_fields`) creates their rows with
+  read on, edit off and no mask, whatever `grant_all` says. Existing resources change only when you sync their fields;
+  the admin then lists the two columns as not configured. Treating timestamps as readable without a row was not chosen:
+  it would carve an exception into `:block` for every resource, rows or not. **Opt out:**
+  `config.ignored_fields += %w[created_at updated_at]`.
 - **A refusing `api_auth` answers 401 Unauthorized instead of 403.** A wrong or missing token is a failed
   authentication: clients that refresh credentials on 401 did not on the 403. The body is
   `{"error":{"status":401,"messages":"Not authenticated"}}`; the `api.auth_failed` event keeps its reason
