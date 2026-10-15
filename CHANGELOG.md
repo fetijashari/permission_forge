@@ -67,6 +67,26 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   part (`dave@acme.test` is "DA"; it was "DT"). In a Muting Permission Set a field without a setting reads "Not
   configured · Mutes nothing", and its drawer says the set takes nothing away from it, instead of "Blocked by
   default" and a link to `unconfigured_field_strategy`, which only decides for granting sets.
+- **The rule builder's preview follows "the current user".** Ticking it left the preview at "Only show Customers
+  where Owner is …." (with a doubled period) until the rule was saved. The preview is now the sentence the saved rule
+  shows, and `pf_admin.js` keeps its value in step with the box and the value input; without JavaScript it changes on
+  the builder's refresh, as before.
+- **A success toast no longer covers the "unsaved changes" bar.** On a page with that sticky bar the toasts are shown
+  at the top of the window instead of the bottom.
+- **Effective access shows the whole rule in the Records cell**, wrapped, instead of cutting it mid-word ("Owner is
+  the cur").
+- **Settings' health summary warns about automatic query scoping** while it is off and record rules are in force that
+  it leaves to `find_by` / `permission_scoped` — the rules the Home "Record rules not applied everywhere" card lists, so
+  both pages warn together. It said "7 settings look good" while Home warned.
+- **"Review and save" says what it did not apply.** A request that turns on Edit (or Delete, View All, Modify All)
+  while Read is off — a form the admin never sends — was answered "No changes to save." It now says "Customer: Edit not
+  turned on, because Read is off" (Modify All: "because it needs View All and Edit"), in the alert when nothing else
+  changed and on the review page next to the changes that do apply (`Admin::ChangeSet#refused`).
+- **A locked Permission Set only offers the end dates it accepts.** The "Change end date…" menu of a locked granting set
+  offered "30 days from today" and "No expiry", which the lock then refused; it now lists only the presets that narrow
+  access (the other way round for a Muting Permission Set; `Admin::EditableLock.expiry_choices`). A person's Assign
+  drawer lists a locked set that cannot take holders as disabled with a "Locked" badge and a note, instead of leaving it
+  out.
 
 ### Documentation
 

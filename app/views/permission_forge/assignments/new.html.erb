@@ -63,16 +63,20 @@
           <% end %>
           <% @sets.each do |set| %>
             <% has = @existing_ids.include?(set.id) %>
+            <%# A locked set that would widen access by taking a holder is shown, but cannot be picked. %>
+            <% locked = !has && @locked_ids.include?(set.id) %>
             <label class="pf-option">
-              <input type="checkbox" name="set_ids[]" value="<%= set.id %>" <%= 'checked' if @selected_ids.include?(set.id) && !has %> <%= 'disabled' if has %>>
+              <input type="checkbox" name="set_ids[]" value="<%= set.id %>" <%= 'checked' if @selected_ids.include?(set.id) && !has && !locked %> <%= 'disabled' if has || locked %>>
               <span class="pf-option__main">
                 <span class="pf-row pf-row--tight">
                   <span class="pf-fw-600"><%= set.name %></span>
                   <% if has %><%= pf_badge(t('.already')) %><% end %>
+                  <% if locked %><%= pf_lock_badge %><% end %>
                   <% if set.is_muting %><%= pf_badge("⊘ #{t('permission_forge.ui.badges.muting')}", variant: :muting) %><% end %>
                   <% unless set.is_active %><%= pf_off_badge %><% end %>
                 </span>
                 <% if set.description.present? %><span class="pf-fs-12 pf-text-3"><%= set.description %></span><% end %>
+                <% if locked %><span class="pf-fs-12 pf-text-3"><%= t('.locked_hint') %></span><% end %>
               </span>
               <span class="pf-option__aside"><%= pf_people_text(@people_counts.fetch(set.id, 0)) %></span>
             </label>

@@ -422,6 +422,24 @@
     }
   });
 
+  /* ------------------------------------------- rule builder preview */
+  // The preview sentence's value token follows "the current user" and the
+  // value input as they change (one-value operators only: the server renders
+  // data-pf-rule-preview for them). Everything else changes on refresh.
+  function syncRulePreview(form) {
+    const preview = form && $('[data-pf-rule-preview]', form);
+    const token = preview && $('.pf-token--value', preview);
+    if (!token) return;
+    const me = $('input[name="rule[current_user]"]', form);
+    const input = $('[name="rule[value]"]', form);
+    const value = input ? input.value.trim() : '';
+    if (me && me.checked) token.textContent = preview.getAttribute('data-pf-current-user');
+    else token.textContent = value === '' ? preview.getAttribute('data-pf-empty') : value;
+  }
+  ['input', 'change'].forEach(function (type) {
+    on(type, 'input[name="rule[current_user]"], [name="rule[value]"]', function (e, el) { syncRulePreview(el.form); });
+  });
+
   /* ------------------------------------------- typed confirmation */
   on('input', 'input[data-pf-confirm-match]', function (e, input) {
     const btn = input.form && input.form.querySelector('[data-pf-confirm-target]');

@@ -4,6 +4,8 @@ module PermissionForge
   #
   # @api private
   class ResourcesController < ApplicationController
+    include PermissionForge::ChangeReview
+
     TABS = %w[fields actions rules].freeze
     GRANTING_PRESETS = %w[full read nothing].freeze
     MUTING_PRESETS = %w[hide_sensitive block_changes leave].freeze
@@ -42,7 +44,7 @@ module PermissionForge
 
     def review
       @change_set = change_set
-      return redirect_to(resource_path, notice: t('permission_forge.flash.permission_sets.no_changes')) if @change_set.empty?
+      return redirect_to(resource_path, pf_nothing_to_save_flash(@change_set)) if @change_set.empty?
 
       load_page
       @changes = @change_set.changes

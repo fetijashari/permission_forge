@@ -192,8 +192,22 @@ module PermissionForge
         'action_guard_nil_user_strategy' => ->(config) { config.action_guard_nil_user_bypass? ? nil : :ok }
       }.freeze
 
+      # Risk rules that also read the data: key => ->(config, attention) { ... },
+      # `attention` being the page's AttentionItems. auto_query_scoping off is a
+      # risk only while record rules are in force that it leaves to find_by /
+      # permission_scoped: the rules the Home "Record rules" card lists
+      # (AttentionItems#unenforced_rules), so both pages warn together.
+      DATA_RISKS = {
+        'auto_query_scoping' => lambda { |config, attention|
+          next :ok if config.auto_query_scoping_enabled?
+
+          attention.unenforced_rules.any? ? :warn : nil
+        }
+      }.freeze
+
       RECOMMENDED = {
         'conditional_sets_strict_mode' => 'true',
+        'auto_query_scoping' => ':filter_only',
         'api_require_authorization' => 'true',
         'admin_tenantless_access' => ':deny',
         'unconfigured_field_strategy' => ':block',
@@ -207,10 +221,13 @@ module PermissionForge
         name.to_s.delete_prefix('::') == 'ActionController::Base'
       end
 
-      def initialize(configuration: PermissionForge.configuration, values: SettingsValues.new)
+      # @param attention [AttentionItems, nil] the page's attention items
+      #   (shared with the Home badge); built on first use when nil
+      def initialize(configuration: PermissionForge.configuration, values: SettingsValues.new, attention: nil)
         @configuration = configuration
         @defaults = Configuration.new
         @values = values
+        @attention = attention
       end
 
       def rows
@@ -251,7 +268,18 @@ module PermissionForge
         key = definition.key
         value = @values.normalize(definition, read(@configuration, key))
         Row.new(definition: definition, value: value, default: @values.normalize(definition, read(@defaults, key)),
-                hook_state: (value if definition.type == :hook), risk: RISKS[key]&.call(@configuration))
+                hook_state: (value if definition.type == :hook), risk: risk_of(key))
+      end
+
+      def risk_of(key)
+        data_risk = DATA_RISKS[key]
+        return data_risk.call(@configuration, attention) if data_risk
+
+        RISKS[key]&.call(@configuration)
+      end
+
+      def attention
+        @attention ||= AttentionItems.new(configuration: @configuration)
       end
 
       def read(config, key)

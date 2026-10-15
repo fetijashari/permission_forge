@@ -132,10 +132,14 @@
       <%= pf_setting_link('auto_query_scoping', t('permission_forge.ui.setting')) %>
     </p>
 
-    <div class="pf-panel pf-panel--muted pf-stack pf-stack--tight">
+    <%# The sentence the saved rule shows. With one value, pf_admin.js keeps its value token in step with
+        "the current user" and the value input; anything else changes on the builder's refresh. %>
+    <% live = form.column && form.arity == :one %>
+    <div class="pf-panel pf-panel--muted pf-stack pf-stack--tight"
+         <%= pf_attrs_when(live, data: { pf_rule_preview: '', pf_current_user: t('permission_forge.ui.rules.current_user'), pf_empty: '…' }) %>>
       <span class="pf-eyebrow"><%= t('.preview') %></span>
       <% if form.column %>
-        <span><%= pf_rule_text(form.preview_rule, resource.name) %>.</span>
+        <%= pf_rule_sentence(form.preview_rule, resource.name) %>
       <% else %>
         <span class="pf-text-3"><%= t('.preview_empty') %></span>
       <% end %>

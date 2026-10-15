@@ -32,6 +32,7 @@ en:
         expires: Expires
         filter_sets: Filter Permission Sets
         forever: with no end date
+        locked_hint: 'Managed by the system/API: holders can''t be added here.'
         muting_notice: "⊘ Muting. %{sets} takes access away from %{name}, whatever
           their other sets allow."
         no_sets: No Permission Sets match.
@@ -439,6 +440,7 @@ en:
           and rules were copied. Assignments were not. The copy is not in “%{group}”,
           which is locked.'
         no_changes: No changes to save.
+        nothing_applied: 'Nothing to save: %{reasons}.'
         save_failed: 'Nothing was saved: %{errors}'
         saved:
           one: Saved %{count} change. It applies to %{people} now.
@@ -1052,6 +1054,7 @@ en:
         body_nobody: Nobody has this set yet, so saving affects no one until you assign
           it.
         crumb: Review
+        not_applied: 'Not applied:'
         save: Save changes
         title:
           one: Review %{count} change
@@ -1720,6 +1723,8 @@ en:
           the audit table is missing). With audit_events = true and no table, every
           change fails (under the default :raise strategy).
         audit_trail_enabled: No one is recorded as creating or editing records.
+        auto_query_scoping: 'Record rules are in use, but they only apply to find_by
+          and permission_scoped lookups: other queries return every record.'
         conditional_sets_strict_mode: Conditional sets are treated as active when
           request info is missing (fail-open).
         http_basic_auth_enabled: These screens are either locked (password prompt
@@ -1957,6 +1962,9 @@ en:
         flag_off_muting: "%{resource}: %{flag} no longer muted"
         flag_on: "%{resource}: %{flag} allowed"
         flag_on_muting: "%{resource}: %{flag} muted"
+        not_applied_read: "%{resource}: %{flag} not turned on, because Read is off"
+        not_applied_view_all_and_edit: "%{resource}: %{flag} not turned on, because
+          it needs View All and Edit"
         resource_text: "%{resource}: %{attribute} changed"
         set_group: Moved to the group “%{group}”
         set_no_group: Removed from its group

@@ -85,6 +85,26 @@ module PermissionForge
         assert_nil EditableLock.widening_lock(create_permission_set(name: 'Open', is_muting: true), :revoke)
       end
 
+      # b-admin-ui #118: the menu offered end dates the lock then refused.
+      test 'expiry_choices offers only what the lock lets through, in the set\'s direction' do
+        today = Date.new(2026, 10, 15)
+        user = create_user
+        granting = create_permission_set_user(user: user, permission_set: @set,
+                                              expires_at: (today + 14).in_time_zone.end_of_day)
+        all = ExpiryPresets::CHANGE_KEYS
+
+        assert_equal all, EditableLock.expiry_choices(granting, today: today)
+
+        @set.update!(is_editable: false)
+        assert_equal %w[1w], EditableLock.expiry_choices(granting.reload, today: today) # eom: 31 Oct, later
+
+        muting_set = create_permission_set(name: 'Mute', is_muting: true)
+        muting = create_permission_set_user(user: user, permission_set: muting_set,
+                                            expires_at: (today + 14).in_time_zone.end_of_day)
+        muting_set.update!(is_editable: false)
+        assert_equal %w[30d eom never], EditableLock.expiry_choices(muting.reload, today: today)
+      end
+
       test 'ChangeSet skips a move into a locked group' do
         @group.update!(is_editable: false)
 

@@ -32,6 +32,7 @@ sq:
         expires: Skadon
         filter_sets: Filtro Grupet e lejeve
         forever: pa datë përfundimi
+        locked_hint: 'Menaxhohet nga sistemi/API: këtu nuk mund të shtohen mbajtës.'
         muting_notice: "⊘ Heshtës. %{sets} i heq qasjen %{name}, pavarësisht çfarë
           lejojnë grupet e tjera."
         no_sets: Asnjë Grup lejesh nuk përputhet.
@@ -444,6 +445,7 @@ sq:
           veprimet dhe rregullat. Caktimet nuk u kopjuan. Kopja nuk është në “%{group}”,
           që është i kyçur.'
         no_changes: Nuk ka ndryshime për të ruajtur.
+        nothing_applied: 'Asgjë për të ruajtur: %{reasons}.'
         save_failed: 'Asgjë nuk u ruajt: %{errors}'
         saved:
           one: U ruajt %{count} ndryshim. Tani vlen për %{people}.
@@ -1067,6 +1069,7 @@ sq:
         body_nobody: Ende askush nuk e ka këtë grup, prandaj ruajtja nuk prek askënd
           derisa ta caktosh.
         crumb: Rishiko
+        not_applied: 'Nuk u zbatua:'
         save: Ruaj ndryshimet
         title:
           one: Rishiko %{count} ndryshim
@@ -1765,6 +1768,9 @@ sq:
           çaktivizuar, ose tabela e auditimit mungon). Me audit_events = true dhe
           pa tabelë, çdo ndryshim dështon (me strategjinë e parazgjedhur :raise).
         audit_trail_enabled: Askush nuk regjistrohet si krijues ose redaktues i regjistrimeve.
+        auto_query_scoping: 'Rregullat e regjistrimeve janë në përdorim, por zbatohen
+          vetëm te kërkimet find_by dhe permission_scoped: pyetjet e tjera kthejnë
+          çdo regjistrim.'
         conditional_sets_strict_mode: Grupet me kushte trajtohen si aktive kur mungojnë
           informacionet e kërkesës (fail-open).
         http_basic_auth_enabled: Këto ekrane janë ose të bllokuara (kërkesa për fjalëkalim
@@ -2003,6 +2009,10 @@ sq:
         flag_off_muting: "%{resource}: %{flag} nuk heshtet më"
         flag_on: "%{resource}: %{flag} u lejua"
         flag_on_muting: "%{resource}: %{flag} u hesht"
+        not_applied_read: "%{resource}: %{flag} nuk u aktivizua, sepse “Lexo” është
+          i fikur"
+        not_applied_view_all_and_edit: "%{resource}: %{flag} nuk u aktivizua, sepse
+          kërkon “Shiko të gjitha” dhe “Ndrysho”"
         resource_text: "%{resource}: %{attribute} ndryshoi"
         set_group: U zhvendos në grupimin “%{group}”
         set_no_group: U hoq nga grupimi i tij

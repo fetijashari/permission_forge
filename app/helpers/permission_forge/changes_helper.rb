@@ -76,6 +76,13 @@ module PermissionForge
       change.cascaded ? "#{text} #{pf_ui('changes.cascaded')}" : text
     end
 
+    # A flag the request turned on that stays off (ChangeSet#refused):
+    # "Customer: Edit not turned on, because Read is off".
+    def pf_refusal_description(refusal)
+      pf_ui("changes.not_applied_#{refusal.needs}", resource: pf_resource_label(refusal.resource),
+                                                    flag: pf_flag_name(refusal.attribute))
+    end
+
     def pf_flag_name(flag)
       pf_ui("flags_short.#{flag}")
     end
