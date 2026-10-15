@@ -1,5 +1,5 @@
 <% first_name = pf_person(@person).first_name %>
-<% granters = pf_granters(@assignments) %>
+<% creations = pf_audit_creations(@assignments) %>
 <div class="pf-stack pf-stack--loose">
   <div class="pf-card">
     <% if @assignments.empty? %>
@@ -17,7 +17,7 @@
           <% unless set.is_active %>
             <span class="pf-fs-13 pf-text-3">○ <%= t('.set_off') %></span>
           <% end %>
-          <span class="pf-fs-12 pf-text-3"><%= t('.assigned', date: pf_date(assignment.created_at), by: pf_granted_by(assignment, granters)) %></span>
+          <span class="pf-fs-12 pf-text-3"><%= t('.assigned', date: pf_date(assignment.created_at), by: pf_audit_creator(assignment, creations)) %></span>
         </div>
         <div class="pf-assignment__when">
           <%= pf_expiry_tag(assignment.expires_at) %>

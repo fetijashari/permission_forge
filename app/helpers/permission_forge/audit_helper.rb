@@ -79,38 +79,6 @@ module PermissionForge
                                               when: relative ? pf_relative(time) : pf_date(time))
     end
 
-    # "Who · when" of an entry's last edit: the latest change event's actor
-    # and time when there is one, else updated_by / updated_at.
-    def pf_audit_edited(entry)
-      return pf_audit_who_when(entry.updated_by, entry.updated_at, relative: true) unless entry.last_event
-
-      t('permission_forge.ui.audit.who_when', who: pf_audit_actor_name(entry.last_event), when: pf_relative(entry.updated_at))
-    end
-
-    # The record's last edit as an event (who really made it), or nil when
-    # the audit log has none for it or the record was edited after it.
-    # Uses the page's preloaded lookup when it covers the record.
-    def pf_audit_last_change(record)
-      lookup = @pf_last_changes if @pf_last_changes&.covers?(record)
-      (lookup || PermissionForge::Admin::LastChanges.new([record])).last_edit(record)
-    end
-
-    # One lookup for every record whose footer the page shows (two queries
-    # per record type instead of two per footer). Nothing while the audit
-    # trail is off: the footers then say so and ask nothing.
-    def pf_audit_preload_last_changes(records)
-      return unless PermissionForge.configuration.audit_trail_enabled
-
-      @pf_last_changes = PermissionForge::Admin::LastChanges.new(records)
-      nil
-    end
-
-    # [created by, last edited by] names for the audit-trail CSV.
-    def pf_audit_people(entry)
-      edited_by = entry.last_event ? pf_audit_actor_name(entry.last_event) : pf_person_name(entry.updated_by)
-      [pf_person_name(entry.created_by), edited_by]
-    end
-
     # --- audit events ---------------------------------------------------------
 
     # Who acted, as recorded: the name snapshot, with what kind of actor it

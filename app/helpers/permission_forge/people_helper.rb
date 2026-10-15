@@ -91,19 +91,6 @@ module PermissionForge
       @pf_reviewers[id.to_s] = PermissionForge.configuration.user_model.find_by(id: id)
     end
 
-    # Who granted an assignment: the actor of its assignment.granted event
-    # when the audit log has one (an HTTP Basic login or an API client stamps
-    # no created_by), else created_by. `granters` is an Admin::LastChanges
-    # over the assignments of the page (events: %w[assignment.granted]).
-    def pf_granted_by(assignment, granters = nil)
-      event = granters && granters[assignment]
-      event ? pf_audit_actor_name(event) : pf_person_name(assignment.try(:created_by))
-    end
-
-    def pf_granters(assignments)
-      PermissionForge::Admin::LastChanges.new(assignments, events: %w[assignment.granted])
-    end
-
     def pf_stale?(assignment)
       assignment.expires_at.nil? &&
         assignment.last_reviewed_at < PermissionForge.configuration.admin_stale_assignment_days.to_i.days.ago

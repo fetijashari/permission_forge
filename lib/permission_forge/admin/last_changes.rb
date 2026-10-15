@@ -9,11 +9,25 @@ module PermissionForge
     # an edit by nobody, by an HTTP Basic login or by an API client keeps the
     # previous editor — so wherever the admin shows "last edited by", an
     # event wins over the columns (see AuditTrail::Entry and the footer).
+    # The same holds for "created by" (.creations).
     #
     # Two queries per record type and slice: the newest event id per record
     # (the ids grow with every insert), then those events.
     class LastChanges
       SLICE = 500
+
+      # The creation event of each record — its model's `audit_event_name(:create)`:
+      # permission_set.created, assignment.granted, group_membership.added, ... —
+      # read with #[]. Who created a record is that event's actor wherever the
+      # admin shows it (AuditHelper#pf_audit_creator): an HTTP Basic login or an
+      # API client stamps no created_by, and the audit log still names them.
+      #
+      # @param records [Array<ActiveRecord::Base>] permission records
+      # @return [LastChanges]
+      def self.creations(records)
+        records = Array(records).compact
+        new(records, events: records.map { |record| record.class.audit_event_name(:create) }.uniq)
+      end
 
       # @param records [Array<ActiveRecord::Base>] permission records
       # @param events [Array<String>, nil] only these change events (e.g.

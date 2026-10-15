@@ -3,7 +3,7 @@
 <% else %>
 <% first_name = pf_person(@person).first_name %>
 <% total = @changes.values.sum(&:size) %>
-<% granters = pf_granters(@assignments) %>
+<% creations = pf_audit_creations(@assignments.to_a + @groups.to_a) %>
 <div class="pf-stack pf-stack--loose">
   <% unless PermissionForge.configuration.audit_trail_enabled %>
     <div class="pf-banner pf-banner--warn" role="note">
@@ -30,7 +30,7 @@
       <div class="pf-card__row pf-card__row--top">
         <span class="pf-stack pf-stack--tight pf-grow">
           <span><b><%= a.permission_set.name %></b> <span class="pf-fs-12 pf-text-3"><%= t(a.permission_set.is_muting ? '.kind_muting' : '.kind_set') %></span></span>
-          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_granted_by(a, granters), date: pf_date(a.created_at)) %></span>
+          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_audit_creator(a, creations), date: pf_date(a.created_at)) %></span>
           <% if a.try(:reason).present? %><span class="pf-fs-12 pf-text-3"><%= t('permission_forge.audit_log.reason_inline', reason: a.reason) %></span><% end %>
         </span>
         <span class="pf-stack pf-stack--tight pf-fs-12">
@@ -43,7 +43,7 @@
       <div class="pf-card__row">
         <span class="pf-stack pf-stack--tight pf-grow">
           <span><b><%= m.permission_set_group.name %></b> <span class="pf-fs-12 pf-text-3"><%= t('.kind_group') %></span></span>
-          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_person_name(m.try(:created_by)), date: pf_date(m.created_at)) %></span>
+          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_audit_creator(m, creations), date: pf_date(m.created_at)) %></span>
         </span>
       </div>
     <% end %>
@@ -79,7 +79,7 @@
                   <% if where %><span class="pf-fs-12 pf-text-3"><%= where %></span><% end %>
                 </span>
                 <span class="pf-stack pf-stack--tight pf-option__aside">
-                  <span><%= t('.created', value: pf_audit_who_when(entry.created_by, entry.created_at)) %></span>
+                  <span><%= t('.created', value: pf_audit_created(entry)) %></span>
                   <span><%= t('.edited', value: pf_audit_edited(entry)) %></span>
                 </span>
               <% end %>

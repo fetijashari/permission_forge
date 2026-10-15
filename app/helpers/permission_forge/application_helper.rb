@@ -8,6 +8,7 @@ module PermissionForge
     include PermissionForge::AuditSentencesHelper
     include PermissionForge::ChangesHelper
     include PermissionForge::AuditHelper
+    include PermissionForge::AuditAttributionHelper
     include PermissionForge::SettingsHelper
 
     # Sidebar link; the current section gets aria-current="page".

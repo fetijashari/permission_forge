@@ -54,6 +54,13 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Fixed
 
+- **"Created by" names who the audit log names.** A record created by the HTTP Basic admin (or an API client) has
+  no `created_by_id` — the column holds a user id — so the footer said "Created by System" and a Permission Set's
+  Assignments tab "by System", next to "Last edited by admin (password prompt)" and an audit log that named
+  "admin (password prompt)". Footers, the Assignments tab, "Assigned by" (person pages, Home), the audit tabs of the
+  Person and Permission Set pages and their CSV now take the creator from the record's creation event
+  (`permission_set.created`, `assignment.granted`, ...) when the audit log has one, and fall back to `created_by`
+  otherwise. The `created_by_id` / `updated_by_id` columns are unchanged.
 - **Users made by Rails 8's `bin/rails generate authentication` show and are found by their email.** That generator
   names the column `email_address`, and PermissionForge only read `email`: a person without a name column showed as
   "User #2" in the admin, searching people by email found nobody, "Paste emails or names" in bulk assignment reported

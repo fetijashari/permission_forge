@@ -59,7 +59,7 @@ module PermissionForge
 
         def each_batch(assignments)
           assignments.find_in_batches(batch_size: @batch_size) do |batch|
-            granted = LastChanges.new(batch, events: %w[assignment.granted])
+            granted = LastChanges.creations(batch)
             people = people_by_id(batch)
             batch.each { |assignment| yield row(assignment, granted[assignment], people) }
           end

@@ -2,13 +2,14 @@
 
 module PermissionForge
   module Admin
-    # Who created and who last edited each permission record. Creation comes
-    # from created_by / created_at (HasAuditTrail); the last edit from the
-    # record's latest change event when the audit log has one (LastChanges),
-    # else from updated_by / updated_at — an event names the real editor,
-    # while updated_by keeps the previous one across an edit by nobody, an
-    # HTTP Basic login or an API client. The full history is the audit log
-    # (Admin::AuditLog).
+    # Who created and who last edited each permission record. The creator is
+    # the actor of the record's creation event when the audit log has one
+    # (LastChanges.creations), else created_by; the last edit is the record's
+    # latest change event when the log has one (LastChanges), else
+    # updated_by / updated_at. An event names who really acted, while the
+    # columns stamp nobody for an HTTP Basic login or an API client (and
+    # updated_by keeps the previous editor). The full history is the audit
+    # log (Admin::AuditLog).
     class AuditTrail
       TYPES = {
         'permission_set' => 'PermissionForge::PermissionSet',
@@ -26,7 +27,8 @@ module PermissionForge
 
       # `last_event` — the record's latest change event, or nil (no events:
       # auditing off, or the record predates the audit log).
-      Entry = Struct.new(:type, :record, :last_event, keyword_init: true) do
+      # `creation_event` — the record's creation event, or nil (likewise).
+      Entry = Struct.new(:type, :record, :last_event, :creation_event, keyword_init: true) do
         def created_by = record.try(:created_by)
         def updated_by = record.try(:updated_by)
         def created_at = record.created_at
@@ -41,6 +43,13 @@ module PermissionForge
           return updated_by_id&.to_s unless last_event
 
           last_event.actor_id if last_event.actor_type == 'user'
+        end
+
+        # The creator's user id as a String, or nil (not a person, or unknown).
+        def creator_id
+          return created_by_id&.to_s unless creation_event
+
+          creation_event.actor_id if creation_event.actor_type == 'user'
         end
       end
 
@@ -109,7 +118,7 @@ module PermissionForge
 
       # Created it, or made its last edit (by the event when there is one).
       def made_by?(entry, user_id)
-        entry.created_by_id.to_s == user_id.to_s || entry.editor_id == user_id.to_s
+        entry.creator_id == user_id.to_s || entry.editor_id == user_id.to_s
       end
 
       def apply_filters(entries, filters)
@@ -147,14 +156,19 @@ module PermissionForge
         with_people(scope).map { |record| [type, record] }
       end
 
-      # [[type, record], ...] → entries, each with its latest change event.
+      # [[type, record], ...] → entries, each with its latest change event
+      # and its creation event.
       def entries_for(typed_records)
-        last = LastChanges.new(typed_records.map(&:last))
-        typed_records.map { |type, record| Entry.new(type: type, record: record, last_event: last.last_edit(record)) }
+        records = typed_records.map(&:last)
+        last = LastChanges.new(records)
+        created = LastChanges.creations(records)
+        typed_records.map do |type, record|
+          Entry.new(type: type, record: record, last_event: last.last_edit(record), creation_event: created[record])
+        end
       end
 
       def filter_who(entries, who)
-        entries.select { |e| e.created_by_id.to_s == who.to_s || e.editor_id == who.to_s }
+        entries.select { |e| e.creator_id == who.to_s || e.editor_id == who.to_s }
       end
 
       def filter_days(entries, days)

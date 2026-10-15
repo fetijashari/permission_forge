@@ -62,7 +62,7 @@
               <% end %>
               <% if where %><span class="pf-fs-12 pf-text-3"><%= where %></span><% end %>
             </span>
-            <span role="cell" class="pf-fs-13 pf-text-2"><%= pf_audit_who_when(entry.created_by, entry.created_at) %></span>
+            <span role="cell" class="pf-fs-13 pf-text-2"><%= pf_audit_created(entry) %></span>
             <span role="cell" class="pf-fs-13 pf-text-2"><%= pf_audit_edited(entry) %></span>
           </div>
         <% end %>

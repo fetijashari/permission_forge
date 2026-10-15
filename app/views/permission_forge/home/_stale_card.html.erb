@@ -1,5 +1,5 @@
 <% items = @attention.stale %>
-<% granters = pf_granters(items) %>
+<% creations = pf_audit_creations(items) %>
 <section class="pf-card" aria-labelledby="pf-card-stale">
   <div class="pf-card__header">
     <div class="pf-stack pf-stack--tight pf-grow">
@@ -20,7 +20,7 @@
           </div>
           <span class="pf-row pf-row--tight pf-fs-13">
             <%= pf_reviewed(assignment) %>
-            <span class="pf-text-3">· <%= t('.assigned', date: pf_date(assignment.created_at), by: pf_granted_by(assignment, granters)) %></span>
+            <span class="pf-text-3">· <%= t('.assigned', date: pf_date(assignment.created_at), by: pf_audit_creator(assignment, creations)) %></span>
           </span>
         </div>
         <div class="pf-actions">
