@@ -58,19 +58,21 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   although "Not configured · Mutes nothing" and Unchanged are one state. The row now starts on Unchanged (saving it
   still creates no field row), the muting Fields filters drop "Not configured", and the field drawer and "Across all
   Permission Sets" say Unchanged too (`Admin::FieldLevel.unconfigured_level`). A turned-off row keeps its saved
-  choice and its "Turned off · Mutes nothing" badge. Granting sets are unchanged.
+  choice and its "Turned off · Mutes nothing" badge. Granting sets are unchanged. **Opt out:** none (wording and
+  counts only).
 - **"Refresh cached permissions" says when it is needed.** The person page's menu read "Rarely needed: changes
   already apply immediately.", which is wrong with a per-process cache (a memory store) after a change from a
   console, runner or job: the server keeps the old permissions until they expire. It now says that (en, sq, mk).
+  **Opt out:** none (text only).
 - **A rule whose field name is not a column of its model does not save.** `PermissionSetRule` adds "is not a column
   of Customer" on `field_name` (en, sq, mk) when the Resource's model loads and the name is no column of its table —
   along `field_accessor_path` for a join rule — so the JSON API answers its field-keyed 422 instead of 201, and the
   admin shows the message. Checked for a new rule and when the field name, path, join type or resource changes, so an
-  existing row stays editable in its other attributes; skipped when the model cannot be loaded, its table does not
+  existing row stays editable in its other attributes (a stored `'filter'` join type and the admin's nil are one);
+  the table is read again before a name is refused, so a column a migration just added is accepted; skipped when the model cannot be loaded, its table does not
   exist, the path cannot be followed or the name is qualified with a table that is none of the rule's. Copying a
   Permission Set (or a group) copies such a rule as it is: leaving it out would widen the copy. **Opt out:** none — the
   rule could only ever raise (and now matches nothing); write it past the model if you must.
-
 - **Development boot warnings also go to standard error.** The cache warnings were logged before `bin/rails server`
   attaches its console logger (and `bin/rails runner` never does), so they reached `log/development.log` only. In
   development each is now also written to standard error, once per boot — not when the logger already writes to
@@ -284,7 +286,6 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   An RLS policy compiles such a rule to `FALSE` (the sync failed on it); `RlsPolicyGenerator::GENERATOR_VERSION` is 6,
   so run `bin/rails permission_forge:rls:sync` after upgrading. See
   [Using the wrong field name](docs/row-level-rules.md#using-the-wrong-field-name).
-
 - **The console shows the gem's own configuration names.** With `filter_parameters_integration` the GDPR pattern
   `\Aname\z` (meant for people's names) reached the gem's models through `ActiveRecord::Base.filter_attributes`, so
   `#inspect` printed `name: [FILTERED]` for a Permission Set, a Permission Set Group, a Resource, a field, an action

@@ -88,6 +88,21 @@ module PermissionForge
       end
     end
 
+    # Rails 8 copies a model's String / Symbol entries into
+    # config.filter_parameters: AuditEvent sets Regexps only, also for the
+    # host's own :passw-style entries it inherits.
+    test 'AuditEvent sets only Regexps, its inherited Strings and Symbols included' do
+      parent = Class.new(ActiveRecord::Base) { self.abstract_class = true }
+      parent.filter_attributes = [:passw, 'secret', :name]
+      event = Class.new(parent) { def self.name = 'PfInspectEventSymbols' }
+      event.table_name = AuditEvent.table_name
+      InspectionFilters.hide_people_labels(event)
+
+      assert(event.filter_attributes.all?(Regexp), event.filter_attributes.inspect)
+      shown = event.new(actor_label: 'Ana Krasniqi', reason: 'secret-ish').inspect
+      assert_match(/actor_label: \[FILTERED\]/, shown)
+    end
+
     test 'AuditEvent keeps the inherited filters when nothing hides a name' do
       parent = Class.new(ActiveRecord::Base) { self.abstract_class = true }
       parent.filter_attributes = %i[passw]

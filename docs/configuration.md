@@ -884,7 +884,7 @@ Rails.application.config.filter_parameters +=
   (patterns - bare_name) + [/first_name|last_name|full_name|contact_name/, 'user.name', 'customer.name']
 ```
 
-A String with a dot (`'customer.name'`) matches the nested key `customer[name]` only. `PermissionForge.gdpr_filter_parameters` reads `gdpr_field_patterns`, so set those in the `configure` block above it. Masking detection keeps using every pattern.
+A String with a dot (`'customer.name'`) matches the nested key `customer[name]` only. `PermissionForge.gdpr_filter_parameters` reads `gdpr_field_patterns`, so set those in the `configure` block above it. Masking detection keeps using every GDPR pattern (`gdpr_field_patterns`); with the integration off it no longer also reads your own `filter_parameters` (a column only your filters name is not flagged as sensitive in the admin). `rake permission_forge:audit` keeps reporting `log_filtering_off` (low) because the setting is false — it cannot tell your own filtering apart from none, so read that finding as done once the lines above are in place.
 
 ### Caching
 

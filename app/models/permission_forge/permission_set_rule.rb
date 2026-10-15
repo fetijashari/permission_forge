@@ -78,9 +78,6 @@ module PermissionForge
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
-    # What a rule's column is looked up by (Operators::RuleColumn.for_rule).
-    COLUMN_ATTRIBUTES = %w[field_name field_accessor_path join_type resource_id].freeze
-
     # A copy (Services::Clonable) names what its original names. A rule
     # written before its column was checked is copied as it is: it matches
     # nothing, as the original does — leaving it out would widen the copy's
@@ -93,17 +90,32 @@ module PermissionForge
 
     private
 
+    # What the rule names a column by: the name, its path, the join type (nil,
+    # blank and 'filter' are one filter: the admin writes nil) and the model
+    # of its Resource (a copy onto another set's Resource of the same model
+    # names the same column).
     def column_parts
-      [field_name, field_accessor_path, join_type]
+      column_parts_of([field_name, field_accessor_path, join_type, resource&.name])
+    end
+
+    def column_parts_was
+      model_was = resource_id_changed? ? PermissionForge::Resource.unscoped.where(id: resource_id_was).pick(:name) : resource&.name
+      column_parts_of([field_name_was, field_accessor_path_was, join_type_was, model_was])
+    end
+
+    # [name, path, join type, model name], the join type of a filter as nil.
+    def column_parts_of(parts)
+      name, path, join, model = parts
+      [name, path, self.class.filter_join_type?(join) ? nil : join, model]
     end
 
     # On a new rule and when what it names changes: a row that already names
     # a missing column stays editable in its other attributes (it matches
-    # nothing; the audit reports it).
+    # nothing; the audit reports it). A copy onto another model's Resource is checked.
     def column_check_due?
       return false if @copied_column && @copied_column == column_parts
 
-      new_record? || changed.intersect?(COLUMN_ATTRIBUTES)
+      new_record? || column_parts != column_parts_was
     end
 
     # A name the model's table does not have (along the rule's path) would
@@ -114,11 +126,23 @@ module PermissionForge
     def validate_field_name_column
       return if field_name.blank? || errors[:field_name].any?
 
-      target = PermissionForge::Operators::RuleColumn.for_rule(self)
-      return unless target&.missing?
+      target = missing_column_target
+      return unless target
 
       errors.add(:field_name, I18n.t('permission_forge.validations.permission_set_rule.unknown_column',
                                      model: target.model.name, default: 'is not a column of %<model>s'))
+    end
+
+    # The rule's column when it is missing, after reading the table again:
+    # the schema cache may predate a column a migration just added (a running
+    # server, an old process in a rolling deploy).
+    def missing_column_target
+      target = PermissionForge::Operators::RuleColumn.for_rule(self)
+      return unless target&.missing?
+
+      target.model.reset_column_information
+      target = PermissionForge::Operators::RuleColumn.for_rule(self)
+      target if target&.missing?
     end
 
     def valueless_operator?

@@ -114,6 +114,38 @@ module PermissionForge
       assert rule.reload.update(field_name: 'supplier_id')
     end
 
+    # The admin's rule form writes join_type nil for a filter; a legacy row
+    # stored 'filter'. Editing only its message is no change of column.
+    test "a filter rule stored as 'filter' stays editable when the form writes nil" do
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
+      rule.update_columns(field_name: 'onwer_id', join_type: 'filter')
+
+      assert rule.reload.update(join_type: nil, failure_message: 'Only your own'), rule.errors.full_messages.inspect
+    end
+
+    test "a copy moved onto another model's Resource is checked" do
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
+      rule.update_columns(field_name: 'domain')
+      supplier = create_resource(permission_set: @permission_set, name: 'Supplier', read_access: true)
+      copy = rule.reload.dup
+      copy.assign_attributes(uuid: SecureRandom.uuid, resource: supplier)
+
+      assert_not copy.valid?, 'domain is a column of Customer, not of Supplier'
+      assert_equal ['is not a column of Supplier'], copy.errors[:field_name]
+    end
+
+    # A column a migration added after the schema cache was read (a running
+    # server, an old process in a rolling deploy) is found at save.
+    test 'a column added after the schema cache was read is accepted' do
+      Customer.columns_hash # warm the cache
+      ActiveRecord::Base.connection.add_column(:customers, :pf_region, :string)
+
+      assert build_rule(field_name: 'pf_region').valid?
+    ensure
+      ActiveRecord::Base.connection.remove_column(:customers, :pf_region) if Customer.connection.column_exists?(:customers, :pf_region)
+      Customer.reset_column_information
+    end
+
     # --- a rule saved before: it denies, it does not raise ---
 
     test 'a holder of a rule naming a missing column is denied every record, never a 500' do

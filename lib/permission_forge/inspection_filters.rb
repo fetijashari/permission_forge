@@ -51,17 +51,20 @@ module PermissionForge
       inherited = klass.superclass.filter_attributes
       return unless hides?(inherited, 'name')
 
-      klass.filter_attributes = inherited + [/\A(?:#{labels.map { |label| Regexp.escape(label) }.join('|')})\z/]
+      # The inherited entries as Regexps too (sparing nothing): a String or
+      # Symbol here would be copied into config.filter_parameters.
+      klass.filter_attributes = sparing(inherited, []) + [/\A(?:#{labels.map { |label| Regexp.escape(label) }.join('|')})\z/]
     end
 
     # `filters` (a filter_attributes list) with every String, Symbol and
     # Regexp turned into a Regexp that matches what it matched, except the
-    # attribute names `names` themselves. A String or Symbol matches as Rails
-    # reads it: anywhere in the name, ignoring case.
+    # attribute names `names` themselves (none when `names` is empty). A
+    # String or Symbol matches as Rails reads it: anywhere in the name,
+    # ignoring case.
     #
     # @return [Array]
     def sparing(filters, names)
-      guard = "\\A(?!(?:#{names.map { |name| Regexp.escape(name.to_s) }.join('|')})\\z).*?"
+      guard = names.empty? ? '' : "\\A(?!(?:#{names.map { |name| Regexp.escape(name.to_s) }.join('|')})\\z).*?"
       filters.map do |filter|
         case filter
         when Proc then filter
