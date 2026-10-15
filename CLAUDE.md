@@ -67,17 +67,17 @@ bundle exec rake yard:check       # Public API docs floor (CI)
 The host app's User model needs SOMETHING the gem can use to show people in the admin (People list, person pickers, audit). Either of these works (no User model changes required for most apps):
 
 - A `:name` method/column (recommended — typically `"#{first_name} #{last_name}"`), and/or
-- An `:email` method/column, and/or
+- An `:email` method/column — or `:email_address`, the column Rails 8's `bin/rails generate authentication` creates — and/or
 - `:full_name` / `:display_name` / `:first_name` + `:last_name` / `:firstname` + `:lastname` (auto-discovered)
 
-Labels come from `Admin::PersonLabel`: `config.user_label_formatter` if set, else `:name` → `:full_name` → `:display_name` → composed first/last name → `:email` → `User #<id>`. Attribute reads go raw-column-first (`read_attribute_before_type_cast`) to bypass MaskedAttributes; the public reader is only consulted for virtual attributes or blank columns.
+Labels come from `Admin::PersonLabel`: `config.user_label_formatter` if set, else `:name` → `:full_name` → `:display_name` → composed first/last name → the email → `User #<id>`. "The user's email attribute" has one definition, `Admin::PersonLabel::EMAIL_ATTRIBUTES` (`email`, then `email_address`): labels, search, bulk paste matching (every such column the table has), `pf_user_option_label` and the default `profile_builder` (the profile key stays `email`) read it; the generated initializer spells the same two names (a test pins it). Attribute reads go raw-column-first (`read_attribute_before_type_cast`) to bypass MaskedAttributes; the public reader is only consulted for virtual attributes or blank columns.
 
 For full control, configure `config.user_label_formatter`:
 ```ruby
 config.user_label_formatter = ->(u) { "#{u.last_name}, #{u.first_name} <#{u.email}>" }
 ```
 
-The candidate list is built from `config.user_list_resolver` (default `user_model.order(:id)`, schema-agnostic). Search (`Admin::PeopleCandidates`) runs in SQL on whichever of `name email full_name display_name first_name last_name firstname lastname username login` exist; every query word must match some column, so split name columns work. Array-returning resolvers are searched in Ruby by label. Pickers are capped by `config.user_list_limit` (default 500; `nil` disables). The group "Add member" control is still a plain `<select>` (`shared/_user_select`, labels via `pf_user_option_label` with `#<id>`), with a localized hint when the cap trims it.
+The candidate list is built from `config.user_list_resolver` (default `user_model.order(:id)`, schema-agnostic). Search (`Admin::PeopleCandidates`) runs in SQL on whichever of `name email email_address full_name display_name first_name last_name firstname lastname username login` exist; every query word must match some column, so split name columns work. Array-returning resolvers are searched in Ruby by label. Pickers are capped by `config.user_list_limit` (default 500; `nil` disables). The group "Add member" control is still a plain `<select>` (`shared/_user_select`, labels via `pf_user_option_label` with `#<id>`), with a localized hint when the cap trims it.
 
 ### Key Design Decisions
 

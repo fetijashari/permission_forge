@@ -268,12 +268,12 @@ PermissionForge.configure do |config|
   # Which people appear (default: user_model.order(:id)), capped by user_list_limit (500)
   config.user_list_resolver = -> { User.active.order(:last_name, :first_name) }
 
-  # How a person is labelled (default: name, full_name, display_name, first+last, email)
+  # How a person is labelled (default: name, full_name, display_name, first+last, email or email_address)
   config.user_label_formatter = ->(u) { "#{u.first_name} #{u.last_name}" }
 end
 ```
 
-People are searched by `name`, `email`, `full_name`, `display_name`, `first_name`, `last_name`, `firstname`, `lastname`, `username` and `login`, whichever of those columns exist; a query of digits also matches the id.
+People are searched by `name`, `email`, `email_address` (Rails 8's authentication generator), `full_name`, `display_name`, `first_name`, `last_name`, `firstname`, `lastname`, `username` and `login`, whichever of those columns exist; a query of digits also matches the id.
 
 The people list is also the boundary of who can be reached by id: a person `user_list_resolver` leaves out cannot be opened, assigned, added to a group or erased from these screens (404). A set's Assignments tab still lists every holder of the set. With multi-tenancy on and a users table that is not tenant-scoped, scope the resolver to the current tenant's users.
 

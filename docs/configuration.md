@@ -53,7 +53,8 @@ PermissionForge.configure do |config|
   # select appends `#<id>` to keep labels unique).
   #
   # Default: tries name → full_name → display_name → composed
-  # first_name/last_name (or firstname/lastname) → email → `User #<id>`.
+  # first_name/last_name (or firstname/lastname) → email (or email_address,
+  # Rails 8's column) → `User #<id>`.
   # Override for full control:
   #   config.user_label_formatter = ->(u) { "#{u.last_name}, #{u.first_name} <#{u.email}>" }
   config.user_label_formatter = nil
@@ -252,7 +253,7 @@ PermissionForge.configure do |config|
 
   # Profile data cached alongside permissions
   config.profile_builder = ->(user) {
-    { id: user.id, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email) }
+    { id: user.id, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email) || user.try(:email_address) }
   }
 
   # ---------------------------------------------------------------------------
@@ -673,7 +674,7 @@ One entry per option, in the order the admin **Settings** page shows them (its "
 
 #### profile_builder
 
-**Profile details.** The profile details cached with each person's permissions (`permissions_hash[:profile]`). The default and the generated initializer build `{ id:, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email) }`.
+**Profile details.** The profile details cached with each person's permissions (`permissions_hash[:profile]`). The default and the generated initializer build `{ id:, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email) || user.try(:email_address) }` (`email_address` is the column Rails 8's authentication generator creates; the key stays `email`).
 
 Your User model needs no `uuid` column: `uuid` is then `nil`, and `permission_set_granted_by` / `permission_set_granted_updated_by` in `source_permission_sets` hold the granting user's uuid when the user model has one, else its id.
 

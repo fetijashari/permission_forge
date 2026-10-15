@@ -107,7 +107,7 @@ end
 
 > **Do not include `PermissionScopedFindable` in your user model.** Sign-in, session restore, password reset and confirmation run before anyone is signed in, and under `nil_user_strategy = :deny` their lookups find nothing. Scope a user directory with `User.permission_scoped` in its controller.
 >
-> **User model contract:** PermissionForge needs *something* to show for each person in the admin (People list, person picker, audit). It auto-discovers `:name` → `:full_name` → `:display_name` → `first_name`/`last_name` (or `firstname`/`lastname`) → `:email` (any can be a column **or** a Ruby method/virtual attribute), falling back to `User #<id>`. People are searched by whichever of `name`, `email`, `full_name`, `display_name`, `first_name`/`last_name`, `firstname`/`lastname`, `username`, `login` exist as columns.
+> **User model contract:** PermissionForge needs *something* to show for each person in the admin (People list, person picker, audit). It auto-discovers `:name` → `:full_name` → `:display_name` → `first_name`/`last_name` (or `firstname`/`lastname`) → `:email` or `:email_address`, the column Rails 8's `bin/rails generate authentication` creates (any can be a column **or** a Ruby method/virtual attribute), falling back to `User #<id>`. People are searched by whichever of `name`, `email`, `email_address`, `full_name`, `display_name`, `first_name`/`last_name`, `firstname`/`lastname`, `username`, `login` exist as columns.
 >
 > If the defaults don't fit, override `config.user_label_formatter` and/or `config.user_list_resolver` — see [Configuration](./configuration.md).
 
