@@ -50,9 +50,15 @@
         </span>
       </div>
       <div class="pf-actions">
-        <%= pf_modal_link t('.fix'), permission_forge.permission_set_resource_field_path(finding.permission_set, resource.name, finding.name),
-                          kind: 'drawer', class: 'pf-btn pf-btn--sm' %>
-        <% if can_ack && !finding.unconfigured? && !pf_locked_record?(finding.field) %>
+        <% field_path = permission_forge.permission_set_resource_field_path(finding.permission_set, resource.name, finding.name) %>
+        <%# A locked set refuses every change to its fields (the drawer is read-only): no Fix, no "This is intended". %>
+        <% if finding.locked? %>
+          <%= pf_lock_badge %>
+          <%= pf_modal_link t('.view'), field_path, kind: 'drawer', class: 'pf-btn pf-btn--ghost' %>
+        <% else %>
+          <%= pf_modal_link t('.fix'), field_path, kind: 'drawer', class: 'pf-btn pf-btn--sm' %>
+        <% end %>
+        <% if can_ack && !finding.unconfigured? && !finding.locked? %>
           <%= form_with url: permission_forge.acknowledge_permission_set_resource_field_path(finding.permission_set, resource.name, finding.name),
                         method: :post, class: 'pf-reason-form' do %>
             <input type="hidden" name="return_to" value="<%= permission_forge.root_path %>">

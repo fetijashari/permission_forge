@@ -21,10 +21,16 @@
     <dl class="pf-card__body pf-kv">
       <dt><%= t('.actor') %></dt>
       <dd>
+        <% unknown = pf_audit_unknown_actor?(event) %>
         <span class="pf-fw-600"><%= pf_audit_actor_name(event) %></span>
-        <span class="pf-text-3">· <%= pf_audit_actor_type_label(event.actor_type) %><% if d.actor_id? %> · <%= t('.id', id: event.actor_id) %><% end %></span>
+        <%# An unknown actor's name is its type already: "Unknown · Unknown" said nothing twice. %>
+        <% unless unknown %>
+          <span class="pf-text-3">· <%= pf_audit_actor_type_label(event.actor_type) %><% if d.actor_id? %> · <%= t('.id', id: event.actor_id) %><% end %></span>
+        <% end %>
+        <% if unknown %><p class="pf-fs-13 pf-text-2"><%= pf_audit_unknown_actor_hint %></p><% end %>
         <div class="pf-row pf-row--tight pf-fs-12">
-          <%= link_to t('.all_by_actor'), pf_audit_log_path(actor_type: event.actor_type, actor_id: event.actor_id) %>
+          <%# With no actor named, the link lists every event without one, and says so. %>
+          <%= link_to (unknown ? t('.all_unknown_actor') : t('.all_by_actor')), pf_audit_log_path(actor_type: event.actor_type, actor_id: event.actor_id) %>
           <% if d.actor_user %>· <%= link_to t('.open_person'), permission_forge.person_path(d.actor_user) %><% end %>
         </div>
       </dd>

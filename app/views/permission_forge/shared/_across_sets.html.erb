@@ -7,7 +7,9 @@
     <% rows.each do |row| %>
       <% set = row[:set] %>
       <% field = row[:field] %>
-      <% level = field && PermissionForge::Admin::FieldLevel.level_of(field, muting: set.is_muting) %>
+      <% level_model = PermissionForge::Admin::FieldLevel %>
+      <%# No row: a Muting Permission Set is on Unchanged (it mutes nothing), as on its Fields tab. %>
+      <% level = field ? level_model.level_of(field, muting: set.is_muting) : level_model.unconfigured_level(muting: set.is_muting) %>
       <%= link_to permission_forge.permission_set_resource_field_path(set, row[:resource].name, key),
                   class: 'pf-option', 'aria-current': (local_assigns[:current_set] == set ? 'true' : nil) do %>
         <span class="pf-option__main">

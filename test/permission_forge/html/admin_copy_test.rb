@@ -47,13 +47,15 @@ module PermissionForge
 
       # b-admin-ui #33: in a Muting Permission Set a field without a setting takes nothing away;
       # "Blocked by default" (unconfigured_field_strategy) is what a granting set does.
+      # Round 3 (b #38): it is on Unchanged, the one name of "mutes nothing" (no second badge).
       test 'an unconfigured field of a Muting Permission Set says it mutes nothing, not blocked by default' do
-        set, = muting_set_with_customer
+        set, resource = muting_set_with_customer
         get pf("/permission_sets/#{set.id}/resources/Customer"), params: { locale: 'en' }
 
         assert_response :success
+        assert_select "input[type=radio][name='pf[new_fields][#{resource.id}][email][level]'][value=leave][checked]", 1
         not_muted = t('resources.fields_tab.not_configured', behaviour: t('resources.fields_tab.mutes_nothing'))
-        assert_select '.pf-badge', text: not_muted, minimum: 1
+        assert_select '.pf-badge', text: not_muted, count: 0
         assert_select "a.pf-badge[href*='unconfigured_field_strategy']", count: 0
         assert_not_includes body, t('ui.unconfigured.block')
       end

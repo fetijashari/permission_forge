@@ -29,6 +29,13 @@ module PermissionForge
         muting ? MUTING.keys : GRANTING.keys
       end
 
+      # The level of a column with no setting: Unchanged in a Muting
+      # Permission Set (it mutes nothing: one state, one name), none in a
+      # granting one (unconfigured_field_strategy decides, and the row says so).
+      def unconfigured_level(muting:)
+        muting ? 'leave' : nil
+      end
+
       def flags_for(level, muting:)
         (muting ? MUTING : GRANTING).fetch(level.to_s) { raise ArgumentError, "Unknown field level: #{level.inspect}" }
       end

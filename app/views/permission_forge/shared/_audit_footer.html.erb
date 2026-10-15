@@ -13,8 +13,7 @@
     <% end %>
     <%# "Unknown" is the audit log's own name for an event with no actor; say where it comes from. %>
     <% if pf_audit_unknown_actor?(last_event) || pf_audit_unknown_actor?(pf_audit_creation_event(record, creations)) %>
-      <span class="pf-audit-footer__hint"><%= t('.unknown_hint_html', unknown: pf_audit_actor_type_label('unknown'),
-                                                                               method: tag.code('PermissionForge.with_audit_actor')) %></span>
+      <span class="pf-audit-footer__hint"><%= pf_audit_unknown_actor_hint %></span>
     <% end %>
   <% else %>
     <%= t('.disabled') %> <%= pf_setting_link('audit_trail_enabled') %>

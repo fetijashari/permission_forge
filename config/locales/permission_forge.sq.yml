@@ -124,6 +124,7 @@ sq:
         all_for_record: Të gjitha ngjarjet e këtij regjistrimi
         all_for_set: Të gjitha ngjarjet e këtij Grupi lejesh
         all_in_action: Të gjitha ngjarjet e këtij veprimi
+        all_unknown_actor: Të gjitha ngjarjet pa aktor të njohur
         attribute: Atributi
         before: Para
         changes: Para dhe pas
@@ -576,6 +577,7 @@ sq:
         unmasked:
           one: "%{count} fushë e ndjeshme shfaqet pa maskim"
           other: "%{count} fusha të ndjeshme shfaqen pa maskim"
+        view: Shiko fushën
         where: "%{resource} · Lexohet pa maskim në “%{set}” · %{people}"
         where_turned_off: "%{resource} · Cilësimi në “%{set}” është i çaktivizuar,
           prandaj fusha kalon pa maskim · %{people}"
@@ -791,7 +793,9 @@ sq:
               dhe pastron emrin nga regjistri i auditimit.
             title: Fshirja e të dhënave të subjektit…
           refresh:
-            desc: 'Rrallë nevojitet: ndryshimet vlejnë tashmë menjëherë.'
+            desc: 'Nevojitet pas një ndryshimi nga konsola, një runner ose një punë
+              në sfond nëse cache-i është për proces (memory store): ky server i mban
+              lejet e vjetra derisa të skadojnë.'
             title: Rifresko lejet e ruajtura
           remove_all:
             desc: 'Largim nga puna: heq çdo caktim.'
@@ -1202,6 +1206,7 @@ sq:
         flags_muting_note: Në grupet heshtëse këta flamuj do të thonë “hiq”.
         impact: Ruajtja vlen menjëherë për %{people}.
         label: Etiketa
+        locked_impact: E kyçur, kështu që asgjë këtu nuk mund të ruhet.
         mask_strategy: Strategjia e maskimit
         muting_note: Ky është Grup lejesh heshtës. Zgjedhjet këtu heqin qasje.
         no_rules: Asnjë rregull në këtë grup nuk filtron sipas kësaj fushe.
