@@ -18,6 +18,11 @@ module PermissionForge
         def turned_off? = !field.nil? && !field.is_active
         def implicit_grant? = implicit_grant == true
         def name = field&.name || column
+
+        # Masking, acknowledging or adding the field changes what the locked
+        # field, Resource or Permission Set holds: refused (EditableLock), so
+        # Home offers neither "Fix" nor "This is intended" for it.
+        def locked? = !EditableLock.locked_record(field, resource).nil?
       end
 
       TidyFinding = Struct.new(:permission_set, :kind, :people_count, keyword_init: true) do

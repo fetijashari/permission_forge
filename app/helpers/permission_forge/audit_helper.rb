@@ -99,6 +99,13 @@ module PermissionForge
       !event.nil? && event.actor_type.to_s == 'unknown' && event.actor_label.blank?
     end
 
+    # Where "Unknown" comes from, said the same way wherever it shows (the
+    # record footer, the event page).
+    def pf_audit_unknown_actor_hint
+      t('permission_forge.shared.audit_footer.unknown_hint_html', unknown: pf_audit_actor_type_label('unknown'),
+                                                                  method: tag.code('PermissionForge.with_audit_actor'))
+    end
+
     def pf_audit_actor_type_label(type)
       t("permission_forge.audit_log.actor_types.#{type}", default: type.to_s.humanize)
     end

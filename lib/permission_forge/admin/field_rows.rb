@@ -25,7 +25,10 @@ module PermissionForge
       end
 
       GRANTING_FILTERS = %w[all hidden masked read edit sensitive unconfigured].freeze
-      MUTING_FILTERS = %w[all leave mask hide sensitive unconfigured].freeze
+      # No "Not configured" here: in a Muting Permission Set a column with no
+      # setting mutes nothing, which is what Unchanged means — one state, one
+      # name (its row starts on Unchanged, and saving it creates no row).
+      MUTING_FILTERS = %w[all leave mask hide sensitive].freeze
 
       attr_reader :resource, :model
 
@@ -107,9 +110,10 @@ module PermissionForge
       end
 
       def unconfigured_rows
+        level = FieldLevel.unconfigured_level(muting: @muting)
         new_columns.map do |name|
           Row.new(name: name, label: human(name), field: nil, match: @sensitive.match(name), virtual: virtual?(name),
-                  missing: false, level: nil, declared: declared?(name), implicit_grant: implicit_grant?(name))
+                  missing: false, level: level, declared: declared?(name), implicit_grant: implicit_grant?(name))
         end
       end
 

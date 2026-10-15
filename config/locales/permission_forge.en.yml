@@ -121,6 +121,7 @@ en:
         all_for_record: All events of this record
         all_for_set: All events of this Permission Set
         all_in_action: All events of this action
+        all_unknown_actor: All events with no known actor
         attribute: Attribute
         before: Before
         changes: Before and after
@@ -570,6 +571,7 @@ en:
         unmasked:
           one: "%{count} sensitive field shown unmasked"
           other: "%{count} sensitive fields shown unmasked"
+        view: View field
         where: "%{resource} · Readable unmasked in “%{set}” · %{people}"
         where_turned_off: "%{resource} · Its setting in “%{set}” is turned off, so
           it passes through unmasked · %{people}"
@@ -780,7 +782,9 @@ en:
               tenant and clears their name from the audit log.
             title: Data subject erasure…
           refresh:
-            desc: 'Rarely needed: changes already apply immediately.'
+            desc: 'Needed after a change from a console, runner or job if the cache
+              is per process (a memory store): this server keeps the old permissions
+              until they expire.'
             title: Refresh cached permissions
           remove_all:
             desc: 'Offboarding: removes every assignment.'
@@ -1183,6 +1187,7 @@ en:
         flags_muting_note: In muting sets these flags mean “remove”.
         impact: Saving applies to %{people} immediately.
         label: Label
+        locked_impact: Locked, so nothing here can be saved.
         mask_strategy: Mask strategy
         muting_note: This is a Muting Permission Set. Choices here take access away.
         no_rules: No rules in this set filter on this field.

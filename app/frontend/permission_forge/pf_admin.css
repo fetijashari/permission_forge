@@ -425,9 +425,20 @@
 .pf-table--sets { min-width: 560px; }
 .pf-table--sets .pf-table__head, .pf-table--sets .pf-table__row { grid-template-columns: minmax(0, 2fr) 56px 76px minmax(0, .8fr) auto; }
 .pf-table--assignments { min-width: 640px; }
-.pf-table--assignments .pf-table__head, .pf-table--assignments .pf-table__row { grid-template-columns: 24px minmax(0, 1.5fr) minmax(0, 1.2fr) minmax(0, 1fr) auto; }
+.pf-table--assignments .pf-table__head, .pf-table--assignments .pf-table__row { grid-template-columns: auto minmax(0, 1.5fr) minmax(0, 1.2fr) minmax(0, 1fr) auto; }
 .pf-table--audit { min-width: 640px; }
 .pf-table--audit .pf-table__head, .pf-table--audit .pf-table__row { grid-template-columns: 110px minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); }
+/* A table with an `auto` column (sized by its content) shares one grid between
+   its head and rows: each row on its own grid would size that column to its own
+   content, and the headers would drift off their cells. The edge tracks are
+   `auto` or `fr` (never a fixed width): a subgrid adds its padding to them. */
+@supports (grid-template-columns: subgrid) {
+  .pf-table--sets, .pf-table--assignments { display: grid; column-gap: 12px; }
+  .pf-table--sets { grid-template-columns: minmax(0, 2fr) 56px 76px minmax(0, .8fr) auto; }
+  .pf-table--assignments { grid-template-columns: auto minmax(0, 1.5fr) minmax(0, 1.2fr) minmax(0, 1fr) fit-content(40%); }
+  .pf-table--sets > .pf-table__head, .pf-table--sets > .pf-table__row,
+  .pf-table--assignments > .pf-table__head, .pf-table--assignments > .pf-table__row { grid-column: 1 / -1; grid-template-columns: subgrid; }
+}
 .pf-cell-person { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .pf-avatar { display: inline-grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 999px; background: var(--pf-surface-2); border: 1px solid var(--pf-border); font-size: 11px; font-weight: 600; color: var(--pf-text-2); }
 .pf-avatar--sm { width: 28px; height: 28px; flex-basis: 28px; }
@@ -516,6 +527,10 @@
 .pf-root a.pf-fields__name:hover .pf-fields__label { text-decoration: underline; }
 .pf-fields__label { font-weight: 500; }
 .pf-mask-preview { font-size: 12px; color: var(--pf-mask); font-family: var(--pf-mono); white-space: nowrap; }
+/* The level control and, under it, the mask preview: the control alone sets the
+   width (the preview's own width does not count), so controls line up across rows. */
+.pf-fields__level { display: flex; flex-direction: column; align-items: stretch; gap: 2px; max-width: 100%; }
+.pf-fields__level > .pf-mask-preview { contain: inline-size; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .pf-bulk-bar { position: sticky; top: 8px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border-radius: var(--pf-radius); background: var(--pf-text); color: var(--pf-surface); box-shadow: var(--pf-shadow); }
 .pf-bulk-bar .pf-btn { background: transparent; color: var(--pf-surface) !important; border-color: rgba(127, 127, 127, .55); }
 .pf-bulk-bar .pf-btn:hover { background: rgba(127, 127, 127, .25); }

@@ -15,7 +15,8 @@
       when it picks the default button (webkit.org/b/247545) and would apply the recommendation. %>
   <% unless locked %><button type="submit" class="pf-sr-only" tabindex="-1" aria-hidden="true"><%= t('.save') %></button><% end %>
   <% footer = capture do %>
-    <span class="pf-sheet__footer-note"><%= t('.impact', people: pf_people_text(d.people_count)) %></span>
+    <%# Nothing can be saved while locked: say so instead of what saving would do. %>
+    <span class="pf-sheet__footer-note"><%= locked ? t('.locked_impact') : t('.impact', people: pf_people_text(d.people_count)) %></span>
     <%= link_to t('permission_forge.ui.close'), resource_path, class: 'pf-btn', data: { pf_close: true } %>
     <% unless locked %><button type="submit" class="pf-btn pf-btn--primary"><%= t('.save') %></button><% end %>
   <% end %>

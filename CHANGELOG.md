@@ -49,6 +49,16 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Changed
 
+- **A Muting Permission Set's column with no setting is "Unchanged" in the admin.** Its Fields tab counted such
+  columns under "Not configured" next to an "Unchanged 0" chip, and their level control had no segment selected,
+  although "Not configured · Mutes nothing" and Unchanged are one state. The row now starts on Unchanged (saving it
+  still creates no field row), the muting Fields filters drop "Not configured", and the field drawer and "Across all
+  Permission Sets" say Unchanged too (`Admin::FieldLevel.unconfigured_level`). A turned-off row keeps its saved
+  choice and its "Turned off · Mutes nothing" badge. Granting sets are unchanged.
+- **"Refresh cached permissions" says when it is needed.** The person page's menu read "Rarely needed: changes
+  already apply immediately.", which is wrong with a per-process cache (a memory store) after a change from a
+  console, runner or job: the server keeps the old permissions until they expire. It now says that (en, sq, mk).
+
 - **Development boot warnings also go to standard error.** The cache warnings were logged before `bin/rails server`
   attaches its console logger (and `bin/rails runner` never does), so they reached `log/development.log` only. In
   development each is now also written to standard error, once per boot — not when the logger already writes to
@@ -216,6 +226,22 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   warning once per process through `PermissionForge.deprecator`; once it is set, `@admin` is ignored. Removed in 0.16.
 
 ### Fixed
+
+- **The Assignments grid's column headers line up with their cells.** Each row was its own grid, so the
+  content-sized actions column took a different width in the header (empty) than in the rows, and "Until 14 Nov"
+  sat under "Assigned". The Assignments and Permission Sets tables now share one grid between head and rows
+  (CSS subgrid); at phone width the end-date menu, "Reason" and "Remove" wrap inside their cell.
+- **Home's privacy audit no longer offers "Fix" for a field of a locked Permission Set.** The field drawer refuses
+  every change to a locked set's (or Resource's, or field's) fields, including a mask, so "Fix" opened a drawer with
+  nothing to do and "This is intended" was offered when only the set was locked. Such a finding now shows the Locked
+  badge and a "View field" link (`AttentionItems::SensitiveFinding#locked?`, by `Admin::EditableLock`), and the
+  drawer of a locked field says "Locked, so nothing here can be saved." instead of "Saving applies to … immediately."
+- **The Fields grid's level controls line up across rows.** A masked row's strategy preview ("Email · j***@acme.com")
+  was a cell of its own that pushed its level control left, and at 600px wrapped "Details ›" onto its own line. The
+  preview now sits under the level control, no wider than it.
+- **The audit event page explains an unknown actor.** An event with no actor read "Unknown · Unknown" with an "All
+  events by this actor" link. It now names Unknown once, gives the same explanation as the record footer (no actor
+  was named; `PermissionForge.with_audit_actor`), and the link reads "All events with no known actor".
 
 - **A response key two fields map to reads by the stricter of them.** With custom `field_variant_mappings` that send
   two fields to one name (`supplier_id` and `supplier_ref` both to `supplier_key`) and a model without that name,
