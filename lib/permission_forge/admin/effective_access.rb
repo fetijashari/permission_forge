@@ -23,14 +23,14 @@ module PermissionForge
         def blocked? = state == :blocked
       end
 
-      # `implicit` — no set configures the field for this outcome: it is a
-      # declared virtual field on the implicit read + edit grant
-      # (extra_fields_default_access = :grant).
       # What one Permission Set does to a field: its most open level (a
       # granting set: masked, read or edit, with that row's mask strategy) or
       # what it takes away (a muting set: mask or hide) — Admin::FieldLevel names.
       FieldSource = Struct.new(:permission_set, :level, :mask_strategy, keyword_init: true)
 
+      # `implicit` — no set configures the field for this outcome: it is a
+      # declared virtual field on the implicit read + edit grant
+      # (extra_fields_default_access = :grant).
       # `grants` / `mutes` — the FieldSources behind granted_by / blocked_by, same order.
       FieldOutcome = Struct.new(:name, :level, :mask_strategy, :granted_by, :blocked_by, :blocked_level,
                                 :capped, :unconfigured, :virtual, :variant_of, :implicit, :grants, :mutes,

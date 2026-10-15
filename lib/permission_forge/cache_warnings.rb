@@ -20,10 +20,11 @@ module PermissionForge
   # instead (MaskingSync.database_recheck?); elsewhere a model first named in
   # another process stays unmasked here until a restart.
   #
-  # In development each warning is also written to standard error — the
-  # boot logs before `bin/rails server` attaches its console logger, and
-  # `bin/rails runner` never does — unless the logger already writes there
-  # or a generator runs.
+  # In development the stale-permissions warning is also written to
+  # standard error — the boot logs before `bin/rails server` attaches its
+  # console logger, and `bin/rails runner` never does — unless the logger
+  # already writes there or a generator runs. The development masking
+  # warning stays in the log: development re-reads the names itself.
   #
   # @api private
   module CacheWarnings
@@ -70,7 +71,8 @@ module PermissionForge
     def warn_in_development(config)
       cache = PermissionForge.cache
       development_warning(stale_permissions_warning(config)) if cache.process_local?
-      development_warning(development_masking_warning(config, cache)) if unannounced_masking?(cache)
+      # Development handles it (the database re-read): the log only, not the terminal.
+      Rails.logger&.warn(development_masking_warning(config, cache)) if unannounced_masking?(cache)
     end
 
     def stale_permissions_warning(config)

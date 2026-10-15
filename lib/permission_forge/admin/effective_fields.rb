@@ -17,6 +17,8 @@ module PermissionForge
       # What FiltersResponseAttributes does with a column no set mentions
       # (any other strategy hides it).
       UNCONFIGURED_LEVELS = { 'pass_through' => 'read', 'warn' => 'read', 'mask_all' => 'masked' }.freeze
+      # What a muting set does to a field, most first (FieldSource#level).
+      MUTING_ORDER = %w[hide no_edit mask].freeze
 
       # @param sources [EffectiveAccess::ResourceSources]
       def initialize(sources, configuration:, catalog:)
@@ -126,7 +128,13 @@ module PermissionForge
         entry[:read_access] = false if field.read_access
         entry[:edit_access] = false if field.read_access || field.edit_access
         entry[:mask_access] = true if field.mask_access
-        (entry[:mutes] ||= []) << [permission_set, level]
+        (entry[:mutes] ||= []) << [permission_set, mute_provenance(field, level)]
+      end
+
+      # A row that mutes edit but not read (API / console only) takes away
+      # editing; the field stays readable.
+      def mute_provenance(field, level)
+        level == 'hide' && !field.read_access ? 'no_edit' : level
       end
 
       def field_outcome(name, virtual)
@@ -149,8 +157,8 @@ module PermissionForge
         { level: capped ? 'read' : level, capped: capped }
       end
 
-      # One FieldSource per muting set; a set that both masks and hides the
-      # field (its own row, and Read muted on the resource) hides it.
+      # One FieldSource per muting set at the most it takes away: hide, then
+      # no_edit (edit muted, read kept), then mask.
       def muting_attrs(entry)
         sources = muting_sources(entry)
         { blocked_by: sources.map(&:permission_set), blocked_level: entry[:mutes]&.last&.last, mutes: sources }
@@ -161,7 +169,7 @@ module PermissionForge
       end
 
       def muting_source(permission_set, levels)
-        FieldSource.new(permission_set: permission_set, level: levels.include?('hide') ? 'hide' : 'mask')
+        FieldSource.new(permission_set: permission_set, level: MUTING_ORDER.find { |level| levels.include?(level) } || 'mask')
       end
 
       # The sets that make the field readable, one FieldSource each at its

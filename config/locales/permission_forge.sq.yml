@@ -2113,6 +2113,7 @@ sq:
         hide: "%{set} e fsheh këtë fushë."
         mask: "%{set} e detyron maskimin e kësaj fushe."
         masked: "%{set} e shfaq këtë fushë të maskuar (%{strategy})."
+        no_edit: "%{set} heq mundësinë e ndryshimit të kësaj fushe."
         read: "%{set} e shfaq këtë fushë vetëm për lexim."
       levels:
         edit: I ndryshueshëm

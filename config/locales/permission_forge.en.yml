@@ -2065,6 +2065,7 @@ en:
         hide: "%{set} hides this field."
         mask: "%{set} forces this field masked."
         masked: "%{set} shows this field masked (%{strategy})."
+        no_edit: "%{set} stops people editing this field."
         read: "%{set} shows this field read-only."
       levels:
         edit: Editable

@@ -42,21 +42,22 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   but `PATCH`/`POST …/permission_sets` read `permission_set_group_id` only as a numeric id: the group's uuid was a 422.
   Under `:uuid` it now takes the uuid or the id; under `:id`, the id. The value is looked up in the current tenant
   like every identifier (see Fixed for a uuid that starts with digits).
+- **Cross-set unmasking findings name the masking sets too.** `GdprFieldAuditor`'s `:cross_set_unmasking` finding
+  gains `masked_in` (the names of the granting Permission Sets that mask the field), `rake permission_forge:audit_masks`
+  prints them ("masked in Permission Set Support") and `rake permission_forge:audit` lists them in parentheses after
+  the set that unmasks. The other keys are unchanged.
 
 ### Changed
 
 - **Development boot warnings also go to standard error.** The cache warnings were logged before `bin/rails server`
   attaches its console logger (and `bin/rails runner` never does), so they reached `log/development.log` only. In
   development each is now also written to standard error, once per boot — not when the logger already writes to
-  standard output or error, not while `bin/rails generate` / `destroy` runs, and never in another environment.
+  standard output or error, not while `bin/rails generate` / `destroy` runs, and never in another environment. The
+  development masking warning stays in the log (development re-reads the Resource names itself). **Opt out:** none;
+  log to standard output (`RAILS_LOG_TO_STDOUT`) to see each warning once.
 - **`rails -T` descriptions.** `permission_forge:audit` no longer says "Read-only": it changes no permission data and
   records the run in the audit log (`report.generated`). `permission_forge:cache:clear` says what it does first; the
-  upgrade hint for 0.13 installs comes last.
-- **Cross-set unmasking findings name the masking sets too.** `GdprFieldAuditor`'s `:cross_set_unmasking` finding
-  gains `masked_in` (the names of the granting Permission Sets that mask the field), `rake permission_forge:audit_masks`
-  prints them ("masked in Permission Set Support") and `rake permission_forge:audit` lists them in parentheses after
-  the set that unmasks. The other keys are unchanged.
-
+  upgrade hint for 0.13 installs comes last. **Opt out:** none (text only).
 - **Full access applies no personal-data masks.** `ResourceFieldGenerator.call(grant_all: true)`, and through it
   `Resource.grant_full_access!`, `Services::ResourceWithFieldsBuilder` and the admin API's `generate_fields` with
   `grant_all`, now create every field readable and editable in the clear, also the columns that match

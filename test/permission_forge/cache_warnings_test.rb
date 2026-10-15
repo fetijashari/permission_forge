@@ -92,11 +92,13 @@ module PermissionForge
 
     # The boot logs before `bin/rails server` attaches its console logger,
     # and `bin/rails runner` never does: the warning was in log/development.log only.
-    test 'development writes each warning to standard error as well, once' do
-      boot_log(env: 'development', backend: :memory)
+    # The masking warning stays in the log: development re-reads the names itself.
+    test 'development writes the stale-permissions warning to standard error as well, once' do
+      log = boot_log(env: 'development', backend: :memory)
 
       assert_equal 1, @stderr.scan(DEVELOPMENT_WARNING).size, @stderr
-      assert_equal 1, @stderr.scan(MASKING_WARNING).size, @stderr
+      assert_equal 0, @stderr.scan(MASKING_WARNING).size, @stderr
+      assert_match MASKING_WARNING, log
     end
 
     test 'nothing on standard error when the logger already writes there' do

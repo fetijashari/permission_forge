@@ -81,6 +81,22 @@ module PermissionForge
         assert_equal([[contractors, 'hide']], field('email').mutes.map { |s| [s.permission_set, s.level] })
       end
 
+      # A muting row with Edit only (API / console) takes editing away, not
+      # the field: the WHY panel must not say it hides it.
+      test 'a muting row that mutes only edit is no_edit and leaves the field readable' do
+        contractors = create_permission_set(name: 'Contractors', is_muting: true)
+        muted = create_resource(permission_set: contractors, read_access: false, edit_access: false)
+        create_resource_field(resource: muted, name: 'email', read_access: false, edit_access: true)
+        create_permission_set_user(user: @user, permission_set: contractors)
+
+        email = field('email')
+
+        assert_equal([[contractors, 'no_edit']], email.mutes.map { |s| [s.permission_set, s.level] })
+        assert_predicate email, :visible?
+        assert_equal 'Contractors stops people editing this field.',
+                     I18n.t('permission_forge.ui.level_sentences.no_edit', set: 'Contractors')
+      end
+
       test 'expired assignments and inactive sets give nothing' do
         other = create_user
         old = create_permission_set(name: 'Old')

@@ -39,8 +39,10 @@ module PermissionForge
     # The entries of the configured fields by the names of their variants
     # (`owner_uuid` → the `owner_id` entry), to read a name that has no entry
     # of its own. A name two fields map to (custom field_variant_mappings)
-    # gets the strictest of their entries (.strictest): a variant is never
-    # more readable than any of its bases.
+    # gets the strictest of their entries (.strictest): such a key is never
+    # more readable than any of its bases. This covers names the model does
+    # not have (serializer keys); a variant the model has gets its entry from
+    # FieldPermissionMerger, which merges every base row like any granting row.
     #
     # @param fields [Hash] a resource's field entries, by name
     # @return [Hash{String => Hash}]
