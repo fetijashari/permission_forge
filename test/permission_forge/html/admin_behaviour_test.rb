@@ -165,6 +165,39 @@ module PermissionForge
         assert_equal PermissionForge::Admin::ExpiryPresets::CHANGE_KEYS, end_date_options("pf-sexp-#{@assignment.id}")
       end
 
+      def extend_form(assignment)
+        "form[action='#{pf("/assignments/#{assignment.id}")}'] input[name=expiry][value=extend30]"
+      end
+
+      test 'Home offers "Extend 30 days" only where the lock lets it through, and says Locked where not' do
+        @assignment.update_columns(expires_at: 3.days.from_now.end_of_day)
+        muting_set = create_permission_set(name: 'No exports', is_muting: true)
+        muted = create_permission_set_user(user: @bo, permission_set: muting_set, expires_at: 3.days.from_now.end_of_day)
+        get pf('/'), params: { locale: 'en' }
+        assert_select extend_form(@assignment), count: 1
+
+        @set.update_columns(is_editable: false)
+        muting_set.update_columns(is_editable: false)
+        get pf('/'), params: { locale: 'en' }
+
+        assert_select extend_form(@assignment), count: 0
+        assert_select '.pf-card__row', text: /Ana Krasniqi/ do
+          assert_select '.pf-badge', text: /#{t('ui.badges.locked')}/
+        end
+        assert_select extend_form(muted), count: 1, message: 'extending a Muting Permission Set narrows access'
+      end
+
+      test 'a crafted "Extend 30 days" on a locked granting set is still refused' do
+        ends = 3.days.from_now.end_of_day.floor(6)
+        @assignment.update_columns(expires_at: ends)
+        @set.update_columns(is_editable: false)
+
+        patch pf("/assignments/#{@assignment.id}"), params: { expiry: 'extend30', return_to: pf('/') }
+
+        assert_equal t('flash.locked_widening'), flash[:alert]
+        assert_equal ends, @assignment.reload.expires_at
+      end
+
       test 'the Assign drawer lists a locked granting set as locked, not hidden, and cannot assign it' do
         @set.update_columns(is_editable: false)
         open_set = create_permission_set(name: 'Support')

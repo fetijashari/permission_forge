@@ -249,15 +249,7 @@ module PermissionForge
 
     # :invalid for a blank or unknown key (CHANGE_KEYS has no blank entry).
     def new_expiry(key)
-      return extended_expiry if key == 'extend30'
-      return :invalid unless PermissionForge::Admin::ExpiryPresets::CHANGE_KEYS.include?(key)
-
-      PermissionForge::Admin::ExpiryPresets.expires_at_for(key)
-    end
-
-    def extended_expiry
-      base = [@assignment.expires_at&.to_date, Time.zone.today].compact.max
-      (base + 30).in_time_zone.end_of_day
+      PermissionForge::Admin::ExpiryPresets.change_to(key, from: @assignment.expires_at)
     end
 
     # What the person stops seeing when this (granting) assignment is removed.

@@ -19,11 +19,17 @@
         <span class="pf-fs-13"><%= pf_expiry_tag(assignment.expires_at) %></span>
       </div>
       <div class="pf-actions">
-        <%= form_with url: permission_forge.assignment_path(assignment), method: :patch, class: 'pf-reason-form' do %>
-          <input type="hidden" name="expiry" value="extend30">
-          <input type="hidden" name="return_to" value="<%= permission_forge.root_path %>">
-          <button type="submit" class="pf-btn pf-btn--sm"><%= t('.extend') %></button>
-          <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-extend-reason-#{assignment.id}" %>
+        <%# Only where the lock lets it through: extending a locked granting set widens access. %>
+        <% extend_key = PermissionForge::Admin::ExpiryPresets::EXTEND_KEY %>
+        <% if PermissionForge::Admin::EditableLock.expiry_choices(assignment, keys: [extend_key]).any? %>
+          <%= form_with url: permission_forge.assignment_path(assignment), method: :patch, class: 'pf-reason-form' do %>
+            <input type="hidden" name="expiry" value="<%= extend_key %>">
+            <input type="hidden" name="return_to" value="<%= permission_forge.root_path %>">
+            <button type="submit" class="pf-btn pf-btn--sm"><%= t('.extend') %></button>
+            <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-extend-reason-#{assignment.id}" %>
+          <% end %>
+        <% else %>
+          <%= pf_lock_badge %>
         <% end %>
         <%= link_to t('permission_forge.ui.open_person'), permission_forge.person_path(assignment.user_id), class: 'pf-btn pf-btn--ghost' %>
       </div>

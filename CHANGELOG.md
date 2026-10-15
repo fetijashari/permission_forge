@@ -96,7 +96,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   offered "30 days from today" and "No expiry", which the lock then refused; it now lists only the presets that narrow
   access (the other way round for a Muting Permission Set; `Admin::EditableLock.expiry_choices`). A person's Assign
   drawer lists a locked set that cannot take holders as disabled with a "Locked" badge and a note, instead of leaving it
-  out.
+  out. Home's "Ending soon" card shows the "Locked" badge in place of "Extend 30 days" where extending would be
+  refused (a locked granting set), and keeps offering it for a locked Muting Permission Set, where extending narrows.
 - **`rake permission_forge:audit` says why `FAIL_ON` fails the build**: `Failing: N finding(s) at or above <level>` on
   stderr before the exit 1 (FORMAT=json output on stdout stays parseable).
 - **The security audit's footer no longer says "Read-only: nothing was changed"**: every run writes a
