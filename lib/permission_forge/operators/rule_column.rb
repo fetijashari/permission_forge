@@ -72,34 +72,42 @@ module PermissionForge
           model = rule_model(rule)
           return unless model
 
-          models = models_along(model, rule.join_rule? ? rule.field_accessor_path.to_s.split('.') : [])
+          models = models_along(model, rule.join_rule? ? path_segments(rule.field_accessor_path) : [])
           find(rule.field_name, models) if models.any? && models.all?(&:table_exists?)
         rescue NameError, ArgumentError, ActiveRecord::ActiveRecordError
           nil
         end
 
         # The rule's own model, then the model of each association on its path;
-        # a plain field_name is a column of the last one.
+        # a plain field_name is a column of the last one. The path is
+        # followed by {RulePath}, the way ActiveRecord joins it.
         #
         # @param model [Class] the rule's model
         # @param association_chain [Array<String>] the rule's field_accessor_path, split
-        # @return [Array<Class>] empty when the path cannot be followed
+        # @return [Array<Class>] empty when the path cannot be followed (RulePath#broken?)
         def models_along(model, association_chain)
-          association_chain.reduce([model]) do |models, assoc|
-            joined = models.last.reflect_on_association(assoc.to_sym)&.klass
-            break [] unless joined
-
-            models << joined
-          end
+          RulePath.follow(model, association_chain).models
         end
 
-        private
+        # A rule's association path (its field_accessor_path), split into
+        # the association names the applier joins; a blank one is no path.
+        #
+        # @param path [String, nil]
+        # @return [Array<String>]
+        def path_segments(path)
+          path.blank? ? [] : path.to_s.split('.')
+        end
 
         # The model the rule's Resource is named after, when it is one.
+        #
+        # @param rule [PermissionForge::PermissionSetRule]
+        # @return [Class, nil]
         def rule_model(rule)
           model = rule.resource&.name.to_s.safe_constantize
           model if model.is_a?(Class) && model < ActiveRecord::Base && !model.abstract_class?
         end
+
+        private
 
         # The model a table name stands for; without one, the model the rule ends on.
         def table_model(table, models)

@@ -115,12 +115,18 @@ module PermissionForge
         build_query(query, column, rule, [@model_class])
       end
 
-      # A path that cannot be followed leaves no model to type by: the value
-      # goes as it is, and ActiveRecord raises for the join when the query is built.
+      # A path that cannot be followed (Operators::RulePath#broken?: no such
+      # association, a polymorphic one, a class that cannot be loaded...)
+      # matches nothing: ActiveRecord would raise for the join when the query
+      # runs, and every holder would get an error instead of a denial.
       def apply_join(query, rule, join_method)
-        query, models = resolve_join(query, rule, join_method)
-        column = quoted_column((models.last || @model_class).table_name, rule[:field_name])
-        build_query(query, column, rule, models)
+        association_chain = PermissionForge::Operators::RuleColumn.path_segments(rule[:field_accessor_path])
+        path = PermissionForge::Operators::RulePath.follow(@model_class, association_chain)
+        return query.none if path.broken?
+
+        query = apply_join_to_query(query, join_method, association_chain) if association_chain.any?
+        column = quoted_column(path.models.last.table_name, rule[:field_name])
+        build_query(query, column, rule, path.models)
       end
 
       # Quotes a column reference with the connection's identifier quoting.
@@ -132,15 +138,6 @@ module PermissionForge
         return name.split('.').map { |seg| conn.quote_column_name(seg) }.join('.') if name.include?('.')
 
         "#{conn.quote_table_name(table)}.#{conn.quote_column_name(name)}"
-      end
-
-      def resolve_join(query, rule, join_method)
-        return [query, [@model_class]] if rule[:field_accessor_path].blank?
-
-        association_chain = rule[:field_accessor_path].split('.')
-        query = apply_join_to_query(query, join_method, association_chain)
-
-        [query, PermissionForge::Operators::RuleColumn.models_along(@model_class, association_chain)]
       end
 
       # @param join_method [Symbol] one of JOIN_METHODS — never a rule's own text

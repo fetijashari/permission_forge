@@ -506,6 +506,17 @@ mk:
         'off': Бележењето е исклучено во иницијализаторот (audit_events = false).
           Ниедна промена не се бележи.
         title: Ревизискиот дневник не бележи
+      broken_rules_card:
+        description: 'Овие правила за записи именуваат поле или врска што не постои.
+          Секое од нив не се совпаѓа со ништо: на секој на кого се однесува му е одбиен
+          секој запис на ресурсот.'
+        fix: Поправи го правилото
+        open: Отвори правила
+        people:
+          one: "%{count} лице го има овој сет."
+          other: "%{count} лица го имаат овој сет."
+        rule: "„%{rule}“ на %{resource} во „%{set}“"
+        title: Правила што не се совпаѓаат со ништо
       ending_card:
         description: Доделувања што завршуваат во следните 7 дена.
         extend: Продолжи за 30 дена
@@ -907,6 +918,9 @@ mk:
         pick_field: Изберете поле…
         preview: Преглед
         preview_empty: Изберете поле за да го видите правилото како реченица.
+        problem_field: Изберете го полето повторно за да го поправите.
+        problem_path: Изберете ја врската повторно за да ја поправите.
+        problem_title: Ова правило не се совпаѓа со ништо
         relationship: Врска
         remove_step: Отстрани го овој чекор на врската
         save: Зачувај правило
@@ -2186,8 +2200,14 @@ mk:
       rules:
         and: и
         current_user: тековниот корисник
+        matches_nothing: Не се совпаѓа со ништо
         only_show: Прикажи само
         or_empty: или %{field} е празно
+        problems:
+          missing_column: "%{name} не е колона на %{model}"
+          unjoinable_association: "%{name} е врска на %{model} што правило не може
+            да ја следи"
+          unknown_association: "%{name} не е врска на %{model}"
         where: каде
       rules_count:
         one: Правила (%{count})
@@ -2222,6 +2242,10 @@ mk:
         invalid_operator: не е валиден оператор
         numeric_or_date_required: мора да биде нумеричка или датумска вредност за
           оператори за споредба
+        unjoinable_association: го именува %{association}, асоцијација на %{model}
+          што правило не може да ја спои (полиморфна, или нејзината класа не може
+          да се вчита)
+        unknown_association: го именува %{association}, што не е асоцијација на %{model}
         unknown_column: не е колона на %{model}
         value_not_expected: не бара вредност за овој оператор
         value_required: не смее да биде празно за овој оператор

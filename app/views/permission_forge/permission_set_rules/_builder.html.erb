@@ -23,6 +23,12 @@
   <%= pf_sheet_frame({ title: title, subtitle: set.name, close_path: back, footer: footer,
                        breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
                                                  [set.name, permission_forge.permission_set_path(set)], [pf_resource_label(resource), back], title) }) do %>
+    <% if (problem = builder.problem) %>
+      <div class="pf-banner pf-banner--block" role="note"><span class="pf-banner__glyph pf-text-block" aria-hidden="true">⊘</span>
+        <div class="pf-banner__body"><span class="pf-banner__title"><%= t('.problem_title') %></span>
+          <span><%= pf_rule_problem_text(problem) %> · <code class="pf-mono-key"><%= builder.written_field %></code></span>
+          <span><%= problem.path? ? t('.problem_path') : t('.problem_field') %></span></div></div>
+    <% end %>
     <% if builder.ignored_warning? %>
       <div class="pf-banner pf-banner--warn"><span class="pf-banner__glyph" aria-hidden="true">⚠</span>
         <div class="pf-banner__body"><span><%= t('.ignored_warning') %></span></div></div>

@@ -213,14 +213,14 @@ module PermissionForge
         assert_equal ['Managers › Customer.supplier_id equal "5_id": Own · 1 person'], item_for(audit, :unusable_rule_values).items
       end
 
-      test 'a rule whose model, association or column cannot be found is no finding and no error' do
+      test 'a rule whose model cannot be found is no finding and no error; a missing column or association is one' do
         set = create_permission_set(name: 'Legacy')
         gone = create_resource(permission_set: set, name: 'Supplier', read_access: true)
         resource = create_resource(permission_set: set, read_access: true)
         rule_with(gone, name: 'Gone', field_name: 'owner_id', field_value: 'x')
         rule_with(resource, name: 'No column', field_name: 'no_such_column', field_value: 'x')
         rule_with(resource, name: 'Elsewhere', field_name: 'elsewhere.supplier_id', field_value: 'x')
-        # The engine raises for a path it cannot follow; the rule is not typed against its own model.
+        # A path that cannot be followed matches nothing; the rule is not typed against its own model.
         rule_with(resource, name: 'No path', field_name: 'supplier_id', field_value: 'x', join_type: 'joins', field_accessor_path: 'nowhere')
         rule_with(resource, name: 'Half a path', field_name: 'deactivated', field_value: 'maybe', join_type: 'left_joins',
                             field_accessor_path: 'supplier.nowhere')
@@ -229,8 +229,10 @@ module PermissionForge
         report = audit
 
         assert_not_includes codes(report), :unusable_rule_values
-        assert_equal ['Legacy › Customer.no_such_column equal "x": No column · 0 people'],
-                     item_for(report, :missing_rule_columns).items, 'only the column the table does not have'
+        assert_equal ['Legacy › Customer.no_such_column equal "x": No column · 0 people',
+                      'Legacy › Customer.nowhere.supplier_id equal "x": No path · 0 people',
+                      'Legacy › Customer.supplier.nowhere.deactivated equal "maybe": Half a path · 0 people'],
+                     item_for(report, :missing_rule_columns).items, 'not the alias, not the model that is gone'
         assert_includes item_for(report, :unknown_models).items, 'FreightCost'
       end
 
@@ -259,6 +261,26 @@ module PermissionForge
                       'Sales › Customer.supplier.domain equal "x": Joined · 1 person'], finding.items
         assert_equal ['Sales › Customer.supplier_id equal "5_id": Typed · 1 person'],
                      item_for(report, :unusable_rule_values).items, 'a missing column is not also an unusable value'
+      end
+
+      # Saved before PermissionSetRule checked the path: ActiveRecord cannot
+      # join it, so the rule matches nothing — the same finding, the same
+      # rules as the admin's Home lists.
+      test 'a rule whose association path cannot be followed is a high finding while people hold the set' do
+        set = create_permission_set(name: 'Sales')
+        resource = create_resource(permission_set: set, read_access: true)
+        create_permission_set_user(user: create_user, permission_set: set)
+        typo = rule_with(resource, name: 'Typo', field_name: 'owner_id', field_value: 'current_user', join_type: 'joins',
+                                   field_accessor_path: 'ownr')
+        rule_with(resource, name: 'Fine', field_name: 'owner_id', field_value: '5', join_type: 'joins', field_accessor_path: 'supplier')
+
+        report = audit
+        finding = item_for(report, :missing_rule_columns)
+
+        assert_equal :high, finding.severity
+        assert_equal ['Sales › Customer.ownr.owner_id equal "current_user": Typo · 1 person'], finding.items
+        assert_not_includes codes(report), :unusable_rule_values
+        assert_equal [typo], PermissionForge::Admin::AttentionItems.new.broken_rules.map(&:rule)
       end
 
       test 'a rule naming a missing column weighs less when nobody holds the set, and is no finding when not in effect' do

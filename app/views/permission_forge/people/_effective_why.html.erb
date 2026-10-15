@@ -14,7 +14,7 @@
 
   <% records_reasons = case res.records
                        when :all then res.op(:view_all).granted_by.map { |ps| ['✓', t('.view_all_from', set: ps.name), ps] }
-                       when :rules then res.rules.map { |src| ['◷', pf_rule_text(src.rule, res.name), src.permission_set] }.presence || [['✓', t('.no_rules'), nil]]
+                       when :rules then res.rules.map { |src| [pf_rule_glyph(src.rule), pf_rule_text(src.rule, res.name), src.permission_set] }.presence || [['✓', t('.no_rules'), nil]]
                        else [['–', t('.records_none'), nil]]
                        end %>
   <%= render 'why_item', key: "#{res.name}.records", title: t('.records_title', resource: plural),

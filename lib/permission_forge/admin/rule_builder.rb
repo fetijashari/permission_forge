@@ -20,12 +20,26 @@ module PermissionForge
 
       attr_reader :form, :resource, :model_errors
 
-      def initialize(form:, resource:, model_errors: [], configuration: PermissionForge.configuration)
+      # rule: the saved rule being edited (nil for a new one).
+      def initialize(form:, resource:, model_errors: [], rule: nil, configuration: PermissionForge.configuration)
         @form = form
         @resource = resource
         @model_errors = Array(model_errors)
+        @rule = rule
         @configuration = configuration
       end
+
+      # Why the saved rule matches nothing — a column or relationship that is
+      # not there (Operators::RuleProblem) — or nil. Only for the rule as it
+      # is stored: a change that did not save shows the model's own errors.
+      def problem
+        return @problem if defined?(@problem)
+
+        @problem = (PermissionForge::Operators::RuleProblem.for(@rule) if @rule&.persisted? && !@rule.changed?)
+      end
+
+      # The saved rule's path and field name as stored: "ownr.owner_id".
+      def written_field = PermissionForge::Operators::RuleProblem.written_field(@rule)
 
       def errors = form.errors
       def error_codes = errors.values

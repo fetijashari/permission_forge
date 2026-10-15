@@ -55,7 +55,8 @@
 <% else %>
   <%# Two independent stacks (no shared grid rows), so a tall card never leaves
       a gap in the other column. Cards alternate in priority order. %>
-  <% cards = { 'audit_card' => @attention.audit_findings, 'privacy_card' => @attention.privacy_findings, 'rules_card' => @attention.unenforced_rules,
+  <% cards = { 'audit_card' => @attention.audit_findings, 'broken_rules_card' => @attention.broken_rules,
+               'privacy_card' => @attention.privacy_findings, 'rules_card' => @attention.unenforced_rules,
                'ending_card' => @attention.ending_soon,
                'expired_card' => @attention.expired, 'stale_card' => @attention.stale,
                'tidy_card' => @attention.tidy }.select { |_, items| items.any? }.keys %>

@@ -82,8 +82,13 @@ module PermissionForge
     # What the check cannot tell is left to the query, as before.
     test 'where the columns cannot be told, the rule is not refused for its column' do
       assert build_rule(field_name: 'elsewhere.anything').valid?, 'a table that is none of the rule\'s (an alias the query joins)'
-      assert build_rule(field_name: 'anything', join_type: 'joins', field_accessor_path: 'nowhere').valid?, 'a path it cannot follow'
-      assert build_rule(field_name: 'anything', join_type: 'joins', field_accessor_path: 'supplier.nowhere').valid?
+      # A path it cannot follow is refused on field_accessor_path (PermissionSetRulePathTest), not on field_name.
+      %w[nowhere supplier.nowhere].each do |path|
+        rule = build_rule(field_name: 'anything', join_type: 'joins', field_accessor_path: path)
+
+        assert_not rule.valid?
+        assert_empty rule.errors[:field_name], path
+      end
 
       { 'FreightCost' => 'no model', TablelessRecord.name => 'no table', 'PermissionForge' => 'not a model' }.each do |name, why|
         @resource.update_columns(name: name)

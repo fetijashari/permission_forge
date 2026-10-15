@@ -62,6 +62,21 @@ module PermissionForge
         assert_equal({ 'field_name' => ['is not a column of Customer'] }, JSON.parse(response.body).dig('error', 'messages'))
       end
 
+      # A path naming no association used to be saved (201) and then turned
+      # every permission_scoped / find_by of the set's holders into a 500.
+      test 'POST create answers 422 on field_accessor_path for an association the model does not have' do
+        assert_no_difference -> { PermissionForge::PermissionSetRule.count } do
+          post "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{@resource.uuid}/rules", params: {
+            permission_set_rule: { name: 'Owner', field_name: 'owner_id', field_value: 'current_user', operator: 'equal',
+                                   join_type: 'joins', field_accessor_path: 'ownr' }
+          }
+        end
+
+        assert_response :unprocessable_entity
+        assert_equal({ 'field_accessor_path' => ['names ownr, which is not an association of Customer'] },
+                     JSON.parse(response.body).dig('error', 'messages'))
+      end
+
       test 'PATCH answers 422 for a rename to a missing column, and leaves an old row editable otherwise' do
         rule = create_permission_set_rule(permission_set: @ps, resource: @resource)
         path = "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{@resource.uuid}/rules/#{rule.uuid}"

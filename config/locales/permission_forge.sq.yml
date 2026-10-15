@@ -508,6 +508,17 @@ sq:
         'off': Regjistrimi është çaktivizuar në inicializues (audit_events = false).
           Asnjë ndryshim nuk regjistrohet.
         title: Regjistri i auditimit nuk po regjistron
+      broken_rules_card:
+        description: 'Këto rregulla regjistrimesh përmendin një fushë ose lidhje që
+          nuk ekziston. Secili nuk përputhet me asgjë: kujtdo që i zbatohet i refuzohet
+          çdo regjistrim i burimit.'
+        fix: Rregullo rregullin
+        open: Hap rregullat
+        people:
+          one: "%{count} person e ka këtë grup."
+          other: "%{count} persona e kanë këtë grup."
+        rule: "“%{rule}” te %{resource} në “%{set}”"
+        title: Rregulla që nuk përputhen me asgjë
       ending_card:
         description: Caktime që përfundojnë në 7 ditët e ardhshme.
         extend: Zgjat 30 ditë
@@ -904,6 +915,9 @@ sq:
         pick_field: Zgjidh një fushë…
         preview: Pamja paraprake
         preview_empty: Zgjidh një fushë për ta parë rregullin si fjali.
+        problem_field: Zgjidhni sërish fushën për ta korrigjuar.
+        problem_path: Zgjidhni sërish lidhjen për ta korrigjuar.
+        problem_title: Ky rregull nuk përputhet me asgjë
         relationship: Lidhja
         remove_step: Hiq këtë hap të lidhjes
         save: Ruaj rregullin
@@ -2186,8 +2200,14 @@ sq:
       rules:
         and: dhe
         current_user: përdoruesi aktual
+        matches_nothing: Nuk përputhet me asgjë
         only_show: Shfaq vetëm
         or_empty: ose %{field} është bosh
+        problems:
+          missing_column: "%{name} nuk është kolonë e %{model}"
+          unjoinable_association: "%{name} është lidhje e %{model} që një rregull
+            nuk mund ta ndjekë"
+          unknown_association: "%{name} nuk është lidhje e %{model}"
         where: ku
       rules_count:
         one: Rregullat (%{count})
@@ -2222,6 +2242,9 @@ sq:
         invalid_operator: nuk është operator i vlefshëm
         numeric_or_date_required: duhet të jetë vlerë numerike ose datë për operatorët
           e krahasimit
+        unjoinable_association: përmend %{association}, një lidhje e %{model} që një
+          rregull nuk mund ta bashkojë (polimorfike, ose klasa e saj nuk mund të ngarkohet)
+        unknown_association: përmend %{association}, që nuk është lidhje e %{model}
         unknown_column: nuk është kolonë e %{model}
         value_not_expected: nuk kërkon vlerë për këtë operator
         value_required: nuk duhet të jetë bosh për këtë operator
