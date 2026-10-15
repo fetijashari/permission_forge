@@ -128,13 +128,9 @@ module PermissionForge
         entry[:read_access] = false if field.read_access
         entry[:edit_access] = false if field.read_access || field.edit_access
         entry[:mask_access] = true if field.mask_access
-        (entry[:mutes] ||= []) << [permission_set, mute_provenance(field, level)]
-      end
-
-      # A row that mutes edit but not read (API / console only) takes away
-      # editing; the field stays readable.
-      def mute_provenance(field, level)
-        level == 'hide' && !field.read_access ? 'no_edit' : level
+        # A row that mutes edit but not read (API / console only) takes
+        # editing away; the field stays readable.
+        (entry[:mutes] ||= []) << [permission_set, level == 'hide' && !field.read_access ? 'no_edit' : level]
       end
 
       def field_outcome(name, virtual)
