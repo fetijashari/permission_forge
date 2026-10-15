@@ -44,6 +44,35 @@ module PermissionForge
         assert_response :ok
       end
 
+      # Field test (round 4, d #35): `/api/permission_sets.xml` answered the
+      # JSON list with a 200.
+      test 'an extension other than .json reaches no endpoint: the JSON 404 envelope' do
+        set = PermissionForge::PermissionSet.order(:id).last
+        ['/permission_sets.xml', '/permission_sets.html', '/permission_sets.csv', "/permission_sets/#{set.uuid}.xml",
+         "/audit_events/#{@event.uuid}.xml", '/stats.xml', "/permission_sets/#{set.uuid}/resources.yaml"].each do |path|
+          get "#{ROOT}#{path}"
+
+          assert_response :not_found, path
+          assert_equal 'application/json', response.media_type, path
+          assert_equal EXPECTED.call, response.parsed_body, path
+        end
+        assert_no_difference -> { PermissionForge::PermissionSet.count } do
+          post "#{ROOT}/permission_sets.xml", params: { permission_set: { name: 'Via XML' } }, as: :json
+        end
+        assert_response :not_found
+      end
+
+      test '.json and no extension still answer' do
+        set = PermissionForge::PermissionSet.order(:id).last
+        ['/permission_sets', '/permission_sets.json', "/permission_sets/#{set.uuid}", "/permission_sets/#{set.uuid}.json",
+         "/audit_events/#{@event.uuid}.json"].each do |path|
+          get "#{ROOT}#{path}"
+
+          assert_response :ok, path
+          assert_equal 'application/json', response.media_type, path
+        end
+      end
+
       test 'while the API is disabled it is the same bodiless 404 as every API route' do
         PermissionForge.configuration.api_enabled = false
 

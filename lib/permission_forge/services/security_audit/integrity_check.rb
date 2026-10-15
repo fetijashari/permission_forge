@@ -4,7 +4,8 @@ module PermissionForge
   module Services
     module SecurityAuditChecks
       # Rows the models' validations would refuse but the database holds
-      # anyway (written by SQL, an older version, or another app).
+      # anyway (written by SQL, an older version, or another app), and field
+      # rows that name nothing on their model.
       class IntegrityCheck < BaseCheck
         RESOURCE_RULES = {
           'edit without read' => ->(r) { r.edit_access && !r.read_access },
@@ -18,7 +19,7 @@ module PermissionForge
         }.freeze
 
         def call
-          [duplicate_fields, duplicate_actions, dependency_violations, unknown_models].compact
+          [duplicate_fields, duplicate_actions, dependency_violations, unknown_models, unknown_fields].compact
         end
 
         private
@@ -93,6 +94,41 @@ module PermissionForge
           finding(:low, :unknown_models, 'Resources for models this app does not have',
                   'No ActiveRecord class matches these names, so the grants do nothing here. If another app ' \
                   'shares these tables it may still use them — check there before deleting.', items: names)
+        end
+
+        # Field rows in effect whose name is nothing their model has
+        # (PermissionForge::FieldNames): a typo such as `emial`. Saving does
+        # not refuse them — a key only a serializer computes is filtered by
+        # a row of its name — so they are reported here. Low when a muting
+        # set holds one (it mutes nothing it was meant to), otherwise info (a
+        # granting row grants nothing on the model).
+        def unknown_fields
+          fields = unknown_field_rows
+          return if fields.empty?
+
+          muting = fields.any? { |field| field.resource.permission_set.is_muting }
+          finding(muting ? :low : :info, :unknown_fields, 'Fields naming nothing on their model',
+                  'No column, attribute, alias, public method, declared or discovered virtual field, or configured ' \
+                  'variant of the model has these names, so the rows configure nothing on it: a muting row mutes ' \
+                  'nothing (a typo such as emial leaves email as it was), a granting row grants nothing. Correct ' \
+                  'or remove the row; for a key only a serializer computes (filtered by FiltersResponseAttributes) ' \
+                  'declare it in the model\'s extra_fields_for_permissions (see "Extra Virtual Fields" in ' \
+                  'docs/field-filtering.md).',
+                  items: fields.map { |field| unknown_field_item(field) })
+        end
+
+        def unknown_field_rows
+          fields = PermissionForge::ResourceField.in_effect.includes(resource: :permission_set).order(:resource_id, :id)
+          fields.group_by(&:resource).flat_map do |resource, rows|
+            names = PermissionForge::FieldNames.for(resource.name, siblings: rows.map(&:name), configuration: configuration)
+            names ? rows.reject { |field| names.include?(field.name) } : []
+          end
+        end
+
+        def unknown_field_item(field)
+          resource = field.resource
+          set = resource.permission_set
+          "#{set.name}#{' (muting)' if set.is_muting} › #{resource.name}.#{field.name} · #{people(set.id)}"
         end
 
         def model?(name)

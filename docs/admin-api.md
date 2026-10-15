@@ -174,6 +174,8 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 
 It passes the same guards first: while the API is disabled it is the bodiless 404, a caller `api_auth` refuses gets the 401 and a request with no tenant the 403 (each recorded as `api.auth_failed`, as on any endpoint). It changes nothing and records nothing else. Paths outside the API mount keep the host's own 404. Through 0.14.1 these answered Rails' HTML 404 page.
 
+**The API speaks JSON only.** An endpoint answers with no extension or with `.json` (`GET /permissions/api/permission_sets.json`). Any other extension (`.xml`, `.html`, `.csv`) names no endpoint and gets the 404 above; through 0.14.1 `GET …/permission_sets.xml` answered the JSON list with a 200.
+
 **Every 422 has this shape.** `messages` is always an object mapping a field to a list of messages: the model's attribute for a failed validation, the request parameter for input the API cannot read, and `base` when the error names no field:
 
 ```json

@@ -209,6 +209,9 @@ sq:
       sentence_variants:
         assignment_revoked_expired: "%{actor} i hoqi %{person} Grupin e lejeve %{set}
           pasi kishte skaduar më %{date}."
+        cache_cleared_process_local: "%{actor} pastroi lejet e ruajtura në cache të
+          të gjithë përdoruesve vetëm në procesin e vet (një ruajtje në memorie):
+          proceset e uebit dhe të punëve i mbajtën të tyret."
         field_access_limited: "%{actor} lexoi %{record} me këto fusha të fshehura
           ose të maskuara: %{fields}."
       sentences:

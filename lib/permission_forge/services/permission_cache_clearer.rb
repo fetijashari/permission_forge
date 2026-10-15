@@ -42,7 +42,10 @@ module PermissionForge
     # `config.on_cache_failure`, and owed). The audit log: one `cache.cleared`
     # event per tenant, in that tenant with that tenant's counts, plus one
     # without a tenant with the totals (`across_tenants`); under :pattern
-    # the counts are not known and the events say `counted: false`.
+    # the counts are not known and the events say `counted: false`. Every
+    # event says `process_local: true` when the store lives in this process
+    # only (a memory store, Cache::Base#process_local?): the clear then did
+    # not reach the web and job processes, and the audit log says so.
     # `actor:` and `reason:` as the other housekeeping services (rake:
     # ACTOR=, REASON=).
     #
@@ -160,9 +163,16 @@ module PermissionForge
         defined?(ActsAsTenant) ? ActsAsTenant.without_tenant(&) : yield
       end
 
+      # `process_local`: the store lives in this process only (a memory
+      # store), so the clear did not reach the web and job processes.
       def record(tenant_id, **data)
-        PermissionForge::Audit.record(EVENT, tenant_id: tenant_id,
-                                             data: data.transform_keys(&:to_s).merge('operation' => 'cache_clear'))
+        data = data.transform_keys(&:to_s).merge('operation' => 'cache_clear', 'process_local' => process_local?)
+        PermissionForge::Audit.record(EVENT, tenant_id: tenant_id, data: data)
+      end
+
+      def process_local?
+        @process_local = PermissionForge.cache.process_local? if @process_local.nil?
+        @process_local
       end
 
       # The event without a tenant — recorded with none ambient, so it is one.

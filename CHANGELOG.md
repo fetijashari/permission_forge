@@ -11,6 +11,15 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **`rake permission_forge:audit` reports rules naming a column that does not exist** (`missing_rule_columns`: High
   when people hold the set, otherwise Medium; lists set, resource, field, operator, value and rule). Such a rule
   matches nothing (see Fixed). Run it after upgrading.
+- **`rake permission_forge:audit` reports fields naming nothing on their model** (`integrity/unknown_fields`). A
+  `ResourceField` named `zzz` (or `emial`) on a `Customer` Resource was saved — 201 through the API — and configured
+  nothing, so a typo went unnoticed. The audit now lists the rows in effect whose name is none of: a column of the
+  model's table (read again before it is listed), an attribute or `alias_attribute`, a declared or discovered virtual
+  field, a public reader or writer, or a configured variant (`field_variant_mappings`) of one of those or of another
+  row of the Resource. Low when a muting set holds one (it mutes nothing it was meant to), otherwise Info; set,
+  resource, field and people per row; Resources whose model the app cannot load are skipped. Saving still accepts
+  such a name: `FiltersResponseAttributes` filters any key of a hash, so a key only a serializer computes is
+  configured by a row of its name — declare it in `extra_fields_for_permissions` to say it is meant.
 
 - **`NotAuthorizedError#failure_messages`.** The `failure_message` of each row-level rule that denied the record, as
   the admin wrote it (in rule order, without blanks and repeats; `[]` when no rule denied), so a host can render a
@@ -73,6 +82,19 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   exist, the path cannot be followed or the name is qualified with a table that is none of the rule's. Copying a
   Permission Set (or a group) copies such a rule as it is: leaving it out would widen the copy. **Opt out:** none — the
   rule could only ever raise (and now matches nothing); write it past the model if you must.
+- **The JSON API answers JSON only.** `GET /api/permission_sets.xml` (any extension but `.json`) answered the JSON list
+  with a 200; it now names no endpoint and gets the API's JSON 404 (`No API endpoint answers this path and method`).
+  No extension and `.json` answer as before. **Opt out:** none.
+- **`cache.cleared` says when the clear reached only its own process.** On an in-memory store (`cache_backend =
+  :memory`, or `Rails.cache` is a `:memory_store`) `rake permission_forge:cache:clear` clears the rake process's
+  store only; the terminal said so, the audit event did not, so the log read as if the servers had been cleared. Each
+  event's data now carries `process_local` (`true` there, `false` for a shared store) and the audit log's sentence
+  says "in its own process only (an in-memory store): the web and job processes kept theirs" (en, sq, mk).
+  **Opt out:** none (an added data key).
+- **`ConsentWithdrawalHandler` answers the same keys for a real run and a dry run.** The real run answered
+  `{ revoked_sets:, invalidated: }` only; it now also answers `affected_sets` (the names of the sets gated on the
+  flag), `affected_assignment_count` and `dry_run: false`, and a dry run also answers `invalidated: false`. Keys are
+  only added. See [GDPR data handling](docs/gdpr-data-handling.md). **Opt out:** none.
 - **Development boot warnings also go to standard error.** The cache warnings were logged before `bin/rails server`
   attaches its console logger (and `bin/rails runner` never does), so they reached `log/development.log` only. In
   development each is now also written to standard error, once per boot — not when the logger already writes to
