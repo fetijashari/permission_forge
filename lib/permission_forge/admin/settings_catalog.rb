@@ -136,6 +136,7 @@ module PermissionForge
           example: '->(controller, permission_set, user_ids) { PermissionForge.current_user&.admin? }'),
         d(:api_require_authorization, 'admin_api', :bool),
         d(:api_stats_require_admin, 'admin_api', :bool),
+        d(:api_stats_authorization, 'admin_api', :hook, example: '->(controller) { PermissionForge.current_user&.admin? }'),
         d(:api_record_identifier, 'admin_api', :enum, options: %i[uuid id]),
         d(:api_default_per_page, 'admin_api', :num, unit: :records),
         d(:api_max_per_page, 'admin_api', :num, unit: :records),

@@ -19,6 +19,8 @@ sq:
         not_found: Regjistrimi nuk u gjet
         not_iso8601_time: nuk është datë ose kohë ISO 8601
         section_missing: mungon, është bosh ose nuk është objekt
+        stats_authorization_missing: GET /api/stats kërkon config.api_stats_authorization,
+          ose config.api_stats_require_admin = false
         tenant_required: Kjo kërkesë nuk ka qiramarrës. API-ja e administrimit shërben
           një qiramarrës në një kohë.
         unauthorized: Nuk jeni i autentikuar
@@ -1477,6 +1479,9 @@ sq:
         api_serializer_overrides:
           desc: Zëvendësime për mënyrën si shkruhen regjistrimet në përgjigjet e API-së.
           name: Serializues të personalizuar
+        api_stats_authorization:
+          desc: Vendos kush mund të lexojë statistikat e përdorimit përmes API-së.
+          name: Kontrolli i statistikave të API-së
         api_stats_require_admin:
           desc: Vetëm administratorët mund të lexojnë statistikat e përdorimit përmes
             API-së.

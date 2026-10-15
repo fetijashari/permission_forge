@@ -92,7 +92,7 @@ When `api_enabled = false` (the default), all API routes return **404 Not Found*
 
 ## Response Format
 
-JSON responses use the envelope below. Some answers have no body: the 401 while `api_auth` is not set, the 404 while the API is disabled, the stats endpoint's 403 (`api_stats_require_admin`) and the 204 of a delete.
+JSON responses use the envelope below. Some answers have no body: the 401 while `api_auth` is not set, the 404 while the API is disabled and the 204 of a delete.
 
 **Success (single record):**
 ```json
@@ -175,14 +175,21 @@ All URLs below assume the engine is mounted at `/permissions`. Replace with your
 
 #### Dashboard Stats
 
-The stats endpoint requires admin access by default:
+The stats endpoint is closed to everyone `api_auth` admits until you say who may read it:
 
 ```ruby
-# In your initializer — when true, the api_auth lambda must set @admin = true
-config.api_stats_require_admin = true  # default: true (secure default)
+config.api_stats_require_admin = true  # default
+# Who may read GET /api/stats (called with the controller; truthy allows)
+config.api_stats_authorization = ->(controller) { PermissionForge.current_user&.admin? }
+# or, for a key-authenticated client:
+config.api_stats_authorization = ->(controller) {
+  ApiKey.active.exists?(key: controller.request.headers['X-API-Key'], scope: 'permissions:read')
+}
 ```
 
-Without `@admin`, the endpoint answers 403 with no body.
+While `api_stats_authorization` is not set the endpoint answers 403 with `"GET /api/stats needs config.api_stats_authorization, or config.api_stats_require_admin = false"`; a lambda that refuses answers 403 `"Forbidden"`. Both are recorded as `api.auth_failed` (reason `stats_not_authorized`, `hook` naming the option). `api_stats_require_admin = false` opens the stats to every caller `api_auth` admits.
+
+Through 0.14.1 the only way in was an `api_auth` that set `@admin = true` on the controller (`controller.instance_variable_set(:@admin, true)`). That still works while `api_stats_authorization` is not set, with a deprecation warning, and is removed in 0.16.
 
 ```bash
 # Get overview counts

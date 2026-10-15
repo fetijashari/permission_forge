@@ -15,6 +15,11 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 - **The install generator prints the next steps.** After the files it lists `bin/rails db:migrate` (not with
   `--skip-migration`), the mount line, where the admin credentials go (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`, or your
   own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start. `rails destroy` prints none.
+- **`config.api_stats_authorization`.** A lambda called with the controller that decides who may read
+  `GET /api/stats` while `api_stats_require_admin` is on (the default); a truthy answer allows. It replaces an
+  `api_auth` that set `@admin = true` on the controller (see Deprecated). A refusal answers 403 with a body (it had
+  none) and is recorded as `api.auth_failed` with reason `stats_not_authorized`; while the lambda is unset the 403
+  names it. See [Dashboard Stats](docs/admin-api.md#dashboard-stats).
 
 ### Changed
 
@@ -64,6 +69,12 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
   raising. **Opt out:** run the task with `THRESHOLD_DAYS=90`, and call
   `Services::StaleAssignmentAuditor.call(threshold_days: 90)`.
+
+### Deprecated
+
+- **An `api_auth` that sets `@admin = true` on the controller to open `GET /api/stats`.** Set
+  `config.api_stats_authorization = ->(controller) { … }` instead. While that option is unset, `@admin` still allows,
+  warning once per process through `PermissionForge.deprecator`; once it is set, `@admin` is ignored. Removed in 0.16.
 
 ### Fixed
 

@@ -17,6 +17,8 @@ mk:
         not_found: Записот не е пронајден
         not_iso8601_time: не е датум или време во ISO 8601
         section_missing: недостасува, празно е или не е објект
+        stats_authorization_missing: GET /api/stats бара config.api_stats_authorization,
+          или config.api_stats_require_admin = false
         tenant_required: Ова барање нема закупец. API-то за администрација служи по
           еден закупец.
         unauthorized: Не сте автентицирани
@@ -1479,6 +1481,9 @@ mk:
         api_serializer_overrides:
           desc: Замени за тоа како записите се запишуваат во API одговорите.
           name: Прилагодени серијализатори
+        api_stats_authorization:
+          desc: Одлучува кој може да ја чита статистиката за користење преку API.
+          name: Проверка на API статистиката
         api_stats_require_admin:
           desc: Само администраторите можат да ја читаат статистиката за користење
             преку API.

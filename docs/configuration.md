@@ -511,8 +511,9 @@ PermissionForge.configure do |config|
   config.api_default_per_page = 15
   config.api_pagination_handler = nil  # nil = built-in LIMIT/OFFSET paginator
 
-  # Stats endpoint requires admin by default
+  # Stats endpoint closed until api_stats_authorization says who may read it
   config.api_stats_require_admin = true
+  config.api_stats_authorization = nil  # ->(controller) { PermissionForge.current_user&.admin? }
 
   # Record identifier for URL lookups
   config.api_record_identifier = :uuid
@@ -971,7 +972,11 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### api_stats_require_admin
 
-**Stats only for admins.** Only admins can read usage statistics through the API.
+**Stats only for admins.** Only admins can read usage statistics through the API. Default `true`: `GET /api/stats` answers only callers `api_stats_authorization` allows (403 otherwise, also while it is unset). `false`: every caller `api_auth` admits.
+
+#### api_stats_authorization
+
+**API stats check.** Decides who may read usage statistics through the API while `api_stats_require_admin` is on. Called with the controller; a truthy answer allows, anything else is a 403 recorded as `api.auth_failed` (reason `stats_not_authorized`). Not set: the stats are refused. Replaces an `api_auth` that sets `@admin = true` on the controller, which still allows while this is unset (deprecated, removed in 0.16).
 
 #### api_record_identifier
 

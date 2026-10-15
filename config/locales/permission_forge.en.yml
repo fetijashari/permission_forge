@@ -19,6 +19,8 @@ en:
         not_found: Record not found
         not_iso8601_time: is not an ISO 8601 date or time
         section_missing: is missing, empty or not an object
+        stats_authorization_missing: GET /api/stats needs config.api_stats_authorization,
+          or config.api_stats_require_admin = false
         tenant_required: No tenant is set for this request. The admin API serves one
           tenant at a time.
         unauthorized: Not authenticated
@@ -1444,6 +1446,9 @@ en:
         api_serializer_overrides:
           desc: Overrides for how records are written in API responses.
           name: Custom serializers
+        api_stats_authorization:
+          desc: Decides who may read usage statistics through the API.
+          name: API stats check
         api_stats_require_admin:
           desc: Only admins can read usage statistics through the API.
           name: Stats only for admins
