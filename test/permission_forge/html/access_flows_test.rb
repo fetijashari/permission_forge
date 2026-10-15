@@ -58,6 +58,23 @@ module PermissionForge
         assert_equal (Time.zone.today + 5), restored.expires_at.to_date
       end
 
+      # The toast's Undo posts the end date the admin itself wrote
+      # (TimeWithZone#iso8601, with the zone's offset): each preset and a
+      # custom date come back to the second, also outside UTC.
+      test 'every end date the assign form sets survives remove and the toast undo' do
+        previous = Time.zone_default
+        # use_zone first: it restores the zone it read on entry.
+        Time.use_zone('Europe/Berlin') do
+          Time.zone_default = ActiveSupport::TimeZone['Europe/Berlin']
+          custom = (Time.zone.today + 12).iso8601
+          { '1d' => nil, '1w' => nil, '30d' => nil, 'eom' => nil, 'custom' => custom }.each do |expiry, custom_date|
+            assert_undo_restores_end_date(expiry, custom_date)
+          end
+        ensure
+          Time.zone_default = previous
+        end
+      end
+
       test 'bulk assign from pasted emails and bulk revoke' do
         post pf("/permission_sets/#{@set.id}/bulk_assignment/preview"), params: { identifiers: "bo@acme.test\nghost@x.test" }
         assert_match 'ghost@x.test', response.body
@@ -122,6 +139,43 @@ module PermissionForge
         assert_response :not_found
       rescue ActionController::RoutingError
         pass
+      end
+
+      private
+
+      # Assign with the preset, remove, then submit the Undo form the toast
+      # renders (its hidden fields, as a browser would).
+      def assert_undo_restores_end_date(expiry, custom_date)
+        assignment = assign_with_end_date(expiry, custom_date)
+        ends = assignment.expires_at
+        action, fields = remove_and_read_undo(assignment)
+        assert_match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\z/, fields['expires_at'], 'written with the zone offset')
+
+        post action, params: fields
+        restored = PermissionForge::PermissionSetUser.find_by!(user: @bo, permission_set: assignment.permission_set_id)
+        assert_equal ends.to_i, restored.expires_at.to_i, "#{expiry}: #{fields['expires_at']}"
+      end
+
+      def remove_and_read_undo(assignment)
+        delete pf("/assignments/#{assignment.id}")
+        follow_redirect!
+        undo_form
+      end
+
+      def assign_with_end_date(expiry, custom_date)
+        set = create_permission_set(name: "Ends #{expiry}")
+        post pf('/assignments'), params: { user_id: @bo.id, set_ids: [set.id], expiry: expiry, custom_date: custom_date }
+        assignment = PermissionForge::PermissionSetUser.find_by!(user: @bo, permission_set: set)
+        expected = PermissionForge::Admin::ExpiryPresets.expires_at_for(expiry, custom: custom_date)
+        assert_equal expected.to_i, assignment.expires_at.to_i
+        assignment
+      end
+
+      # The toast's Undo form: [action, { name => value }].
+      def undo_form
+        form = css_select('.pf-toast form').first
+        assert form, 'no Undo form in the toast'
+        [form['action'], css_select(form, 'input[type=hidden]').to_h { |input| [input['name'], input['value']] }]
       end
     end
   end

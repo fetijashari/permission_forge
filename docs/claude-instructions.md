@@ -47,7 +47,9 @@ stored in database tables and managed in the PermissionForge admin. `User` inclu
   rules of the entry that grants it).
 - `find_by` returns `nil` for a missing record and raises
   `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` when a rule denies an
-  existing one. `error.message` is a String; `error.details` holds the rule failure messages.
+  existing one. `error.message` is a String; `error.details` holds the rule failure messages;
+  `error.failure_messages` the rules' own `failure_message` texts. Both denial errors answer 403 when
+  nothing rescues them; a `rescue_from` decides otherwise.
 - With no current user: rules follow `config.nil_user_strategy` (default `:bypass` = no rules), masking
   follows `masked_attributes_nil_user_strategy` (default `:bypass` = raw values; `:hide`; the user model is exempt), `FiltersResponseAttributes` follows `response_filter_nil_user_strategy` (default
   `:bypass`), and `PermitsAttributes` returns `{}`.

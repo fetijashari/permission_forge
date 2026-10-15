@@ -156,7 +156,7 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 **What answers 422.** A failed validation (`messages` is the model's errors, as above), and input the API cannot read:
 
 - a body section that is not an object (`"permission_set": "x"`), or a missing one;
-- an unreadable `expires_at`;
+- an `expires_at` that is not one of the [ISO 8601 forms below](#expires_at-formats) (`"tuesday"`, `"2026-13-45"`, `"22/10/2026"`, a number);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
 - a `permission_set_group_id` that names no group of the current tenant;
 - a string longer than its column: `is too long (at most N characters)`. Only columns that declare a limit are checked — a `string` on MySQL is `varchar(255)` (counted in characters) and a `text` holds 65,535 bytes; on PostgreSQL and SQLite the install's `string` and `text` columns declare none, so nothing is checked there. A Permission Set name keeps its own 255-character rule on every database.
@@ -440,11 +440,25 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
 # Response: 201 Created — expires_at is optional (time-bound assignment)
 # Assigning a user who is already in the set returns 422 (uniqueness validation)
 # A user_id outside config.user_list_resolver returns 404, as an unknown one does
-# An unreadable expires_at returns 422
+# An expires_at that is not ISO 8601 (see below) returns 422 and assigns nobody
 
 # Remove a user from a permission set (:uuid is the assignment's identifier)
 DELETE /permissions/api/permission_sets/:ps_uuid/users/:uuid
 ```
+
+##### `expires_at` formats
+
+`expires_at` (on `POST …/users` and `POST …/users/bulk`) is read as ISO 8601, and only in these forms:
+
+| Form | Example | Means |
+|------|---------|-------|
+| a date | `2026-10-22` | the **beginning** of that day (00:00) in the application's `Time.zone`: the assignment has ended when that day starts. To grant through the whole day, send `2026-10-22T23:59:59` or the next day |
+| a date and a time of day | `2026-10-22T10:00`, `2026-10-22T10:00:00`, `2026-10-22T10:00:00.5` | that moment in `Time.zone` |
+| the same with an offset | `2026-10-22T10:00:00Z`, `2026-10-22T10:00+02:00` | that moment at that offset (`Z` = UTC) |
+
+Hours and minutes are required once there is a time; seconds and a fraction (up to 9 digits; the database keeps what its column holds, microseconds on most) are optional. The date and the time are separated by `T` or by one space (`2026-10-22 10:00`). An offset is `Z` or `±HH:MM`, written right after the time. Every field must exist on the calendar and on the clock: `2026-02-30`, `24:00` and a leap second (`:60`) are refused. Surrounding white space is ignored; a missing, `null` or empty `expires_at` means the assignment does not end.
+
+Anything else is a 422 and nothing is assigned: `"tuesday"`, `"next tuesday-ish"`, `"2026-13-45"`, `"22/10/2026"`, `"2026-10-22T10"` (no minutes), `"2026-10-22 10:00 +0200"` (an offset needs its colon and no space), week or ordinal dates (`2026-W43-4`), the basic format without separators (`20261022`) and numbers (epoch seconds). Through 0.14.1 any text with a recognisable fragment was read (`"tuesday"` became today 00:00, an assignment that had already ended).
 
 `GET …/users` lists every holder of the set (each row carries its `user_id`), including people outside `user_list_resolver`: the resolver bounds who can be reached by id, not who is listed.
 
@@ -461,7 +475,8 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
     "bulk_action": "assign",
     "expires_at": "2026-12-31T23:59:00Z"
   }'
-# Response: 200 OK — expires_at is optional (time-bound assignments)
+# Response: 200 OK — expires_at is optional (time-bound assignments; same formats
+# as above, an unreadable one is a 422 and changes nothing)
 # { "data": { "assigned": 3, "revoked": 0, "invalidated": 3 } }
 # Ids outside config.user_list_resolver (or naming nobody) are skipped.
 # "invalidated" counts the users whose assignment changed and whose cached
