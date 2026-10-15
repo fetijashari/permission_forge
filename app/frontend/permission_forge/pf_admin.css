@@ -439,6 +439,24 @@
   .pf-table--sets > .pf-table__head, .pf-table--sets > .pf-table__row,
   .pf-table--assignments > .pf-table__head, .pf-table--assignments > .pf-table__row { grid-column: 1 / -1; grid-template-columns: subgrid; }
 }
+/* A narrow card (a phone) stacks each Assignments row instead of scrolling it
+   sideways: the checkbox, then the person, the dates and the actions one under
+   another, so the end-date menu, Reason and Remove wrap inside the row. The
+   card's width decides, not the window's (the sidebar takes room at desktop
+   widths); without container queries the card still scrolls. The head keeps
+   only its first two columns on screen (the rest stay for screen readers). */
+.pf-table-frame { container-type: inline-size; }
+@container (max-width: 639px) {
+  .pf-table-frame .pf-table--assignments { display: block; min-width: 0; }
+  .pf-table-frame .pf-table--assignments > .pf-table__head,
+  .pf-table-frame .pf-table--assignments > .pf-table__row { grid-template-columns: auto minmax(0, 1fr); padding: 10px 16px; }
+  .pf-table-frame .pf-table--assignments > * > :first-child { grid-column: 1; grid-row: 1; }
+  .pf-table-frame .pf-table--assignments > * > :not(:first-child) { grid-column: 2; }
+  .pf-table-frame .pf-table--assignments > .pf-table__head > :nth-child(n+3) {
+    position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap;
+  }
+  .pf-table-frame .pf-table--assignments .pf-reason-form { max-width: 100%; }
+}
 .pf-cell-person { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .pf-avatar { display: inline-grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 999px; background: var(--pf-surface-2); border: 1px solid var(--pf-border); font-size: 11px; font-weight: 600; color: var(--pf-text-2); }
 .pf-avatar--sm { width: 28px; height: 28px; flex-basis: 28px; }

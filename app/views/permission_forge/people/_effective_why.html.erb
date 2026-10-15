@@ -32,7 +32,7 @@
     <% reasons << ['↳', t('.field_variant', base: field.variant_of), nil] if field.variant_of %>
     <% reasons << ['–', t('.field_none'), nil] if reasons.empty? %>
     <%= render 'why_item', key: "#{res.name}.field.#{field.name}", title: "#{pf_resource_label(res.name)} › #{field_label}",
-               badge: pf_level_badge(field.level, strategy: (field.mask_strategy if field.level == 'masked'), sample_for: (field.name if field.level == 'masked')),
+               badge: pf_effective_field_badge(field, sample: true),
                reasons: reasons,
                note: field.blocked_by.any? ? t('.note_muting') : t('.note_fields') %>
   <% end %>

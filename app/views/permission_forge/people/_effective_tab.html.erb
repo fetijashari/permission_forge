@@ -79,9 +79,7 @@
                       <code class="pf-mono-key"><%= field.name %></code>
                       <% if field.virtual %><%= pf_badge(t('permission_forge.ui.badges.virtual')) %><% end %>
                     </span>
-                    <%= pf_level_badge(field.blocked_by.any? && field.level == 'hidden' ? 'muted' : field.level,
-                                       strategy: field.level == 'masked' ? field.mask_strategy : nil,
-                                       label: (t('.hidden_by_muting') if field.blocked_by.any? && field.level == 'hidden')) %>
+                    <%= pf_effective_field_badge(field) %>
                     <span class="pf-fs-12 <%= field.blocked_by.any? ? 'pf-text-block' : (field.unconfigured ? 'pf-text-warn' : 'pf-text-3') %>">
                       <%= render 'effective_field_source', field: field %>
                     </span>

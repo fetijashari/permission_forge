@@ -36,6 +36,8 @@ module PermissionForge
                                 :capped, :unconfigured, :virtual, :variant_of, :implicit, :grants, :mutes,
                                 keyword_init: true) do
         def visible? = level != 'hidden'
+        # Hidden because a Muting Permission Set takes it away, not because no set grants it.
+        def hidden_by_muting? = level == 'hidden' && blocked_by.any?
       end
 
       RuleSource = Struct.new(:rule, :permission_set, keyword_init: true)

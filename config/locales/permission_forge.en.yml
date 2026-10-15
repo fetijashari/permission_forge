@@ -151,6 +151,8 @@ en:
         snapshot_destroyed: The record as it was when it was removed.
         source: Where
         title: Audit event %{event}
+        unknown_actor_html: No actor was named for this change (code run outside a
+          request, such as a runner or a job). Name one with %{method}.
         uuid: Event id
         value: Value
         what: What
@@ -558,11 +560,11 @@ en:
         title: Needs attention
       privacy_card:
         by_name_note: Fields are flagged by column name, so some may not be personal
-          data (a company's name, for example). If a field is fine unmasked, choose
-          This is intended.
+          data (a company's name, for example).
         description: "%{unmasked}, %{unconfigured}."
         fix: Fix
         intended: This is intended
+        intended_note: If a field is fine unmasked, choose This is intended.
         per_set_note: Each line looks at one Permission Set on its own. A person who
           also holds another set that configures the field follows that set.
         show_all: Show all %{count}
