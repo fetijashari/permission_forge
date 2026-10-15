@@ -214,6 +214,39 @@ module PermissionForge
         assert_equal 'x', klass.new(user: @user, message: 'x').message
       end
 
+      test 'NotAuthorizedError#failure_messages are the denying rules\' own messages, without parsing' do
+        create_rule(operator: 'equal', field_value: 'current_user', include_nulls: false,
+                    name: 'Own customers only', failure_message: 'You can only open your own customers')
+        create_rule(operator: 'not_equal', field_value: (@user.id + 999).to_s, include_nulls: false,
+                    name: 'Not the house account', failure_message: '')
+        other_set = create_permission_set(name: 'Second')
+        create_permission_set_user(user: @user, permission_set: other_set)
+        create_permission_set_rule(permission_set: other_set, name: 'Same text elsewhere', include_nulls: false,
+                                   resource: create_resource(permission_set: other_set, name: 'Customer', read_access: true),
+                                   failure_message: 'You can only open your own customers')
+        setup_permissions
+
+        other = create_customer(supplier_id: @user.id + 999)
+        error = assert_raises(PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError) do
+          Customer.find_by!(uuid: other.uuid)
+        end
+
+        assert_equal ['You can only open your own customers'], error.failure_messages, 'blank and repeated messages are left out'
+        assert_predicate error.failure_messages, :frozen?
+        assert_includes error.message, '[Forbidden by Rule: Own customers only] with message: You can only open your own customers'
+        assert_equal 3, error.details.size, 'details still name every denying rule'
+      end
+
+      test 'NotAuthorizedError#failure_messages is empty unless rules denied' do
+        klass = PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError
+
+        assert_equal [], klass.new(%w[a b]).failure_messages
+        assert_equal [], klass.new(message: 'no user').failure_messages
+        assert_equal %w[x], klass.new(['[Forbidden by Rule: r] with message: x'], failure_messages: ['x', nil]).failure_messages
+        assert_equal 'a', klass.new(%w[a], failure_messages: %w[b]).message, 'failure_messages: is not a detail'
+        assert_equal 'm', klass.new(message: 'm', failure_messages: %w[secret]).message
+      end
+
       test 'NotAuthorizedError#message is a String whatever the details are' do
         klass = PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError
 

@@ -23,8 +23,8 @@ module PermissionForge
       @previous_rake = Rake.application
       Rake.application = self.class.rake_application
       Rake.application.tasks.each(&:reenable)
-      @saved_env = ENV.to_h.slice('ACTOR', 'REASON', 'USER_ID', 'DRY_RUN')
-      %w[ACTOR REASON USER_ID DRY_RUN].each { |key| ENV.delete(key) }
+      @saved_env = ENV.to_h.slice('ACTOR', 'REASON', 'USER_ID', 'DRY_RUN', 'THRESHOLD_DAYS')
+      %w[ACTOR REASON USER_ID DRY_RUN THRESHOLD_DAYS].each { |key| ENV.delete(key) }
       @user = create_user(name: 'Rae Rake')
       @set = create_permission_set(name: 'Rake Set')
       @assignment = create_permission_set_user(user: @user, permission_set: @set)
@@ -32,7 +32,7 @@ module PermissionForge
 
     teardown do
       Rake.application = @previous_rake
-      %w[ACTOR REASON USER_ID DRY_RUN].each { |key| ENV.delete(key) }
+      %w[ACTOR REASON USER_ID DRY_RUN THRESHOLD_DAYS].each { |key| ENV.delete(key) }
       @saved_env.each { |key, value| ENV[key] = value }
     end
 
@@ -155,6 +155,47 @@ module PermissionForge
       out, = run_task('permission_forge:stale_assignments')
 
       assert_match(/\(200 days since last review or grant\)/, out)
+    end
+
+    test 'stale_assignments without THRESHOLD_DAYS uses admin_stale_assignment_days' do
+      @assignment.update_columns(created_at: 40.days.ago, updated_at: 40.days.ago)
+
+      out, = run_task('permission_forge:stale_assignments')
+      assert_includes out, 'No stale assignments found (threshold: 90 days).'
+
+      PermissionForge.configuration.admin_stale_assignment_days = 30
+      Rake::Task['permission_forge:stale_assignments'].reenable
+      _, _, status = run_task('permission_forge:stale_assignments')
+
+      assert_equal 1, status
+      assert_equal({ 'stale' => 1, 'users' => 1, 'threshold_days' => 30 }, last_event('report.generated').data['counts'])
+    end
+
+    test 'stale_assignments takes a THRESHOLD_DAYS of whole days' do
+      @assignment.update_columns(created_at: 40.days.ago, updated_at: 40.days.ago)
+      ENV['THRESHOLD_DAYS'] = ' 30 '
+
+      out, _, status = run_task('permission_forge:stale_assignments')
+
+      assert_equal 1, status
+      assert_match(/\(40 days since last review or grant\)/, out)
+      assert_equal 30, last_event('report.generated').data.dig('counts', 'threshold_days')
+    end
+
+    # Read with to_i, these were 0 days: every permanent assignment reported.
+    test 'stale_assignments refuses a THRESHOLD_DAYS that is not a number of days' do
+      ['', 'abc', '-3', '0', '1.5', '36501', '1_0'].each do |given|
+        ENV['THRESHOLD_DAYS'] = given
+        Rake::Task['permission_forge:stale_assignments'].reenable
+
+        assert_no_difference -> { PermissionForge::AuditEvent.unscoped.where(event: 'report.generated').count } do
+          out, err, status = run_task('permission_forge:stale_assignments')
+
+          assert_equal 2, status, "THRESHOLD_DAYS=#{given.inspect}"
+          assert_empty out
+          assert_includes err, "THRESHOLD_DAYS must be a whole number of days from 1 to 36500 (got #{given.inspect})"
+        end
+      end
     end
 
     test 'tasks log through Rails.logger' do

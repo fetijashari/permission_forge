@@ -30,7 +30,7 @@ bundle install
 rails generate permission_forge:install
 ```
 
-This creates two files:
+This creates two files and prints the next steps (the ones in this guide):
 1. **`config/initializers/permission_forge.rb`** — your configuration file
 2. **A migration** — creates all the database tables PermissionForge needs
 
@@ -107,7 +107,7 @@ end
 
 > **Do not include `PermissionScopedFindable` in your user model.** Sign-in, session restore, password reset and confirmation run before anyone is signed in, and under `nil_user_strategy = :deny` their lookups find nothing. Scope a user directory with `User.permission_scoped` in its controller.
 >
-> **User model contract:** PermissionForge needs *something* to show for each person in the admin (People list, person picker, audit). It auto-discovers `:name` → `:full_name` → `:display_name` → `first_name`/`last_name` (or `firstname`/`lastname`) → `:email` (any can be a column **or** a Ruby method/virtual attribute), falling back to `User #<id>`. People are searched by whichever of `name`, `email`, `full_name`, `display_name`, `first_name`/`last_name`, `firstname`/`lastname`, `username`, `login` exist as columns.
+> **User model contract:** PermissionForge needs *something* to show for each person in the admin (People list, person picker, audit). It auto-discovers `:name` → `:full_name` → `:display_name` → `first_name`/`last_name` (or `firstname`/`lastname`) → `:email` or `:email_address`, the column Rails 8's `bin/rails generate authentication` creates (any can be a column **or** a Ruby method/virtual attribute), falling back to `User #<id>`. People are searched by whichever of `name`, `email`, `email_address`, `full_name`, `display_name`, `first_name`/`last_name`, `firstname`/`lastname`, `username`, `login` exist as columns.
 >
 > If the defaults don't fit, override `config.user_label_formatter` and/or `config.user_list_resolver` — see [Configuration](./configuration.md).
 
@@ -204,6 +204,32 @@ entry[:fields]
 # => { name:  { read_access: true, edit_access: true,  mask_access: false, mask_strategy: 'full' },
 #      email: { read_access: true, edit_access: false, mask_access: false, mask_strategy: 'full' } }
 ```
+
+## Step 7: Open the Admin UI
+
+The admin UI is where a business owner manages Permission Sets, people and assignments without the console. Mount it in `config/routes.rb`:
+
+```ruby
+Rails.application.routes.draw do
+  mount PermissionForge::Engine, at: "/permissions"
+end
+```
+
+It is behind HTTP Basic auth and answers **401** until credentials are set. The generated initializer has them commented under "Admin screens", Option A; uncomment the two lines:
+
+```ruby
+config.http_basic_auth_user     = ENV['PF_ADMIN_USER']
+config.http_basic_auth_password = ENV['PF_ADMIN_PASSWORD']
+```
+
+Restart the server with `PF_ADMIN_USER` and `PF_ADMIN_PASSWORD` set and open `http://localhost:3000/permissions`. To sign admins in with your app's own authentication instead (Option B, `base_controller_class`), see [Admin UI](./admin-ui.md#disabling-http-basic-auth). Before production, run `bin/rails permission_forge:audit`: it lists the settings and data that are still open.
+
+## Using Rails 8's authentication generator
+
+If your app was set up with `bin/rails generate authentication`, the generated `current_user_resolver` already reads its `Current.user`, so it needs no change. Two things to know:
+
+- **Public actions.** `allow_unauthenticated_access` skips `require_authentication`, which is what resumes the session, so on those actions `Current.user` is `nil` even for a signed-in visitor. The controller action guard then treats them as signed out, and row-level rules and masking follow the nil-user strategies (the default `:bypass` restricts nothing). Add `prepend_before_action :resume_session, only: ...` for the same actions: see [Controller Actions](./controller-actions.md#callback-order).
+- **Your own admin controller.** An admin controller that inherits from your `ApplicationController` (`base_controller_class`, Option B) also inherits the generated `request_authentication`, which redirects to `new_session_path`. That path does not resolve inside the engine, so a signed-out visit to `/permissions` is a 500. Override it to use `main_app.new_session_path`: see [Admin UI](./admin-ui.md#rails-8-authentication-generator).
 
 ## What's Next?
 

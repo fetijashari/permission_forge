@@ -5,12 +5,18 @@ module PermissionForge
     # Display name / email / initials for a host-app user in the admin UI.
     #
     # Honors config.user_label_formatter for the name. Otherwise tries :name,
-    # :full_name, :display_name, then composes first_name/last_name (or firstname/lastname). Attribute
+    # :full_name, :display_name, then composes first_name/last_name (or firstname/lastname), then
+    # the email (EMAIL_ATTRIBUTES: `email`, or Rails 8's `email_address`). Attribute
     # reads go raw-column-first (read_attribute_before_type_cast) so
     # MaskedAttributes on the User model never garbles admin lists; virtual
     # attributes and blank columns fall back to the public reader.
     class PersonLabel
       NAME_METHODS = %i[name full_name display_name].freeze
+      # The one definition of "the user's email attribute", in order: `email`,
+      # then `email_address` (the column Rails 8's authentication generator
+      # creates). Labels, people search, bulk matching and the default
+      # profile_builder all read it from here.
+      EMAIL_ATTRIBUTES = %i[email email_address].freeze
 
       def initialize(user, configuration: PermissionForge.configuration)
         @user = user
@@ -21,8 +27,9 @@ module PermissionForge
         @name ||= formatted_name || default_name || email || fallback
       end
 
+      # The first EMAIL_ATTRIBUTES value present, stripped.
       def email
-        @email ||= raw_value(:email).to_s.strip.presence
+        @email ||= first_present(EMAIL_ATTRIBUTES)
       end
 
       # Email shown under the name — omitted when the name already is the email.
@@ -58,11 +65,15 @@ module PermissionForge
       end
 
       def default_name
-        NAME_METHODS.each do |method|
-          value = raw_value(method).to_s.strip
+        first_present(NAME_METHODS) || composed(:first_name, :last_name) || composed(:firstname, :lastname)
+      end
+
+      def first_present(attrs)
+        attrs.each do |attr|
+          value = raw_value(attr).to_s.strip
           return value unless value.empty?
         end
-        composed(:first_name, :last_name) || composed(:firstname, :lastname)
+        nil
       end
 
       def composed(first, last)

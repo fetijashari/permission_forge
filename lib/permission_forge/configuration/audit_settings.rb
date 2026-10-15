@@ -38,7 +38,8 @@ module PermissionForge
       # user, an Audit::Actor, or a Hash { type:, id:, label: }. nil (default)
       # falls back to current_user_resolver; under HTTP Basic auth the
       # supplied username is recorded with actor_type 'basic_auth'.
-      #   config.audit_actor_resolver = ->(controller) { controller.current_admin }
+      #   # Rails 8's authentication generator, under HTTP Basic (its sign-in does not run there):
+      #   config.audit_actor_resolver = ->(controller) { Session.find_by(id: controller.request.cookie_jar.signed[:session_id])&.user }
       attr_accessor :audit_actor_resolver
 
       # Lambda(controller) returning the request context stored with each

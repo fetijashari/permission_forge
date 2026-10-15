@@ -1,8 +1,10 @@
 module PermissionForge
   module Services
     # Audits permanent permission set assignments that haven't been reviewed
-    # within a configurable threshold (default: 90 days). Reviewed means the
-    # last access review "Keep" (reviewed_at), else the grant (created_at) —
+    # within a threshold (default: config.admin_stale_assignment_days, the
+    # threshold of the admin's Stale list; when that is nil,
+    # Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS, 90).
+    # Reviewed means the last access review "Keep" (reviewed_at), else the grant (created_at) —
     # PermissionSetUser.stale_before; editing an assignment is not a review.
     # Supports GDPR Art. 5(1)(e) — Storage Limitation.
     #
@@ -21,12 +23,14 @@ module PermissionForge
     class StaleAssignmentAuditor
       include Concerns::AcrossTenants
 
-      # @param threshold_days [Integer] how long a permanent assignment may go unreviewed
+      # @param threshold_days [Integer, nil] how long a permanent assignment may go
+      #   unreviewed; nil: config.admin_stale_assignment_days
       # @return [Hash] see {#call}
       def self.call(...) = new(...).call
 
-      def initialize(threshold_days: 90)
-        @threshold_days = threshold_days
+      def initialize(threshold_days: nil, configuration: PermissionForge.configuration)
+        @threshold_days = threshold_days || configuration.admin_stale_assignment_days ||
+                          Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS
       end
 
       # @return [Hash] `{ stale_count:, affected_user_ids:, assignments: }`

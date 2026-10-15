@@ -44,7 +44,7 @@ module PermissionForge
           example: 'Rails.application.credentials.dig(:permission_forge, :password)'),
         d(:base_controller_class, 'admin_access', :class, example: "'::AdminController'"),
         d(:admin_assignment_authorization, 'admin_access', :hook,
-          example: '->(controller, target, user_ids, action) { controller.current_user&.admin? }'),
+          example: '->(controller, target, user_ids, action) { PermissionForge.current_user&.admin? }'),
 
         d(:user_class, 'people', :class, example: "'User'"),
         d(:current_user_resolver, 'people', :hook, example: '-> { ::Current.user if defined?(::Current) && ::Current.respond_to?(:user) }'),
@@ -111,7 +111,8 @@ module PermissionForge
         d(:audit_user_class, 'audit_trail', :class, example: "'User'"),
         d(:audit_events, 'audit_trail', :enum, options: %i[auto true false]),
         d(:audit_actor_resolver, 'audit_trail', :hook, nil_label: :default,
-                                                       example: '->(controller) { controller.current_user }'),
+                                                       example: '->(controller) { Session.find_by(id: ' \
+                                                                'controller.request.cookie_jar.signed[:session_id])&.user }'),
         d(:audit_request_context, 'audit_trail', :hook, nil_label: :default,
                                                         example: '->(controller) { { request_id: controller.request.request_id, ' \
                                                                  'ip: controller.request.remote_ip } }'),
@@ -121,18 +122,18 @@ module PermissionForge
         d(:audit_log_subscriber, 'audit_trail', :bool),
         d(:audit_retention_period, 'audit_trail', :num, unit: :seconds, nil_label: :nil),
         d(:audit_log_authorization, 'audit_trail', :hook, nil_label: :default,
-                                                          example: '->(controller) { controller.current_user&.auditor? }'),
+                                                          example: '->(controller) { PermissionForge.current_user&.auditor? == true }'),
 
         d(:tenant_model, 'multi_tenancy', :class, nil_label: :disabled, example: "'Account'"),
         d(:tenant_column, 'multi_tenancy', :str, nil_label: :disabled),
 
         d(:api_enabled, 'admin_api', :bool),
-        d(:api_auth, 'admin_api', :hook, example: '->(controller) { controller.current_user&.admin? }'),
+        d(:api_auth, 'admin_api', :hook, example: '->(controller) { PermissionForge.current_user&.admin? }'),
         d(:api_base_controller_class, 'admin_api', :class, example: "'::Api::BaseController'"),
         d(:api_action_authorization, 'admin_api', :hook,
-          example: '->(controller, action, record) { controller.current_user&.admin? }'),
+          example: '->(controller, action, record) { PermissionForge.current_user&.admin? }'),
         d(:api_assignment_authorization, 'admin_api', :hook,
-          example: '->(controller, permission_set, user_ids) { controller.current_user&.admin? }'),
+          example: '->(controller, permission_set, user_ids) { PermissionForge.current_user&.admin? }'),
         d(:api_require_authorization, 'admin_api', :bool),
         d(:api_stats_require_admin, 'admin_api', :bool),
         d(:api_record_identifier, 'admin_api', :enum, options: %i[uuid id]),

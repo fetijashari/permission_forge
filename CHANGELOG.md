@@ -6,6 +6,84 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+### Added
+
+- **`NotAuthorizedError#failure_messages`.** The `failure_message` of each row-level rule that denied the record, as
+  the admin wrote it (in rule order, without blanks and repeats; `[]` when no rule denied), so a host can render a
+  friendly 403 without parsing `message` (`[Forbidden by Rule: <name>] with message: <failure_message>`). `message`
+  and `details` are unchanged. See [Handling Denials](docs/row-level-rules.md#handling-denials).
+- **The install generator prints the next steps.** After the files it lists `bin/rails db:migrate` (not with
+  `--skip-migration`), the mount line, where the admin credentials go (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`, or your
+  own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start. `rails destroy` prints none.
+
+### Changed
+
+- **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
+  `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
+  `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`
+  (the action guard) in `config.action_dispatch.rescue_responses` as `:forbidden`, as ActiveRecord registers
+  `RecordNotFound` as 404. In production Rails renders `public/403.html`, which Rails apps do not ship: an HTML request
+  gets an empty 403 page until you add one (a JSON request gets `{"status":403,"error":"Forbidden"}`). Like every mapped
+  exception, an unrescued denial is no longer reported to `Rails.error` as unhandled; it stays in the audit log
+  (`access.denied`, `action.denied`). Request tests under `show_exceptions = :rescuable` (the Rails 7.1+ test default)
+  now get the 403 response instead of the raised error. A `rescue_from` in your controllers runs first and keeps
+  deciding, as before. **Opt out:** rescue the errors yourself, or set another status in `config/application.rb`,
+  e.g. `config.action_dispatch.rescue_responses['PermissionForge::ActionNotAuthorizedError'] = :internal_server_error`.
+- **The stale-assignment report and the admin agree on the threshold.** Without `THRESHOLD_DAYS` the rake task, and
+  `Services::StaleAssignmentAuditor.call` without `threshold_days:`, now use `config.admin_stale_assignment_days`, as
+  the Home Stale list, the person page and `rake permission_forge:audit` already did; they used a fixed 90 before.
+  Nothing changes unless you set `admin_stale_assignment_days` to something other than 90. Callers that pass
+  `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
+  raising. **Opt out:** run the task with `THRESHOLD_DAYS=90`, and call
+  `Services::StaleAssignmentAuditor.call(threshold_days: 90)`.
+
+### Fixed
+
+- **Users made by Rails 8's `bin/rails generate authentication` show and are found by their email.** That generator
+  names the column `email_address`, and PermissionForge only read `email`: a person without a name column showed as
+  "User #2" in the admin, searching people by email found nobody, "Paste emails or names" in bulk assignment reported
+  existing people as not found, and the cached profile (`permissions_hash[:profile][:email]`) was empty. The admin
+  labels, people search and bulk matching now read `email`, then `email_address` (bulk matching tries every such
+  column the table has), and the default `profile_builder` and the one the install generator writes fill the
+  profile's `email` key from `email_address` when `email` is missing or blank. An existing generated initializer keeps
+  its `profile_builder`: change its `email:` to `user.try(:email).presence || user.try(:email_address)` to get the
+  same. Users with an `email` column see no change.
+- **An `expires_at` that is not ISO 8601 is refused.** The API (`POST …/users`, `POST …/users/bulk`) and the admin's
+  Undo after a removal read `expires_at` with `Time.zone.parse`, which takes any text with a recognisable fragment:
+  `"tuesday"` or `"next tuesday-ish"` became today 00:00 and was answered 201 with an assignment that had already ended,
+  and `"2030-02-30"` became 2 March. `expires_at` is now read only as an ISO 8601 date (`2026-10-22`, the beginning of
+  that day in `Time.zone`, as before) or date and time (`2026-10-22T10:00`, optional seconds and fraction, `T` or one
+  space, optional `Z` or `±HH:MM`); anything else is a 422 in the API (a 400 in the admin) and assigns nobody. The
+  formats are listed in [`docs/admin-api.md`](docs/admin-api.md#expires_at-formats). The values the admin itself sends
+  are unchanged.
+- **`rake permission_forge:stale_assignments` refuses a `THRESHOLD_DAYS` it cannot read.** The value was read with
+  `to_i`, so `THRESHOLD_DAYS=`, `abc`, `0` or `-3` became a threshold of 0 (or less) days and reported every permanent
+  assignment, exiting 1. Anything that is not a whole number of days from 1 to 36500 now prints what is expected on
+  stderr and exits 2, without running the report.
+
+### Documentation
+
+Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authentication generator:
+
+- README Installation and the getting-started guide now mount the admin UI and set its credentials; without them there
+  is no admin to open. The README Quick Start defines the `user` it assigns.
+- The initializer template, README and guides no longer call `controller.current_user` / `controller.current_admin` in
+  the authorization examples, which Rails 8's generator does not define (a 500 on the default base controllers):
+  they use `PermissionForge.current_user`, and the `audit_actor_resolver` examples show a Rails 8 and a Devise variant
+  for HTTP Basic auth.
+- [Admin UI](docs/admin-ui.md#rails-8-authentication-generator): with Rails 8's generator as `base_controller_class`, a
+  signed-out visit was a 500 (`new_session_path` does not resolve inside the engine); a complete admin base controller
+  that redirects through `main_app` and checks for an admin.
+- [Controller actions](docs/controller-actions.md#callback-order): the user must be resolved before the guard and any
+  model read; an action opened with `allow_unauthenticated_access` needs `prepend_before_action :resume_session`.
+- [Configuration](docs/configuration.md#how-people-are-labelled-and-searched): how people are labelled, which columns
+  are searched in SQL, and that an Array-returning `user_list_resolver` is searched in Ruby and loads every user.
+- [Admin API](docs/admin-api.md#response-format): a flat JSON body is accepted where Rails wraps parameters (only an
+  empty, missing or non-object section answers 422); the collection sample shows `meta.pagination`.
+- [Assignment expiration](docs/assignment-expiration.md#rake-task-stale-assignments): `rake
+  permission_forge:stale_assignments`, its `THRESHOLD_DAYS`, its output and its exit status 1 when it finds stale
+  assignments.
+
 ## [0.14.1] - 2026-10-14
 
 ### Security

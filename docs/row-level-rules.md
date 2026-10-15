@@ -259,20 +259,80 @@ The path `'organization.members.user'` tells PermissionForge to:
 
 > **Important:** The association names in `field_accessor_path` must match your ActiveRecord association names exactly.
 
-## Handling NotAuthorizedError
+## Handling Denials
 
-In your base controller, rescue the error:
+Two errors refuse access. This section is the one place for both; [Controller Actions](controller-actions.md#2-answer-denied-requests) links here.
+
+| Error | Raised by | Readers |
+|-------|-----------|---------|
+| `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` | `find_by` / `find_by!` when a row-level rule denies a record that exists; `find_by` / `find_by!` / `permission_scoped` with nobody signed in under `nil_user_strategy = :raise` | `failure_messages`, `message`, `details`, `user`, `record_id`, `record` |
+| `PermissionForge::ActionNotAuthorizedError` | `ControllerActionGuard`, before the action runs | `resource`, `action`, `controller_path`, `reason`, `user`, `record` |
+
+### The default: 403 Forbidden
+
+The engine registers both errors in `config.action_dispatch.rescue_responses` as `:forbidden`, so a denial your app does not rescue answers **403**, the way Rails answers 404 for `ActiveRecord::RecordNotFound`. Through 0.14.1 it was a 500. Rails looks the status up by the exact class name, so only these two classes are mapped: a subclass your app defines answers 500 unless you register it too.
+
+What the response looks like depends on Rails' error pages, not on the gem:
+
+- **Production** (`consider_all_requests_local = false`): `ActionDispatch::PublicExceptions` renders `public/403.html` (or `public/403.<locale>.html`). **Rails apps ship no `public/403.html`**, so an HTML request gets a 403 with an empty body until you add one or rescue the error. A JSON request gets `{"status":403,"error":"Forbidden"}`.
+- **Development**: the debug page, with status 403.
+- **Request tests**: under `config.action_dispatch.show_exceptions = :rescuable` (what a Rails 7.1+ app generates in `config/environments/test.rb`) the test now gets the 403 response, as it gets a 404 for `RecordNotFound`: a test that wrapped the request in `assert_raises` asserts `assert_response :forbidden` instead. Under `:none` the error still raises in the test.
+
+Like every mapped exception, an unrescued denial is not reported to `Rails.error` as an unhandled exception. The denial is still in the audit log: `access.denied` (rule) and `action.denied` (guard) are stored whenever the audit log is on (`audit_runtime_events` holds `:denied` by default; see [audit-log.md](audit-log.md)).
+
+**Opting out.** A `rescue_from` in your controller runs first and decides (below). To answer a different status without a handler, set it in `config/application.rb` or `config/environments/*.rb` — `config/initializers` run after Rails has read the setting:
 
 ```ruby
-class ApplicationController < ActionController::API
+# config/application.rb — e.g. hide that the record exists
+config.action_dispatch.rescue_responses['PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError'] = :not_found
+```
+
+### Rescuing them yourself
+
+An HTML app (`ActionController::Base`):
+
+```ruby
+class ApplicationController < ActionController::Base
   rescue_from PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError do |error|
-    Rails.logger.info("Forbidden: #{error.message}")
-    render json: { status: 403, error: 'Forbidden' }, status: :forbidden
+    # The rules' own messages, as the admin wrote them ([] when no rule denied).
+    @reasons = error.failure_messages
+    render 'errors/forbidden', status: :forbidden
+  end
+
+  rescue_from PermissionForge::ActionNotAuthorizedError do |error|
+    # error.resource => "Customer", error.action => "export",
+    # error.controller_path => "customers",
+    # error.reason => :action_denied (:nil_user_denied when nobody is signed in)
+    redirect_back fallback_location: root_path, alert: t('errors.not_allowed', action: error.action)
   end
 end
 ```
 
-`error.message` is always a String: the failure messages of the rules that denied the record, joined by `, ` (each reads `[Forbidden by Rule: <name>] with message: <failure_message>`). `error.details` keeps the structured value: the Array of those messages for a rule denial, or a Hash with `:message` when there is no user under `nil_user_strategy = :raise`. `error.user` and `error.record_id` name the user the rules were applied for and the record that was denied (`error.record` is `nil`: the denied row is not loaded). Rule names and failure messages are written by admins; decide whether you want them in a response before you render them.
+A JSON API (`ActionController::API`):
+
+```ruby
+class Api::BaseController < ActionController::API
+  rescue_from PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError do |error|
+    render json: { error: { status: 403, messages: error.failure_messages.presence || ['Forbidden'] } },
+           status: :forbidden
+  end
+
+  rescue_from PermissionForge::ActionNotAuthorizedError do |error|
+    render json: { error: { status: 403, action: error.action, resource: error.resource } }, status: :forbidden
+  end
+end
+```
+
+A handler may answer any status (a 404 to hide that the record exists, a redirect to sign in when `error.reason == :nil_user_denied`); whatever it renders is the response.
+
+### What `NotAuthorizedError` tells you
+
+- `error.failure_messages` — an Array of the `failure_message` of each rule that denied the record, in rule order, without blanks and repeats (two Permission Sets can carry the same rule). Empty when no rule denied: nobody signed in under `nil_user_strategy = :raise`, or an error your own code raised without `failure_messages:`. Use it for a friendly 403 without parsing `message`.
+- `error.message` — always a String: the denying rules joined by `, `, each as `[Forbidden by Rule: <name>] with message: <failure_message>`. Meant for logs.
+- `error.details` — the structured value the error was raised with: the Array of those strings for a rule denial, or a Hash with `:message` when there is no user under `nil_user_strategy = :raise`.
+- `error.user` and `error.record_id` — the user the rules were applied for and the record that was denied (`error.record` is `nil`: the denied row is not loaded).
+
+Rule names and failure messages are written by admins; decide whether you want them in a response before you render them.
 
 ## ViewAll / ModifyAll
 

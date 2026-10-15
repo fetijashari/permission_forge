@@ -1,8 +1,6 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/fetijashari/permission_forge/main/docs/assets/logo-horizontal-dark.svg">
-    <img alt="PermissionForge" src="https://raw.githubusercontent.com/fetijashari/permission_forge/main/docs/assets/logo-horizontal-light.svg" width="420">
-  </picture>
+  <img alt="PermissionForge" src="https://raw.githubusercontent.com/fetijashari/permission_forge/main/docs/assets/logo-horizontal-light.svg#gh-light-mode-only" width="420">
+  <img alt="PermissionForge" src="https://raw.githubusercontent.com/fetijashari/permission_forge/main/docs/assets/logo-horizontal-dark.svg#gh-dark-mode-only" width="420">
 </p>
 
 <p align="center">
@@ -86,6 +84,23 @@ bin/rails db:migrate
 
 This creates `config/initializers/permission_forge.rb` and a migration with 9 tables: the 8 permission tables and the
 audit log, prefixed with `permission_forge_` by default.
+
+Then mount the admin UI and give it credentials. It is behind HTTP Basic auth and answers 401 until both are set:
+
+```ruby
+# config/routes.rb
+mount PermissionForge::Engine, at: "/permissions"
+```
+
+```ruby
+# config/initializers/permission_forge.rb: uncomment Option A ("Admin screens")
+config.http_basic_auth_user     = ENV['PF_ADMIN_USER']
+config.http_basic_auth_password = ENV['PF_ADMIN_PASSWORD']
+```
+
+Set `PF_ADMIN_USER` and `PF_ADMIN_PASSWORD` in the environment and open `/permissions`. To sign admins in with your
+own authentication instead, see [Admin UI](https://github.com/fetijashari/permission_forge/blob/main/docs/admin-ui.md#disabling-http-basic-auth)
+(`base_controller_class`). `bin/rails permission_forge:audit` lists what is still open before production.
 
 Generator options:
 - `--skip-migration`: no migration (for apps with existing tables)
@@ -176,12 +191,12 @@ PermissionForge::ResourceField.create!(
   read_access: true, edit_access: true
 )
 
+user = User.first # the person who gets the set
 PermissionForge::PermissionSetUser.create!(permission_set: pset, user: user)
 ```
 
 Each change invalidates the cached permissions of the users it affects; the next read rebuilds them. The admin UI
-(mounted as described in [Admin UI](https://github.com/fetijashari/permission_forge/blob/main/docs/admin-ui.md)) does
-the same through forms.
+(mounted at `/permissions` in [Installation](#installation)) does the same through forms.
 
 ### 5. Check permissions at runtime
 
@@ -268,11 +283,14 @@ Every create, update and destroy, made through the models, of a Permission Set, 
 assignment or membership is written to the `audit_events` table inside the change's own transaction. Under the default
 `audit_change_failure_strategy = :raise`, a change whose event cannot be written rolls back. Each event stores the
 actor, source, request id, IP, an optional reason, a correlation id, and the changes or a snapshot of the deleted row.
-Name the person who acts, otherwise HTTP Basic admins share one name:
+Behind your own admin controller (`base_controller_class`) the actor is the user `current_user_resolver` returns.
+Under HTTP Basic auth your app's sign-in does not run in the admin, so admins share one login name unless
+`audit_actor_resolver` names them:
 
 ```ruby
 PermissionForge.configure do |config|
-  config.audit_actor_resolver = ->(controller) { controller.current_admin }
+  # Rails 8's authentication generator (with Devise: controller.request.env['warden']&.user(:user))
+  config.audit_actor_resolver = ->(controller) { Session.find_by(id: controller.request.cookie_jar.signed[:session_id])&.user }
   config.audit_retention_period = 2.years # purge: bin/rails permission_forge:audit_events:purge
 end
 ```

@@ -89,8 +89,9 @@ module PermissionForge
     # Display label for a user in the assignment dropdown.
     #
     # Honors `config.user_label_formatter` if configured. Otherwise tries
-    # `:name`, `:full_name`, `:display_name`, then `:email`, then composes
-    # `first_name`/`last_name`, and finally falls back to `User #<id>`.
+    # `:name`, `:full_name`, `:display_name`, then composes `first_name`/`last_name`,
+    # adds the email (`Admin::PersonLabel::EMAIL_ATTRIBUTES`: `email`, then
+    # `email_address`), and finally falls back to `User #<id>`.
     # The id is appended in `#<id>` form to keep labels unique.
     def pf_user_option_label(user)
       formatter = PermissionForge.configuration.user_label_formatter
@@ -103,7 +104,7 @@ module PermissionForge
 
     def pf_default_user_label(user)
       name = pf_first_present(user, :name, :full_name, :display_name) || pf_compose_name(user)
-      email = pf_raw_user_attribute(user, :email).to_s.strip.presence
+      email = pf_first_present(user, *Admin::PersonLabel::EMAIL_ATTRIBUTES)
       pf_format_name_and_email(name, email)
     end
 

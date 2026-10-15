@@ -49,7 +49,11 @@ class ApplicationController < ActionController::Base
 end
 ```
 
-Without a `rescue_from` the error becomes a 500 in production.
+Without a `rescue_from` the request answers **403 Forbidden**: the engine registers the error in
+`config.action_dispatch.rescue_responses`. In production Rails renders `public/403.html`, which Rails apps do
+not ship, so an HTML request gets an empty 403 page until you add one or rescue the error. See
+[Handling Denials](row-level-rules.md#handling-denials) for the default, how to change it, and HTML and JSON
+handlers for this error and the row-level `NotAuthorizedError`.
 
 ### 3. Permit the action in a Permission Set
 
@@ -288,7 +292,9 @@ authentication is refused. That option only affects the guard; `nil_user_strateg
 ### Callback order
 
 The guard reads the user from `config.current_user_resolver` when its `before_action` runs.
-If your app sets the user in a `before_action` too, that callback has to come first:
+The rule: **the user must be resolved before the guard runs and before any model read** (a
+`find_by`, `permission_scoped`, a masked getter), on every action, public ones included. If your
+app sets the user in a `before_action` too, that callback has to come first:
 
 ```ruby
 class ApplicationController < ActionController::Base
@@ -300,6 +306,29 @@ end
 In the opposite order the guard sees no user: under `action_guard_nil_user_strategy = :deny` it
 refuses everything, and with neither option set (`nil_user_strategy` `:bypass`) it lets
 everything through.
+
+**Rails 8's authentication generator.** Its `Authentication` concern adds
+`before_action :require_authentication` to `ApplicationController`, and `require_authentication`
+is what resumes the session (`resume_session` sets `Current.session`, and `Current.user` comes from
+it). A controller that includes the guard after inheriting from it gets the right order. An action
+opened with `allow_unauthenticated_access` skips `require_authentication`, so nothing resumes the
+session there: `Current.user` is `nil` even for a signed-in visitor. The guard then treats them as
+signed out (refused under `action_guard_nil_user_strategy = :deny`), and if the guard is skipped
+too, row-level rules and masking follow the nil-user strategies, whose default `:bypass` shows
+every row unmasked. Resume the session on those actions, ahead of the guard:
+
+```ruby
+class CustomersController < ApplicationController
+  include PermissionForge::Concerns::ControllerActionGuard
+  allow_unauthenticated_access only: :index
+  prepend_before_action :resume_session, only: :index # Current.user for a signed-in visitor
+end
+```
+
+`prepend_before_action` puts it ahead of the guard wherever the `include` is; a plain
+`before_action :resume_session` works only when it is declared before the `include`.
+`resume_session` reads the session cookie and never redirects, so a signed-out visitor still
+reaches the action, as `nil`.
 
 ## Hiding Buttons
 

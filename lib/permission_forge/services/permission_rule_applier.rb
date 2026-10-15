@@ -49,7 +49,12 @@ module PermissionForge
         @operator_registry = operator_registry
       end
 
-      # @return [Array(ActiveRecord::Relation, Array<String>)] query and failure messages
+      # The query, the denial's messages (`[Forbidden by Rule: <name>] with
+      # message: <failure_message>`, one per denying rule) and the denying
+      # rules (the rule hashes themselves, in the same order); both empty when
+      # nothing denied.
+      #
+      # @return [Array(ActiveRecord::Relation, Array<String>, Array<Hash>)]
       def call
         report_no_rules if @rules.empty?
         query = @rules.reduce(@model_class.where(nil)) { |q, rule| build_rule_query(q, rule) }
@@ -57,11 +62,12 @@ module PermissionForge
         # Happy path is a single existence check: rule constraints are monotonic
         # (each only removes rows), so if the fully-constrained query still matches
         # the target, no individual rule denied it.
-        return [query, []] if @rules.empty? || query.where(*@args).exists?
+        return [query, [], []] if @rules.empty? || query.where(*@args).exists?
 
         # Denial path only: attribute the denial to specific rules for the error
         # message. The extra per-rule queries here run solely when access is denied.
-        [query, denial_messages]
+        denying = denying_rules
+        [query, denying.map { |rule| rule_failure_message(rule) }, denying]
       end
 
       private
@@ -79,14 +85,14 @@ module PermissionForge
       # Rebuilds the query rule-by-rule, blaming each rule whose addition removes
       # the target from the result set (the first denying rule and every rule
       # after it, matching the original cumulative semantics).
-      def denial_messages
-        messages = []
+      def denying_rules
+        denying = []
         @rules.reduce(@model_class.where(nil)) do |q, rule|
           next_query = build_rule_query(q, rule)
-          messages << rule_failure_message(rule) unless next_query.where(*@args).exists?
+          denying << rule unless next_query.where(*@args).exists?
           next_query
         end
-        messages
+        denying
       end
 
       def build_rule_query(query, rule)

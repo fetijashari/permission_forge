@@ -13,8 +13,8 @@ module PermissionForge
       # SQL-backed: searches whichever of the usual name/email columns exist.
       class Relation
         # Common person columns; only those the user table has are searched.
-        SEARCH_COLUMNS = %w[name email full_name display_name first_name last_name firstname lastname
-                            username login].freeze
+        SEARCH_COLUMNS = (%w[name] + PersonLabel::EMAIL_ATTRIBUTES.map(&:to_s) +
+                          %w[full_name display_name first_name last_name firstname lastname username login]).freeze
         # A query of digits also matches the id — up to a bigint's length.
         NUMERIC = /\A\d{1,18}\z/
 

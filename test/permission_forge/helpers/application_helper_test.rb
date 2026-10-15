@@ -11,6 +11,7 @@ module PermissionForge
     NamedUser = Struct.new(:id, :name)
     NamedEmailUser = Struct.new(:id, :name, :email)
     EmailOnlyUser = Struct.new(:id, :email)
+    EmailAddressUser = Struct.new(:id, :name, :email_address) # Rails 8's authentication generator
     FallbackNameUser = Struct.new(:id, :name, :full_name, :display_name)
     ComposedNameUser = Struct.new(:id, :first_name, :last_name)
     BareUser = Struct.new(:id)
@@ -99,6 +100,11 @@ module PermissionForge
       user = EmailOnlyUser.new(5, 'bob@example.com')
 
       assert_equal 'bob@example.com #5', pf_user_option_label(user)
+    end
+
+    test 'pf_user_option_label reads email_address when there is no email' do
+      assert_equal 'bob@example.com #5', pf_user_option_label(EmailAddressUser.new(5, nil, 'bob@example.com'))
+      assert_equal 'Bob (bob@example.com) #6', pf_user_option_label(EmailAddressUser.new(6, 'Bob', 'bob@example.com'))
     end
 
     test 'pf_user_option_label falls through blank name to full_name' do

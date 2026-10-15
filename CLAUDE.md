@@ -31,7 +31,7 @@ bundle exec rake yard:check       # Public API docs floor (CI)
 |-------|------|---------|
 | Entry point | `lib/permission_forge.rb` | `configure`, `current_user`, `cache`, `table_name_prefix`, `gdpr_filter_parameters`, `MODEL_NAMES` (the nine models), `RESOURCE_NAME_FORMAT`, `const_missing` (explains a model referenced before the app's autoloader exists); `ModelBindings` (`model_bindings.rb`: what a loaded model declared vs the configuration; logged by `configure` and after boot) |
 | Configuration | `lib/permission_forge/configuration.rb` | All config options, defaults, cache store builder; sub-settings in `configuration/` (`GdprSettings`, `MaskedAttributesSettings`, `QueryScopingSettings`, `AdminUiSettings`, `VirtualAttributesSettings`, `ControllerActionSettings`, `CacheSettings`, `AuditSettings`, `PermitsAttributesSettings`; `MaskedAttributesSettings` also holds `masked_attributes_nil_user_strategy`); `Presets` (`config.preset`: `:compat` = library defaults, `:strict`; a defaults layer: each preset option's writer records an explicit setting, which always wins; `OPT_IN` = checklist rows in no preset), `StrategyValues` (prepended: every strategy option takes a Symbol from its list or its String, anything else raises `ConfigurationError`) |
-| Engine | `lib/permission_forge/engine.rb` | Rails::Engine, isolated namespace — initializers and hooks only; the work lives in plain modules (`BootChecks`, `MaskingSync`, `MaskedModels`, `QueryScopingWarnings`, `Audit`, `ExecutionState`). Never extend a module into the Engine or call `Engine.send`. `Engine.apply_masked_attributes_to_managed_models` is a deprecated delegator to `MaskedModels.apply` (removed in 0.15) |
+| Engine | `lib/permission_forge/engine.rb` | Rails::Engine, isolated namespace — initializers and hooks only (plus `config.action_dispatch.rescue_responses`: both denial errors are 403 by class-name string); the work lives in plain modules (`BootChecks`, `MaskingSync`, `MaskedModels`, `QueryScopingWarnings`, `Audit`, `ExecutionState`). Never extend a module into the Engine or call `Engine.send`. `Engine.apply_masked_attributes_to_managed_models` is a deprecated delegator to `MaskedModels.apply` (removed in 0.15) |
 | Boot & masking | `lib/permission_forge/boot_checks.rb`, `masking_sync.rb`, `masked_models.rb`, `query_scoping_warnings.rb` | `BootChecks.run` (config warnings, then `DATABASE_STEPS`: an ordered table, each step skipped when the database is unreachable), `BootChecks.ensure_tenancy_gem!`; `MaskedModels` (`apply(only:)`, `apply_concern`, `enabled?`, `row_driven?`: a setting that takes its models from the Resource rows); `MaskingSync` (`check!`, `named!`, `boot!`, `reloaded!`) |
 | Execution state | `lib/permission_forge/execution_state.rb` | `ExecutionState` — the one place for the gem's per-fiber / per-request state; `KEYS` lists every slot: its scope (`:fiber` = `Thread#[]`, for the slots whose leak would widen access or drop audit events; `:execution` = `ActiveSupport::IsolatedExecutionState`), what the end of an executor run does (`:clean` = remove what the run added, never write; `:keep`) and what it holds; `RunHook` is installed by `Audit.install!` |
 | Deprecations | `lib/permission_forge/deprecation.rb` | `PermissionForge.deprecator` (registered with `Rails.application.deprecators` via `on_load(:before_initialize)`), `Deprecation.warn` (once per key), `HORIZON` |
@@ -67,17 +67,17 @@ bundle exec rake yard:check       # Public API docs floor (CI)
 The host app's User model needs SOMETHING the gem can use to show people in the admin (People list, person pickers, audit). Either of these works (no User model changes required for most apps):
 
 - A `:name` method/column (recommended — typically `"#{first_name} #{last_name}"`), and/or
-- An `:email` method/column, and/or
+- An `:email` method/column — or `:email_address`, the column Rails 8's `bin/rails generate authentication` creates — and/or
 - `:full_name` / `:display_name` / `:first_name` + `:last_name` / `:firstname` + `:lastname` (auto-discovered)
 
-Labels come from `Admin::PersonLabel`: `config.user_label_formatter` if set, else `:name` → `:full_name` → `:display_name` → composed first/last name → `:email` → `User #<id>`. Attribute reads go raw-column-first (`read_attribute_before_type_cast`) to bypass MaskedAttributes; the public reader is only consulted for virtual attributes or blank columns.
+Labels come from `Admin::PersonLabel`: `config.user_label_formatter` if set, else `:name` → `:full_name` → `:display_name` → composed first/last name → the email → `User #<id>`. "The user's email attribute" has one definition, `Admin::PersonLabel::EMAIL_ATTRIBUTES` (`email`, then `email_address`): labels, search, bulk paste matching (every such column the table has), `pf_user_option_label` and the default `profile_builder` (the profile key stays `email`) read it; the generated initializer spells the same two names (a test pins it). Attribute reads go raw-column-first (`read_attribute_before_type_cast`) to bypass MaskedAttributes; the public reader is only consulted for virtual attributes or blank columns.
 
 For full control, configure `config.user_label_formatter`:
 ```ruby
 config.user_label_formatter = ->(u) { "#{u.last_name}, #{u.first_name} <#{u.email}>" }
 ```
 
-The candidate list is built from `config.user_list_resolver` (default `user_model.order(:id)`, schema-agnostic). Search (`Admin::PeopleCandidates`) runs in SQL on whichever of `name email full_name display_name first_name last_name firstname lastname username login` exist; every query word must match some column, so split name columns work. Array-returning resolvers are searched in Ruby by label. Pickers are capped by `config.user_list_limit` (default 500; `nil` disables). The group "Add member" control is still a plain `<select>` (`shared/_user_select`, labels via `pf_user_option_label` with `#<id>`), with a localized hint when the cap trims it.
+The candidate list is built from `config.user_list_resolver` (default `user_model.order(:id)`, schema-agnostic). Search (`Admin::PeopleCandidates`) runs in SQL on whichever of `name email email_address full_name display_name first_name last_name firstname lastname username login` exist; every query word must match some column, so split name columns work. Array-returning resolvers are searched in Ruby by label. Pickers are capped by `config.user_list_limit` (default 500; `nil` disables). The group "Add member" control is still a plain `<select>` (`shared/_user_select`, labels via `pf_user_option_label` with `#<id>`), with a localized hint when the cap trims it.
 
 ### Key Design Decisions
 
@@ -126,7 +126,7 @@ Composition concern that includes 3 focused sub-concerns:
 
 ### PermissionScopedFindable (include on protected models)
 - Thin orchestrator — overrides `find_by`/`find_by!` and adds `Model.permission_scoped` (chainable rule-constrained relation), delegates query building to `PermissionRuleApplier` service
-- `find_by` returns `nil` for a genuinely missing record; `NotAuthorizedError` raised only when a rule denies an existing record
+- `find_by` returns `nil` for a genuinely missing record; `NotAuthorizedError` raised only when a rule denies an existing record. `NotAuthorizedError#failure_messages` = the denying rules' own `failure_message` texts (the applier's third return value: the denying rule hashes); `message`/`details` keep the `[Forbidden by Rule: …]` strings. Unrescued it is a 403 (engine's `rescue_responses`)
 - ViewAll/ModifyAll bypass — when resource has `view_all` or `modify_all`, all row-level rules are skipped
 - Nil current user follows `nil_user_strategy` (default `:bypass`); fallback queries use `where(nil)` (preserves `default_scope` and tenant scope)
 
@@ -138,7 +138,7 @@ Composition concern that includes 3 focused sub-concerns:
 - Uses direct DB queries (not cached associations) to avoid stale data in callbacks
 
 ### ControllerActionGuard (include on host controllers)
-- `before_action :pf_authorize_action!` → `ControllerActions::Authorizer` → raises `PermissionForge::ActionNotAuthorizedError` (`resource`, `action`, `controller_path`, `reason`); never renders
+- `before_action :pf_authorize_action!` → `ControllerActions::Authorizer` → raises `PermissionForge::ActionNotAuthorizedError` (`resource`, `action`, `controller_path`, `reason`); never renders (unrescued, Rails answers 403: engine's `rescue_responses`; a host `rescue_from` wins). Handling both denial errors is documented once, in `docs/row-level-rules.md#handling-denials`
 - `permission_forge_actions resource:, actions:, rest_actions:` declares the mapping; repeated and subclass declarations **add to** the current one; invalid names raise `ArgumentError` at class load
 - Decision order: unmapped → allow; nil user → `nil_user_strategy`; `action_guard_bypass`; a grant (`user.can?`) → allow; then one `ManagedIndex` lookup: unmanaged → `unconfigured_action_strategy`, managed → deny
 - Anything unexpected fails closed: resolver typos and wrong-shape answers raise `ConfigurationError`, a model that fails to load raises, a raising bypass counts as no bypass, only an exact `true` grants

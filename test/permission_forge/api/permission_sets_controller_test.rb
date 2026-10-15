@@ -45,6 +45,29 @@ module PermissionForge
         assert PermissionForge::PermissionSet.find_by(name: 'New Set')
       end
 
+      # docs/admin-api.md "What answers 422": with JSON parameter wrapping on
+      # (load_defaults 7.0+, as in the dummy app) Rails copies a flat JSON
+      # body's model attributes under the section; an empty or missing
+      # section is a 422.
+      test 'POST create wraps a flat JSON body into the section' do
+        post '/permission_forge/api/permission_sets', params: { name: 'Flat payload' }.to_json,
+                                                      headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        assert_response :created
+        assert PermissionForge::PermissionSet.find_by(name: 'Flat payload')
+      end
+
+      test 'POST create answers 422 for an empty or missing section' do
+        post '/permission_forge/api/permission_sets', params: { not_an_attribute: 'x' }.to_json,
+                                                      headers: { 'CONTENT_TYPE' => 'application/json' }
+        assert_response :unprocessable_entity
+        assert_match(/permission_set/, JSON.parse(response.body).dig('error', 'messages'))
+
+        post '/permission_forge/api/permission_sets', params: { name: 'Form-encoded' }
+        assert_response :unprocessable_entity
+        assert_nil PermissionForge::PermissionSet.find_by(name: 'Form-encoded')
+      end
+
       # ---------- UPDATE ----------
 
       test 'PATCH update modifies permission set' do

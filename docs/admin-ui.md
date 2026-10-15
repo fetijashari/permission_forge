@@ -60,6 +60,8 @@ Now visit `http://localhost:3000/permissions` to open the admin.
 
 ### Setting Credentials
 
+The generated initializer has them commented under "Admin screens", Option A: uncomment the two lines and set `PF_ADMIN_USER` and `PF_ADMIN_PASSWORD` in the environment. Or read them from Rails encrypted credentials:
+
 ```ruby
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
@@ -91,9 +93,42 @@ PermissionForge.configure do |config|
 end
 ```
 
-Now all PermissionForge admin controllers inherit from `AdminController` instead of `ActionController::Base`, and your existing authentication (Devise `before_action :authenticate_user!`, etc.) is inherited automatically.
+Now all PermissionForge admin controllers inherit from `AdminController` instead of `ActionController::Base`, and its callbacks (Devise `before_action :authenticate_user!`, Rails 8's `require_authentication`, your admin check) run before every admin page. One thing does not carry over: the engine is isolated, so a route helper called inside it resolves against the engine's routes, not your app's. A path the engine does not have (`new_session_path`) raises `ActionController::UrlGenerationError` (a 500), and one it has (`root_path`) points into the admin. Call your app's routes through `main_app` (`main_app.new_session_path`).
 
 **With multi-tenancy on**, the base controller must also set the current tenant (or middleware must). A request that reaches the admin with no current tenant is refused with a 403 (plain text), recorded as `admin.auth_failed` with reason `tenant_missing`, unless `config.admin_tenantless_access = :allow` — which serves it across every tenant. See [multi-tenancy.md](multi-tenancy.md).
+
+### Rails 8 authentication generator
+
+Rails 8's `bin/rails generate authentication` puts `before_action :require_authentication` in your `ApplicationController`, and for a signed-out visitor its `request_authentication` redirects to `new_session_path`. Inside the engine that path does not resolve, so a signed-out `GET /permissions` is a 500. Inherit from a base controller that overrides it, and check that the signed-in user is an admin:
+
+```ruby
+# app/controllers/admin/base_controller.rb
+class Admin::BaseController < ApplicationController
+  before_action :require_permissions_admin
+
+  private
+
+  # Inside the mounted engine, route helpers resolve against the engine's
+  # routes: send signed-out visitors to the app's sign-in page via main_app.
+  def request_authentication
+    session[:return_to_after_authenticating] = request.url
+    redirect_to main_app.new_session_path
+  end
+
+  # Signed in is not enough: the admin can grant anything to anyone.
+  def require_permissions_admin
+    head :forbidden unless Current.user&.admin? # an admin flag of your own
+  end
+end
+```
+
+```ruby
+# config/initializers/permission_forge.rb
+config.http_basic_auth_enabled = false
+config.base_controller_class   = '::Admin::BaseController'
+```
+
+`require_authentication` runs first (it is declared in `ApplicationController`) and resumes the session, so `Current.user`, and with it `PermissionForge.current_user`, is the signed-in admin in the admin screens and in the lambdas that receive the controller (`admin_assignment_authorization`, `audit_log_authorization`). After signing in, the generated `SessionsController` returns the admin to the page they asked for (`return_to_after_authenticating`).
 
 ### Using Devise Route Constraints
 
@@ -268,14 +303,16 @@ PermissionForge.configure do |config|
   # Which people appear (default: user_model.order(:id)), capped by user_list_limit (500)
   config.user_list_resolver = -> { User.active.order(:last_name, :first_name) }
 
-  # How a person is labelled (default: name, full_name, display_name, first+last, email)
+  # How a person is labelled (default: name, full_name, display_name, first+last, email or email_address)
   config.user_label_formatter = ->(u) { "#{u.first_name} #{u.last_name}" }
 end
 ```
 
-People are searched by `name`, `email`, `full_name`, `display_name`, `first_name`, `last_name`, `firstname`, `lastname`, `username` and `login`, whichever of those columns exist; a query of digits also matches the id.
+People are searched by `name`, `email`, `email_address` (Rails 8's authentication generator), `full_name`, `display_name`, `first_name`, `last_name`, `firstname`, `lastname`, `username` and `login`, whichever of those columns exist; a query of digits also matches the id.
 
 The people list is also the boundary of who can be reached by id: a person `user_list_resolver` leaves out cannot be opened, assigned, added to a group or erased from these screens (404). A set's Assignments tab still lists every holder of the set. With multi-tenancy on and a users table that is not tenant-scoped, scope the resolver to the current tenant's users.
+
+A resolver that returns an Array instead of a relation is searched in Ruby and loads every user it returns on each lookup: see [How people are labelled and searched](configuration.md#how-people-are-labelled-and-searched).
 
 ### Theming
 

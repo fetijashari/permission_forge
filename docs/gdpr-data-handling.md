@@ -73,7 +73,7 @@ Audits whether permission configurations respect storage limitation:
 - **Time-bound assignments** — Are `expires_at` values set on PermissionSetUser records?
 - **Expired cleanup** — Is `ExpiredAssignmentCleaner` running regularly? (Each removal is an `assignment.revoked` event; the run writes a `cleanup.expired_assignments` event only when it removed something.)
 - **Inactive but assigned** — Sets deactivated but still linked to users
-- **Stale assignments** — Permanent assignments not reviewed in 90+ days. Review is counted from the last "Keep" (`reviewed_at`, recorded as `assignment.reviewed`), else from the grant; an edit is not a review
+- **Stale assignments** — Permanent assignments not reviewed in 90+ days. Review is counted from the last "Keep" (`reviewed_at`, recorded as `assignment.reviewed`), else from the grant; an edit is not a review. `bin/rails permission_forge:stale_assignments` lists them and exits 1 when it finds any ([assignment-expiration.md](assignment-expiration.md#rake-task-stale-assignments))
 - **Audit-log retention** — Is `audit_retention_period` set to your policy, and is `rake permission_forge:audit_events:purge` scheduled? The log holds personal data too (see below)
 - **Cache TTL** — Revoking an assignment invalidates the user's cache once the cache store confirms the removal (0.10.0+); `cache_ttl` (default 1 hour) is the staleness backstop for everything else
 
@@ -205,6 +205,12 @@ PermissionForge::PermissionSetUser
 
 # Cleanup expired
 PermissionForge::Services::ExpiredAssignmentCleaner.call(dry_run: true)
+
+# Permanent assignments not reviewed for admin_stale_assignment_days (default 90; Art. 5(1)(e)).
+# As a rake task that exits 1 when it finds any (THRESHOLD_DAYS= for another threshold):
+#   bin/rails permission_forge:stale_assignments
+# (see assignment-expiration.md#rake-task-stale-assignments)
+PermissionForge::Services::StaleAssignmentAuditor.call
 
 # Preview consent withdrawal (Art. 7(3)) — removes this person's assignments to the sets gated on the flag
 PermissionForge::Services::ConsentWithdrawalHandler.call(

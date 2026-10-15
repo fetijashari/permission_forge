@@ -45,8 +45,10 @@ module PermissionForge
       test 'restore with an unreadable end date is a 400, not a permanent assignment' do
         @assignment.destroy!
 
-        assert_raises(ActionController::BadRequest) do
-          post "#{ROOT}/assignments/restore", params: { permission_set_id: @set.id, user_id: @user.id, expires_at: 'soon' }
+        ['soon', 'tuesday', 'next tuesday-ish', '2026-13-45', '2030-02-30', 'banana'].each do |value|
+          assert_raises(ActionController::BadRequest, value) do
+            post "#{ROOT}/assignments/restore", params: { permission_set_id: @set.id, user_id: @user.id, expires_at: value }
+          end
         end
         assert_not PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
       end
@@ -276,7 +278,7 @@ module PermissionForge
       end
 
       test 'an unreadable expires_at is a 422, not a permanent assignment' do
-        %w[25:99 soon].each do |value|
+        ['25:99', 'soon', 'tuesday', 'next tuesday-ish', '2026-13-45', 'banana'].each do |value|
           post "#{ROOT}/permission_sets/#{@set.uuid}/users", params: { user_id: @user.id, expires_at: value }
           assert_response :unprocessable_entity
           post "#{ROOT}/permission_sets/#{@set.uuid}/users/bulk", params: { user_ids: [@user.id], bulk_action: 'assign', expires_at: value }

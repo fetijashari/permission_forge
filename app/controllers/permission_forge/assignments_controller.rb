@@ -104,8 +104,9 @@ module PermissionForge
     def restore_undo
       return if pf_widening_lock(@assignment.permission_set, :grant)
 
+      # Microseconds: end_of_day is 23:59:59.999999, and IsoTime reads up to 9 fraction digits.
       restore = { 'permission_set_id' => @assignment.permission_set_id, 'user_id' => @assignment.user_id,
-                  'expires_at' => @assignment.expires_at&.iso8601, 'return_to' => return_path }
+                  'expires_at' => @assignment.expires_at&.iso8601(6), 'return_to' => return_path }
       { path: permission_forge.restore_assignments_path, method: 'post', params: restore }
     end
 
