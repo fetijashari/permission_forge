@@ -75,20 +75,23 @@ module PermissionForge
       Rails.logger&.warn(development_masking_warning(config, cache)) if unannounced_masking?(cache)
     end
 
+    # Printed by every development process that boots (a server, a console,
+    # `bin/rails runner`, `db:seed`), so it speaks of processes, not of
+    # "this server".
     def stale_permissions_warning(config)
       "[PermissionForge] Development: the permission cache is #{store_description(config, PermissionForge.cache)}, " \
-        'one per process. A permission change made from a console, `bin/rails runner` or a rake ' \
-        "task invalidates only that process's cache: this server keeps the permissions it has " \
-        "cached until cache_ttl (#{config.cache_ttl.inspect} s) or a restart. Changes made in " \
-        "this server's admin UI apply at once. To share the cache between processes, set " \
-        'config.cache_store = :file_store, "tmp/cache/store" in config/environments/development.rb ' \
-        '(with config.cache_backend = :rails_cache), or set config.cache_backend = :null ' \
-        'in development (no caching). See docs/configuration.md#cache-consistency.'
+        'one per process. A permission change made in one process (a console, `bin/rails runner`, ' \
+        "a rake task or db:seed) invalidates only that process's cache: a running server keeps the " \
+        "permissions it has cached until cache_ttl (#{config.cache_ttl.inspect} s) or a restart. " \
+        "Changes made in the server's own admin UI apply there at once. To share the cache between " \
+        'processes, set config.cache_store = :file_store, "tmp/cache/store" in ' \
+        'config/environments/development.rb (with config.cache_backend = :rails_cache), or set ' \
+        'config.cache_backend = :null in development (no caching). See docs/configuration.md#cache-consistency.'
     end
 
     def development_masking_warning(config, cache)
       "[PermissionForge] Development: #{masking_setting} takes its models from the Resource rows, and the cache " \
-        "store is #{store_description(config, cache)}: it cannot tell this server that a Resource row " \
+        "store is #{store_description(config, cache)}: it cannot tell a running server that a Resource row " \
         'committed from a console, `bin/rails runner` or a rake task names a new model. In development ' \
         'the server re-reads the Resource names from the database instead (one query at most every ' \
         "#{MaskingSync::DATABASE_RECHECK} s); in production a process would mask such a model only after a " \

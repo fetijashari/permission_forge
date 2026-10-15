@@ -23,11 +23,22 @@ module PermissionForge
 
       assert_match DEVELOPMENT_WARNING, log
       assert_match(/Rails\.cache is a :memory_store/, log)
-      assert_match(%r{console, `bin/rails runner` or a rake task invalidates only that process's cache}, log)
+      assert_match(%r{made in one process \(a console, `bin/rails runner`, a rake task or db:seed\) invalidates only that process's cache}, log)
+      assert_match(/a running server keeps the permissions it has cached/, log)
       assert_match(/until cache_ttl \(#{PermissionForge.configuration.cache_ttl} s\)/, log)
       assert_match(%r{config\.cache_store = :file_store, "tmp/cache/store" in config/environments/development\.rb}, log)
       assert_match(/config\.cache_backend = :null/, log)
       assert_equal 1, log.scan(DEVELOPMENT_WARNING).size, 'logged once per boot'
+    end
+
+    # Field test: printed during `db:seed` and `bin/rails runner`, the
+    # warning spoke of "this server" when no server ran.
+    test 'the development warning reads right in any process, not only a server' do
+      log = boot_log(env: 'development', backend: :memory)
+
+      assert_no_match(/this server/, log)
+      assert_match(/one per process/, log)
+      assert_match(/config\.cache_backend = :null in development/, log)
     end
 
     test 'development with cache_backend = :memory warns' do

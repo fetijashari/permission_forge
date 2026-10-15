@@ -55,6 +55,10 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   standard output or error, not while `bin/rails generate` / `destroy` runs, and never in another environment. The
   development masking warning stays in the log (development re-reads the Resource names itself). **Opt out:** none;
   log to standard output (`RAILS_LOG_TO_STDOUT`) to see each warning once.
+- **The development cache warning reads right outside a server.** Every development process prints it, also
+  `db:seed` and `bin/rails runner`, where "this server keeps the permissions it has cached" named a server that was
+  not running. It now says a change made in one process invalidates only that process's cache and that a running
+  server keeps what it cached until `cache_ttl` or a restart; the remedies are unchanged. **Opt out:** none.
 - **`rails -T` descriptions.** `permission_forge:audit` no longer says "Read-only": it changes no permission data and
   records the run in the audit log (`report.generated`). `permission_forge:cache:clear` says what it does first; the
   upgrade hint for 0.13 installs comes last. **Opt out:** none (text only).
