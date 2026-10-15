@@ -132,6 +132,12 @@ Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authent
 - [Assignment expiration](docs/assignment-expiration.md#rake-task-stale-assignments): `rake
   permission_forge:stale_assignments`, its `THRESHOLD_DAYS`, its output and its exit status 1 when it finds stale
   assignments.
+- [Admin API](docs/admin-api.md#who-the-audit-log-names-for-an-api-change): why API changes read "API client" even
+  from a signed-in browser (the default `api_base_controller_class` runs none of your sign-in, so `Current.user` is not
+  set), and the two ways to name the caller: an `api_base_controller_class` that resumes the session, or an
+  `audit_actor_resolver` that maps the credential `api_auth` verified (never a caller-chosen header).
+- [Admin API](docs/admin-api.md#permission-set-group-users-group-membership--grants-nothing): the group-member
+  endpoints say that membership is organisational and grants none of the group's sets.
 
 ## [0.14.1] - 2026-10-14
 

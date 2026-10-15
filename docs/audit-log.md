@@ -179,7 +179,7 @@ The actor of an event is the first of these that names someone (`Audit::Actor.cu
 
 1. An explicit block: `PermissionForge.with_audit_actor(...)` or `Audit::Context.with(actor: ...)`. A host that wraps requests in its own around-action wins over the request's resolution.
 2. The request (admin UI): `config.audit_actor_resolver`, called with the controller; then `config.current_user_resolver`; then, under HTTP Basic auth, the username that was checked (`actor_type: basic_auth`, no id).
-3. The request (API): `audit_actor_resolver`; then the current user; otherwise an anonymous `api` actor labelled "API client" (`api_auth` answers yes or no, so it cannot name a principal).
+3. The request (API): `audit_actor_resolver`; then the current user; otherwise an anonymous `api` actor labelled "API client" (`api_auth` answers yes or no, so it cannot name a principal). On the default `api_base_controller_class` your app's sign-in does not run, so `Current.user` is not set there and changes read "API client" even from a signed-in browser: see [naming the API caller](admin-api.md#who-the-audit-log-names-for-an-api-change).
 4. Outside a request: `PermissionForge.current_user`; otherwise `unknown`.
 
 The actor is never taken from parameters or headers. A resolver that raises, or answers with something that is not an actor, gives `unknown` and is reported through `audit_hook_failure_strategy`.

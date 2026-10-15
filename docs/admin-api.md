@@ -90,6 +90,26 @@ config.api_enabled = true
 
 When `api_enabled = false` (the default), all API routes return **404 Not Found** with no body. The routes are defined but guarded at runtime — no route leakage.
 
+#### Who the audit log names for an API change
+
+Every change made through the API is an [audit event](audit-log.md#who-did-it-actor-resolution). Its actor is the first of: `config.audit_actor_resolver` (called with the controller), the current user (`config.current_user_resolver`), else an anonymous `api` actor labelled **"API client"**. `api_auth` answers only yes or no, so it cannot name anyone by itself.
+
+On the default `api_base_controller_class` (`::ActionController::Base`) your application's sign-in does not run in the API: the `Current.user` that the generated `current_user_resolver` reads is never set there, so even a request from a browser signed in to your app is recorded as "API client". Name the caller one of two ways:
+
+- **Inherit your sign-in (Option B).** Set `api_base_controller_class` to an application controller that resumes the session (Rails 8's `Authentication` concern, Devise's `authenticate_user!`). `current_user_resolver` then names the signed-in user, for the audit log and for your authorization lambdas.
+- **Resolve the actor from the credential `api_auth` verified.** For a token or key client, map that credential to who it belongs to:
+
+  ```ruby
+  config.audit_actor_resolver = ->(controller) {
+    key = ApiKey.active.find_by(key: controller.request.headers['X-API-Key'])
+    key && { type: 'api', id: key.id, label: key.name }  # or key.user, to name a person
+  }
+  ```
+
+  Derive the actor from the same verified credential, never from a value the caller picks (an `X-User-Id` header, a `user_id` parameter): the gem itself never takes the actor from parameters or headers, and your resolver should not either. A resolver that answers `nil` falls back to the current user, then to "API client".
+
+Changes made from a console, a runner or a job are not API requests: wrap them in `PermissionForge.with_audit_actor(user: admin) { … }` ([audit log](audit-log.md#who-did-it-actor-resolution)).
+
 ## Response Format
 
 JSON responses use the envelope below. Some answers have no body: the 401 while `api_auth` is not set, the 404 while the API is disabled and the 204 of a delete.
@@ -548,13 +568,15 @@ curl -X POST http://localhost:3000/permissions/api/permission_set_groups/abc-123
 # The copied group, its sets and their rows are editable.
 ```
 
-#### Permission Set Group Users (assign users to groups)
+#### Permission Set Group Users (group membership — grants nothing)
+
+**Membership is organisational: it grants no access.** Adding someone to a group does not give them the group's Permission Sets; permissions come only from assignments (`POST …/permission_sets/:uuid/users`, above). A 201 here means "now listed as a member", not "can now do what the group's sets allow". To give someone a group's access, assign each of its sets. See [Permission Set Groups](permission-set-groups.md).
 
 ```bash
-# List users in a group
+# List the members of a group
 GET /permissions/api/permission_set_groups/:group_uuid/users
 
-# Add a user to a group
+# Add a member (organisational only: assigns none of the group's sets)
 POST /permissions/api/permission_set_groups/:group_uuid/users
 # Body: { "user_id": 42 }
 # A user_id outside config.user_list_resolver returns 404
