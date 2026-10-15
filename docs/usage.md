@@ -265,7 +265,7 @@ PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant
 
 | Pattern | Fields Matched | Strategy |
 |---------|---------------|----------|
-| `email`, `*_email` | email, work_email, billing_email | `email` |
+| `email`, `*_email`, `email_address`, `*_email_address` | email, work_email, email_address (Rails 8 authentication), billing_email_address | `email` |
 | `*phone*`, `*telefon*`; `tel`, `fax`, `mobile` as a name segment | phone, mobile_phone, home_tel, fax_number, telNumber | `last4` |
 | `ssn`, `social_security*`, `national_id` | ssn, social_security_number | `last4` |
 | `*iban*`, `*bank_account*`, `*credit_card*` | iban, bank_account_number | `last4` |

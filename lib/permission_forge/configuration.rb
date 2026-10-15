@@ -324,9 +324,11 @@ module PermissionForge
     # `home_tel`, `tel2`, `telNumber`, `cityName`, `zipcode` yes — `hotel_id`,
     # `capacity`, `telemetry_enabled`, `automobile_id`, `gzip_enabled` no.
     # Every alternative stands alone (no group with an inner `|`):
-    # Admin::SensitiveColumns names the one that matched.
+    # Admin::SensitiveColumns names the one that matched. The first pattern
+    # that matches decides the strategy: Rails 8's `email_address` is an
+    # email (it also matches `address`, below).
     DEFAULT_GDPR_FIELD_PATTERNS = {
-      /\Aemail\z|_email\z/ => 'email',
+      /\Aemail\z|_email\z|\Aemail_address\z|_email_address\z/ => 'email',
       /phone|telefon|\Amobile|_mobile|\Afax|_fax|\Atel\z|\Atel_|\Atel[A-Z0-9]|_tel\z|_tel_|_tel[A-Z0-9]/ => 'last4',
       /\Assn\z|social_security|national_id/ => 'last4',
       /iban|bank_account|credit_card|card_number/ => 'last4',

@@ -36,6 +36,18 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   intended**. **Read-only** (preset and Sync) still starts them Masked; the muting presets are unchanged. **Opt out:**
   add the resource with **Read-only** and raise the other fields to Editable, or set the reported fields to Masked
   from the Fields tab (bulk: filter **Sensitive**, select all, Set to Masked).
+- **`email_address` is detected as an email.** `DEFAULT_GDPR_FIELD_PATTERNS` adds `email_address` and
+  `*_email_address` (Rails 8's authentication generator names the user's email column `email_address`) to the email
+  pattern, so the column is recommended and generated with the `email` strategy (`j***@example.com`) instead of
+  `full` (it matched `address` before). Log filtering is unchanged (the column was already filtered), and the
+  admin names the pattern `email_address`. Existing field rows are never rewritten: a row generated with `full` keeps
+  it (the stricter mask) until you change it in the field drawer. `gdpr_patterns_changed_since_generation?` compares
+  with the patterns of the last generation in the same process only, so it does not report a gem upgrade; run
+  `rake permission_forge:audit_masks` after upgrading, which suggests `email` for an unmasked `email_address`. Apps
+  that set `gdpr_field_patterns` to their own hash keep their patterns; apps that merged into
+  `DEFAULT_GDPR_FIELD_PATTERNS` get the new alternatives. **Opt out:** put a pattern ahead of the defaults (the first
+  matching pattern decides): `config.gdpr_field_patterns = { /\Aemail_address\z/ => 'full' }
+  .merge(PermissionForge::Configuration::DEFAULT_GDPR_FIELD_PATTERNS)`.
 - **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
   `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
   `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`
