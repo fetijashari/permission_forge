@@ -26,8 +26,8 @@ module PermissionForge
         assert_select '#pf-card-broken-rules', text: I18n.t('permission_forge.home.broken_rules_card.title')
         body = CGI.unescapeHTML(response.body)
 
-        assert_includes body, 'Matches nothing: Stauts is not a column of Customer'
-        assert_includes body, 'Matches nothing: Ownr is not a relationship of Customer'
+        assert_includes body, 'Matches nothing: <code class="pf-mono-key">stauts</code> is not a column of Customer'
+        assert_includes body, 'Matches nothing: <code class="pf-mono-key">ownr</code> is not a relationship of Customer'
         assert_includes body, '1 person has this set.'
         assert_select "a[href='#{pf("/permission_sets/#{@set.id}/resources/Customer/rules/#{@status.id}/edit")}']",
                       text: I18n.t('permission_forge.home.broken_rules_card.fix')
@@ -52,7 +52,7 @@ module PermissionForge
         assert_select '.pf-sentence .pf-badge--block', text: '⊘ Matches nothing', count: 2
         body = CGI.unescapeHTML(response.body)
 
-        assert_includes body, 'Stauts is not a column of Customer'
+        assert_includes body, '<code class="pf-mono-key">stauts</code> is not a column of Customer'
         assert_includes body, 'stauts equal active'
         assert_includes body, 'ownr.owner_id equal current_user'
         assert_not_includes body, 'Stauts is empty'
@@ -64,12 +64,12 @@ module PermissionForge
 
         assert_response :success
         assert_select '.pf-banner--block', text: /This rule matches nothing/
-        assert_select '.pf-banner--block', text: /Stauts is not a column of Customer/
+        assert_select '.pf-banner--block', text: /stauts is not a column of Customer/
         assert_select '.pf-banner--block', text: /Pick the field again/
 
         get pf("/permission_sets/#{@set.id}/resources/Customer/rules/#{@via_owner.id}/edit")
 
-        assert_select '.pf-banner--block', text: /Ownr is not a relationship of Customer/
+        assert_select '.pf-banner--block', text: /ownr is not a relationship of Customer/
         assert_select '.pf-banner--block', text: /Choose the relationship again/
       end
 
@@ -94,8 +94,8 @@ module PermissionForge
         assert_response :success
         body = CGI.unescapeHTML(response.body)
 
-        assert_includes body, '⊘ Matches nothing: Stauts is not a column of Customer'
-        assert_includes body, 'Matches nothing: Ownr is not a relationship of Customer'
+        assert_includes body, '⊘ Matches nothing: <code class="pf-mono-key">stauts</code> is not a column of Customer'
+        assert_includes body, 'Matches nothing: <code class="pf-mono-key">ownr</code> is not a relationship of Customer'
         assert_no_missing_translations
       end
 
@@ -122,7 +122,7 @@ module PermissionForge
         get pf("/permission_sets/#{@set.id}")
 
         assert_response :success
-        assert_includes CGI.unescapeHTML(response.body), '⊘ Matches nothing: Ownr is not a relationship of Customer'
+        assert_includes CGI.unescapeHTML(response.body), '⊘ Matches nothing: <code class="pf-mono-key">ownr</code> is not a relationship of Customer'
       end
     end
   end

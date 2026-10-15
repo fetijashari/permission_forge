@@ -28,7 +28,7 @@
           <span class="pf-text-3">· <%= pf_audit_actor_type_label(event.actor_type) %><% if d.actor_id? %> · <%= t('.id', id: event.actor_id) %><% end %></span>
         <% end %>
         <%# The actor line above already reads "Unknown": the explanation does not start with it again. %>
-        <% if unknown %><p class="pf-fs-13 pf-text-2"><%= pf_audit_unknown_actor_hint(named: false) %></p><% end %>
+        <% if unknown %><p class="pf-fs-13 pf-text-2"><%= pf_audit_unknown_actor_hint %></p><% end %>
         <div class="pf-row pf-row--tight pf-fs-12">
           <%# With no actor named, the link lists every event without one, and says so. %>
           <%= link_to (unknown ? t('.all_unknown_actor') : t('.all_by_actor')), pf_audit_log_path(actor_type: event.actor_type, actor_id: event.actor_id) %>

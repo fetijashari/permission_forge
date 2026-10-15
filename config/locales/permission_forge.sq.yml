@@ -519,6 +519,9 @@ sq:
           nuk ekziston. Secili nuk përputhet me asgjë: kujtdo që i zbatohet i refuzohet
           çdo regjistrim i burimit.'
         fix: Rregullo rregullin
+        locked_fix_html: 'I kyçur (%{flag}): menaxhohet nga sistemi ose API që e krijoi,
+          prandaj rregullojeni rregullin atje (ose zhbllokojeni grupin në kod). Një
+          kopje e bërë këtu e lë këtë rregull siç është.'
         open: Hap rregullat
         people:
           one: "%{count} person e ka këtë grup."
@@ -914,12 +917,14 @@ sq:
         message: Mesazhi i bllokimit
         message_placeholder: Shfaqet kur dikush hap një regjistrim që ky rregull e
           fsheh.
+        model_error: "%{field} %{message}"
         model_missing: Ky model ose lidhje nuk ekziston më në aplikacion.
         name: Emri i rregullit
         name_placeholder: p.sh. Klientët e mi
         operator: Kushti
         optional: opsionale
         pick_field: Zgjidh një fushë…
+        pick_relationship: Zgjidh një lidhje…
         preview: Pamja paraprake
         preview_empty: Zgjidh një fushë për ta parë rregullin si fjali.
         problem_field: Zgjidhni sërish fushën për ta korrigjuar.
@@ -928,6 +933,7 @@ sq:
         relationship: Lidhja
         remove_step: Hiq këtë hap të lidhjes
         save: Ruaj rregullin
+        stored_field: "%{name} (siç është ruajtur)"
         this_field: kjo fushë
         update_form: Përditëso
       confirm_destroy:
@@ -1039,7 +1045,7 @@ sq:
       copy_name: "%{name} (kopje)"
       header:
         description: Përshkrimi
-        description_placeholder: Shto një përshkrim që të tjerët ta dinë kur ta përdorin
+        description_placeholder: 'Shto një përshkrim: kur përdoret'
         group: Grupimi
         name: Emri
       index:
@@ -1931,9 +1937,6 @@ sq:
         disabled: Nuk regjistrohet kush krijoi dhe kush ndryshoi.
         edited: Ndryshuar së fundi nga %{updated_by} · %{updated_at}
         history: Historiku
-        unknown_hint_html: "%{unknown}: për këtë ndryshim nuk u emërtua asnjë aktor
-          (kod i ekzekutuar jashtë një kërkese, si një runner ose një punë në sfond).
-          Emërtojeni me %{method}."
       crud_cell:
         allowed: Lejohet
         muted: I heshtur
@@ -2011,6 +2014,11 @@ sq:
       user_select_prompt: Zgjidh një person...
       user_select_truncated: Shfaqen vetëm %{count} përdoruesit e parë. Konfiguro
         user_list_resolver për ta ngushtuar listën.
+    support:
+      array:
+        last_word_connector: " dhe "
+        two_words_connector: " dhe "
+        words_connector: ", "
     ui:
       actions: Veprimet
       apply: Apliko
@@ -2211,10 +2219,10 @@ sq:
         only_show: Shfaq vetëm
         or_empty: ose %{field} është bosh
         problems:
-          missing_column: "%{name} nuk është kolonë e %{model}"
+          missing_column_html: "%{name} nuk është kolonë e %{model}"
           unjoinable_association: "%{name} është lidhje e %{model} që një rregull
             nuk mund ta ndjekë"
-          unknown_association: "%{name} nuk është lidhje e %{model}"
+          unknown_association_html: "%{name} nuk është lidhje e %{model}"
         where: ku
       rules_count:
         one: Rregullat (%{count})

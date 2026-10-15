@@ -9,7 +9,7 @@
     <% elsif set.is_muting %>
       <%= t('.body_muting', people: pf_people_text(@people_count)) %>
     <% else %>
-      <%= t('.body', people: pf_people_text(@people_count), resources: @lost.presence&.to_sentence || '—') %>
+      <%= t('.body', people: pf_people_text(@people_count), resources: @lost.any? ? pf_to_sentence(@lost) : '—') %>
     <% end %>
     <%= t('.irreversible') %>
   </p>

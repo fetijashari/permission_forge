@@ -11,7 +11,7 @@
       <% if errors.any? %>
         <% errors.each_value do |msg| %><span class="pf-error" role="alert"><%= msg %></span> <% end %>
       <% elsif @person && @chosen_sets.any? %>
-        <%= t('.summary', name: pf_person_name(@person), sets: @chosen_sets.map(&:name).to_sentence,
+        <%= t('.summary', name: pf_person_name(@person), sets: pf_to_sentence(@chosen_sets.map(&:name)),
                           until: (@expiry == 'never' ? t('.forever') : t('.until', date: pf_expiry_preset_date(@expiry) || @custom_date))) %>
       <% else %>
         <%= t('.applies_now') %>
@@ -87,7 +87,7 @@
       <% if muting.any? %>
         <div class="pf-banner pf-banner--muting">
           <span class="pf-banner__glyph" aria-hidden="true">⊘</span>
-          <div class="pf-banner__body"><span><%= t('.muting_notice', sets: muting.map(&:name).to_sentence, name: @person ? pf_person(@person).first_name : t('.this_person')) %></span></div>
+          <div class="pf-banner__body"><span><%= t('.muting_notice', sets: pf_to_sentence(muting.map(&:name)), name: @person ? pf_person(@person).first_name : t('.this_person')) %></span></div>
         </div>
       <% end %>
     </section>

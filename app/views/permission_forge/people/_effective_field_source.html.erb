@@ -1,5 +1,5 @@
 <% if field.blocked_by.any? %>
-  <%= t('.muted_by', set: field.blocked_by.map(&:name).to_sentence) %>
+  <%= t('.muted_by', set: pf_to_sentence(field.blocked_by.map(&:name))) %>
 <% elsif field.unconfigured %>
   <%= t('.unconfigured', behaviour: t("permission_forge.ui.unconfigured.#{PermissionForge.configuration.unconfigured_field_strategy}", default: t('permission_forge.ui.unconfigured.block'))) %>
 <% elsif field.granted_by.any? %>

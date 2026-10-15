@@ -512,6 +512,9 @@ en:
           not exist. Each one matches nothing: everyone it applies to is denied every
           record of the resource.'
         fix: Fix rule
+        locked_fix_html: 'Locked (%{flag}): it is managed by the system or API that
+          created it, so fix the rule there (or unlock the set in code). A copy made
+          here would leave this rule as it is.'
         open: Open rules
         people:
           one: "%{count} person has this set."
@@ -899,12 +902,14 @@ en:
             title: Also records without it
         message: Blocked message
         message_placeholder: Shown when someone opens a record this rule hides.
+        model_error: "%{field} %{message}"
         model_missing: This model or relationship no longer exists in the app.
         name: Rule name
         name_placeholder: e.g. Own customers
         operator: Condition
         optional: optional
         pick_field: Pick a field…
+        pick_relationship: Pick a relationship…
         preview: Preview
         preview_empty: Pick a field to see the rule as a sentence.
         problem_field: Pick the field again to correct it.
@@ -913,6 +918,7 @@ en:
         relationship: Relationship
         remove_step: Remove this relationship step
         save: Save rule
+        stored_field: "%{name} (as stored)"
         this_field: this field
         update_form: Update
       confirm_destroy:
@@ -1023,7 +1029,7 @@ en:
       copy_name: "%{name} (copy)"
       header:
         description: Description
-        description_placeholder: Add a description so others know when to use it
+        description_placeholder: 'Add a description: when to use this set'
         group: Group
         name: Name
       index:
@@ -1883,8 +1889,6 @@ en:
         disabled: Created-by and edited-by aren't being recorded.
         edited: Last edited by %{updated_by} · %{updated_at}
         history: History
-        unknown_hint_html: "%{unknown}: no actor was named for this change (code run
-          outside a request, such as a runner or a job). Name one with %{method}."
       crud_cell:
         allowed: Allowed
         muted: Muted
@@ -1962,6 +1966,11 @@ en:
       user_select_prompt: Select a person...
       user_select_truncated: Showing only the first %{count} users. Configure user_list_resolver
         to narrow this list.
+    support:
+      array:
+        last_word_connector: ", and "
+        two_words_connector: " and "
+        words_connector: ", "
     ui:
       actions: Actions
       apply: Apply
@@ -2160,10 +2169,10 @@ en:
         only_show: Only show
         or_empty: or %{field} is empty
         problems:
-          missing_column: "%{name} is not a column of %{model}"
+          missing_column_html: "%{name} is not a column of %{model}"
           unjoinable_association: "%{name} is a relationship of %{model} that a rule
             cannot follow"
-          unknown_association: "%{name} is not a relationship of %{model}"
+          unknown_association_html: "%{name} is not a relationship of %{model}"
         where: where
       rules_count:
         one: Rules (%{count})

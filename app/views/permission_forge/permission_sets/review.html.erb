@@ -21,7 +21,7 @@
   <% end %>
   <% if @impact_people.any? %>
     <p class="pf-fs-13 pf-text-3">
-      <%= t('.affected', names: (@impact_people.map { |u| pf_person_name(u) } + (@people_count > 3 ? [t('permission_forge.permission_sets.show.and_more', count: @people_count - 3)] : [])).to_sentence) %>
+      <%= t('.affected', names: pf_to_sentence(@impact_people.map { |u| pf_person_name(u) } + (@people_count > 3 ? [t('permission_forge.permission_sets.show.and_more', count: @people_count - 3)] : []))) %>
     </p>
   <% end %>
   <%= form_with url: permission_forge.apply_permission_set_path(set), method: :patch, class: 'pf-confirm-form' do %>

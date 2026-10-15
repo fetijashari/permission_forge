@@ -240,7 +240,7 @@ module PermissionForge
     def restored_expiry = pf_time_param(:expires_at)
 
     def assigned_notice(created)
-      sets = created.map { |assignment| assignment.permission_set.name }.to_sentence
+      sets = helpers.pf_to_sentence(created.map { |assignment| assignment.permission_set.name })
       return t('permission_forge.flash.assignments.assigned', name: person_name(@person), sets: sets) if @expires_at.nil?
 
       t('permission_forge.flash.assignments.assigned_until', name: person_name(@person), sets: sets,

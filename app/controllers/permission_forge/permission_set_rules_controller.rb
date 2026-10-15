@@ -90,7 +90,7 @@ module PermissionForge
       if @rule.save
         redirect_to rules_path, notice: t("permission_forge.flash.rules.#{flash_key}", rule: @rule.name)
       else
-        @model_errors = @rule.errors.full_messages
+        @model_errors = @rule.errors
         render template, status: :unprocessable_entity
       end
     end

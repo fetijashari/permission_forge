@@ -311,6 +311,12 @@
 .pf-textarea--mono { font-family: var(--pf-mono); font-size: 13px; max-width: 360px; }
 .pf-input[aria-invalid="true"], .pf-select[aria-invalid="true"], .pf-textarea[aria-invalid="true"] { border-color: var(--pf-block); }
 .pf-input::placeholder, .pf-textarea::placeholder { color: var(--pf-text-3); }
+/* Read-only (a locked record): a filled box that does not light up on hover, so it
+   does not read as editable. It stays focusable (announced "read only") with a
+   visible, neutral focus ring. */
+.pf-root .pf-input[readonly], .pf-root .pf-textarea[readonly] { background: var(--pf-surface-2); border-color: var(--pf-border); color: var(--pf-text-2); cursor: default; resize: none; }
+.pf-root .pf-input[readonly]:hover, .pf-root .pf-textarea[readonly]:hover { border-color: var(--pf-border); }
+.pf-root .pf-input[readonly]:focus, .pf-root .pf-textarea[readonly]:focus { border-color: var(--pf-border-strong); box-shadow: 0 0 0 3px var(--pf-border); }
 .pf-label { display: block; font-size: 13px; font-weight: 600; color: var(--pf-text); margin-bottom: 6px; }
 .pf-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px 16px; align-items: end; }
 .pf-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -322,9 +328,15 @@
 .pf-title-input { width: 100%; font-size: 24px; line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; border: 1px solid transparent; border-radius: var(--pf-radius-sm); background: transparent; margin-left: -8px; padding: 4px 8px; }
 .pf-title-input:hover { border-color: var(--pf-border); }
 .pf-title-input:focus { border-color: var(--pf-border-strong); background: var(--pf-surface); }
-.pf-desc-input { width: 100%; font-size: 14px; color: var(--pf-text-2); border: 1px solid transparent; border-radius: var(--pf-radius-sm); background: transparent; margin-left: -8px; padding: 3px 8px; }
+.pf-desc-input { width: 100%; font-size: 14px; color: var(--pf-text-2); border: 1px solid transparent; border-radius: var(--pf-radius-sm); background: transparent; margin-left: -8px; padding: 3px 8px; text-overflow: ellipsis; }
 .pf-desc-input:hover { border-color: var(--pf-border); }
 .pf-desc-input:focus { border-color: var(--pf-border-strong); background: var(--pf-surface); color: var(--pf-text); }
+/* A locked record's name and description: plain text that does not invite an edit. */
+.pf-title-input[readonly], .pf-desc-input[readonly] { cursor: default; }
+.pf-title-input[readonly]:hover, .pf-desc-input[readonly]:hover { border-color: transparent; }
+.pf-title-input[readonly]:focus, .pf-desc-input[readonly]:focus { background: transparent; }
+.pf-desc-input[readonly]:focus { color: var(--pf-text-2); }
+.pf-desc-input[readonly]::placeholder { color: transparent; }
 
 /* switch: <label class="pf-switch"><input type="checkbox" role="switch"><span class="pf-switch__track"></span>Text</label> */
 .pf-switch { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--pf-border-strong); border-radius: var(--pf-radius-sm); background: var(--pf-surface); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }

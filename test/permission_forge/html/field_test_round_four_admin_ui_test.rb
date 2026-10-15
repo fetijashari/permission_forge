@@ -163,13 +163,21 @@ module PermissionForge
         end
       end
 
-      test 'the record footer keeps naming Unknown before its explanation' do
+      # Round 5 (b #63): the footer already reads "Last edited by Unknown", so its
+      # explanation is the event page's, without the word again.
+      test 'the record footer names Unknown once: the explanation does not start with it again' do
         with_unattributed_change do
-          get pf("/permission_sets/#{@set.id}"), params: { locale: 'en' }
+          LOCALES.each do |locale|
+            get pf("/permission_sets/#{@set.id}"), params: { locale: locale }
 
-          hint = css_select('.pf-audit-footer__hint').first
-          assert hint
-          assert hint.text.strip.start_with?("#{t('audit_log.actor_types.unknown')}:")
+            I18n.with_locale(locale) do
+              unknown = t('audit_log.actor_types.unknown')
+              hint = css_select('.pf-audit-footer__hint').first
+              assert hint
+              assert_not hint.text.strip.start_with?(unknown), "#{locale}: the footer's explanation repeats #{unknown}"
+              assert_equal 'PermissionForge.with_audit_actor', hint.at_css('code').text
+            end
+          end
         end
       end
     end

@@ -18,8 +18,9 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   naming a column or association that does not exist"; its code is unchanged.
 - **Home lists the rules that match nothing.** A "Rules that match nothing" card on the admin's Home lists every active
   rule in effect whose column or association is missing — the same rules as the audit's `missing_rule_columns`
-  (`AttentionItems#broken_rules`, by `Operators::RuleProblem`) — with why ("Matches nothing: Stauts is not a column of
-  Customer"), how many people hold the set, and **Fix rule** (the rule's edit page; **Open rules** for a locked set).
+  (`AttentionItems#broken_rules`, by `Operators::RuleProblem`) — with why ("Matches nothing: `stauts` is not a column of
+  Customer"), how many people hold the set, and **Fix rule** (the rule's edit page; for a locked set the Locked badge,
+  where the rule gets fixed — the system or code that manages the set — and **Open rules**).
 - **`rake permission_forge:audit` reports fields naming nothing on their model** (`integrity/unknown_fields`). A
   `ResourceField` named `zzz` (or `emial`) on a `Customer` Resource was saved — 201 through the API — and configured
   nothing, so a typo went unnoticed. The audit now lists the rows in effect whose name is none of: a column of the
@@ -303,6 +304,36 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ### Fixed
 
+- **Lists in the admin read in Albanian and Macedonian.** A list of people, sets or resources ("Bob Sales and Carol
+  Support" on the set page, the review, the assign drawer, the confirmations, the "Assigned" notice) was joined by
+  `Array#to_sentence`, which reads Rails' `support.array` keys: an app without `rails-i18n` has them in English only.
+  The admin now joins every list with the connectors of the gem's own keys (`permission_forge.support.array.*`, in
+  en, sq and mk; helper `pf_to_sentence`, `Admin::ListSentence`); a test fails on a bare `to_sentence` in `app/` or
+  `lib/`.
+- **A save the rule builder refuses names the field as the builder does.** The model's errors were shown as Rails'
+  full messages ("Field accessor path names ownr, …", in English in every locale); they now carry the builder's own
+  label ("Relationship names ownr, …", "Field to check is not a column of …", in the page's language). The API's
+  field-keyed messages are unchanged.
+- **A locked rule that matches nothing says how it gets fixed.** On Home its row has the Locked badge (as on the
+  privacy card) and says the set is managed by the system or API that created it, so the rule is fixed there (or the
+  set unlocked in code): its page only offers a copy, which would leave the rule as it is.
+- **Read-only inputs look read-only.** A locked record's inputs (the field drawer's Label and Description, the
+  conditions' IP list) were white boxes like editable ones; they are now filled and do not light up on hover (still
+  focusable and announced read-only), and a locked set's name and description no longer show an edit outline or the
+  "Add a description" placeholder.
+- **Fixing a misspelled relationship keeps the rule's field.** A join rule whose stored path names no relationship
+  (`ownr`) showed the first relationship as if it were chosen next to "This model or relationship no longer exists";
+  its select now shows "Pick a relationship…" (marked invalid) and the field select keeps the stored field
+  (`email_address (as stored)`), so picking the relationship again keeps it when it is a column there — Save answered
+  "Pick the field to check." and the field was lost.
+- **A rule that names something missing shows the name as stored.** "Onwer is not a column of Customer" (for
+  `onwer_id`) and "Ownr is not a relationship" read like real names; Home, the Rules tab, the rule page and a person's
+  effective access now show `onwer_id` / `ownr` as code. A relationship that exists but cannot be followed keeps its
+  label.
+- **A record footer names "Unknown" once.** A change written with no actor read "Last edited by Unknown" followed by
+  "Unknown: no actor was named…"; the footer now gives the event page's explanation, from the same helper.
+- **The Permission Set description placeholder fits a phone.** At 390px the Macedonian placeholder (53 characters) was
+  cut off; it is shorter in en, sq and mk, and a value or placeholder wider than the input ends in an ellipsis.
 - **The Assignments grid's column headers line up with their cells.** Each row was its own grid, so the
   content-sized actions column took a different width in the header (empty) than in the rows, and "Until 14 Nov"
   sat under "Assigned". The Assignments and Permission Sets tables now share one grid between head and rows

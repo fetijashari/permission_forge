@@ -24,7 +24,7 @@ module PermissionForge
       return if ips.empty?
 
       connector = pf_ui('conditions.or')
-      pf_ui('conditions.from_ips', ips: ips.to_sentence(two_words_connector: connector, last_word_connector: connector))
+      pf_ui('conditions.from_ips', ips: pf_to_sentence(ips, two_words_connector: connector, last_word_connector: connector))
     end
 
     def pf_condition_hours(permission_set)
@@ -76,7 +76,7 @@ module PermissionForge
       taken = pf_muted_parts(resource, count)
       return t('permission_forge.flash.resources.added_muting_nothing', resource: label) if taken.empty?
 
-      t('permission_forge.flash.resources.added_muting', resource: label, what: taken.to_sentence)
+      t('permission_forge.flash.resources.added_muting', resource: label, what: pf_to_sentence(taken))
     end
 
     # What a muting resource takes away: its muted flags, then its field rows.
@@ -209,7 +209,7 @@ module PermissionForge
     # Short form used in matrix cells: "Owner is the current user".
     def pf_rule_summary(rule, model_name = rule.resource&.name)
       problem = pf_rule_problem(rule)
-      return "⊘ #{pf_rule_problem_line(problem)}" if problem
+      return safe_join(['⊘ ', pf_rule_problem_line(problem)]) if problem
 
       field = pf_rule_field_labels(model_name, rule).join(' › ')
       value = NO_VALUE_OPERATORS.include?(rule.operator) ? nil : pf_rule_value_text(rule)

@@ -20,7 +20,7 @@
     <%= t('.impact_none') %>
   <% else %>
     <%= t('.impact', people: pf_people_text(@people_count),
-                     names: (@impact_people.map { |u| pf_person_name(u) } + (@people_count > 3 ? [t('.and_more', count: @people_count - 3)] : [])).to_sentence) %>
+                     names: pf_to_sentence(@impact_people.map { |u| pf_person_name(u) } + (@people_count > 3 ? [t('.and_more', count: @people_count - 3)] : []))) %>
   <% end %>
 </p>
 

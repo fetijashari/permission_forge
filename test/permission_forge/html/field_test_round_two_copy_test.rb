@@ -163,7 +163,7 @@ module PermissionForge
           hint = footer.css('.pf-audit-footer__hint').first
           assert hint, 'the footer explains the unknown actor'
           assert_equal 'PermissionForge.with_audit_actor', hint.css('code').text
-          assert_match(/no actor was named for this change/, hint.text)
+          assert_match(/no actor was named for this change/i, hint.text)
         end
       end
 
