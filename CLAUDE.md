@@ -55,7 +55,7 @@ bundle exec rake yard:check       # Public API docs floor (CI)
 | Admin helpers | `app/helpers/permission_forge/` | `ApplicationHelper` includes `UiHelper` (components), `SentencesHelper` (rule/condition/change sentences), `AuditHelper`, `AuditAttributionHelper` (who created / last edited a record), `SettingsHelper` |
 | Shared partials | `app/views/permission_forge/shared/` | `_sheet_frame`/`_dialog_frame` (via `pf_sheet_frame`/`pf_dialog_frame` — never `render layout:`, it breaks lazy `t('.x')`), `_crud_cell`, `_level_control`, `_expiry_picker`, `_savebar`, `_mode_banners`, `_across_sets`, `_audit_footer`, `_tech_details`, `_help_banner`, `_toasts`, `_head_extra` (host theming hook) |
 | Admin assets | `app/frontend/permission_forge/` | `pf_admin.css` (tokens + components), `pf_admin.js` (progressive enhancement), `brand/` — served by `AssetsController`, NOT the host asset pipeline |
-| API Controllers | `app/controllers/permission_forge/api/` | 9 JSON API controllers (dashboard, permission_sets, resources, fields, actions, rules, users, groups, group_users) plus the read-only `audit_events` |
+| API Controllers | `app/controllers/permission_forge/api/` | 9 JSON API controllers (dashboard, permission_sets, resources, fields, actions, rules, users, groups, group_users) plus the read-only `audit_events` and `unmatched_routes` (drawn last: any other path or method under `/api` answers the JSON 404 envelope) |
 | API Serializers | `lib/permission_forge/api/serializers/` | 10 lightweight Ruby serializers plus `BaseSerializer` (no AMS dependency) |
 | API Auth | `app/controllers/concerns/permission_forge/api_authentication.rb` | `verify_api_enabled!` + `authenticate_api_request!` |
 | HTML Controllers | `app/controllers/permission_forge/` | `concerns/permission_forge/cache_confirmation.rb` (`CacheConfirmation`: flash what the cache store confirmed). Admin screens: `Home`, `People`, `Assignments`, `BulkAssignments`, `PermissionSets`, `Resources`, `ResourceFields`, `ResourceActions`, `PermissionSetRules`, `PermissionSetGroups`(+`GroupUsers`), `FieldLookups`, `Settings`, `Preferences`, `Maintenance`, `Assets`, `AuditEvents` (the log, exports, holdings); concerns `AuditLogGate` (`audit_log_authorization`), `AssignmentAuthorization` (`admin_assignment_authorization`), `ActingAdmin`, `TenantRequired` (403 with no tenant while `tenant_model` is set, unless `admin_tenantless_access = :allow`; admin and API), `ParamShapes` (`pf_require_hash`, `pf_hash_param`, `pf_text_param`, ...: the shape of every param, NUL bytes dropped; admin and API), `HtmlFormat` (the admin answers HTML whatever the `Accept` header; exports declared with `pf_exports`), `ForgeryProtection` (`protect_from_forgery with: …, **pf_forgery_strategy`: every engine controller verifies with `:header_or_legacy_token` on Rails 8.2+, whatever the host chose) |
@@ -254,6 +254,7 @@ All under engine mount path + `/api/`:
 - `GET/POST /api/permission_set_groups` + `GET/PATCH/DELETE /:identifier` + `POST /:identifier/clone` + nested `/users`
 - `GET /api/stats`
 - `GET /api/audit_events` + `GET /api/audit_events/:identifier` (read-only)
+- Anything else under `/api` → `Api::UnmatchedRoutesController` (JSON 404, after the API's guards)
 
 ### Response envelope
 - Single: `{ data: { ... } }`

@@ -174,6 +174,39 @@ module PermissionForge
         user
       end
 
+      # The person params[key] names, for a new assignment or membership,
+      # within config.user_list_resolver (Admin::PeopleDirectory#find). Every
+      # refusal is a 422 keyed by the parameter, so it never reads as the
+      # Permission Set or the Group in the path being wrong (a 404):
+      #
+      # - missing, null or blank: "is missing";
+      # - not one id (a list, an object, a number with a fraction, text that
+      #   is not a key of the user model: "abc" for an integer key): "is not
+      #   a user id";
+      # - an id that names nobody the resolver lists: "names nobody who can
+      #   be assigned". An unknown id and someone the resolver leaves out read
+      #   the same, as in a bulk request's `skipped`.
+      #
+      # @raise [ParamShapes::InvalidParam]
+      def requested_user(key = :user_id)
+        value = params[key]
+        problem = user_id_problem(value)
+        user = PermissionForge::Admin::PeopleDirectory.new.find(value) unless problem
+        problem ||= I18n.t('permission_forge.api.errors.user_not_found') unless user
+        raise ParamShapes::InvalidParam.new(key, problem) if problem
+
+        user
+      end
+
+      # What is wrong with a user_id before anybody is looked up, nil when
+      # it is one id of the user model's key type.
+      def user_id_problem(value)
+        return I18n.t('permission_forge.api.errors.user_id_missing') if value.blank?
+        return if (value.is_a?(String) || value.is_a?(Integer)) && PermissionForge::Admin::PeopleDirectory::Ids.cast(value).any?
+
+        I18n.t('permission_forge.api.errors.user_id_invalid')
+      end
+
       def authorize_action!(action, record)
         authorizer = PermissionForge.configuration.api_action_authorization
         unless authorizer

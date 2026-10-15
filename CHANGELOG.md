@@ -208,6 +208,23 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   the current tenant was a validation error under `permission_set_group`; the API now answers
   `{"permission_set_group_id": ["…"]}`, the parameter the request sent, before anything is saved. **Opt out:** none;
   a client that read `messages.permission_set_group` reads `messages.permission_set_group_id`.
+- **A single assignment or membership with an unusable `user_id` is a 422 keyed by `user_id`.**
+  `POST …/permission_sets/:id/users` and `POST …/permission_set_groups/:id/users` answered 404 `"Record not found"`
+  for a missing `user_id`, for one that is not an id (`"abc"`, `[2]`) and for one that names nobody, which read as if
+  the set or the group were wrong. They now answer `{"user_id": ["is missing"]}`, `["is not a user id"]` or
+  `["names nobody who can be assigned"]`, after the authorization lambdas, and assign nobody. An unknown id and
+  someone `user_list_resolver` leaves out read the same, as in a bulk request's `skipped`; a 404 now always means the
+  set or the group in the path. **Opt out:** none; a client that treated that 404 as "no such person" reads the 422.
+- **A bulk `user_ids` that is not a list is a 422.** `"user_ids": "1,3"` was read as one unknown id and answered 200
+  `{"assigned": 0, "skipped": ["1,3"]}`; a string, a number or an object now answers
+  `{"user_ids": ["must be a list of user ids"]}` and changes nothing. **Opt out:** none; send a JSON list.
+- **A `per_page` or `page` the API cannot read is the default, not 1.** `per_page=abc`, `0` or a negative number gave
+  pages of one row; anything that is not a positive whole number is now `api_default_per_page` (a `page`, the first
+  page). The `api_max_per_page` cap is unchanged. **Opt out:** none; `meta.pagination` says what was used.
+- **Unrouted API calls answer the JSON 404 envelope.** Any other path or method under the API mount
+  (`/api/unknown`, a `POST`, `PATCH` or `DELETE` on the read-only `audit_events`) answered Rails' HTML 404 page; it is
+  now `{"error":{"status":404,"messages":"No API endpoint answers this path and method"}}`, after the same guards as
+  every endpoint (a disabled API stays a bodiless 404, a refused `api_auth` a 401). **Opt out:** none.
 
 ### Deprecated
 

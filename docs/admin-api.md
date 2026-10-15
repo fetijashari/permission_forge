@@ -88,7 +88,7 @@ config.api_enabled = true
 
 #### Disabling the API entirely
 
-When `api_enabled = false` (the default), all API routes return **404 Not Found** with no body. The routes are defined but guarded at runtime — no route leakage.
+When `api_enabled = false` (the default), all API routes return **404 Not Found** with no body — and so does any other path under the API mount. The routes are defined but guarded at runtime — no route leakage.
 
 #### Who the audit log names for an API change
 
@@ -166,6 +166,14 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 }
 ```
 
+**A path or method no endpoint answers is a 404 in the same envelope.** Any other path under the API mount (`GET /permissions/api/unknown`, `GET …/permission_sets/:uuid/widgets`, `PUT /permissions/api/stats`, a `POST`, `PATCH` or `DELETE` on the read-only `audit_events`) answers:
+
+```json
+{ "error": { "status": 404, "messages": "No API endpoint answers this path and method" } }
+```
+
+It passes the same guards first: while the API is disabled it is the bodiless 404, a caller `api_auth` refuses gets the 401 and a request with no tenant the 403 (each recorded as `api.auth_failed`, as on any endpoint). It changes nothing and records nothing else. Paths outside the API mount keep the host's own 404. Through 0.14.1 these answered Rails' HTML 404 page.
+
 **Every 422 has this shape.** `messages` is always an object mapping a field to a list of messages: the model's attribute for a failed validation, the request parameter for input the API cannot read, and `base` when the error names no field:
 
 ```json
@@ -173,6 +181,7 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 { "error": { "status": 422, "messages": { "permission_set": ["is missing, empty or not an object"] } } }
 { "error": { "status": 422, "messages": { "bulk_action": ["must be assign or revoke"] } } }
 { "error": { "status": 422, "messages": { "user_ids": ["must name at least one user"] } } }
+{ "error": { "status": 422, "messages": { "user_id": ["names nobody who can be assigned"] } } }
 { "error": { "status": 422, "messages": { "grant_all": ["must be true or false"] } } }
 { "error": { "status": 422, "messages": { "base": ["Could not generate fields for this resource"] } } }
 ```
@@ -192,7 +201,8 @@ Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 ca
 - a body section that is not an object (`"permission_set": "x"`), or one that is missing or empty (see below);
 - an `expires_at` that is not one of the [ISO 8601 forms below](#expires_at-formats) (`"tuesday"`, `"2026-13-45"`, `"22/10/2026"`, a number);
 - a `grant_all` that is not `true`, `false`, `1`, `0` or one of their strings (`"yes"`, `""`, `2`): see [generate_fields](#resources-nested-under-permission-set);
-- a bulk assignment without `user_ids` (missing, `[]`, `""` or only blanks): see [Bulk User Assignment](#bulk-user-assignment);
+- a bulk assignment without `user_ids` (missing, `[]`, `""` or only blanks), or with `user_ids` that is not a list (`"1,3"`, `3`): see [Bulk User Assignment](#bulk-user-assignment);
+- a single assignment or group membership whose `user_id` is missing, is not one user id (`"abc"` for an integer key, `[2]`, an object), or names nobody `user_list_resolver` lists: see [Permission Set Users](#permission-set-users-assign-users-to-sets);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
 - a `permission_set_group_id` that names no group of the current tenant;
 - a string longer than its column: `is too long (at most N characters)`. Only columns that declare a limit are checked — a `string` on MySQL is `varchar(255)` (counted in characters) and a `text` holds 65,535 bytes; on PostgreSQL and SQLite the install's `string` and `text` columns declare none, so nothing is checked there. A Permission Set name keeps its own 255-character rule on every database.
@@ -503,7 +513,6 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
   -d '{ "user_id": 42, "expires_at": "2026-12-31T23:59:00Z" }'
 # Response: 201 Created — expires_at is optional (time-bound assignment)
 # Assigning a user who is already in the set returns 422 (uniqueness validation)
-# A user_id outside config.user_list_resolver returns 404, as an unknown one does
 # An expires_at that is not ISO 8601 (see below), or not after now, returns 422 and assigns nobody
 
 # Remove a user from a permission set (:uuid is the assignment's identifier)
@@ -525,6 +534,18 @@ Hours and minutes are required once there is a time; seconds and a fraction (up 
 Anything else is a 422 and nothing is assigned: `"tuesday"`, `"next tuesday-ish"`, `"2026-13-45"`, `"22/10/2026"`, `"2026-10-22T10"` (no minutes), `"2026-10-22 10:00 +0200"` (an offset needs its colon and no space), week or ordinal dates (`2026-W43-4`), the basic format without separators (`20261022`) and numbers (epoch seconds). Through 0.14.1 any text with a recognisable fragment was read (`"tuesday"` became today 00:00, an assignment that had already ended).
 
 **The end must be after now.** An assignment whose end has passed grants nothing, so a readable `expires_at` that is not after the moment of the request (`"2020-01-01"`, yesterday's date, a time a minute ago) is refused too: `422 {"expires_at": ["must be in the future"]}`, on `POST …/users` and on a bulk `assign`, and nobody is assigned. Today's date is accepted (it means the end of today). A bulk `revoke` ignores `expires_at`. Through 0.14.1 such an assignment was created (201). The admin's Undo after a removal is not a new grant: it restores the assignment with the end it had, also one that has passed.
+
+##### `user_id`
+
+`user_id` (on `POST …/permission_sets/:uuid/users` and `POST …/permission_set_groups/:uuid/users`) is one id of the user model, as a JSON number or a string. Every refusal is a 422 keyed by `user_id`, answered after the authorization lambdas and the lock check, and nobody is assigned:
+
+| `user_id` | `messages` |
+|-----------|------------|
+| missing, `null`, `""` or blank | `{"user_id": ["is missing"]}` |
+| not one id: a list (`[2]`), an object, `1.5`, `true`, or text that is not a key of the user model (`"abc"`, `"2abc"`, `-1` for an integer key) | `{"user_id": ["is not a user id"]}` |
+| a well-formed id that names nobody `config.user_list_resolver` lists | `{"user_id": ["names nobody who can be assigned"]}` |
+
+**An unknown id and someone the resolver leaves out read the same** (another tenant's user, an account the host keeps out of the admin): the answer says no more than a bulk request's `skipped` does. A 404 means the Permission Set or the Group in the path is unknown, never the person. Through 0.14.1 all three cases answered 404 `"Record not found"`, which read as if the set were wrong. Removing an assignment or a membership (`DELETE …/users/:uuid`) of someone outside the resolver stays a 404.
 
 `GET …/users` lists every holder of the set (each row carries its `user_id`), including people outside `user_list_resolver`: the resolver bounds who can be reached by id, not who is listed.
 
@@ -553,6 +574,9 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
 # {"user_ids": ["must name at least one user"]} on assign and revoke, and
 # changes nothing (through 0.14.1: 200 with nothing done). Like the other
 # 422s it records no audit event.
+# user_ids must be a JSON list: one string ("1,3"), a number or an object is
+# a 422 {"user_ids": ["must be a list of user ids"]} and changes nothing
+# (through 0.14.1 "1,3" was read as one unknown id: 200, nobody assigned).
 
 # Bulk revoke users from a permission set
 POST /permissions/api/permission_sets/:ps_uuid/users/bulk
@@ -590,6 +614,14 @@ curl -X POST http://localhost:3000/permissions/api/permission_set_groups \
 GET    /permissions/api/permission_set_groups/:uuid
 PATCH  /permissions/api/permission_set_groups/:uuid
 DELETE /permissions/api/permission_set_groups/:uuid
+# Response: 204 No Content. Deleting a group deletes neither its Permission Sets
+# nor anybody's access: each set stays, moved out of the group
+# (permission_set_group_id: null), and its assignments keep granting. The
+# group's memberships (organisational only) are removed. The audit log
+# records permission_set.updated for each set taken out of the group,
+# group_membership.removed for each member and permission_set_group.destroyed,
+# under one correlation id. To remove the sets too, delete each one
+# (DELETE /permissions/api/permission_sets/:uuid).
 
 # Clone a group (deep clone: permission sets, resources, fields, actions, rules)
 POST /permissions/api/permission_set_groups/:uuid/clone
@@ -614,7 +646,8 @@ GET /permissions/api/permission_set_groups/:group_uuid/users
 # Add a member (organisational only: assigns none of the group's sets)
 POST /permissions/api/permission_set_groups/:group_uuid/users
 # Body: { "user_id": 42 }
-# A user_id outside config.user_list_resolver returns 404
+# A user_id that is missing, not an id, or names nobody config.user_list_resolver
+# lists is a 422 keyed by user_id (see `user_id` above)
 
 # Remove a user from a group
 DELETE /permissions/api/permission_set_groups/:group_uuid/users/:uuid
@@ -661,7 +694,7 @@ Every column is returned except the tenant column; `data` is an object. Filters 
 | `record_type` with `record_id` or `record_uuid` | `record_id` matches the `record_id` column only and `record_uuid` the `record_uuid` column only; either needs `record_type`, otherwise 422; `record_type` alone is also a filter. |
 | `permission_set` | A uuid, or a numeric id. |
 
-An invalid value answers `422 {"error":{"status":422,"messages":{"from":["is invalid"]}}}`; an array or hash for a scalar filter parameter, or a NUL byte in a value, is a 422 too (`page` and `per_page` are not filter parameters: an array or hash there reads as 1, the first page or a page size of 1). Unknown parameters are ignored. Order is `occurred_at desc, id desc`; page size follows `api_default_per_page` / `api_max_per_page`. **A `page` beyond 2,147,483,647 is clamped** (on every paginated endpoint) instead of failing in the database. With tenancy on, a request with no tenant set is refused (403, see [Tenancy](#tenancy)); under `admin_tenantless_access = :allow` it lists the events of every tenant, as the other endpoints do for their records.
+An invalid value answers `422 {"error":{"status":422,"messages":{"from":["is invalid"]}}}`; an array or hash for a scalar filter parameter, or a NUL byte in a value, is a 422 too (`page` and `per_page` are not filter parameters: anything there that is not a positive whole number reads as the first page or the default page size, see [Pagination](#pagination)). Unknown parameters are ignored. Order is `occurred_at desc, id desc`; page size follows `api_default_per_page` / `api_max_per_page`. **A `page` beyond 2,147,483,647 is clamped** (on every paginated endpoint) instead of failing in the database. With tenancy on, a request with no tenant set is refused (403, see [Tenancy](#tenancy)); under `admin_tenantless_access = :allow` it lists the events of every tenant, as the other endpoints do for their records.
 
 Writes through the API record their own events: the API sets the actor (`audit_actor_resolver`, else the current user, else an anonymous `api` actor), source `api`, the request id and IP, and reads an optional `reason` (a request parameter or JSON key, at most 255 characters) from any request that changes something.
 
@@ -695,6 +728,8 @@ PermissionForge.configure do |config|
   config.api_default_per_page = 15  # Default when per_page param is omitted
 end
 ```
+
+`page` and `per_page` are read when they are positive whole numbers (a JSON number or digits, e.g. `"3"`). Anything else is ignored rather than refused: a `per_page` of `0`, a negative number, a typo (`abc`, `2abc`, `1.5`), a list or an object is `api_default_per_page`, and such a `page` is the first page. A `per_page` above `api_max_per_page` is that maximum, and a `page` above 2,147,483,647 is that page. `meta.pagination` always says which page and page size were used. Through 0.14.1 a `per_page` of `0` or one that was not a number read as 1, a page of one row.
 
 To use a custom pagination handler (e.g., Kaminari, will_paginate):
 

@@ -6,6 +6,10 @@ module PermissionForge
       # Beyond this the offset overflows the database's integer; the page is
       # empty long before.
       MAX_PAGE = (2**31) - 1
+      # What a page or a page size is read from: a positive whole number,
+      # as a JSON number or as digits. Anything else ("abc", "0", "-1",
+      # "2abc", 1.5, a list) is not one.
+      POSITIVE_INTEGER = /\A[1-9]\d*\z/
 
       private
 
@@ -34,16 +38,25 @@ module PermissionForge
         }
       end
 
-      # Anything that is not a number (a Hash, an Array) reads as page 1.
+      # params[:page] when it is a positive whole number (at most MAX_PAGE),
+      # else the first page.
       def current_page
-        params[:page].to_s.to_i.clamp(1, MAX_PAGE)
+        (positive_integer_param(:page) || 1).clamp(1, MAX_PAGE)
       end
 
+      # params[:per_page] when it is a positive whole number, else
+      # config.api_default_per_page; never above config.api_max_per_page.
+      # A typo (`per_page=abc`), 0 or a negative number is the default page
+      # size, not a page of one row (through 0.14.1 they read as 1).
       def clamped_per_page
         config = PermissionForge.configuration
-        requested = params[:per_page]
-        requested = requested.nil? ? config.api_default_per_page : requested.to_s.to_i
-        requested.clamp(1, config.api_max_per_page)
+        (positive_integer_param(:per_page) || config.api_default_per_page).clamp(1, config.api_max_per_page)
+      end
+
+      def positive_integer_param(key)
+        value = params[key]
+        text = value.to_s.strip if value.is_a?(String) || value.is_a?(Integer)
+        text.to_i if text&.match?(POSITIVE_INTEGER)
       end
     end
   end

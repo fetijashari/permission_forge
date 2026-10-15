@@ -19,13 +19,16 @@ module PermissionForge
         render_collection(scope, serializer_for(:permission_set_user))
       end
 
+      # A user_id that is missing, not an id, or names nobody
+      # config.user_list_resolver lists is a 422 keyed by user_id
+      # (BaseController#requested_user), after the authorization hooks.
       def create
         authorize_assignment!(@permission_set, [params[:user_id]])
         reject_widening!(:grant) unless performed?
         return if performed?
 
-        user = find_host_user(params[:user_id])
-        return if performed? || pf_assignment_refused_api?(@permission_set, user.id, :grant)
+        user = requested_user
+        return if pf_assignment_refused_api?(@permission_set, user.id, :grant)
 
         create_assignment(user)
       end
@@ -91,12 +94,17 @@ module PermissionForge
         pf_assignment_refused_api?(@permission_set, params[:user_ids], action)
       end
 
-      # user_ids missing, [], "" or only blanks. Ids that name nobody are
-      # not refused: they are reported as `skipped`.
+      # user_ids missing, [], "" or only blanks: "must name at least one
+      # user". Anything else that is not a list (one string such as "1,3",
+      # a number, an object): "must be a list" — through 0.14.1 "1,3" was
+      # read as one id and answered 200 with nobody assigned. Ids that name
+      # nobody are not refused: they are reported as `skipped`.
       def require_user_ids!
-        return unless Array.wrap(params[:user_ids]).all?(&:blank?)
-
-        raise ParamShapes::InvalidParam.new(:user_ids, I18n.t('permission_forge.api.errors.user_ids_missing'))
+        user_ids = params[:user_ids]
+        message = if Array.wrap(user_ids).all?(&:blank?) then I18n.t('permission_forge.api.errors.user_ids_missing')
+                  elsif !user_ids.is_a?(Array) then I18n.t('permission_forge.api.errors.user_ids_not_list')
+                  end
+        raise ParamShapes::InvalidParam.new(:user_ids, message) if message
       end
 
       # The service's counts plus `skipped`: the ids of the request that

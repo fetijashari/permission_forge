@@ -275,7 +275,10 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSetUser.unscoped.count } do
           post "#{ROOT}/assignments", params: { user_id: bob.id, set_ids: [set_a.id], expiry: 'never' }
           post "#{API}/permission_sets/#{set_a.uuid}/users", params: { user_id: bob.id }
-          assert_response :not_found
+          # The same 422 as an id that names nobody (through 0.14.1 a 404).
+          assert_response :unprocessable_entity
+          assert_equal({ 'user_id' => [I18n.t('permission_forge.api.errors.user_not_found')] },
+                       JSON.parse(response.body).dig('error', 'messages'))
         end
         assert_raises(ActionController::RoutingError) do
           post "#{ROOT}/people/#{bob.id}/erasure", params: { confirmation: 'Bob Only-In-B' }

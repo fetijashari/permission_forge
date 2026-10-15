@@ -19,13 +19,18 @@ mk:
         not_editable: Овој запис не може да се уредува
         not_found: Записот не е пронајден
         not_iso8601_time: не е датум или време во ISO 8601
+        route_not_found: Ниедна крајна точка на API не одговара на оваа патека и метод
         section_missing: недостасува, празно е или не е објект
         stats_authorization_missing: GET /api/stats бара config.api_stats_authorization,
           или config.api_stats_require_admin = false
         tenant_required: Ова барање нема закупец. API-то за администрација служи по
           еден закупец.
         unauthorized: Не сте автентицирани
+        user_id_invalid: не е id на корисник
+        user_id_missing: недостасува
         user_ids_missing: мора да наведе барем еден корисник
+        user_ids_not_list: мора да биде листа од id на корисници
+        user_not_found: не именува никого што може да се додели
     assignments:
       confirm_destroy:
         body: "%{name} ќе го изгуби пристапот до %{resources}, освен ако друг сет

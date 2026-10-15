@@ -195,6 +195,72 @@ module PermissionForge
         assert_equal ['bulk_action'], JSON.parse(response.body).dig('error', 'messages').keys
       end
 
+      # Field test: one string "1,3" was read as a single unknown id, 200 with nobody assigned.
+      test 'a bulk user_ids that is not a list is a 422 keyed by user_ids and changes nothing' do
+        expected = { 'user_ids' => [I18n.t('permission_forge.api.errors.user_ids_not_list')] }
+
+        ["#{@user.id},3", @user.id, @user.id.to_s, { 'a' => @user.id }].each do |ids|
+          %w[assign revoke].each do |action|
+            assert_no_difference -> { PermissionForge::AuditEvent.unscoped.count }, "#{ids.inspect} #{action}" do
+              post "#{users_path}/bulk", params: { user_ids: ids, bulk_action: action }, as: :json
+            end
+            assert_response :unprocessable_entity, "#{ids.inspect} #{action}"
+            assert_equal expected, JSON.parse(response.body).dig('error', 'messages'), "#{ids.inspect} #{action}"
+          end
+        end
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
+      end
+
+      # Field test: each of these answered 404 "Record not found", as if the set were wrong.
+      test 'a missing or malformed user_id is a 422 keyed by user_id, on a set that exists' do
+        missing = [I18n.t('permission_forge.api.errors.user_id_missing')]
+        invalid = [I18n.t('permission_forge.api.errors.user_id_invalid')]
+
+        { {} => missing, { user_id: nil } => missing, { user_id: '' } => missing, { user_id: ' ' } => missing,
+          { user_id: [] } => missing, { user_id: 'abc' } => invalid, { user_id: [@user.id] } => invalid,
+          { user_id: { 'id' => @user.id } } => invalid, { user_id: 1.5 } => invalid, { user_id: true } => invalid,
+          { user_id: -1 } => invalid, { user_id: "#{@user.id}abc" } => invalid }.each do |body, messages|
+          assert_no_difference -> { PermissionForge::AuditEvent.unscoped.count }, body.inspect do
+            post users_path, params: body, as: :json
+          end
+          assert_response :unprocessable_entity, body.inspect
+          assert_equal({ 'user_id' => messages }, JSON.parse(response.body).dig('error', 'messages'), body.inspect)
+        end
+        assert_not PermissionForge::PermissionSetUser.exists?(permission_set_id: @ps.id)
+      end
+
+      # Reveals what a bulk request's `skipped` reveals: nobody and someone
+      # outside user_list_resolver read the same, and the message is about the
+      # person, not the set.
+      test 'a user_id that names nobody, or someone outside user_list_resolver, is the same 422' do
+        outside = create_user(name: 'Outside')
+        config = PermissionForge.configuration
+        config.user_list_resolver = -> { config.user_model.where.not(id: outside.id).order(:id) }
+        expected = { 'user_id' => [I18n.t('permission_forge.api.errors.user_not_found')] }
+
+        [99_999, '99999', outside.id, outside.id.to_s].each do |id|
+          post users_path, params: { user_id: id }, as: :json
+
+          assert_response :unprocessable_entity, id.inspect
+          assert_equal expected, JSON.parse(response.body).dig('error', 'messages'), id.inspect
+        end
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: outside.id)
+      end
+
+      test 'the user_id messages follow the request locale' do
+        post "#{users_path}?locale=sq", params: { user_id: 99_999 }, as: :json
+
+        assert_equal({ 'user_id' => [I18n.t('permission_forge.api.errors.user_not_found', locale: :sq)] },
+                     JSON.parse(response.body).dig('error', 'messages'))
+      end
+
+      test 'an unknown set is still a 404' do
+        post '/permission_forge/api/permission_sets/00000000-0000-0000-0000-000000000000/users', params: { user_id: @user.id },
+                                                                                                 as: :json
+
+        assert_response :not_found
+      end
+
       test 'a blank expires_at is a permanent assignment' do
         post users_path, params: { user_id: @user.id, expires_at: '' }, as: :json
 

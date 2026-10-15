@@ -174,7 +174,9 @@ module PermissionForge
         'permission_forge/api/permission_set_group_users#create' => { verbs: %w[POST], drive: :api_member_add,
                                                                       events: %w[group_membership.added] },
         'permission_forge/api/permission_set_group_users#destroy' => { verbs: %w[DELETE], drive: :api_member_remove,
-                                                                       events: %w[group_membership.removed] }
+                                                                       events: %w[group_membership.removed] },
+        'permission_forge/api/unmatched_routes#show' => { verbs: %w[POST PUT PATCH DELETE], drive: :api_unmatched,
+                                                          none: 'no endpoint at this path and method: the JSON 404' }
       }.freeze
 
       API_PREFIX = 'permission_forge/api/'
@@ -318,6 +320,17 @@ module PermissionForge
       end
 
       # --- admin UI drivers ---------------------------------------------------------------
+
+      # The catch-all under /api (POST /api/audit_events has no route): a
+      # 404 in the envelope, nothing recorded or changed.
+      def drive_api_unmatched
+        @request_events = ledger_events do
+          post "#{ROOT}/api/audit_events", params: { audit_event: { event: 'fake' }, reason: REASON }, headers: @auth_headers,
+                                           as: :json
+        end
+        assert_response :not_found
+        assert_equal 404, response.parsed_body.dig('error', 'status')
+      end
 
       def drive_preferences
         admin_request(:patch, '/preferences', theme: 'dark')
