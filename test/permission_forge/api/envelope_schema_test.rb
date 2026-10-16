@@ -196,7 +196,7 @@ module PermissionForge
       end
 
       test 'a message that is no translation of the request language is reported' do
-        assert_equal ['$.error.messages: "Not authenticated" is not a translation of xx'],
+        assert_equal ['$.error.messages: "Not authenticated" is not a translation of xx (Not, authenticated)'],
                      message_problems(Schema.error_body(401, 'Not authenticated'))
         assert_empty message_problems(Schema.error_body(401, I18n.t('permission_forge.api.errors.unauthorized', locale: :xx)))
       end
@@ -222,7 +222,7 @@ module PermissionForge
       def scenarios(verb, spec, key)
         path = build_path(spec)
         mutating = MUTATING.include?(verb) && key != 'unmatched_routes#show'
-        request = ->(params = valid_params(key), target = path) { send(verb, target, params: params, headers: HEADERS, as: :json) }
+        request = ->(params = valid_params(key), target = path) { send(verb, target, params: params, headers: HEADERS.dup, as: :json) }
         endpoint = Schema::ENDPOINTS.fetch(key)
         list = []
         list << ['401 api_auth refuses', 401, -> { PermissionForge.configuration.api_auth = ->(_) { false }; request.call }]
@@ -325,7 +325,9 @@ module PermissionForge
           ':permission_set_group_identifier' => @group.uuid, ':identifier' => nil, '(/*path)' => '/no/such/endpoint'
         }
         identifiers = identifiers.to_h { |name, value| [name, name.start_with?(':') ? UNKNOWN : value] } if unknown
-        identifiers.reduce(ROOT + spec) { |path, (name, value)| path.gsub(name, (value || identifier_for(path)).to_s) }
+        identifiers.reduce(ROOT + spec) do |path, (name, value)|
+          path.include?(name) ? path.gsub(name, (value || identifier_for(path)).to_s) : path
+        end
       end
 
       # The record an :identifier names, by the path's last collection.

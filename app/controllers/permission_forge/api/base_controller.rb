@@ -36,7 +36,11 @@ module PermissionForge
         permission_set_group_id: 'permission_forge.validations.permission_set.group_missing'
       }.freeze
 
-      before_action :set_api_locale
+      # First of every callback: the 401 of api_auth and the 404 of a
+      # disabled API come before the others, and the 401's message is in the
+      # request's language too (through 0.14.1 it was always the default
+      # locale). A body Rails cannot parse raises here (ParseError, below).
+      prepend_before_action :set_api_locale
       before_action :pf_require_tenant
       # After api_auth (a refused request records its own event).
       around_action :pf_audit_request

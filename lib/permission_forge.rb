@@ -372,6 +372,7 @@ require_relative 'permission_forge/api/serializers/permission_set_user_serialize
 require_relative 'permission_forge/api/serializers/audit_event_serializer'
 require_relative 'permission_forge/api/serializers/permission_set_group_serializer'
 require_relative 'permission_forge/api/serializers/permission_set_group_user_serializer'
+require_relative 'permission_forge/api/schema'
 
 require_relative 'permission_forge/services/concerns/clonable'
 require_relative 'permission_forge/services/concerns/audited_operation'

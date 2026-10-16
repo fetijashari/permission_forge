@@ -116,18 +116,22 @@ PermissionForge::Engine.routes.draw do
       # The audit log is read-only over the API: no write route exists.
       resources :audit_events, only: %i[index show], param: :identifier
 
-      resources :permission_sets, param: :identifier do
+      # No new/edit: a JSON API has no forms. Without them `…/new` reads as
+      # an identifier (404 unknown record) and `…/:identifier/edit` reaches
+      # the catch-all (404), both in the envelope; through 0.14.1 they raised
+      # AbstractController::ActionNotFound (Rails' own 404 page).
+      resources :permission_sets, param: :identifier, except: %i[new edit] do
         member do
           post :clone
         end
 
-        resources :resources, param: :identifier do
+        resources :resources, param: :identifier, except: %i[new edit] do
           member do
             post :generate_fields
           end
-          resources :fields, param: :identifier, controller: 'resource_fields'
-          resources :actions, param: :identifier, controller: 'resource_actions'
-          resources :rules, param: :identifier, controller: 'permission_set_rules'
+          resources :fields, param: :identifier, controller: 'resource_fields', except: %i[new edit]
+          resources :actions, param: :identifier, controller: 'resource_actions', except: %i[new edit]
+          resources :rules, param: :identifier, controller: 'permission_set_rules', except: %i[new edit]
         end
 
         resources :users, param: :identifier, controller: 'permission_set_users', only: %i[index create destroy] do
@@ -137,7 +141,7 @@ PermissionForge::Engine.routes.draw do
         end
       end
 
-      resources :permission_set_groups, param: :identifier do
+      resources :permission_set_groups, param: :identifier, except: %i[new edit] do
         member do
           post :clone
         end
