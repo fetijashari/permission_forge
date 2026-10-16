@@ -17,9 +17,9 @@ module PermissionForge
       # ResourceFieldGenerator (the API's generate_fields, grant_full_access!,
       # the console) write the same rows for the same level: name, read, edit,
       # mask, strategy, label — timestamps, privacy defaults and virtual
-      # fields included. A level the admin never writes a row for (Unchanged
-      # in a Muting Permission Set) is no row on both admin paths; the
-      # generator writes it as the row that mutes nothing, as documented.
+      # fields included. A level that is no row (Unchanged in a Muting
+      # Permission Set: FieldLevel.row?) is no row on every path — the
+      # generator without grant_all on a muting set writes none either.
       PARITY_MODELS.each do |model_name|
         [false, true].each do |muting|
           [false, true].each do |gdpr|
@@ -31,12 +31,10 @@ module PermissionForge
                 assert_equal presets, bulk, 'presets vs bulk'
                 if generated.nil?
                   assert_not_empty presets
-                elsif level == 'leave'
-                  assert_empty presets
-                  assert(generated.all? { |(_, read, edit, mask, _, _)| !read && !edit && !mask }, 'the generator writes rows that mute nothing')
                 else
                   assert_equal presets, generated, 'presets vs generator'
                 end
+                assert_equal PermissionForge::FieldLevel.row?(level, muting: muting), presets.any?, 'a level that is no row writes none'
               end
             end
           end
