@@ -36,7 +36,8 @@ module PermissionForge
     # (422 / the form again), never the database's NotNullViolation (a 500).
     class ValidatesRequiredColumnsTest < ActiveSupport::TestCase
       def owner
-        @owner ||= PfRequiredProbe.new(id: 1, named: 'owner', pf_required_owner_id: 1).tap { |probe| probe.save!(validate: false) }
+        # No id of its own: PostgreSQL's sequence would hand the next row the same one.
+        @owner ||= PfRequiredProbe.new(named: 'owner', pf_required_owner_id: 0).tap { |probe| probe.save!(validate: false) }
       end
 
       test 'nil in a NOT NULL column with a default is refused, keyed by the attribute' do

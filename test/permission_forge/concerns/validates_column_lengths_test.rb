@@ -100,6 +100,30 @@ module PermissionForge
         refute_predicate group, :valid?
         assert_includes group.errors[:name], I18n.t('permission_forge.validations.too_long', count: column.limit)
       end
+
+      # PostgreSQL's driver raises on a statement carrying a NUL byte (the
+      # uniqueness checks query with the value), and SQLite on Rails 7.1
+      # reads it cut short: a validation error before any of them runs.
+      test 'a NUL byte in a string being written is a validation error, before any validator queries with it' do
+        set = PermissionSet.new(name: "Sales\0team", is_active: true)
+        resource = Resource.new(name: "Cust\0omer")
+        group = PermissionSetGroup.new(name: 'Ops', description: "a\0b", is_active: true)
+
+        [[set, :name], [resource, :name], [group, :description]].each do |record, attribute|
+          refute_predicate record, :valid?
+          assert_equal [I18n.t('permission_forge.validations.nul_byte')], record.errors[attribute], record.class.name
+        end
+        refute set.save
+      end
+
+      test 'a NUL byte stored before leaves the other attributes editable' do
+        group = PermissionSetGroup.create!(name: 'Stored', is_active: true)
+        skip 'PostgreSQL stores no NUL byte' if PermissionSetGroup.connection.adapter_name == 'PostgreSQL'
+
+        group.update_column(:description, "a\0b")
+
+        assert group.reload.update(is_active: false)
+      end
     end
   end
 end

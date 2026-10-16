@@ -2446,6 +2446,7 @@ sq:
       full_message: "%{attribute} %{message}"
       invalid: nuk është e vlefshme
       name_blank: nuk mund të jetë bosh
+      nul_byte: nuk duhet të përmbajë bajt NUL
       permission_set:
         group_missing: duhet të jetë një grupim ekzistues i grupeve të lejeve
         hours_equal: duhet të ndryshojë nga ora e fillimit (një dritare nga një orë

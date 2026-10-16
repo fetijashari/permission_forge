@@ -2388,6 +2388,7 @@ en:
       full_message: "%{attribute} %{message}"
       invalid: is invalid
       name_blank: can't be blank
+      nul_byte: must not contain a NUL byte
       permission_set:
         group_missing: must be an existing Permission Set Group
         hours_equal: must differ from the start hour (a window from an hour to the

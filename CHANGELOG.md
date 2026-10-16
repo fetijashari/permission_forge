@@ -1108,6 +1108,11 @@ and the RLS re-sync.
 
 ### Fixed
 
+- **A NUL byte in any text attribute of the permission models is a validation error.** A save from code (the console,
+  a host's service) with one raised — PostgreSQL's driver refuses any statement carrying it, the uniqueness checks
+  included, and SQLite on Rails 7.1 reads the statement cut short; the admin and the API already dropped NUL bytes from
+  request parameters. A value stored before keeps the row's other attributes editable.
+  <!-- pin: test/permission_forge/concerns/validates_column_lengths_test.rb#a NUL byte in a string being written is a validation error, before any validator queries with it -->
 - **The rule builder's live sentence keeps up with typing**: a newer input aborts the request before it, so a late
   answer no longer overwrites the newer sentence, and a redirect (a lapsed session) or a whole page is never put into
   the panel.

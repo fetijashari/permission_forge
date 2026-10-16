@@ -2445,6 +2445,7 @@ mk:
       full_message: "%{attribute} %{message}"
       invalid: не е валидно
       name_blank: не смее да биде празно
+      nul_byte: не смее да содржи NUL бајт
       permission_set:
         group_missing: мора да биде постоечка група на сетови на дозволи
         hours_equal: мора да се разликува од почетниот час (прозорец од еден час до
