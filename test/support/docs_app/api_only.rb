@@ -52,7 +52,48 @@ module DocsApp
       { admin_page_without_middlewares: call(:get, '/permissions/', BASIC),
         admin_page_with_middlewares: call(:get, '/permissions/', BASIC, app: with_admin_middlewares),
         admin_post_with_middlewares: submit_new_set('From the admin'),
-        admin_post_without_token: submit_new_set('Without a token', token: false) }
+        admin_post_without_token: submit_new_set('Without a token', token: false),
+        admin_patch_field: save_field_drawer,
+        admin_delete_rule: delete_rule }
+    end
+
+    # A Permission Set with a Customer Resource, its email field and a rule:
+    # what the edit and delete forms act on.
+    def editable_set
+      @editable_set ||= PermissionForge::PermissionSet.create!(name: 'Editable').tap do |set|
+        resource = PermissionForge::Resource.create!(permission_set: set, name: 'Customer', read_access: true)
+        PermissionForge::ResourceField.create!(resource: resource, name: 'email', read_access: true)
+        PermissionForge::PermissionSetRule.create!(permission_set: set, resource: resource, name: 'Active only',
+                                                   field_name: 'status', operator: 'equal', field_value: 'active')
+      end
+    end
+
+    # The field drawer's form (POST + hidden _method=patch, the admin's
+    # forms all send it) saved with a new label, behind the three
+    # middlewares only: the engine turns it into the PATCH its route wants.
+    def save_field_drawer
+      path = "/permissions/permission_sets/#{editable_set.id}/resources/Customer/fields/email"
+      submit_form(path, path) { |fields| fields.merge('field[label]' => 'E-mail address') }
+        .merge(label: PermissionForge::ResourceField.find_by(name: 'email').label)
+    end
+
+    # The rule's delete confirmation (POST + hidden _method=delete) submitted.
+    def delete_rule
+      rule = editable_set.permission_set_rules.first
+      action = "/permissions/permission_sets/#{editable_set.id}/resources/Customer/rules/#{rule.id}"
+      submit_form("#{action}/delete", action).merge(deleted: !PermissionForge::PermissionSetRule.exists?(rule.id))
+    end
+
+    # Reads the form posting to `action` on the page at `page` (its fields,
+    # the hidden _method and the token, the session cookie kept) and posts it.
+    def submit_form(page, action)
+      browser = Rack::Test::Session.new(with_admin_middlewares)
+      fields = form_fields(browser.get(page, {}, BASIC).body, action)
+      fields = yield(fields) if block_given?
+      response = browser.post(action, fields, BASIC)
+      { status: response.status, method: fields['_method'] }
+    rescue StandardError => e
+      { status: nil, error: (e.cause || e).class.name, message: (e.cause || e).message.lines.first.to_s.strip }
     end
 
     NEW_SET = '/permissions/permission_sets/new'

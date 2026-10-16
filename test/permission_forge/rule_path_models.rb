@@ -15,6 +15,9 @@ ActiveRecord::Schema.define do
     t.string  :subject_type
     t.integer :subject_id
     t.integer :phantom_id
+    # A column no LIKE pattern can be matched against, on every database
+    # (RuleProblem :pattern_on_non_text).
+    t.json    :details
   end
   create_table :pf_rule_path_peers, id: false, force: true do |t|
     t.integer :record_id

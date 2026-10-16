@@ -82,6 +82,8 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     missing_column: { field_name: 'onwer_id', operator: 'equal', field_value: 'current_user' },
     unknown_table: { field_name: 'nosuch.label', operator: 'equal', field_value: 'five' },
     foreign_table: { field_name: 'users.name', operator: 'equal', field_value: 'five' },
+    encrypted_column: { field_name: 'sealed', operator: 'equal', field_value: 'five' },
+    pattern_on_non_text: { field_name: 'small_count', operator: 'contains', field_value: '5' },
     unusable_value: { field_name: 'ref', operator: 'equal', field_value: 'banana' }
   }.freeze
   # A field name that is not a name is a missing column to RuleProblem.
@@ -199,6 +201,23 @@ class RlsRuleParityTest < ActiveSupport::TestCase
 
     assert_empty app_layer_rows(rules)
     assert_empty rows_through_policy(rules)
+  end
+
+  # The column of an attribute declared with `encrypts` holds ciphertext:
+  # every operator that compares a value matches nothing in both layers
+  # (current_user too), and the null checks — ciphertext is NULL exactly
+  # when the value is — select the same rows in both.
+  test 'a rule on an encrypted attribute: the null checks agree, every other built-in operator matches nothing' do
+    (OPERATORS - PermissionForge::Operators::Validations::VALUELESS).each do |operator|
+      %w[five current_user].each do |value|
+        assert_equal [[], []], compare(:sealed, operator, value, false), "sealed #{operator} #{value}"
+        assert_equal [[], []], compare(:sealed, operator, value, true), "sealed #{operator} #{value}, include_nulls"
+      end
+    end
+    assert_equal [%w[five], %w[five]], compare(:sealed, 'is_not_null', '', false)
+    nulls = all_labels - %w[five]
+
+    assert_equal [nulls, nulls], compare(:sealed, 'is_null', '', false)
   end
 
   test 'the parity matrix is not vacuous' do
@@ -416,7 +435,7 @@ class RlsRuleParityTest < ActiveSupport::TestCase
                    born_on: '2026-01-10', seen_at: Time.utc(2026, 1, 10, 10), opens_at: '09:00', status: :active, tier: :basic,
                    codes: [1, 2], tags: %w[a b], ref: '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', code: 'ab',
                    aliases: %w[a b], settings: { 'a' => 1 }, ip: '10.0.0.1', net: '10.0.0.0/24', mood: 'calm',
-                   doc: '<a/>', spot: '(1,2)')
+                   doc: '<a/>', spot: '(1,2)', sealed: 'five')
     record('zero', small_count: 0, owner_id: @other.id, amount: 0, ratio: 0.0, rate: 0.5, flag: false, notes: '50x_OFF',
                    born_on: '2025-06-01', seen_at: Time.utc(2025, 6, 1), opens_at: '17:30', status: :archived, tier: :gold,
                    codes: [3], tags: %w[c], ref: '00000000-0000-0000-0000-000000000000', code: 'xyz',

@@ -131,10 +131,14 @@ module PermissionForge
         assert_equal [], fields
       end
 
-      test 'humanizes column names for labels' do
+      # Round 7 (A#127): the label was `name.humanize`, English stored on the
+      # row whatever the admin's language. The name is stored; the admin
+      # shows the host's translation or the name (GeneratedText).
+      test 'labels a generated row with its column name, never the humanized English' do
         fields = PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource)
-        name_field = fields.find { |f| f.name == 'name' }
-        assert_equal 'Name', name_field.label
+
+        assert_equal 'name', fields.find { |f| f.name == 'name' }.label
+        assert(fields.all? { |f| f.label == f.name }, fields.map { |f| [f.name, f.label] }.inspect)
       end
 
       test 'persists fields to the database' do
@@ -224,7 +228,7 @@ module PermissionForge
 
         assert_equal %w[contact_count full_address], virtual.map(&:name).sort
         assert(virtual.none? { |f| f.read_access || f.edit_access })
-        assert_equal 'Full address', virtual.find { |f| f.name == 'full_address' }.label
+        assert_equal 'full_address', virtual.find { |f| f.name == 'full_address' }.label
       end
 
       test 'under :unconfigured grant_all keeps full access to virtual fields explicit' do

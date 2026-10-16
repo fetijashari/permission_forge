@@ -63,10 +63,12 @@ module PermissionForge
 
     def template_defaults = File.read(MIGRATION).scan(TEMPLATE_DEFAULT)
 
-    # The defaults that are text: not the value of an enumerated column.
+    # The defaults that are text: not the value of an enumerated column —
+    # and the ones the install migration gave the columns before 0.15
+    # (PermissionForge::GeneratedText): an upgraded install still has them.
     def text_defaults
-      live_columns.reject { |klass, name, _| klass.validators_on(name).any? { |validator| validator.kind == :inclusion } }
-                  .map(&:last).uniq
+      live = live_columns.reject { |klass, name, _| klass.validators_on(name).any? { |validator| validator.kind == :inclusion } }
+      (live.map(&:last) | PermissionForge::GeneratedText.install_defaults).uniq
     end
 
     # "input rule[name] = "Untitled Rule"" for every text input value,

@@ -160,6 +160,10 @@ module PermissionForge
         unknown_table: 'Matches nothing: <code class="pf-mono-key">nosuch</code> is not a table of this database',
         foreign_table: 'Matches nothing: <code class="pf-mono-key">suppliers</code> is a table of another model: a filter rule ' \
                        "compares Customer's own columns",
+        encrypted_column: 'Matches nothing: body of PfEncryptedNote is encrypted: the database holds its ciphertext, so a rule ' \
+                          'can only check whether it is empty',
+        pattern_on_non_text: 'Matches nothing: details of PfRulePathRecord is not text: a pattern condition (contains, starts ' \
+                             'with, ends with) cannot match it',
         unusable_value: 'Matches nothing: <code class="pf-mono-key">5_id</code> is not a value supplier_id of Customer can hold'
       }.freeze
 

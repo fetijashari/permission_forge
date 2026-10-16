@@ -54,6 +54,7 @@ module PermissionForge
         assert_match(/flash|sessions disabled/, without['message'].to_s)
         assert_equal 200, result.dig('admin_page_with_middlewares', 'status'), result['admin_page_with_middlewares'].inspect
         assert_admin_form_posts(result)
+        assert_admin_edit_forms(result)
         warning = result['boot_warning'].to_s
         %w[ActionDispatch::Cookies ActionDispatch::Session::CookieStore ActionDispatch::Flash].each do |middleware|
           assert_includes warning, middleware, 'the boot warning names the middlewares the admin needs'
@@ -72,6 +73,17 @@ module PermissionForge
         assert_match(%r{\A/permissions/permission_sets/\d+\z}, post['location'])
         refused = result.fetch('admin_post_without_token')
         assert_equal [false, 'ActionController::InvalidAuthenticityToken'], refused.values_at('created', 'error'), refused.inspect
+      end
+
+      # Field test round 7 (D#67): the edit and delete forms send POST with a
+      # hidden _method; an API-only app has no Rack::MethodOverride, and with
+      # the three documented middlewares they answered 404. The engine brings
+      # its own (PermissionForge::AdminMethodOverride).
+      def assert_admin_edit_forms(result)
+        patch = result.fetch('admin_patch_field')
+        assert_equal [302, 'patch', 'E-mail address'], patch.values_at('status', 'method', 'label'), patch.inspect
+        delete = result.fetch('admin_delete_rule')
+        assert_equal [302, 'delete', true], delete.values_at('status', 'method', 'deleted'), delete.inspect
       end
 
       def block_failures(file, block)

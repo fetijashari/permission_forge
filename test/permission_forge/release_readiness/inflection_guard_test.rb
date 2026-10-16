@@ -17,8 +17,10 @@ module PermissionForge
   # through Admin::ErrorSentence. Comments and string literals do not count
   # (StaticGuard); an allow-listed line needs a reason and must still match.
   class InflectionGuardTest < ActiveSupport::TestCase
-    GLOBS = %w[app/**/*.rb app/**/*.erb lib/permission_forge/admin/**/*.rb
-               lib/permission_forge/unique_conflict.rb lib/permission_forge/audit/event_query.rb].freeze
+    # All of lib/permission_forge (round 7, critique 22): a writer outside the
+    # admin (the field generator's RowBuilder) stored `name.humanize` on every
+    # generated row, where the narrower globs never looked.
+    GLOBS = %w[app/**/*.rb app/**/*.erb lib/permission_forge/**/*.rb].freeze
 
     INFLECTIONS = /\.(?:humanize|titleize|pluralize|singularize|to_sentence|full_messages?)\b|
                    \b(?:pluralize|time_ago_in_words|distance_of_time_in_words|number_to_human\w*|number_with_delimiter)\(|
@@ -27,17 +29,13 @@ module PermissionForge
     # t('errors.…'), I18n.t("support.…"): a Rails-core key family (strings kept for this scan).
     RAILS_KEYS = /\b(?:I18n\.)?t\(\s*:?["']?(?:errors|support|datetime|date|time|number|helpers|activerecord|activemodel)\./
 
-    # [file, line pattern, reason]: a stored default is written once when a
-    # row is created (the host's column name made readable; an admin edits
-    # the label afterwards), the host application's constant name is the
-    # same in every language.
+    # [file, line pattern, reason]. No writer stores an inflected name (round
+    # 7: the gem stores the name itself; GeneratedText reads what it stored
+    # before). The host application's constant name is the same in every
+    # language.
     INFLECTION_ALLOWLIST = [
-      ['app/models/permission_forge/resource_field.rb', /self\.label = name\.to_s\.humanize/,
-       'the label stored for a new row without one (default_label), as generated rows are labelled'],
-      ['lib/permission_forge/admin/change_set_parts/new_actions.rb', /label: key\.humanize/,
-       'the label stored when an action row is created from a controller action key'],
-      ['lib/permission_forge/admin/change_set_parts/field_edit.rb', /field\.name\.humanize/,
-       'a label an admin blanked is stored as the generated default again'],
+      ['lib/permission_forge/generated_text.rb', /name\.to_s\.humanize/,
+       'recognises the label 0.15 and earlier stored (`name.humanize`) as generated; it writes and shows nothing'],
       ['app/helpers/permission_forge/application_helper.rb', /module_parent_name\.to_s\.titleize/,
        'the host application\'s constant name (admin_app_name overrides it); the same in every locale']
     ].freeze
@@ -46,7 +44,7 @@ module PermissionForge
     # Admin::ModelLabel (Admin::ModelCatalog's too, since WP-13): no entry.
     HOST_TRANSLATION_ALLOWLIST = [].freeze
 
-    test 'nothing in app/ or lib/permission_forge/admin inflects English' do
+    test 'nothing in app/ or lib/permission_forge inflects English' do
       hits = StaticGuard.scan(globs: GLOBS, needle: INFLECTIONS, allowlist: INFLECTION_ALLOWLIST,
                               canonical: %w[lib/permission_forge/admin/list_sentence.rb])
 
@@ -65,7 +63,7 @@ module PermissionForge
                                                  allowlist: HOST_TRANSLATION_ALLOWLIST)
     end
 
-    test 'nothing in app/ or lib/permission_forge/admin reads a Rails-core translation key' do
+    test 'nothing in app/ or lib/permission_forge reads a Rails-core translation key' do
       hits = StaticGuard.scan(globs: GLOBS, needle: RAILS_KEYS, strings: :keep)
 
       assert_empty hits.map(&:to_s),

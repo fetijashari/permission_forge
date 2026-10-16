@@ -181,6 +181,22 @@ module PermissionForge
         assert_equal %w[counted], labels(:label, 'contains', 'unt')
       end
 
+      # Field test round 7 (D#22): `small_count contains '1'` was refused as
+      # "is not a value … can hold" on field_value; '1' is a good integer —
+      # the operator is what an integer column cannot take.
+      test 'a LIKE operator on an integer, date or boolean column is refused on operator, naming the column type' do
+        { small_count: 'integer', born_on: 'date', flag: 'boolean' }.each do |column, type|
+          rule = new_rule(field_name: column.to_s, operator: 'contains', field_value: '1')
+
+          assert_not rule.valid?, column
+          assert_equal [I18n.t('permission_forge.validations.permission_set_rule.pattern_on_non_text', model: 'PfRuleRecord',
+                                                                                                       name: column.to_s, type: type)],
+                       rule.errors[:operator], column
+          assert_empty rule.errors[:field_value], column
+          assert_equal :pattern_on_non_text, RuleProblem.for(stored_rule(field_name: column.to_s, operator: 'contains', field_value: '1')).kind
+        end
+      end
+
       private
 
       def resource

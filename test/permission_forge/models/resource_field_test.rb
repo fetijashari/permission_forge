@@ -21,15 +21,17 @@ module PermissionForge
 
     # The install migration's label default ('Untitled Field') showed in the
     # admin's privacy audit for every row created through the API or a
-    # console; generated rows get the humanized name, and so does every row now.
-    test 'a new row without a label is labelled with its humanized name' do
+    # console. Since round 7 (A#127) a row is labelled with its name, never
+    # the humanized English ("Billing email" on a Macedonian page): the admin
+    # shows the host's translation or the name (PermissionForge::GeneratedText).
+    test 'a new row without a label is labelled with its name' do
       untitled = PermissionForge::ResourceField.create!(resource: @resource, name: 'billing_email')
       blank = PermissionForge::ResourceField.create!(resource: @resource, name: 'phone_number', label: '')
       named = PermissionForge::ResourceField.create!(resource: @resource, name: 'domain', label: 'Web address')
 
       assert_equal PermissionForge::ResourceField::UNTITLED_LABEL, PermissionForge::ResourceField.new.label,
                    'the column default this replaces'
-      assert_equal(['Billing email', 'Phone number', 'Web address'], [untitled, blank, named].map { |row| row.reload.label })
+      assert_equal(['billing_email', 'phone_number', 'Web address'], [untitled, blank, named].map { |row| row.reload.label })
     end
 
     test 'the label default applies on create only' do

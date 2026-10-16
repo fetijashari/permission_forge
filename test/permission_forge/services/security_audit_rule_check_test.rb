@@ -85,7 +85,8 @@ module PermissionForge
 
           assert_equal 1, named.size, "#{kind}: #{named.inspect}"
         end
-        codes = %i[missing_rule_columns unknown_rule_operators unusable_rule_values foreign_table_filter_rules]
+        codes = %i[missing_rule_columns unknown_rule_operators unusable_rule_values foreign_table_filter_rules encrypted_rule_columns
+                   non_text_pattern_rules]
 
         assert_equal codes.sort, report.findings.map(&:code).intersection(codes).sort
       end

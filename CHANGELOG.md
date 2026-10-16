@@ -344,10 +344,10 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/html/locale_leak_test.rb#every screen shows only translated words and host data -->
 - **Static lints for the admin's words.** `release_readiness/inflection_guard_test.rb`: no English inflection
   (`humanize`, `pluralize`, `to_sentence`, `full_messages`, `time_ago_in_words`, ...) and no Rails-core key family in
-  `app/` or `lib/permission_forge/admin/`; `i18n_test.rb`: a sq/mk value identical to English needs a reason, one pair
+  `app/` or `lib/permission_forge/`; `i18n_test.rb`: a sq/mk value identical to English needs a reason, one pair
   of quotation marks per locale, one label per state; `release_readiness/column_default_prefill_test.rb`: no form
   pre-fills a string column default; `AdminPagesTest` lints every re-rendered form as it does every screen.
-  <!-- pin: test/permission_forge/release_readiness/inflection_guard_test.rb#nothing in app/ or lib/permission_forge/admin inflects English -->
+  <!-- pin: test/permission_forge/release_readiness/inflection_guard_test.rb#nothing in app/ or lib/permission_forge inflects English -->
   <!-- pin: test/permission_forge/release_readiness/column_default_prefill_test.rb#no new-record screen or re-rendered form pre-fills a text default -->
   <!-- pin: test/permission_forge/html/admin_pages_test.rb#markup is CSP-safe and namespaced, on every screen and every re-rendered form -->
 - **Release-readiness guards.** `stored_data_fail_closed_test.rb` poisons every interpreted column of the eight models

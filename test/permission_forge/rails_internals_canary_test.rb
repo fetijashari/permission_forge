@@ -46,6 +46,12 @@ ActiveRecord::Schema.define do
     t.text :prefs
     t.integer :parent_id
   end
+  # For the encrypted_attributes canary (ignore_case needs its original_ column).
+  create_table :pf_canary_encrypted_records, force: true do |t|
+    t.string :name
+    t.string :email
+    t.string :original_email
+  end
 end
 
 # A plain model on the canary table. Never give it (or any model here) a
@@ -118,7 +124,9 @@ module PermissionForge
       journey_route: Regexp.union('@route.path.spec', '@route.verb', '@route.defaults', '@route.internal'),
       association_target: Regexp.union('association.target.sort_by!', 'association(:user).target', 'return association.target if'),
       host_translation_default: Regexp.union('human_attribute_name(name, default: MISSING)',
-                                             'model_name.human(count: count, default: FieldLabel::MISSING)')
+                                             'model_name.human(count: count, default: FieldLabel::MISSING)'),
+      encrypted_attributes: Regexp.union('model.encrypted_attributes', 'model.deterministic_encrypted_attributes',
+                                         'model.type_for_attribute(name.to_s).deserialize(')
     }.freeze
 
     # What to change, per touch point, when a test fails on something its own
@@ -185,7 +193,9 @@ module PermissionForge
       association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)',
       host_translation_default: 'adapt Admin::FieldLabel.host_translation and Admin::ModelLabel.host_translation (how a host ' \
                                 'translation is told from Rails\' English fallback: the `default:` option is answered when no key ' \
-                                'of the lookup chain exists)'
+                                'of the lookup chain exists)',
+      encrypted_attributes: 'adapt PermissionForge::EncryptedAttributes (which columns hold ciphertext: a rule is refused ' \
+                            'on one, the people search leaves one out, a person label is read decrypted)'
     }.freeze
 
     # Marks a failure message as a canary's.
@@ -1575,6 +1585,34 @@ module PermissionForge
       assert_equal [], result['others'], 'a server, a console or a runner loads no generator command'
       assert_equal %w[Rails::Command::GenerateCommand Rails::Command::DestroyCommand], result['generators']
       assert_equal PermissionForge::BootChecks::GENERATOR_COMMANDS, result['generators']
+    end
+
+    # PermissionForge::EncryptedAttributes reads these: `encrypted_attributes`
+    # (no rdoc, not in the guides) and `deterministic_encrypted_attributes`.
+    # nil on a model that encrypts nothing (the gem reads it through Array()),
+    # Symbols, the `original_<name>` column of an ignore_case attribute among
+    # them; the attribute type decrypts the stored value.
+    canary_test :encrypted_attributes,
+                'encrypted_attributes / deterministic_encrypted_attributes: nil or Symbols; type_for_attribute decrypts' do
+      plain = canary_model('PfCanaryPlain')
+
+      assert_empty Array(plain.encrypted_attributes)
+      model = canary_model('PfCanaryEncrypted') do
+        self.table_name = 'pf_canary_encrypted_records'
+        encrypts :name
+        encrypts :email, deterministic: true, ignore_case: true
+      end
+      names = Array(model.encrypted_attributes)
+
+      assert names.all?(Symbol), names.inspect
+      assert_equal %i[email name original_email], names.sort
+      assert_includes Array(model.deterministic_encrypted_attributes), :email
+      assert_not_includes Array(model.deterministic_encrypted_attributes), :name
+      record = model.create!(name: 'Ana', email: 'Ana@acme.test')
+      raw = record.read_attribute_before_type_cast('name')
+
+      assert_not_equal 'Ana', raw
+      assert_equal 'Ana', model.type_for_attribute('name').deserialize(raw)
     end
 
     canary_test :sandbox, 'Rails.application.sandbox?: false outside `rails console --sandbox`' do

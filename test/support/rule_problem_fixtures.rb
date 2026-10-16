@@ -21,6 +21,11 @@ module RuleProblemFixtures
     unknown_join_type: { attrs: { join_type: 'inner', field_accessor_path: 'supplier' }, refused: :join_type },
     unknown_table: { attrs: { field_name: 'nosuch.name' }, refused: :field_name },
     foreign_table: { attrs: { field_name: 'suppliers.name' }, refused: :field_name },
+    # An attribute declared with `encrypts`: the column holds ciphertext.
+    encrypted_column: { attrs: { field_name: 'body', field_value: 'mine' }, refused: :field_name, model: 'PfEncryptedNote' },
+    # A LIKE operator on a column it cannot match (json, on every database).
+    pattern_on_non_text: { attrs: { field_name: 'details', operator: 'contains', field_value: 'mine' }, refused: :operator,
+                           model: 'PfRulePathRecord' },
     unusable_value: { attrs: { field_name: 'supplier_id', field_value: '5_id' }, refused: :field_value }
   }.freeze
 

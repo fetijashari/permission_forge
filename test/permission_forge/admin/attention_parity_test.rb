@@ -43,6 +43,8 @@ module PermissionForge
         unknown_rule_operators: :broken_rules,
         unusable_rule_values: :broken_rules,
         foreign_table_filter_rules: :broken_rules,
+        encrypted_rule_columns: :broken_rules,
+        non_text_pattern_rules: :broken_rules,
         secret_rule_columns: :secret_rules,
         unknown_mask_strategies: :unknown_mask_strategies,
         incomplete_conditions: :broken_conditions,
@@ -228,6 +230,8 @@ module PermissionForge
       def arrange_unknown_rule_operators = rule_of_kind(:unknown_operator)
       def arrange_unusable_rule_values = rule_of_kind(:unusable_value)
       def arrange_foreign_table_filter_rules = rule_of_kind(:foreign_table)
+      def arrange_encrypted_rule_columns = rule_of_kind(:encrypted_column)
+      def arrange_non_text_pattern_rules = rule_of_kind(:pattern_on_non_text)
 
       # A rule on a secret column, written before the model refused one.
       def arrange_secret_rule_columns

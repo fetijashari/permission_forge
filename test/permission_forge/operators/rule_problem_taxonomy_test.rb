@@ -30,7 +30,8 @@ module PermissionForge
         create_permission_set_user(user: @user, permission_set: @set)
         @resources = {}
         @customer = create_customer(name: 'mine')
-        @path_record = PfRulePathRecord.create!(label: 'mine')
+        @path_record = PfRulePathRecord.create!(label: 'mine', details: { 'a' => 'mine' })
+        @records = { 'Customer' => @customer, 'PfRulePathRecord' => @path_record, 'PfEncryptedNote' => PfEncryptedNote.create!(body: 'mine') }
         Current.user = @user
       end
 
@@ -41,7 +42,18 @@ module PermissionForge
       test 'every kind has a fixture, and every fixture is a kind' do
         assert_equal RuleProblem::KINDS.sort, FIXTURES.keys.sort
         assert_equal %i[missing_column unknown_association unjoinable_association unknown_operator unknown_join_type
-                        unknown_table foreign_table unusable_value].sort, RuleProblem::KINDS.sort
+                        unknown_table foreign_table encrypted_column pattern_on_non_text unusable_value].sort, RuleProblem::KINDS.sort
+      end
+
+      # The value kinds are told apart in the order ValueTyping decides them:
+      # an encrypted column or a LIKE on a column that is not text answers
+      # UNUSABLE for any value, so a kind after :unusable_value would never be named.
+      test 'the column and operator kinds of a value come before :unusable_value' do
+        kinds = RuleProblem::KINDS
+
+        assert_operator kinds.index(:encrypted_column), :<, kinds.index(:pattern_on_non_text)
+        assert_operator kinds.index(:pattern_on_non_text), :<, kinds.index(:unusable_value)
+        assert_equal :unusable_value, kinds.last
       end
 
       # A kind without a remedy has no control for the builder to point at
@@ -119,7 +131,7 @@ module PermissionForge
       end
 
       def record_for(kind)
-        fixture_model_name(kind) == 'Customer' ? @customer : @path_record
+        @records.fetch(fixture_model_name(kind))
       end
 
       # The holder's queries: permission_scoped lets nothing through, find_by

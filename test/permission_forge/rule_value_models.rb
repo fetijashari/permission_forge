@@ -27,6 +27,8 @@ ActiveRecord::Schema.define do
     t.time     :opens_at
     t.integer  :status
     t.string   :tier
+    # Declared with `encrypts` below: the column holds ciphertext (RuleProblem :encrypted_column).
+    t.text     :sealed
     if postgres
       t.integer :codes, array: true
       t.string  :tags, array: true
@@ -58,6 +60,8 @@ class PfRuleRecord < ApplicationRecord
 
   enum :status, { active: 0, archived: 1, hidden: 2 }
   enum :tier, { basic: 'B', gold: 'G' }, prefix: true
+  # Its column holds ciphertext: a rule can only ask whether it is empty.
+  encrypts :sealed
 
   # Runs the block with other enum mappings, as after a model change.
   def self.stub_enums(mappings)

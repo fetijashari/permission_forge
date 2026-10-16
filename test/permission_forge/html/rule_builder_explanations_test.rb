@@ -73,14 +73,16 @@ module PermissionForge
       # RuleProblem kind => the fix the banner names.
       FIXES = {
         missing_column: 'field', unknown_table: 'field', unusable_value: 'value', unknown_operator: 'operator',
-        unknown_join_type: 'join', unknown_association: 'path', unjoinable_association: 'path', foreign_table: 'path'
+        unknown_join_type: 'join', unknown_association: 'path', unjoinable_association: 'path', foreign_table: 'path',
+        encrypted_column: 'field', pattern_on_non_text: 'operator'
       }.freeze
 
       test 'the banner names the fix for each kind of problem, in every locale' do
         assert_equal Operators::RuleProblem::KINDS.sort, FIXES.keys.sort, 'a fix per kind'
         assert_equal FIXES, Operators::RuleProblem::REMEDIES.transform_values(&:to_s), 'RuleProblem#remedy is the one definition'
+        resources = { 'Customer' => @resource }
         failures = FIXES.flat_map do |kind, fix|
-          resource = fixture_model_name(kind) == 'Customer' ? @resource : create_resource(permission_set: @set, name: fixture_model_name(kind))
+          resource = resources[fixture_model_name(kind)] ||= create_resource(permission_set: @set, name: fixture_model_name(kind))
           rule = broken_rule(kind, permission_set: @set, resource: resource)
           PermissionForge::BUNDLED_LOCALES.filter_map do |locale|
             get pf("/permission_sets/#{@set.id}/resources/#{resource.name}/rules/#{rule.id}/edit"), params: { locale: locale }
