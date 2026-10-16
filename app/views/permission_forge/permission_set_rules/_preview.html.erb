@@ -1,8 +1,17 @@
-<%# The rule being built as the sentence the saved rule shows: the builder's preview panel, and the
-    fragment pf_admin.js fetches from the preview action. %>
+<%# The rule being built, as the save would answer it (Admin::RulePreview: the save path in memory): the first
+    error the save would show, else the sentence the saved rule shows and what is said beside it
+    (Admin::RuleNotes). The builder's preview panel, and the fragment pf_admin.js fetches from the preview action. %>
 <span class="pf-eyebrow"><%= t('permission_forge.permission_set_rules.builder.preview') %></span>
-<% if form.column %>
-  <%= pf_rule_sentence(form.preview_rule, resource.name) %>
-<% else %>
+<% if preview.empty? %>
   <span class="pf-text-3"><%= t('permission_forge.permission_set_rules.builder.preview_empty') %></span>
+<% elsif (refusal = preview.refusal) %>
+  <p class="pf-sentence" data-pf-rule-preview-error>
+    <%= pf_badge("⚠ #{t('permission_forge.permission_set_rules.builder.preview_refused')}", variant: :warn) %>
+    <span><%= refusal.text %></span>
+  </p>
+<% else %>
+  <%= pf_rule_sentence(preview.rule, resource.name) %>
+  <% preview.notes.each do |note| %>
+    <p class="pf-fs-13 pf-text-2" data-pf-rule-note="<%= note.kind %>">⚠ <%= t("permission_forge.permission_set_rules.builder.notes.#{note.kind}.title") %></p>
+  <% end %>
 <% end %>

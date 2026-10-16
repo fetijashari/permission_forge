@@ -24,7 +24,7 @@
 </div>
 <div class="pf-field">
   <label class="pf-label" for="pf-action-label"><%= t('.label') %></label>
-  <input id="pf-action-label" class="pf-input" type="text" name="resource_action[label]" value="<%= action.label %>" placeholder="<%= t('.label_placeholder') %>">
+  <input id="pf-action-label" class="pf-input" type="text" name="resource_action[label]" value="<%= pf_prefill(action, :label) %>" placeholder="<%= t('.label_placeholder') %>">
 </div>
 <div class="pf-field">
   <label class="pf-label" for="pf-action-desc"><%= t('.description') %></label>

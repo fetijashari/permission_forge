@@ -50,7 +50,7 @@ module PermissionForge
       return render(:new, status: :unprocessable_entity) if @error
 
       set = build_set
-      redirect_to permission_forge.permission_set_path(set), notice: t('permission_forge.flash.permission_sets.created', name: set.name)
+      redirect_to permission_forge.permission_set_path(set), notice: t('permission_forge.flash.permission_sets.created', name: pf_record_name(set))
     rescue ActiveRecord::RecordInvalid => e
       @error = pf_copy_refused_message(e, @name)
       render :new, status: :unprocessable_entity
@@ -101,9 +101,10 @@ module PermissionForge
       group = @permission_set.permission_set_group
       key = group && copy.permission_set_group_id.nil? ? 'duplicated_outside_group' : 'duplicated'
       redirect_to permission_forge.permission_set_path(copy),
-                  notice: t("permission_forge.flash.permission_sets.#{key}", name: @permission_set.name, group: group&.name)
+                  notice: t("permission_forge.flash.permission_sets.#{key}", name: pf_record_name(@permission_set),
+                                                                             group: (pf_record_name(group) if group))
     rescue ActiveRecord::RecordInvalid => e
-      redirect_to permission_forge.permission_set_path(@permission_set), alert: pf_copy_refused_message(e, @permission_set.name)
+      redirect_to permission_forge.permission_set_path(@permission_set), alert: pf_copy_refused_message(e, pf_record_name(@permission_set))
     end
 
     def confirm_destroy
@@ -111,7 +112,7 @@ module PermissionForge
     end
 
     def destroy
-      name = @permission_set.name
+      name = pf_record_name(@permission_set)
       @permission_set.destroy!
       redirect_to permission_forge.permission_sets_path, notice: t('permission_forge.flash.permission_sets.deleted', name: name)
     end
@@ -125,7 +126,7 @@ module PermissionForge
       @permission_set.update!(is_muting: !@permission_set.is_muting)
       key = @permission_set.is_muting ? 'switched_muting' : 'switched_granting'
       redirect_to permission_forge.permission_set_path(@permission_set),
-                  notice: t("permission_forge.flash.permission_sets.#{key}", name: @permission_set.name)
+                  notice: t("permission_forge.flash.permission_sets.#{key}", name: pf_record_name(@permission_set))
     end
 
     def conditions

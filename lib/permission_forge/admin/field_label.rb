@@ -5,15 +5,21 @@ module PermissionForge
     # The one definition of the label the admin shows for a stored field,
     # column or association name: the host application's own translation
     # when it has one (`activerecord.attributes.<model>.<name>`, read
-    # through `human_attribute_name` — never its English fallback), else the
-    # label of the ResourceField row, else the name verbatim (`verbatim?`:
-    # the view draws it in <code>; an admin looks for the stored name).
-    # Rails' `humanize` ("Full address") is English whatever the page's
-    # language, so it is never used (release_readiness/inflection_guard_test.rb).
+    # through `human_attribute_name` with a sentinel default), else the label
+    # an admin wrote on the ResourceField row — a label the gem generated
+    # (PermissionForge::GeneratedText.label?: blank, the name, the name
+    # humanized, 'Untitled Field') is no label — else, on an English page,
+    # Rails' own English for the name (`human_attribute_name`: "Created at",
+    # what an English host saw before 0.15; #english), else the name
+    # verbatim (`verbatim?`: the view draws it in <code>; an admin looks for
+    # the stored name). Rails' English is never shown on a page in another
+    # language (release_readiness/inflection_guard_test.rb). A column with
+    # no row and one with a generated label read the same (field test round
+    # 7, B#26).
     #
     # @example
-    #   FieldLabel.for(Customer, 'full_address').text          # => "Adresa" (host translation), or "full_address"
-    #   FieldLabel.for('Customer', 'email', row: field).text   # => the row's label when the host has no translation
+    #   FieldLabel.for(Customer, 'full_address').text          # => "Adresa" (host translation); on sq "full_address", on en "Full address"
+    #   FieldLabel.for('Customer', 'email', row: field).text   # => the label an admin wrote, when the host has no translation
     #
     # @api private
     class FieldLabel
@@ -37,8 +43,44 @@ module PermissionForge
           translated = host_translation(model, name)
           return Label.new(text: translated, verbatim: false) if translated
 
+          label = written_label(row, name)
+          return Label.new(text: label, verbatim: false) if label
+
+          fallback(klass_of(model), name)
+        end
+
+        # The label an admin wrote on `row`, or nil for none — a label the
+        # gem generated (GeneratedText.label?) is none.
+        #
+        # @return [String, nil]
+        def written_label(row, name)
           label = row.respond_to?(:label) ? row.label.to_s.strip : ''
-          label.empty? ? Label.new(text: name, verbatim: true) : Label.new(text: label, verbatim: false)
+          label unless PermissionForge::GeneratedText.label?(label, name)
+        end
+
+        # A name with no translation and no label of the admin's: Rails' own
+        # English on an English page (#english), the name verbatim elsewhere
+        # — and wherever the model cannot be loaded (the stored name is what
+        # the admin looks for).
+        #
+        # @param klass [Class, nil] the model the name belongs to, when known
+        # @return [Label]
+        def fallback(klass, name)
+          text = english(name) { klass.human_attribute_name(name) if klass.respond_to?(:human_attribute_name) }
+          text ? Label.new(text: text, verbatim: false) : Label.new(text: name.to_s, verbatim: true)
+        end
+
+        # Rails' English for a name, only while the page is English: what
+        # the block answers (a model's `human_attribute_name`: "Created at"),
+        # or without a block Rails' humanization of the name (an action key,
+        # which belongs to no attribute: "Export csv"). nil on any other
+        # page, and for a blank name.
+        #
+        # @return [String, nil]
+        def english(name)
+          return nil if name.blank? || !I18n.locale.to_s.start_with?('en')
+
+          block_given? ? yield : ActiveSupport::Inflector.humanize(name)
         end
 
         # The host's translation of `name` on `model`, or nil. An empty name

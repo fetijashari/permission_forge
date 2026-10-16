@@ -39,7 +39,7 @@ module PermissionForge
       # the service's one cache outcome: what the store confirmed, and its scope (CacheConfirmation)
       redirect_to assignments_path,
                   **cache_flash(result[:cache], { notice: :assigned, alert: :assigned_cache_kept },
-                                count: result[:assigned], set: @permission_set.name)
+                                count: result[:assigned], set: pf_record_name(@permission_set))
     end
 
     def confirm_revoke
@@ -55,7 +55,7 @@ module PermissionForge
       )
       redirect_to assignments_path,
                   **cache_flash(result[:cache], { notice: :revoked, alert: :revoked_cache_kept },
-                                count: result[:revoked], set: @permission_set.name)
+                                count: result[:revoked], set: pf_record_name(@permission_set))
     end
 
     private

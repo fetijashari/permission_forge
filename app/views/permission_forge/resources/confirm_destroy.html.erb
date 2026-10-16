@@ -1,9 +1,9 @@
 <% set = @permission_set %>
 <% label = pf_resource_label(@resource) %>
-<% content_for :pf_title, t('.title', resource: label, set: set.name) %>
-<%= pf_dialog_frame({ title: t('.title', resource: label, set: set.name), danger: true,
+<% content_for :pf_title, t('.title', resource: label, set: pf_record_name(set)) %>
+<%= pf_dialog_frame({ title: t('.title', resource: label, set: pf_record_name(set)), danger: true,
                      breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
-                                               [set.name, permission_forge.permission_set_path(set)], label) }) do %>
+                                               [pf_record_name(set), permission_forge.permission_set_path(set)], label) }) do %>
   <p class="pf-text-2">
     <%= set.is_muting ? t('.body_muting', people: pf_people_text(@people_count)) : t('.body', people: pf_people_text(@people_count), resources: pf_resource_plural(@resource.name)) %>
   </p>

@@ -15,7 +15,7 @@
     <% set = item.permission_set %>
     <div class="pf-card__row pf-card__row--top">
       <div class="pf-stack pf-stack--tight pf-grow">
-        <strong><%= t('.field', field: pf_field_label_text(item.resource.name, field.name), resource: pf_resource_label(item.resource), set: set.name) %></strong>
+        <strong><%= t('.field', field: pf_field_label_text(item.resource.name, field.name), resource: pf_resource_label(item.resource), set: pf_record_name(set)) %></strong>
         <%# The stored name is shown as written: it names no strategy, so it has no label. %>
         <span class="pf-fs-13 pf-text-2"><%= t('.strategy_html', strategy: content_tag(:code, field.mask_strategy.to_s)) %></span>
         <span class="pf-fs-13 pf-text-2"><%= t('.people', count: item.people_count) %></span>

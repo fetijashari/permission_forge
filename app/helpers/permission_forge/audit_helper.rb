@@ -164,30 +164,40 @@ module PermissionForge
     # what the event says about it.
     def pf_audit_set_name(event, lookups)
       return nil if event.permission_set_id.blank? && event.permission_set_uuid.blank?
-      return event.record_label if event.record_type == 'PermissionForge::PermissionSet' && event.record_label.present?
+      if event.record_type == 'PermissionForge::PermissionSet' && event.record_label.present?
+        return pf_record_name_text(event.record_label, :permission_set)
+      end
 
       name = lookups.permission_set_name(event)
-      return name if name
+      return pf_record_name_text(name, :permission_set) if name
 
       t('permission_forge.audit_log.deleted_set', id: event.permission_set_id || event.permission_set_uuid)
     end
 
     def pf_audit_group_name(event, lookups)
       name = lookups.group_name(event)
-      return name if name
+      return pf_record_name_text(name, :permission_set_group) if name
 
       id = PermissionForge::Admin::AuditLookups.group_id(event)
       id ? t('permission_forge.audit_log.deleted_group', id: id) : t('permission_forge.audit_log.unknown_group')
     end
 
-    # What the event is about: its label snapshot, else the type's label
-    # (Admin::AuditTrail::TYPES; a class outside them as stored) and id.
+    # What the event is about: its label snapshot (a set's, group's or
+    # rule's install-default name in the page's language: Admin::RecordName),
+    # else the type's label (Admin::AuditTrail::TYPES; a class outside them
+    # as stored) and id.
     def pf_audit_record_name(event)
-      return event.record_label if event.record_label.present?
+      return pf_audit_label_text(event) if event.record_label.present?
       return '' if event.record_type.blank?
 
       type = PermissionForge::Admin::AuditTrail::TYPES.key(event.record_type.to_s)
       [type ? pf_audit_type_label(type) : event.record_type.to_s, event.record_id || event.record_uuid].compact.join(' #')
+    end
+
+    # An event's record label as Admin::RecordName reads a name of its type.
+    def pf_audit_label_text(event)
+      klass = PermissionForge::ModelLookup.model_for(event.record_type.to_s) if event.record_type.to_s.start_with?('PermissionForge::')
+      klass ? pf_record_name_text(event.record_label, klass) : event.record_label
     end
 
     # A value of a before/after or snapshot table: text as it is, nothing as

@@ -59,7 +59,7 @@
   </div>
   <% if @groups.any? %>
     <p class="pf-fs-13 pf-text-2">
-      <%= t('.groups_html', groups: safe_join(@groups.map { |g| link_to(g.permission_set_group.name, permission_forge.group_path(g.permission_set_group)) }, ', ')) %>
+      <%= t('.groups_html', groups: safe_join(@groups.map { |g| link_to(pf_record_name(g.permission_set_group), permission_forge.group_path(g.permission_set_group)) }, ', ')) %>
     </p>
   <% end %>
 </div>

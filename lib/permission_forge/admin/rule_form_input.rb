@@ -34,7 +34,7 @@ module PermissionForge
       def self.param_values(attrs)
         { value: stripped(attrs['value']), values: list_values(attrs),
           value_from: stripped(attrs['value_from']), value_to: stripped(attrs['value_to']),
-          current_user: attrs['current_user'] == '1' }
+          current_user: flag(attrs, 'current_user', default: false) }
       end
 
       # Checked list values plus comma-separated free text.
@@ -44,9 +44,17 @@ module PermissionForge
       end
 
       def self.param_options(attrs)
-        { include_nulls: attrs['include_nulls'] == '1', failure_message: stripped(attrs['failure_message']),
+        { include_nulls: flag(attrs, 'include_nulls', default: false), failure_message: stripped(attrs['failure_message']),
           join: allowed(attrs['join'], RuleForm::JOINS, 'auto'),
-          is_active: attrs.key?('is_active') ? attrs['is_active'] == '1' : true }
+          is_active: flag(attrs, 'is_active', default: true) }
+      end
+
+      # A checkbox of the builder, through the one boolean reading of the
+      # admin and the API (ParamShapes.flag): the box absent (unchecked, no
+      # hidden field) is `default`; a value that is no boolean raises
+      # ParamShapes::InvalidFlag, which the admin answers with a flash.
+      def self.flag(attrs, key, default:)
+        attrs[key].nil? ? default : ParamShapes.flag(key, attrs[key])
       end
 
       # A filter rule's path is never joined (PermissionSetRule#join_rule?,

@@ -33,8 +33,8 @@ module PermissionForge
 
         done.each do |key|
           would = RakeOutput.label(key, dry_run: true)
-          assert_match(/\bwould\b/, would, key)
-          assert_no_match DONE, would.sub(/would be \w+/, ''), "#{key}: #{would}"
+          assert_match(/\bwould\b/i, would, key)
+          assert_no_match DONE, would.sub(/would be \w+/i, ''), "#{key}: #{would}"
         end
         assert_equal RakeOutput.label('strategy'), RakeOutput.label('strategy', dry_run: true), 'a label of no change reads the same'
       end
@@ -69,7 +69,7 @@ module PermissionForge
         assert_nil outcome.confirmed, 'nothing to confirm: nothing was asked of the store'
         assert_equal false, outcome.work
         assert_predicate outcome, :none?
-        assert_includes RakeOutput.lines(result).join("\n"), RakeOutput::NO_CACHE_WORK
+        assert_includes RakeOutput.lines(result).join("\n"), RakeOutput::CONFIRMED.fetch(:none)
       end
 
       test 'every dry run answers no cache work' do
@@ -83,7 +83,7 @@ module PermissionForge
 
         ENV['USER_ID'] = @user.id.to_s
         out, = run_task('permission_forge:erasure')
-        assert_includes out, RakeOutput::NO_CACHE_WORK
+        assert_includes out, RakeOutput::CONFIRMED.fetch(:none)
         assert_not_includes out, RakeOutput::CONFIRMED.fetch(nil), 'never "follows the commit" for a dry run'
       end
 

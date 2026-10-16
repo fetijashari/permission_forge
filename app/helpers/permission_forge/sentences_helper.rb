@@ -5,39 +5,43 @@ module PermissionForge
   #
   # @api private
   module SentencesHelper
-    NULLABLE_OPERATORS = %w[equal not_equal in not_in].freeze
-    LIST_OPERATORS = %w[in not_in].freeze
-    NO_VALUE_OPERATORS = %w[is_null is_not_null].freeze
-    USER_OPERATORS = %w[equal not_equal in not_in is_null is_not_null].freeze
-    CURRENT_USER = 'current_user'.freeze
     # Resource flags a Muting Permission Set can take away, in the order the page shows them.
     MUTED_FLAGS = %i[read_access create_access edit_access delete_access].freeze
 
     # --- activation conditions ------------------------------------------------
 
-    def pf_condition_parts(permission_set)
-      [pf_condition_ips(permission_set), pf_condition_hours(permission_set), pf_condition_flag(permission_set)].compact
+    # `here`: the sentence is drawn on the set's own Conditions tab, so a
+    # broken condition is not sent "to the Conditions tab" (E#32).
+    def pf_condition_parts(permission_set, here: false)
+      [pf_condition_ips(permission_set, here: here), pf_condition_hours(permission_set, here: here),
+       pf_condition_flag(permission_set)].compact
     end
 
-    # The IP entries as the engine reads them (ActivationConditions).
-    def pf_condition_ips(permission_set)
-      ips = PermissionForge::ActivationConditions.of(permission_set).allowed_ip_list
-      return if ips.empty?
+    # The IP entries as the engine reads them (ActivationConditions); a list
+    # it cannot judge (an entry that is no address, no entry at all) says so
+    # (B#48a), never reads as a list of addresses.
+    def pf_condition_ips(permission_set, here: false)
+      conditions = PermissionForge::ActivationConditions.of(permission_set)
+      ips = conditions.allowed_ip_list
+      return if ips.empty? && !conditions.ip_list_broken?
 
       connector = pf_ui('conditions.or')
-      pf_ui('conditions.from_ips', ips: pf_to_sentence(ips, two_words_connector: connector, last_word_connector: connector))
+      listed = pf_to_sentence(ips, two_words_connector: connector, last_word_connector: connector)
+      return pf_ui('conditions.from_ips', ips: listed) unless conditions.ip_list_broken?
+
+      pf_ui(here ? 'conditions.ips_broken_here' : 'conditions.ips_broken', ips: listed.presence || permission_set.allowed_ips.to_s.strip)
     end
 
     # The hour window as the engine reads it: none, a window, an overnight
     # one, or a broken one (one hour of the two, the same hour twice, an
     # hour outside 0–23) that nobody can judge — said so, never shown as an
     # overnight window.
-    def pf_condition_hours(permission_set)
+    def pf_condition_hours(permission_set, here: false)
       window = PermissionForge::ActivationConditions.of(permission_set).hours_window
       return unless window.set?
 
       hours = { from: pf_hour_or_blank(window.from), to: pf_hour_or_blank(window.to) }
-      return pf_ui('conditions.hours_broken', **hours) if window.broken?
+      return pf_ui(here ? 'conditions.hours_broken_here' : 'conditions.hours_broken', **hours) if window.broken?
 
       pf_ui("conditions.#{window.wraps? ? 'hours_overnight' : 'hours'}", **hours)
     end
@@ -46,13 +50,30 @@ module PermissionForge
       hour.nil? ? pf_ui('conditions.no_hour') : pf_hour(hour)
     end
 
+    # One sentence per ActivationConditions#condition_problems entry: what
+    # cannot be judged, the stored entry as written (in <code>).
+    def pf_condition_problem(kind, value)
+      case kind
+      when :ip_entry then pf_ui('conditions.problems.ip_entry_html', entry: content_tag(:code, value, class: 'pf-mono-key'))
+      when :flag_unusable then pf_ui('conditions.problems.flag_unusable_html', flag: content_tag(:code, value.inspect, class: 'pf-mono-key'))
+      else pf_ui("conditions.problems.#{kind}")
+      end
+    end
+
+    # What a condition nobody can judge does to the set (ActivationConditions,
+    # ConditionalSets::Member): a granting set never passes, a muting set
+    # applies to every request — the words Home's card uses.
+    def pf_condition_effect(permission_set)
+      pf_ui("conditions.effect.#{permission_set.is_muting ? 'muting' : 'granting'}")
+    end
+
     def pf_condition_flag(permission_set)
       flag = permission_set.requires_session_flag
       pf_flag_phrase(flag) if flag.present?
     end
 
-    def pf_condition_sentence(permission_set)
-      parts = pf_condition_parts(permission_set)
+    def pf_condition_sentence(permission_set, here: false)
+      parts = pf_condition_parts(permission_set, here: here)
       return pf_ui('conditions.always') if parts.empty?
 
       pf_ui('conditions.only_works', parts: parts.join(', '))
@@ -101,9 +122,11 @@ module PermissionForge
 
     # What one Permission Set does to a field, by its level (an
     # Admin::EffectiveAccess::FieldSource): "Sales rep shows this field masked (Email)."
-    def pf_field_source_sentence(source)
-      pf_ui("level_sentences.#{source.level}", set: source.permission_set.name,
-                                               strategy: pf_mask_strategy_label(source.mask_strategy))
+    # `set_name`: how the set is named (LabelsHelper#pf_chain_set_name on a
+    # person's effective access); the set's name by default.
+    def pf_field_source_sentence(source, set_name: pf_record_name(source.permission_set))
+      strategy = pf_mask_strategy_label(source.mask_strategy)
+      pf_t_markup(set: set_name) { |held| pf_ui("level_sentences.#{source.level}", **held, strategy: strategy) }
     end
 
     # --- record rules ---------------------------------------------------------
@@ -140,24 +163,37 @@ module PermissionForge
       [klass]
     end
 
+    # The value as the rule compares it: "the current user" only where
+    # ValueTyping substitutes the user's id (one value compared:
+    # ValueTyping.current_user?); in a list the word is an element as written.
     def pf_rule_value_text(rule)
       value = rule.field_value.to_s
       return '…' if value.strip.empty? # builder preview before a value is entered
-      return pf_ui('rules.current_user') if value == CURRENT_USER
+      return pf_ui('rules.current_user') if PermissionForge::Operators::ValueTyping.current_user?(rule.operator, value)
 
       pf_rule_value_parts(rule.operator, value)
     end
 
-    # List values as "a, b"; ranges as "a and b"; anything else verbatim.
+    # A list's values as "a, b"; a range's ends as "a and b" — split as
+    # ValueTyping splits them (its SHAPES: :list, :pair); anything else verbatim.
     def pf_rule_value_parts(operator, value)
-      return value.split(',').map(&:strip).join(', ') if LIST_OPERATORS.include?(operator)
-      return value.split(',', 2).map(&:strip).join(" #{pf_ui('rules.and')} ") if operator == 'between'
-
-      value
+      parts = PermissionForge::Operators::ValueTyping.split(value)
+      case PermissionForge::Operators::ValueTyping::SHAPES[operator]
+      when :list then parts.join(', ')
+      when :pair then parts.join(" #{pf_ui('rules.and')} ")
+      else value
+      end
     end
 
+    # Whether the sentence adds "or … is empty": the rule includes the NULL
+    # rows and its operator's strategy adds them (Operators::Registry::NULL_INCLUDING).
     def pf_rule_nullable?(rule)
-      rule.include_nulls && NULLABLE_OPERATORS.include?(rule.operator)
+      rule.include_nulls && PermissionForge::Operators::Registry::NULL_INCLUDING.include?(rule.operator)
+    end
+
+    # Whether the operator takes no value (Operators::Validations::VALUELESS: the null checks).
+    def pf_rule_valueless?(rule)
+      PermissionForge::Operators::Validations.valueless?(rule.operator)
     end
 
     # Token sentence: Only show [Customers] where [Owner] [is] [the current user], or Owner is empty.
@@ -184,7 +220,7 @@ module PermissionForge
     end
 
     def pf_rule_value_token(rule)
-      return if NO_VALUE_OPERATORS.include?(rule.operator)
+      return if pf_rule_valueless?(rule)
 
       content_tag(:span, pf_rule_value_text(rule), class: 'pf-token pf-token--value')
     end
@@ -196,7 +232,7 @@ module PermissionForge
       field = pf_rule_field_labels(model_name, rule).join(' › ')
       text = "#{pf_ui('rules.only_show')} #{pf_resource_plural(model_name)} #{pf_ui('rules.where')} #{field} " \
              "#{pf_operator_label(rule.operator)}"
-      text += " #{pf_rule_value_text(rule)}" unless NO_VALUE_OPERATORS.include?(rule.operator)
+      text += " #{pf_rule_value_text(rule)}" unless pf_rule_valueless?(rule)
       text += ", #{pf_ui('rules.or_empty', field: field)}" if pf_rule_nullable?(rule)
       text
     end
@@ -207,7 +243,7 @@ module PermissionForge
       return safe_join(['⊘ ', pf_rule_problem_line(problem)]) if problem
 
       field = pf_rule_field_labels(model_name, rule).join(' › ')
-      value = NO_VALUE_OPERATORS.include?(rule.operator) ? nil : pf_rule_value_text(rule)
+      value = pf_rule_valueless?(rule) ? nil : pf_rule_value_text(rule)
       [field, pf_operator_label(rule.operator), value].compact.join(' ')
     end
   end

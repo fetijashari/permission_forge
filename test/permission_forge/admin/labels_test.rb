@@ -39,7 +39,8 @@ module PermissionForge
         assert_equal ['', true], FieldLabel.for(Customer, '').to_h.values
         assert_equal ['zzz', true], FieldLabel.for('NoSuchModelHere', 'zzz').to_h.values
         info = ModelCatalog.new.find('Customer')
-        assert_equal 'name', FieldLabel.for(info, 'name').text
+        I18n.with_locale(:sq) { assert_equal 'name', FieldLabel.for(info, 'name').text }
+        assert_equal 'Name', FieldLabel.for(info, 'name').text, 'Rails\' English, only on an English page (round 7)'
         assert_nil FieldLabel.host_translation(Customer, 'name'), 'Rails\' humanize is not a translation'
       end
 
@@ -62,15 +63,18 @@ module PermissionForge
 
       # --- ActionLabel ---------------------------------------------------------------
 
-      test 'an action is labelled by its row, else its key verbatim' do
+      test 'an action is labelled by its row, else its key verbatim (Rails\' English on an English page)' do
         set = create_permission_set
         action = create_resource_action(resource: create_resource(permission_set: set), name: 'export_csv', label: 'Export to CSV')
 
         assert_equal ['Export to CSV', false], ActionLabel.for(action).to_h.values
         action.label = ' '
-        assert_equal ['export_csv', true], ActionLabel.for(action).to_h.values
-        assert_equal ['sync_now', true], ActionLabel.for(nil, :sync_now).to_h.values
-        assert_equal 'export_csv', action.display_name, 'ResourceAction#display_name is the same definition'
+        I18n.with_locale(:mk) do
+          assert_equal ['export_csv', true], ActionLabel.for(action).to_h.values
+          assert_equal ['sync_now', true], ActionLabel.for(nil, :sync_now).to_h.values
+          assert_equal 'export_csv', action.display_name, 'ResourceAction#display_name is the same definition'
+        end
+        assert_equal ['Export csv', false], ActionLabel.for(action).to_h.values
       end
 
       # --- ErrorSentence -------------------------------------------------------------
@@ -100,7 +104,9 @@ module PermissionForge
         assert_equal 'Own orders', Prefill.text(rule, :name)
         saved = create_permission_set_rule(permission_set: (set = create_permission_set), resource: create_resource(permission_set: set),
                                            failure_message: 'You do not have permission to perform this action.')
-        assert_equal 'You do not have permission to perform this action.', Prefill.text(saved, :failure_message), 'stored on purpose'
+        assert_equal '', Prefill.text(saved, :failure_message), 'the install default is generated text (GeneratedText, round 7)'
+        saved.update_columns(failure_message: 'Only your own orders.')
+        assert_equal 'Only your own orders.', Prefill.text(saved, :failure_message), 'an admin\'s message is shown as written'
       end
 
       test 'a rule left without a message denies with the gem\'s sentence in the locale' do

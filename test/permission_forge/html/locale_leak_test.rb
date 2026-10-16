@@ -149,7 +149,9 @@ module PermissionForge
         assert_equal %w[Name], leaks_in(render_inline("<p><%= 'name'.humanize %></p>"))
         assert_equal %w[Access denied], leaks_in(render_inline('<table><tr><th>Access denied</th></tr></table>'))
         assert_equal %w[Export], leaks_in(render_inline('<button>Export</button>'))
-        assert_empty leaks_in(render_inline('<b data-pf-host-data>Export</b> <a aria-label="Export">x</a>'))
+        assert_empty leaks_in(render_inline('<b data-pf-host-data>Export</b> <a aria-label="Access denied by test rule">x</a>'))
+        # A label the gem generated is no host data (round 7): the stored "Export" of the action `export`.
+        assert_equal %w[Export], leaks_in(render_inline('<a aria-label="Export">x</a>'))
         assert_empty leaks_in(render_inline("<p><%= t('permission_forge.ui.audit.who_when', who: 'Access denied by test rule', when: 1) %></p>"))
       end
 

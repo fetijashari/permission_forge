@@ -3,6 +3,7 @@
 <% if rows.empty? %>
   <p class="pf-fs-13 pf-text-3"><%= t('.none') %></p>
 <% else %>
+  <% chain = rows.map { |row| row[:resource].name }.uniq %>
   <div class="pf-listbox">
     <% rows.each do |row| %>
       <% set = row[:set] %>
@@ -15,7 +16,8 @@
         <span class="pf-option__main">
           <span class="pf-row pf-row--tight">
             <% if set.is_muting %><span class="pf-text-restrict" aria-hidden="true">⊘</span><% end %>
-            <span class="pf-fw-600"><%= set.name %></span>
+            <%# "<set> · <Model>" when the set holds more than one Resource of the chain (B#35). %>
+            <span class="pf-fw-600"><%= pf_set_entry_name(set, row[:resource].name, chain) %></span>
             <%= pf_off_badge unless row[:in_effect] %>
           </span>
         </span>

@@ -39,6 +39,23 @@ module PermissionForge
       t("permission_forge.ui.#{key}", **)
     end
 
+    # A translation whose interpolated values may be markup (a SafeBuffer:
+    # a name marked as host data) although its key does not end in `_html`:
+    # the block translates with a marker in place of each value, and the
+    # pieces are joined with safe_join — the translation's own text escaped,
+    # the markup kept, nothing marked safe by hand. The `t(...)` stays in the
+    # caller (i18n-tasks sees the key).
+    #
+    #   pf_t_markup(set: pf_host_data(name)) { |held| t('.flag_granted', **held, flag: word) }
+    #
+    # @yieldparam held [Hash{Symbol => String}] the markers, by value name
+    # @return [ActiveSupport::SafeBuffer]
+    def pf_t_markup(**values)
+      held = values.to_h { |name, _| [name, "\u0001#{name}\u0001"] }
+      pieces = yield(held).to_s.split(/\u0001(\w+)\u0001/)
+      safe_join(pieces.each_with_index.map { |piece, index| index.odd? ? values.fetch(piece.to_sym) : piece })
+    end
+
     # "Bob, Carol and Dan" in the page's language (Admin::ListSentence): never
     # a bare to_sentence, whose connectors stay English without rails-i18n.
     def pf_to_sentence(items, **)

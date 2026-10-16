@@ -6,14 +6,14 @@
     <% flag_label = t("permission_forge.ui.flags_short.#{flag}") %>
     <%= render 'why_item', key: "#{res.name}.#{flag}", title: t('.flag_title', flag: flag_label, resource: plural),
                badge: pf_state_cell(outcome.state, aria: t('.flag_title', flag: flag_label, resource: plural)),
-               reasons: outcome.granted_by.map { |ps| ['✓', t('.flag_granted', set: ps.name, flag: flag_label), ps] } +
-                        outcome.blocked_by.map { |ps| ['⊘', t('.flag_muted', set: ps.name, flag: flag_label), ps] } +
+               reasons: outcome.granted_by.map { |ps| ['✓', pf_t_markup(set: pf_chain_set_name(ps, res.name)) { |held| t('.flag_granted', **held, flag: flag_label) }, ps] } +
+                        outcome.blocked_by.map { |ps| ['⊘', t('.flag_muted', set: pf_record_name(ps), flag: flag_label), ps] } +
                         (outcome.granted_by.empty? ? [['–', t('.flag_none', flag: flag_label), nil]] : []),
                note: outcome.blocked? ? t('.note_muting') : t('.note_add_up') %>
   <% end %>
 
   <% records_reasons = case res.records
-                       when :all then res.op(:view_all).granted_by.map { |ps| ['✓', t('.view_all_from', set: ps.name), ps] }
+                       when :all then res.op(:view_all).granted_by.map { |ps| ['✓', pf_t_markup(set: pf_chain_set_name(ps, res.name)) { |held| t('.view_all_from', **held) }, ps] }
                        when :rules then res.rules.map { |src| [pf_rule_glyph(src.rule), pf_rule_text(src.rule, res.name), src.permission_set] }.presence || [['✓', t('.no_rules'), nil]]
                        else [['–', t('.records_none'), nil]]
                        end %>
@@ -24,7 +24,8 @@
 
   <% res.fields.each do |field| %>
     <% field_label = pf_field_label_text(res.name, field.name) %>
-    <% reasons = field.grants.map { |src| ['✓', pf_field_source_sentence(src), src.permission_set] } %>
+    <%# A grant is the deciding entry's: an STI base's (decided_by) or the resource's own (B#35). %>
+    <% reasons = field.grants.map { |src| ['✓', pf_field_source_sentence(src, set_name: pf_chain_set_name(src.permission_set, res.name, field.decided_by || res.name)), src.permission_set] } %>
     <% reasons += field.mutes.map { |src| ['⊘', pf_field_source_sentence(src), src.permission_set] } %>
     <% reasons << ['⚠', t('.field_unconfigured', behaviour: t("permission_forge.ui.unconfigured.#{PermissionForge.configuration.unconfigured_field_strategy}", default: t('permission_forge.ui.unconfigured.block'))), nil] if field.unconfigured %>
     <% reasons << ['–', t('.field_capped'), nil] if field.capped %>
@@ -43,8 +44,8 @@
     <% action_label = pf_action_label_text(nil, name) %>
     <%= render 'why_item', key: "#{res.name}.action.#{name}", title: t('.action_title', action: action_label, resource: plural),
                badge: pf_state_cell(outcome.state, aria: action_label),
-               reasons: outcome.granted_by.map { |ps| ['✓', t('.action_granted', set: ps.name), ps] } +
-                        outcome.blocked_by.map { |ps| ['⊘', t('.action_muted', set: ps.name), ps] } +
+               reasons: outcome.granted_by.map { |ps| ['✓', pf_t_markup(set: pf_chain_set_name(ps, res.name)) { |held| t('.action_granted', **held) }, ps] } +
+                        outcome.blocked_by.map { |ps| ['⊘', t('.action_muted', set: pf_record_name(ps)), ps] } +
                         (outcome.granted_by.empty? ? [['–', t('.action_none'), nil]] : []),
                note: outcome.blocked? ? t('.note_muting') : t('.note_add_up') %>
   <% end %>

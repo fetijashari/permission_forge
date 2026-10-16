@@ -383,6 +383,8 @@ en:
           and underscores.
         group_blank: Give the group a name.
         hours_equal: The start and end hour must differ (a window from 9 to 9 is empty).
+        hours_incomplete: Choose both the start and the end hour.
+        hours_range: Choose hours between 00:00 and 23:00.
         ip: 'Line %{line}: “%{ip}” isn''t a valid IP address or CIDR range.'
         person: Choose a person first.
         resource_model: Pick a model from the list.
@@ -601,8 +603,6 @@ en:
       conditions_card:
         description: These sets hold a condition that cannot be judged (an IP entry
           that is no address, no entry at all, or a broken hour window).
-        granting: It never passes, so it grants nothing.
-        muting: 'A Muting Permission Set: it applies to every request.'
         open: Fix conditions
         people:
           one: "%{count} person has this set."
@@ -1025,12 +1025,19 @@ en:
         model_missing: This model or relationship no longer exists in the app.
         name: Rule name
         name_placeholder: e.g. Own customers
+        notes:
+          secret_column:
+            body_html: "%{column} holds a secret, so a new rule on it is refused.
+              This rule still applies, but who can see which record gives the secret
+              away: compare another column, or remove the rule."
+            title: This rule compares a column that holds a secret
         operator: Condition
         optional: optional
         pick_field: Pick a field…
         pick_relationship: Pick a relationship…
         preview: Preview
         preview_empty: Pick a field to see the rule as a sentence.
+        preview_refused: Will not save
         problem_fixes:
           field: Pick the field again to correct it.
           join: Choose how to combine again, under Advanced, to correct it.
@@ -2187,6 +2194,9 @@ en:
       close: Close
       conditions:
         always: Always active. No activation conditions.
+        effect:
+          granting: It never passes, so it grants nothing.
+          muting: 'A Muting Permission Set: it applies to every request.'
         flag_generic: when %{flag} is set
         flags:
           marketing_consent: when marketing consent is given
@@ -2196,10 +2206,23 @@ en:
         hours: between %{from} and %{to}
         hours_broken: between %{from} and %{to} (a window nobody can judge — fix it
           on the Conditions tab)
+        hours_broken_here: between %{from} and %{to} (a window nobody can judge)
         hours_overnight: between %{from} and %{to} (overnight)
+        ips_broken: from %{ips} (a list nobody can judge — fix it on the Conditions
+          tab)
+        ips_broken_here: from %{ips} (a list nobody can judge)
         no_hour: no hour
         only_works: Only works %{parts}.
         or: " or "
+        problems:
+          flag_unusable_html: The session flag %{flag} holds a control character,
+            so no request can carry it.
+          hours_equal: The start and end hour are the same, so the window is empty.
+          hours_incomplete: Only one of the two hours is set.
+          hours_range: An hour is outside 00:00–23:00.
+          ip_empty: The IP list holds separators but no entry.
+          ip_entry_html: "%{entry} is not an IP address or CIDR range."
+        problems_title: These conditions cannot be judged
       dates:
         days_ago:
           one: "%{count} day ago"
@@ -2302,6 +2325,8 @@ en:
         and: and
         current_user: the current user
         matches_nothing: Matches nothing
+        notes:
+          secret_column: Secret column
         only_show: Only show
         or_empty: or %{field} is empty
         problems:
@@ -2365,6 +2390,10 @@ en:
         mask_all: Fully masked
         pass_through: Passes through unmasked
         warn: Passes through and is logged
+      untitled:
+        permission_set: Untitled Permission Set
+        permission_set_group: Untitled Permission Set Group
+        permission_set_rule: Untitled Rule
       view_all: View All
     validations:
       attributes:

@@ -29,14 +29,18 @@ module PermissionForge
         random = Random.new(SEED)
         Array.new(COUNT) do |index|
           operator = OPERATORS.sample(random: random)
-          input = { name: "Generated #{index}", field_name: FIELDS.sample(random: random), operator: operator }
-          case Admin::RuleForm::ARITY.fetch(operator)
-          when :list then input[:values_text] = LISTS.sample(random: random)
-          when :range then input.merge!(value_from: ENDS.sample(random: random), value_to: ENDS.sample(random: random))
-          when :one
-            random.rand(5).zero? ? input[:current_user] = '1' : input[:value] = SINGLE.sample(random: random)
-          end
-          input
+          { name: "Generated #{index}", field_name: FIELDS.sample(random: random), operator: operator,
+            **value_inputs(Admin::RuleForm::ARITY.fetch(operator), random) }
+        end
+      end
+
+      # The value inputs the builder posts for a value shape.
+      def self.value_inputs(arity, random)
+        case arity
+        when :list then { values_text: LISTS.sample(random: random) }
+        when :range then { value_from: ENDS.sample(random: random), value_to: ENDS.sample(random: random) }
+        when :one then random.rand(5).zero? ? { current_user: '1' } : { value: SINGLE.sample(random: random) }
+        else {}
         end
       end
 
@@ -62,7 +66,9 @@ module PermissionForge
       test 'the generated inputs cover every value shape, refused and saved' do
         inputs = self.class.inputs
         assert_operator inputs.size, :>=, 40
-        assert_equal OPERATORS.map { |op| Admin::RuleForm::ARITY.fetch(op) }.uniq.sort, inputs.map { |i| Admin::RuleForm::ARITY.fetch(i[:operator]) }.uniq.sort
+        assert_equal OPERATORS.map { |op| Admin::RuleForm::ARITY.fetch(op) }.uniq.sort, inputs.map { |i|
+          Admin::RuleForm::ARITY.fetch(i[:operator])
+        }.uniq.sort
         outcomes = inputs.map { |input| save_first_error(input).nil? }
         assert_includes outcomes, true, 'some inputs save'
         assert_includes outcomes, false, 'some inputs are refused'

@@ -181,10 +181,10 @@ module PermissionForge
 
       test 'picking the relationship again keeps the stored field when it is a column there' do
         post pf("#{rules_base}/refresh"), params: { rule: { name: 'Own', path: ['supplier'], field_name: 'owner_id',
-                                                            operator: 'equal', current_user: '1' } }
+                                                            operator: 'equal', current_user: '1' }, locale: 'sq' }
 
         assert_response :success
-        assert_select '#pf-rule-path-0 option[selected]', text: 'supplier'
+        assert_select '#pf-rule-path-0 option[selected]', { text: 'supplier' }, 'the stored name, on a page that is not English'
         assert_select '#pf-rule-field option[selected][value=owner_id]', 1
       end
 

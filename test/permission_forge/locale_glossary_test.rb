@@ -29,11 +29,13 @@ module PermissionForge
       node.flat_map { |key, inner| strings(inner, path + [key]).to_a }.to_h
     end
 
+    COUNT = '%{count}' # rubocop:disable Style/FormatStringToken -- the placeholder as a locale file writes it
+
     # The count phrases of Home that count people: a pluralized key whose text names a person.
     def people_counts(locale)
       stem, synonyms = PERSON.fetch(locale)
       strings(locale_tree(locale)['home'], ['home']).select do |key, text|
-        key.match?(/\.(?:one|other|few|many)\z/) && text.include?('%{count}') && (text.match?(stem) || text.match?(synonyms))
+        key.match?(/\.(?:one|other|few|many)\z/) && text.include?(COUNT) && (text.match?(stem) || text.match?(synonyms))
       end
     end
 
@@ -51,9 +53,9 @@ module PermissionForge
 
     test 'negative fixture: a synonym is caught' do
       _, synonyms = PERSON.fetch('mk')
-      assert_match synonyms, '%{count} лице го има овој сет.'
-      assert_match synonyms, '%{count} лица го имаат овој сет.'
-      assert_no_match synonyms, '%{count} корисник го има овој сет.'
+      assert_match synonyms, "#{COUNT} лице го има овој сет."
+      assert_match synonyms, "#{COUNT} лица го имаат овој сет."
+      assert_no_match synonyms, "#{COUNT} корисник го има овој сет."
       assert_no_match synonyms, 'Отвори го лицеви', 'a word that only begins the same'
     end
   end

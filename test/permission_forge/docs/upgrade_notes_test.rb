@@ -62,9 +62,10 @@ module PermissionForge
 
         assert_includes intro, 'migration-guide.md#upgrading-to-015'
         changed = section(read('CHANGELOG.md'), '## [0.15.0]')[/### Changed\n(.*?)\n### /m, 1]
-        named = intro.scan(/\*\*([^*]+)\*\*/).flatten
+        named = intro.scan(/\*\*([^*]+)\*\*/).flatten.map(&:squish)
         assert_operator named.size, :>=, 3, 'the intro names the entries that need action'
-        named.each { |title| assert_includes changed, title, "#{title.inspect} is a Changed entry" }
+        titles = changed.scan(/^- \*\*([^*]+)\*\*/).flatten.map(&:squish)
+        named.each { |title| assert_includes titles, title, "#{title.inspect} is the title of a Changed entry" }
       end
     end
   end

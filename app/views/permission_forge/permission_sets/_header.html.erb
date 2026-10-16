@@ -1,8 +1,8 @@
 <div class="pf-page-header">
   <div class="pf-page-header__text">
-    <h1 class="pf-sr-only"><%= set.name %></h1>
+    <h1 class="pf-sr-only"><%= pf_record_name(set) %></h1>
     <label class="pf-sr-only" for="pf-set-name"><%= t('.name') %></label>
-    <input id="pf-set-name" class="pf-title-input" type="text" name="pf[set][name]" value="<%= set.name %>" form="pf-set-form"
+    <input id="pf-set-name" class="pf-title-input" type="text" name="pf[set][name]" value="<%= pf_prefill(set, :name) %>" placeholder="<%= t('permission_forge.ui.untitled.permission_set') %>" form="pf-set-form"
            maxlength="255" required <%= 'readonly' if locked %>>
     <label class="pf-sr-only" for="pf-set-desc"><%= t('.description') %></label>
     <input id="pf-set-desc" class="pf-desc-input" type="text" name="pf[set][description]" value="<%= set.description %>" form="pf-set-form"
@@ -12,7 +12,7 @@
       <select id="pf-set-group" name="pf[set][permission_set_group_id]" class="pf-select pf-select--sm pf-select--auto" form="pf-set-form" <%= 'disabled' if locked %>>
         <option value=""><%= t('permission_forge.ui.no_group') %></option>
         <% @groups.each do |g| %>
-          <option value="<%= g.id %>" <%= 'selected' if set.permission_set_group_id == g.id %>><%= g.name %></option>
+          <option value="<%= g.id %>" <%= 'selected' if set.permission_set_group_id == g.id %>><%= pf_record_name(g) %></option>
         <% end %>
       </select>
     </div>

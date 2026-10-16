@@ -14,7 +14,8 @@ module PermissionForge
         'between' => :range, 'is_null' => :none, 'is_not_null' => :none
       }.freeze
       USER_OPERATORS = %w[equal not_equal in not_in is_null is_not_null].freeze
-      NULLABLE = %w[equal not_equal in not_in].freeze
+      # The operators whose strategy adds the NULL rows ("or empty").
+      NULLABLE = PermissionForge::Operators::Registry::NULL_INCLUDING
       JOINS = %w[auto joins left_joins].freeze
       CURRENT_USER = 'current_user'
       VALUE_ERRORS = { one: :value, list: :list, range: :range }.freeze
@@ -64,9 +65,11 @@ module PermissionForge
       # column of the table, as the validation accepts them) — not the
       # fields that get rows: a column config.ignored_fields leaves out
       # (`id`) is offered, flagged (#ignored_field?); a virtual field never.
-      # A column holding a secret (PermissionForge::SecretColumns) is not
-      # offered — the model refuses a rule on one — except the one the rule
-      # already names, so a rule stored before stays editable as it is.
+      # A column holding a secret (PermissionForge::SecretColumns) or
+      # ciphertext (an attribute declared with `encrypts`:
+      # Operators::RuleColumn.encrypted?) is not offered — the model refuses
+      # a rule on one — except the one the rule already names, so a rule
+      # stored before stays editable as it is.
       def field_options
         @field_options ||= target_model ? build_field_options : []
       end
@@ -154,11 +157,6 @@ module PermissionForge
         @include_nulls ? 'left_joins' : 'joins'
       end
 
-      # Unsaved rule for previews.
-      def preview_rule
-        PermissionForge::PermissionSetRule.new(attributes.merge(resource: @resource))
-      end
-
       private
 
       # The columns are compared with the database once, by the catalog's
@@ -166,9 +164,14 @@ module PermissionForge
       # list then reads them without asking again.
       def build_field_options
         target_model.column_names
-        secrets = PermissionForge::SecretColumns.new
         names = PermissionForge::Operators::RuleColumn.names_for(target_model.klass, verify: false)
-        names.reject { |name| name != @field_name && secrets.secret?(name) }.map { |name| target_model.column(name) }
+        names.reject { |name| name != @field_name && refused_column?(name) }.map { |name| target_model.column(name) }
+      end
+
+      # A column the model refuses a new rule on: a secret or an encrypted one.
+      def refused_column?(name)
+        @secrets ||= PermissionForge::SecretColumns.new
+        @secrets.secret?(name) || PermissionForge::Operators::RuleColumn.encrypted?(target_model.klass, name)
       end
 
       def normalize(params)

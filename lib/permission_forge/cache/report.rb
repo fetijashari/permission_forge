@@ -106,6 +106,22 @@ module PermissionForge
         Outcome.deferred(process_local: process_local?, in_request: in_request?)
       end
 
+      # The outcome of an operation that does no cache work (a dry run):
+      # Outcome.none, with the store's scope and the origin as this report
+      # reads them.
+      #
+      # @return [Outcome]
+      def none
+        Outcome.none(process_local: process_local?, in_request: in_request?)
+      end
+
+      # The outcome of a dry run, measured nowhere (Report#none).
+      #
+      # @return [Outcome]
+      def self.none
+        new.none
+      end
+
       # @param user_ids [Array, nil] the users invalidated, to count the
       #   unconfirmed ones (nil: one unnamed — any failure counts as one)
       # @param unconfirmed [Integer, nil] a count the caller made itself

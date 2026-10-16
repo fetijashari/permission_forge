@@ -29,7 +29,7 @@
     <% @assignments.each do |a| %>
       <div class="pf-card__row pf-card__row--top">
         <span class="pf-stack pf-stack--tight pf-grow">
-          <span><b><%= a.permission_set.name %></b> <span class="pf-fs-12 pf-text-3"><%= t(a.permission_set.is_muting ? '.kind_muting' : '.kind_set') %></span></span>
+          <span><b><%= pf_record_name(a.permission_set) %></b> <span class="pf-fs-12 pf-text-3"><%= t(a.permission_set.is_muting ? '.kind_muting' : '.kind_set') %></span></span>
           <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_audit_creator(a, creations), date: pf_date(a.created_at)) %></span>
           <% if (reason = pf_audit_reason(a)) %><span class="pf-fs-12 pf-text-3"><%= t('permission_forge.audit_log.reason_inline', reason: reason) %></span><% end %>
         </span>
@@ -42,7 +42,7 @@
     <% @groups.each do |m| %>
       <div class="pf-card__row">
         <span class="pf-stack pf-stack--tight pf-grow">
-          <span><b><%= m.permission_set_group.name %></b> <span class="pf-fs-12 pf-text-3"><%= t('.kind_group') %></span></span>
+          <span><b><%= pf_record_name(m.permission_set_group) %></b> <span class="pf-fs-12 pf-text-3"><%= t('.kind_group') %></span></span>
           <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_audit_creator(m, creations), date: pf_date(m.created_at)) %></span>
         </span>
       </div>

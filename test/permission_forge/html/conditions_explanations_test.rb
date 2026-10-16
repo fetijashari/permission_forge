@@ -86,8 +86,8 @@ module PermissionForge
           assert_includes banner.text, 'office-network'
           effect = I18n.t("permission_forge.ui.conditions.effect.#{kind}")
           assert_includes banner.text, effect
-          assert_includes doc.css('strong').map(&:text).join(' '), I18n.t('permission_forge.ui.conditions.ips_broken_here', ips: '10.0.0.0/8 or office-network'),
-                          'the summary says the list cannot be judged'
+          summary = I18n.t('permission_forge.ui.conditions.ips_broken_here', ips: '10.0.0.0/8 or office-network')
+          assert_includes doc.css('strong').map(&:text).join(' '), summary, 'the summary says the list cannot be judged'
 
           get pf('/')
           assert_includes Nokogiri::HTML(response.body).at_css('#pf-card-conditions').ancestors('section').first.text, effect,
@@ -110,7 +110,7 @@ module PermissionForge
             banner = conditions_tab(set, locale: locale).at_css('[data-pf-condition-problems]')
             assert banner, "#{kind} #{locale}"
             assert_no_match(/translation missing/i, banner.to_html, "#{kind} #{locale}")
-            assert_includes banner.text, I18n.t("permission_forge.ui.conditions.effect.granting", locale: locale), "#{kind} #{locale}"
+            assert_includes banner.text, I18n.t('permission_forge.ui.conditions.effect.granting', locale: locale), "#{kind} #{locale}"
           end
         end
       end

@@ -58,7 +58,7 @@ module PermissionForge
     # is allowed (EditableLock.widening_lock).
     def destroy
       name = person_name(@assignment.user)
-      set_name = @assignment.permission_set.name
+      set_name = pf_record_name(@assignment.permission_set)
       undo = restore_undo
       outcome = cache_outcome { @assignment.destroy! }
       pf_redirect return_path, undo: undo, **cache_flash_text(outcome, t('permission_forge.flash.assignments.removed', name: name, set: set_name))
@@ -70,7 +70,7 @@ module PermissionForge
     def keep
       outcome = cache_outcome { @assignment.mark_reviewed!(reviewer: pf_acting_admin_record) }
       redirect_to return_path, **cache_flash_text(outcome, t('permission_forge.flash.assignments.kept',
-                                                             name: person_name(@assignment.user), set: @assignment.permission_set.name))
+                                                             name: person_name(@assignment.user), set: pf_record_name(@assignment.permission_set)))
     end
 
     # Undo for "Remove": recreates the assignment.
@@ -80,7 +80,8 @@ module PermissionForge
       return if pf_widening_refused?(pf_widening_lock(set, :grant), return_path) || pf_assignment_refused?(set, user.id, :grant, return_path)
 
       outcome = cache_outcome { restore_assignment(set, user, expires_at) }
-      redirect_to return_path, **cache_flash_text(outcome, t('permission_forge.flash.assignments.restored', name: person_name(user), set: set.name))
+      redirect_to return_path,
+                  **cache_flash_text(outcome, t('permission_forge.flash.assignments.restored', name: person_name(user), set: pf_record_name(set)))
     end
 
     # Undo for "Assign": removes the assignments just created (narrows
@@ -233,7 +234,7 @@ module PermissionForge
 
     def end_changed_notice(expires_at)
       t('permission_forge.flash.assignments.end_changed', name: person_name(@assignment.user),
-                                                          set: @assignment.permission_set.name,
+                                                          set: pf_record_name(@assignment.permission_set),
                                                           when: helpers.pf_expiry(expires_at).first)
     end
 
@@ -242,7 +243,7 @@ module PermissionForge
     def restored_expiry = pf_time_param(:expires_at)
 
     def assigned_notice(created)
-      sets = helpers.pf_to_sentence(created.map { |assignment| assignment.permission_set.name })
+      sets = helpers.pf_to_sentence(created.map { |assignment| pf_record_name(assignment.permission_set) })
       return t('permission_forge.flash.assignments.assigned', name: person_name(@person), sets: sets) if @expires_at.nil?
 
       t('permission_forge.flash.assignments.assigned_until', name: person_name(@person), sets: sets,

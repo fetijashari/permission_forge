@@ -80,7 +80,7 @@ module PermissionForge
       label = helpers.pf_resource_label(@resource)
       @resource.destroy!
       redirect_to permission_forge.permission_set_path(@permission_set),
-                  notice: t('permission_forge.flash.resources.removed', resource: label, set: @permission_set.name)
+                  notice: t('permission_forge.flash.resources.removed', resource: label, set: pf_record_name(@permission_set))
     end
 
     private

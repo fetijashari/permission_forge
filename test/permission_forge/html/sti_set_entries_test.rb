@@ -43,7 +43,7 @@ module PermissionForge
         assert_response :success
         doc = Nokogiri::HTML(response.body)
 
-        assert_includes doc.text.squish, "Ticket desk · PfStiBugTicket", 'the field source names the Resource whose entry decides'
+        assert_includes doc.text.squish, 'Ticket desk · PfStiBugTicket', 'the field source names the Resource whose entry decides'
         assert doc.css('[data-pf-host-data]').any? { |node| node.text == 'PfStiBugTicket' }, 'marked as host data'
       end
 
@@ -51,7 +51,7 @@ module PermissionForge
         get pf("/permission_sets/#{@one.id}/resources/PfStiBugTicket/fields/title")
         doc = Nokogiri::HTML(response.body)
         assert_includes options_text(doc), 'Bug triage'
-        assert_not options_text(doc).any? { |text| text.start_with?('Bug triage ·') }
+        assert_not(options_text(doc).any? { |text| text.start_with?('Bug triage ·') })
       end
     end
   end

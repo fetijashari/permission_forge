@@ -19,7 +19,7 @@ module PermissionForge
       return render_blank_name if @group.name.blank?
 
       @group.save!
-      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.created', name: @group.name)
+      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.created', name: pf_record_name(@group))
     end
 
     def show
@@ -46,15 +46,15 @@ module PermissionForge
         permission_set_group: @group, attrs: { name: t('permission_forge.permission_sets.copy_name', name: @group.name), is_editable: true },
         unlock: true
       )
-      redirect_to permission_forge.group_path(copy), notice: t('permission_forge.flash.groups.duplicated', name: @group.name)
+      redirect_to permission_forge.group_path(copy), notice: t('permission_forge.flash.groups.duplicated', name: pf_record_name(@group))
     rescue ActiveRecord::RecordInvalid => e
-      redirect_to permission_forge.group_path(@group), alert: pf_copy_refused_message(e, @group.name)
+      redirect_to permission_forge.group_path(@group), alert: pf_copy_refused_message(e, pf_record_name(@group))
     end
 
     def confirm_destroy; end
 
     def destroy
-      name = @group.name
+      name = pf_record_name(@group)
       @group.destroy!
       redirect_to permission_forge.groups_path, notice: t('permission_forge.flash.groups.deleted', name: name)
     end
@@ -68,7 +68,7 @@ module PermissionForge
       return if pf_reject_locked!([set, leaving], permission_forge.group_path(@group))
 
       set.update!(permission_set_group: @group)
-      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.set_added', set: set.name)
+      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.set_added', set: pf_record_name(set))
     end
 
     def remove_set
@@ -76,7 +76,7 @@ module PermissionForge
       return if pf_reject_locked!(set, permission_forge.group_path(@group))
 
       set.update!(permission_set_group: nil)
-      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.set_removed', set: set.name)
+      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.set_removed', set: pf_record_name(set))
     end
 
     private

@@ -49,7 +49,7 @@
           <% where = finding.implicit_grant? ? '.where_virtual' : '.where_unconfigured' %>
           <% where = finding.implicit_grant? ? '.where_turned_off_virtual' : '.where_turned_off' if finding.turned_off? %>
           <%= t(finding.unconfigured? ? where : '.where',
-                resource: pf_resource_label(resource), set: finding.permission_set.name,
+                resource: pf_resource_label(resource), set: pf_record_name(finding.permission_set),
                 people: pf_people_text(finding.people_count)) %>
         </span>
       </div>

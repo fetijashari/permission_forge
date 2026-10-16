@@ -2,7 +2,7 @@
 <% content_for :pf_title, t('.title') %>
 <% back = permission_forge.permission_set_path(set) %>
 <%= pf_dialog_frame({ title: t('.title'), role: 'dialog', wide: true,
-                     breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path], [set.name, back], t('.title')) }) do %>
+                     breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path], [pf_record_name(set), back], t('.title')) }) do %>
   <p class="pf-text-2"><%= t('.intro', app: pf_default_app_name || t('.the_app')) %></p>
   <%= form_with url: permission_forge.permission_set_resources_path(set), method: :post, class: 'pf-stack pf-stack--loose' do %>
     <div class="pf-row pf-row--nowrap">

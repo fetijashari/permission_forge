@@ -405,13 +405,16 @@ module PermissionForge
         one_segment.call(PfRulePathRecord::NOT_JOINED.keys).each { |name| assert_not_includes offered, name }
       end
 
-      test 'labels are the host translation, else the stored name verbatim' do
-        customer = ModelCatalog.new.find('Customer')
-
-        assert_equal 'Customer', customer.label
-        assert_equal Admin::ModelLabel.plural(Customer), customer.plural_label
-        assert_equal 'email', customer.column('email').label
-        assert_equal 'supplier', customer.association('supplier').label
+      test 'labels are the host translation, else the stored name verbatim (Rails\' English on an English page)' do
+        I18n.with_locale(:sq) do
+          customer = ModelCatalog.new.find('Customer')
+          assert_equal 'Customer', customer.label
+          assert_equal 'email', customer.column('email').label
+          assert_equal 'supplier', customer.association('supplier').label
+        end
+        english = ModelCatalog.new.find('Customer')
+        assert_equal Admin::ModelLabel.plural(Customer), english.plural_label
+        assert_equal %w[Email Supplier], [english.column('email').label, english.association('supplier').label]
       end
 
       test 'honors admin_model_resolver' do

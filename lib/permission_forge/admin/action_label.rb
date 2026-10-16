@@ -3,13 +3,17 @@
 module PermissionForge
   module Admin
     # The one definition of the label the admin shows for an action: the
-    # ResourceAction row's label when it has one, else the action key
-    # verbatim ("export_csv"; `verbatim?`: the view draws it in <code>).
-    # Never Rails' `humanize`, which is English whatever the page's language.
+    # label an admin wrote on the ResourceAction row — one the gem generated
+    # (PermissionForge::GeneratedText.label?: blank, the key, the key
+    # humanized) is none — else, on an English page, Rails' English for the
+    # key ("Export csv", what an English host saw before 0.15:
+    # FieldLabel.english), else the key verbatim ("export_csv"; `verbatim?`:
+    # the view draws it in <code>). An action with a row and one without
+    # read the same.
     #
     # @example
-    #   ActionLabel.for(action).text          # => "Export to CSV" (the row's label) or "export_csv"
-    #   ActionLabel.for(nil, 'sync').verbatim? # => true
+    #   ActionLabel.for(action).text           # => "Export to CSV" (the admin's label); "export_csv" on sq, "Export csv" on en
+    #   ActionLabel.for(nil, 'sync').verbatim?  # => true on a page that is not English
     #
     # @api private
     module ActionLabel
@@ -17,8 +21,12 @@ module PermissionForge
       # @param key [String, Symbol] the action key (the row's name by default)
       # @return [FieldLabel::Label]
       def self.for(action, key = action&.name)
-        label = action.respond_to?(:label) ? action.label.to_s.strip : ''
-        label.empty? ? FieldLabel::Label.new(text: key.to_s, verbatim: true) : FieldLabel::Label.new(text: label, verbatim: false)
+        key = key.to_s
+        label = FieldLabel.written_label(action, key)
+        return FieldLabel::Label.new(text: label, verbatim: false) if label
+
+        english = FieldLabel.english(key)
+        english ? FieldLabel::Label.new(text: english, verbatim: false) : FieldLabel::Label.new(text: key, verbatim: true)
       end
     end
   end

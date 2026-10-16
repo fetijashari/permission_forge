@@ -13,8 +13,10 @@ module PermissionForge
   # and renders the locale's own words instead.
   #
   # Asked by PermissionRuleApplier.failure_message_for (a denial's
-  # message), the admin's labels (Admin::FieldLabel, Admin::ActionLabel) and
-  # the admin's names and prefills.
+  # message), the admin's labels (Admin::FieldLabel, Admin::ActionLabel: a
+  # generated label is no label), names (Admin::RecordName: an install
+  # default is named in the page's language) and form pre-fills
+  # (Admin::Prefill: blank for generated text).
   #
   # @example
   #   GeneratedText.label?('Owner', 'owner_id')                         # => true

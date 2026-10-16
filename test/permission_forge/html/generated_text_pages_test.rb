@@ -11,7 +11,7 @@ module PermissionForge
     # set; the field drawer and the action form pre-fill no generated label;
     # a rule's install-default blocked message is never shown as the admin's.
     class GeneratedTextPagesTest < AdminTestCase
-      INSTALL_MESSAGE = 'You do not have permission to perform this action.'
+      INSTALL_MESSAGE = 'You do not have permission to perform this action.'.freeze
 
       def fields_tab(set, locale)
         get pf("/permission_sets/#{set.id}/resources/Customer"), params: { tab: 'fields', locale: locale }

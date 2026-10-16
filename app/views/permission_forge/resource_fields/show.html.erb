@@ -29,10 +29,10 @@
       <%= pf_badge(t('permission_forge.ui.badges.unknown_mask_strategy'), variant: :column_missing) if d.unknown_strategy? %>
     </span>
   <% end %>
-  <%= pf_sheet_frame({ title: pf_host_data(d.label), subtitle: "#{set.name} › #{resource.name}", after_title: after,
+  <%= pf_sheet_frame({ title: pf_host_data(d.label), subtitle: "#{pf_record_name(set)} › #{resource.name}", after_title: after,
                        close_path: resource_path, footer: footer,
                        breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
-                                                 [set.name, permission_forge.permission_set_path(set)], [res_label, resource_path], pf_host_data(d.label)) }) do %>
+                                                 [pf_record_name(set), permission_forge.permission_set_path(set)], [res_label, resource_path], pf_host_data(d.label)) }) do %>
     <% if locked %>
       <div class="pf-banner" role="note"><span class="pf-banner__glyph" aria-hidden="true"><%= pf_lock_icon %></span>
         <div class="pf-banner__body"><span><%= t('permission_forge.ui.locked.title') %></span></div></div>
@@ -52,7 +52,7 @@
       <% if (note = d.unconfigured_note) %>
         <% behaviour = t("permission_forge.ui.unconfigured.#{d.unconfigured_behaviour}", default: t('permission_forge.ui.unconfigured.block')) %>
         <p class="pf-fs-13 <%= d.muting? ? 'pf-text-2' : 'pf-text-warn' %>">
-          <%= t(".#{note}", set: set.name, behaviour: behaviour) %>
+          <%= t(".#{note}", set: pf_record_name(set), behaviour: behaviour) %>
           <%= pf_setting_link(d.unconfigured_setting) if d.unconfigured_setting %>
         </p>
       <% end %>
@@ -119,7 +119,7 @@
       </div>
       <div class="pf-field">
         <label class="pf-label" for="pf-fd-label"><%= t('.label') %></label>
-        <input id="pf-fd-label" class="pf-input" type="text" name="field[label]" value="<%= field&.label %>" placeholder="<%= d.label %>" <%= 'readonly' if locked %>>
+        <input id="pf-fd-label" class="pf-input" type="text" name="field[label]" value="<%= pf_prefill(field, :label) %>" placeholder="<%= d.label %>" <%= 'readonly' if locked %>>
       </div>
       <div class="pf-field">
         <label class="pf-label" for="pf-fd-desc"><%= t('.description') %></label>

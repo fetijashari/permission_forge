@@ -19,12 +19,12 @@ module PermissionForge
     test 'the operators that add the NULL rows are the strategies that do, and the policy reads the same list' do
       relation = Customer.all
       column = "#{Customer.quoted_table_name}.#{Customer.connection.quote_column_name('name')}"
-      adding = Operators::Constants::OPERATORS.select do |operator|
-        typed = Operators::ValueTyping::SHAPES[operator] == :single || Operators::ValueTyping::SHAPES[operator] == :pattern ? 'x' : %w[x y]
+      adding = Operators::Constants::OPERATORS.reject do |operator|
+        typed = %i[single pattern].include?(Operators::ValueTyping::SHAPES[operator]) ? 'x' : %w[x y]
         typed = nil if Operators::Validations.valueless?(operator)
         with = Operators::Registry.fetch(operator).call(relation, column, { include_nulls: true, field_value: 'x,y' }, typed).to_sql
         without = Operators::Registry.fetch(operator).call(relation, column, { include_nulls: false, field_value: 'x,y' }, typed).to_sql
-        with != without
+        with == without
       end
 
       assert_equal adding.sort, Operators::Registry::NULL_INCLUDING.sort

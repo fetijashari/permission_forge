@@ -20,8 +20,9 @@
     <% rule_locked = pf_locked?(rule) %>
     <div class="pf-rule<%= ' pf-rule--off' unless rule.is_active %>">
       <div class="pf-row">
-        <b><%= rule.name %></b>
+        <b><%= pf_record_name(rule) %></b>
         <%= pf_off_badge unless rule.is_active %>
+        <%= pf_rule_note_badges(rule) %>
         <% if ignored %><%= pf_badge("⚠ #{resource.modify_all ? t('.ignored_both') : t('.ignored')}", variant: :warn) %><% end %>
         <%= pf_lock_badge(rule) %>
         <% unless rule_locked %>
@@ -41,7 +42,7 @@
       <%= pf_rule_sentence(rule, resource.name) %>
       <div class="pf-rule__meta">
         <span><%= rule.join_rule? ? t('.join_rule') : t('.filter_rule', applies: (scoping == 'filter_only' ? t('.all_queries') : t('.scoped_lookups'))) %></span>
-        <% if rule.failure_message.present? %><span><%= t('.blocked_message', message: rule.failure_message) %></span><% end %>
+        <% if (message = pf_prefill(rule, :failure_message)).present? %><span><%= t('.blocked_message', message: message) %></span><% end %>
       </div>
       <%= pf_audit_footer(rule) %>
     </div>

@@ -1,14 +1,14 @@
 <% group = @group %>
 <% locked = pf_locked?(group) %>
-<% content_for :pf_title, group.name %>
-<%= pf_breadcrumb([t('permission_forge.nav.groups'), permission_forge.groups_path], group.name) %>
+<% content_for :pf_title, pf_record_name(group) %>
+<%= pf_breadcrumb([t('permission_forge.nav.groups'), permission_forge.groups_path], pf_record_name(group)) %>
 <%= render 'permission_forge/shared/mode_banners', record: group, muting: false %>
 
 <%= form_with url: permission_forge.group_path(group), method: :patch, scope: :group, class: 'pf-page-header' do %>
   <div class="pf-page-header__text">
-    <h1 class="pf-sr-only"><%= group.name %></h1>
+    <h1 class="pf-sr-only"><%= pf_record_name(group) %></h1>
     <label class="pf-sr-only" for="pf-group-title"><%= t('.name') %></label>
-    <input id="pf-group-title" class="pf-title-input" type="text" name="group[name]" value="<%= group.name %>" required maxlength="255" <%= 'readonly' if locked %>>
+    <input id="pf-group-title" class="pf-title-input" type="text" name="group[name]" value="<%= pf_prefill(group, :name) %>" placeholder="<%= t('permission_forge.ui.untitled.permission_set_group') %>" required maxlength="255" <%= 'readonly' if locked %>>
     <label class="pf-sr-only" for="pf-group-desc"><%= t('.description') %></label>
     <input id="pf-group-desc" class="pf-desc-input" type="text" name="group[description]" value="<%= group.description %>"
            placeholder="<%= t('.description_placeholder') %>" <%= 'readonly' if locked %>>
@@ -46,7 +46,7 @@
         <select id="pf-group-add-set" name="permission_set_id" class="pf-select pf-select--sm pf-select--auto" data-pf-autosubmit required>
           <option value=""><%= t('.add_set') %>…</option>
           <% @other_sets.each do |ps| %>
-            <option value="<%= ps.id %>"><%= ps.name %><%= " (#{t('.in_group', group: ps.permission_set_group.name)})" if ps.permission_set_group %></option>
+            <option value="<%= ps.id %>"><%= pf_record_name(ps) %><%= " (#{t('.in_group', group: pf_record_name(ps.permission_set_group))})" if ps.permission_set_group %></option>
           <% end %>
         </select>
         <button type="submit" class="pf-btn pf-btn--xs" data-pf-js-hide><%= t('permission_forge.ui.apply') %></button>

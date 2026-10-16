@@ -49,7 +49,7 @@
           <div class="pf-table__row" role="row">
             <span role="cell" class="pf-stack pf-stack--tight">
               <span class="pf-row pf-row--tight">
-                <%= link_to set.name, permission_forge.permission_set_path(set), class: 'pf-fw-600' %>
+                <%= link_to pf_record_name(set), permission_forge.permission_set_path(set), class: 'pf-fw-600' %>
                 <%= pf_set_badges(set) %>
               </span>
               <% if set.description.present? %><span class="pf-fs-13 pf-text-2" data-pf-host-data><%= set.description %></span><% end %>
@@ -65,10 +65,10 @@
                 <span class="pf-text-3">○ <%= t('permission_forge.ui.badges.off') %></span>
               <% end %>
             </span>
-            <span role="cell" class="pf-fs-13 pf-text-2 pf-ellipsis"><%= set.permission_set_group&.name || '—' %></span>
+            <span role="cell" class="pf-fs-13 pf-text-2 pf-ellipsis"><%= set.permission_set_group ? pf_record_name(set.permission_set_group) : '—' %></span>
             <span role="cell">
               <%= form_with url: permission_forge.duplicate_permission_set_path(set), method: :post, class: 'pf-reason-form' do %>
-                <button type="submit" class="pf-btn pf-btn--xs pf-btn--fixed" aria-label="<%= t('.duplicate_aria', name: set.name) %>"><%= t('permission_forge.ui.duplicate') %></button>
+                <button type="submit" class="pf-btn pf-btn--xs pf-btn--fixed" aria-label="<%= t('.duplicate_aria', name: pf_record_name(set)) %>"><%= t('permission_forge.ui.duplicate') %></button>
                 <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-duplicate-reason-#{set.id}" %>
               <% end %>
             </span>

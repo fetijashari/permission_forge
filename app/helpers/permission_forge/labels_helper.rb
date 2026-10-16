@@ -2,9 +2,11 @@ module PermissionForge
   # Labels of stored names in the page's language: a field, column or
   # association name (Admin::FieldLabel), a model or Resource
   # (Admin::ModelLabel), an action (Admin::ActionLabel) — the host's own
-  # translation when it has one, else the row's label, else the name
-  # verbatim, drawn in <code>. Never Rails' English inflections
-  # (release_readiness/inflection_guard_test.rb).
+  # translation when it has one, else the label an admin wrote, else (on an
+  # English page) Rails' English, else the name verbatim, drawn in <code>
+  # — and the names of sets, groups and rules (Admin::RecordName), what a
+  # form pre-fills (Admin::Prefill). Never Rails' English inflections on a
+  # page in another language (release_readiness/inflection_guard_test.rb).
   #
   # @api private
   module LabelsHelper
@@ -52,6 +54,51 @@ module PermissionForge
     # label, else the host's translation, else the constant's name.
     def pf_resource_label(resource_or_name)
       PermissionForge::Admin::ModelLabel.for(resource_or_name).text
+    end
+
+    # The name of a Permission Set, group or rule (Admin::RecordName): as
+    # stored, except an install-default English name, named in the page's
+    # language.
+    def pf_record_name(record)
+      PermissionForge::Admin::RecordName.for(record)
+    end
+
+    # A stored name of `kind` without its record (a list a service answered,
+    # an event's label): Admin::RecordName.text.
+    def pf_record_name_text(name, kind)
+      PermissionForge::Admin::RecordName.text(name, kind)
+    end
+
+    # What a form's text field shows for a stored attribute (Admin::Prefill):
+    # never a column default of a new record, nor text the gem generated.
+    def pf_prefill(record, attribute)
+      record ? PermissionForge::Admin::Prefill.text(record, attribute) : ''
+    end
+
+    # A Permission Set named on a row about one of its Resources: "<set> ·
+    # <Model>" when the set holds more than one Resource of `chain` (a
+    # single-table-inheritance base and its subclass: Admin::ChainEntries),
+    # the model marked as host data; the set's name alone otherwise (round 7,
+    # B#35).
+    #
+    # @param set [PermissionSet]
+    # @param resource_name [String] the Resource the row is about
+    # @param chain [Array<String>] the Resource names of the chain the list is about
+    def pf_set_entry_name(set, resource_name, chain)
+      name = pf_record_name(set)
+      return name unless PermissionForge::Admin::ChainEntries.several?(set, chain)
+
+      safe_join([name, ' · ', pf_host_data(pf_resource_label(resource_name))])
+    end
+
+    # #pf_set_entry_name on a row about records of `leaf_name` (a person's
+    # effective access): the chain is the leaf's ResourceChain; `entry_name`
+    # the Resource the row's set acts through (an STI base whose entry
+    # decides, or the leaf itself).
+    def pf_chain_set_name(set, leaf_name, entry_name = leaf_name)
+      @pf_chains ||= {}
+      chain = (@pf_chains[leaf_name.to_s] ||= PermissionForge::ResourceChain.names_for(leaf_name).map(&:to_s))
+      pf_set_entry_name(set, entry_name, chain)
     end
   end
 end
