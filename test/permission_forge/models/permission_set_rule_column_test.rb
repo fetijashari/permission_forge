@@ -80,20 +80,23 @@ module PermissionForge
       assert_not build_rule(field_name: 'owner_id', field_accessor_path: 'supplier').valid?
     end
 
-    # A qualifier naming no table, on a rule that joins nothing, would reach
-    # SQL as written and raise for every holder: refused on field_name. One
-    # naming a real table that is none of the rule's is left to the query
-    # (the host may join it); with a path the name may be an alias the join
-    # gives a table (a self-join), so it is left to the query as well.
-    test 'a qualifier naming no table is refused on a rule that joins nothing, and left to the query with a path' do
+    # A qualifier naming no table would reach SQL as written and raise for
+    # every holder: refused on field_name. So is a filter rule's qualifier
+    # naming a real table of another model (a filter rule compares its own
+    # table: review R1 #2), and a join rule's naming none of the names its
+    # join gives (review R1 #1). A join rule's qualifier naming a real table
+    # its query may join itself, or an alias its join gives, is left to the query.
+    test 'a qualifier naming no table is refused; a join rule may name a table or an alias its query gives' do
       rule = build_rule(field_name: 'elsewhere.anything')
 
       assert_not rule.valid?
       assert_equal ['names elsewhere, which is no table of this database'], rule.errors[:field_name]
       assert_not build_rule(field_name: 'customer.name').valid?, 'a typo of the own table'
-      assert build_rule(field_name: 'suppliers.anything').valid?, 'a real table that is none of the rule\'s'
-      assert build_rule(field_name: 'elsewhere.anything', join_type: 'joins', field_accessor_path: 'supplier').valid?,
-             'with a path: an alias the join may give'
+      assert_not build_rule(field_name: 'suppliers.name').valid?, 'a real table that is none of the filter rule\'s'
+      assert_not build_rule(field_name: 'elsewhere.anything', join_type: 'joins', field_accessor_path: 'supplier').valid?,
+                 'with a path: no name its join gives'
+      assert build_rule(field_name: 'users.id', join_type: 'joins', field_accessor_path: 'supplier').valid?,
+             'a join rule: a real table its query may join itself'
     end
 
     # What the check cannot tell is left to the query, as before.

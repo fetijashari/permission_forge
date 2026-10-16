@@ -6,11 +6,11 @@ module PermissionForge
   module Operators
     # A qualified field_name whose table is none of the rule's used to reach
     # SQL as written ("nosuch"."name") and raise ActiveRecord::StatementInvalid
-    # for every holder. It is now one of three things: a table the query may
-    # join itself (UNKNOWN, left to the database), no table at all on a rule
-    # that joins nothing (UNRESOLVABLE: matches nothing), or — with a path —
-    # possibly an alias the join gives a table (UNKNOWN: an alias is no data
-    # source, and a self-join is named by one).
+    # for every holder. It is now one of three things: a name the rule's own
+    # query gives a table (UNKNOWN: an alias a join gives, left to the
+    # database), a real table that is none of the rule's (FOREIGN: a filter
+    # rule matches nothing; a join rule's query must join it itself), or no
+    # table at all (UNRESOLVABLE: matches nothing).
     class RuleColumnTest < ActiveSupport::TestCase
       class TablelessRecord < ActiveRecord::Base
         self.table_name = 'pf_rule_column_test_no_such_table'
@@ -43,17 +43,34 @@ module PermissionForge
         end
       end
 
-      test 'a qualifier naming a real table that is none of the rule\'s is left to the database' do
+      test 'a qualifier naming a real table that is none of the rule\'s is a foreign table' do
         target = RuleColumn.find('suppliers.name', [Customer])
 
-        assert_same RuleColumn::UNKNOWN, target
+        assert_same RuleColumn::FOREIGN, target
+        assert_predicate target, :foreign?
         assert_not target.unresolvable?
+        assert_same RuleColumn::FOREIGN, RuleColumn.find('suppliers.name', [Customer], joined: %w[customers])
       end
 
-      test 'with a path, a qualifier naming no table may be an alias the join gives: left to the database' do
-        target = RuleColumn.find('parents_customers.name', [Customer, Supplier])
+      # Review R1 #1: a name the joined query mentions (a column of its ON
+      # clause) is no name it gives a table. Only the FROM and JOIN names count.
+      test 'with a path, a qualifier is an alias only when the joined query gives that name to a table' do
+        assert_same RuleColumn::UNKNOWN, RuleColumn.find('parents_customers.name', [Customer, Supplier],
+                                                         joined: %w[customers suppliers parents_customers])
+        assert_predicate RuleColumn.find('supplier_id.id', [Customer, Supplier], joined: %w[customers suppliers]), :unresolvable?
+        assert_predicate RuleColumn.find('parents_customers.name', [Customer, Supplier], joined: %w[customers suppliers]),
+                         :unresolvable?
+      end
 
-        assert_same RuleColumn::UNKNOWN, target
+      test 'RuleSources are the table names and aliases of the FROM and JOINs, not the names in their conditions' do
+        assert_equal %w[customers suppliers], RuleSources.of(Customer.joins(:supplier)).sort
+        assert_equal %w[customers], RuleSources.of(Customer.where(supplier_id: 1))
+
+        require_relative '../rule_path_models'
+        assert_includes RuleSources.of(PfRulePathRecord.joins(:parent)), 'parents_pf_rule_path_records'
+        string_join = Customer.joins('INNER JOIN suppliers AS vendors ON vendors.id = customers.supplier_id')
+
+        assert_equal %w[customers vendors], RuleSources.of(string_join).sort
       end
 
       test 'a name that is not a name is malformed, whatever it is qualified with' do
@@ -84,11 +101,37 @@ module PermissionForge
 
         rule.update_columns(field_name: 'suppliers.name')
 
-        assert_same RuleColumn::UNKNOWN, RuleColumn.for_rule(rule.reload)
+        assert_same RuleColumn::FOREIGN, RuleColumn.for_rule(rule.reload)
 
         rule.update_columns(field_name: 'nosuch.name', join_type: 'joins', field_accessor_path: 'supplier')
 
-        assert_same RuleColumn::UNKNOWN, RuleColumn.for_rule(rule.reload), 'a join rule: the name may be an alias'
+        assert_predicate RuleColumn.for_rule(rule.reload), :unresolvable?, 'a join rule: no name its join gives'
+
+        rule.update_columns(field_name: 'supplier_id.id')
+
+        assert_predicate RuleColumn.for_rule(rule.reload), :unresolvable?, 'a column of the ON clause is no table'
+
+        rule.update_columns(field_name: 'users.id')
+
+        assert_same RuleColumn::FOREIGN, RuleColumn.for_rule(rule.reload), 'a join rule: a table its query may join itself'
+      end
+
+      test 'a join rule qualified with a stray name is named by RuleProblem and refused on save' do
+        set = create_permission_set
+        resource = create_resource(permission_set: set, name: 'Customer', read_access: true)
+        rule = create_permission_set_rule(permission_set: set, resource: resource, field_name: 'owner_id', field_value: '1',
+                                          join_type: 'joins', field_accessor_path: 'supplier')
+        rule.update_columns(field_name: 'supplier_id.id')
+
+        assert_equal :unknown_table, RuleProblem.for(rule.reload)&.kind
+        assert rule.valid?, 'stored: editable in its other attributes'
+
+        fresh = rule.dup
+        fresh.uuid = SecureRandom.uuid
+        fresh.field_name = 'supplier_id.owner_id'
+
+        assert_not fresh.valid?
+        assert_includes fresh.errors[:field_name], RuleProblem.for(fresh).validation_message
       end
 
       test 'rule_model is the one model lookup: a class with a table, not abstract, not a module' do

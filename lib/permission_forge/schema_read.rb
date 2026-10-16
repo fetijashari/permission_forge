@@ -153,11 +153,10 @@ module PermissionForge
         table = table.to_s
         cache = schema_cache(model)
         return true if cache.data_source_exists?(table)
-        return false unless table_recheck_due?([slot(model), table])
+        claim = [slot(model), table]
+        return false unless table_recheck_due?(claim)
 
-        cache.clear_data_source_cache!(table)
-        @rereads.increment
-        cache.data_source_exists?(table)
+        reread_table?(cache, table, claim)
       end
 
       # Whether `label` is one of the labels of the native enum type `type`
@@ -176,11 +175,25 @@ module PermissionForge
         key = [model.connection_db_config.name, type.to_s]
         labels = @enum_labels.compute_if_absent(key) { enum_labels_of(model, type) }
         return true if labels.include?(label)
-        return false unless @enum_claims.put_if_absent([key, labels.object_id, label], true).nil?
+
+        claim = [key, labels.object_id, label]
+        return false unless @enum_claims.put_if_absent(claim, true).nil?
 
         @rereads.increment
         (@enum_labels[key] = enum_labels_of(model, type)).include?(label)
+      rescue ActiveRecord::StatementInvalid
+        # The labels could not be read (a timeout, a lost connection): no
+        # for this call only — nothing kept, asked again next time.
+        @enum_claims.delete(claim) if claim
+        false
       end
+
+      # Whether PostgreSQL can compare values of the type (SchemaRead::OrderedTypes).
+      #
+      # @param model [Class] a model on the connection
+      # @param sql_type [String] the column's SQL type, from the schema
+      # @return [Boolean]
+      def ordered_type?(model, sql_type) = OrderedTypes.ordered?(model, sql_type)
 
       # @return [Integer] how many times this process read a table's schema again
       def rereads
@@ -192,6 +205,7 @@ module PermissionForge
       # @return [void]
       def reset!
         [@confirmed, @claims, @tables, @enum_labels, @enum_claims].each(&:clear)
+        OrderedTypes.reset!
       end
 
       private
@@ -201,10 +215,12 @@ module PermissionForge
       # the statement, and with it the caller's transaction).
       def enum_labels_of(model, type)
         model.connection_pool.with_connection do |connection|
-          connection.select_values(<<~SQL.squish, 'SCHEMA').freeze
-            SELECT enumlabel::text FROM pg_catalog.pg_enum
-            WHERE enumtypid = to_regtype(#{connection.quote(type.to_s)}) ORDER BY enumsortorder
-          SQL
+          connection.transaction(requires_new: true) do
+            connection.select_values(<<~SQL.squish, 'SCHEMA').freeze
+              SELECT enumlabel::text FROM pg_catalog.pg_enum
+              WHERE enumtypid = to_regtype(#{connection.quote(type.to_s)}) ORDER BY enumsortorder
+            SQL
+          end
         end
       end
 
@@ -217,6 +233,18 @@ module PermissionForge
         return false if now - last < TABLE_RECHECK
 
         @tables.replace_pair(key, last, now)
+      end
+
+      # The table asked of the database again, once per claim. A read that
+      # fails (a timeout, a lost connection) answers no for this call only:
+      # the claim is let go, so the next call asks again.
+      def reread_table?(cache, table, claim)
+        cache.clear_data_source_cache!(table)
+        @rereads.increment
+        cache.data_source_exists?(table)
+      rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished
+        @tables.delete(claim)
+        false
       end
 
       def table_columns(model)

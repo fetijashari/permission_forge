@@ -73,7 +73,7 @@ module PermissionForge
       # RuleProblem kind => the fix the banner names.
       FIXES = {
         missing_column: 'field', unknown_table: 'field', unusable_value: 'value', unknown_operator: 'operator',
-        unknown_join_type: 'join', unknown_association: 'path', unjoinable_association: 'path'
+        unknown_join_type: 'join', unknown_association: 'path', unjoinable_association: 'path', foreign_table: 'path'
       }.freeze
 
       test 'the banner names the fix for each kind of problem, in every locale' do

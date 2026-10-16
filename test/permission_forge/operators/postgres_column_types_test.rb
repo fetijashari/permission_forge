@@ -134,6 +134,30 @@ module PermissionForge
         assert_equal %w[dated], labels(:label, 'equal', 'dated'), 'the transaction is still usable after a refused CAST'
       end
 
+      # Review R1 #4: ReadBack asked whether PostgreSQL can read the value,
+      # not whether it can compare it — CAST('<a/>' AS xml) succeeds, but xml
+      # and point have no `=` (nor `<`), so every holder's query raised.
+      test 'a type PostgreSQL cannot compare takes no value: xml and point match nothing, the null checks work' do
+        record('shaped', doc: '<a/>', spot: '(1,2)')
+
+        { doc: ['<a/>', '<a/>,<b/>'], spot: ['(1,2)', '(1,2),(3,4)'] }.each do |column, (one, two)|
+          %w[equal not_equal less_than greater_than_or_equal].each do |operator|
+            assert_equal [], labels(column, operator, one), "#{column} #{operator}"
+          end
+          assert_equal [], labels(column, 'in', two), "#{column} in"
+          assert_equal [], labels(column, 'between', two), "#{column} between"
+          assert_equal %w[shaped], labels(column, 'is_not_null', ''), "#{column} is_not_null"
+          refused = new_rule(field_name: column.to_s, field_value: one)
+
+          assert_not refused.valid?, column
+          assert_includes refused.errors[:field_value], "is not a value PfRuleRecord.#{column} can hold"
+        end
+        assert_not SchemaRead.ordered_type?(PfRuleRecord, 'xml')
+        assert_not SchemaRead.ordered_type?(PfRuleRecord, 'point')
+        assert_not SchemaRead.ordered_type?(PfRuleRecord, 'no_such_type')
+        %w[interval macaddr money date int4range].each { |type| assert SchemaRead.ordered_type?(PfRuleRecord, type), type }
+      end
+
       test 'a value is asked of PostgreSQL once per process and type' do
         ValueCasters::PostgresqlTypes::ReadBack.reset!
         casts = 0

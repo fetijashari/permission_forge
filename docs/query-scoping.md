@@ -188,8 +188,8 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
 - **Semantics parity:** muting sets contribute no rules but *do* cancel a view_all bypass;
   users in no rule-bearing set see all rows (rules only restrict); a missing session
   variable follows `nil_user_strategy` (`:bypass` allows, `:deny`/`:raise` hides all rows).
-- **The view_all bypass needs a resource row in effect.** A `view_all` / `modify_all` grant
-  bypasses the rules only while its resource row and its set are active and, with tenancy
+- **The view_all bypass needs a resource row in effect.** A `view_all` grant (`modify_all`
+  counts only with it, as in the application layer) bypasses the rules only while its resource row and its set are active and, with tenancy
   on, only for rows of the grant's own tenant: a grant in tenant A never bypasses the rules
   on tenant B's rows. A row whose tenant column is NULL gets no bypass under RLS (narrower
   than the application layer there, never wider). If the protected table has no tenant
@@ -203,9 +203,11 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   is asked of PostgreSQL first, as in the application layer (once per process,
   `ValueCasters::PostgresqlTypes::ReadBack`): text it reads is written into the policy as
   it is, text it cannot read compiles to `FALSE` (through version 6 it failed the sync at
-  that table). A word like `tomorrow` or `infinity` is read **once, when the policy is
-  created** — it does not move with the clock the way it does in the application layer,
-  which sends it with every query. Use ISO dates in rules that back a policy. `contains` and the other string operators compile to `ILIKE` on the column itself
+  that table). `today`, `now`, `tomorrow` and `yesterday` compile to what PostgreSQL computes
+  per statement (`CURRENT_DATE`, `now()`, `CURRENT_DATE ± 1`, cast to the column's type), so
+  the policy moves with the clock as the application layer does; such a word with more text
+  (`today 10:00`) compiles to `FALSE` (narrower). A constant word (`infinity`, `epoch`) is
+  written as it is. `contains` and the other string operators compile to `ILIKE` on the column itself
   (the padding of a `char(n)` value counts, as in the application layer), and
   `include_nulls` adds the NULL rows for `equal`, `not_equal`, `in` and `not_in` only — both
   as in the application layer.

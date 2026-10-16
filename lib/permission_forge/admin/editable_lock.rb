@@ -111,7 +111,7 @@ module PermissionForge
       # @return [Boolean]
       def permits?(record, action, **expiry)
         return true if ALWAYS_PERMITTED.include?(action)
-        return widening_lock(permission_set_of(record), action, **expiry).nil? if HOLDER_CHANGES.include?(action)
+        return holder_change_permitted?(record, action, **expiry) if HOLDER_CHANGES.include?(action)
         return false if locked?(record)
 
         action != :delete || !flagged?(container_of(record))
@@ -140,9 +140,18 @@ module PermissionForge
       end
 
       # The set a holder change is on: the record when it is one, else the
-      # set an assignment belongs to.
+      # set an assignment belongs to; nil for a group or its membership.
       def permission_set_of(record)
-        record.respond_to?(:permission_set) ? record.permission_set : record
+        set = record.respond_to?(:permission_set) ? record.permission_set : record
+        set if set.is_a?(PermissionForge::PermissionSet)
+      end
+
+      # A holder change on a set goes by direction (.widening_lock); one on a
+      # Permission Set Group (a membership, or the group) has none — a
+      # locked group freezes its members both ways.
+      def holder_change_permitted?(record, action, **expiry)
+        set = permission_set_of(record)
+        set ? widening_lock(set, action, **expiry).nil? : !locked?(record)
       end
 
       # How a change moves a person's holding of a set: +1 they hold it more

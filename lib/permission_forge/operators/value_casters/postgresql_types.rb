@@ -98,14 +98,27 @@ module PermissionForge
         end
 
         # Text PostgreSQL reads itself: a column type no caster here knows
-        # (hstore, money, interval, macaddr, xml, bit, ...) and date and time
+        # (hstore, money, interval, macaddr, bit, ...) and date and time
         # text in a notation Temporal does not recognise (`today`, `31 Jan
         # 2026`). PostgreSQL raises on text it cannot read as the column's
         # type — for every holder, on every query — so the text is asked of
         # PostgreSQL once (a CAST in a savepoint) and the answer kept for the
-        # process: what it reads is handed over as written, anything else is
-        # UNUSABLE and the rule matches nothing. The caster wrapped, when
-        # there is one, is tried first (a recognised date costs no query).
+        # process and database: what it reads is handed over as written,
+        # anything else is UNUSABLE and the rule matches nothing. The caster
+        # wrapped, when there is one, is tried first (a recognised date costs
+        # no query).
+        #
+        # Only a type PostgreSQL can compare is read back: one with a default
+        # btree operator class whose family has `=` and `<`
+        # (SchemaRead.ordered_type?). Reading a value is not comparing it —
+        # `CAST('<a/>' AS xml)` succeeds, but xml, point, polygon and path
+        # have no `=`, hstore no `<` — so a value of any other type is
+        # UNUSABLE (the null checks take none and still work).
+        #
+        # Only a refusal of the value itself is kept: an error of SQLSTATE
+        # class 22 (data exception: invalid input). Any other error — a
+        # statement or lock timeout, a lost connection, an aborted
+        # transaction — denies this read only and is asked again next time.
         class ReadBack
           # Answers kept per process before the memo starts over.
           LIMIT = 4096
@@ -126,19 +139,22 @@ module PermissionForge
             def wrapping(inner) = Factory.new(inner)
 
             # Whether PostgreSQL reads `text` as a value of `sql_type`; asked
-            # once per process and type.
+            # once per process, database and type.
             #
             # @param model [Class] a model on the connection
             # @param sql_type [String] the column's SQL type, from the schema
             # @param text [String]
             # @return [Boolean]
             def reads?(model, sql_type, text)
-              key = [sql_type, text]
+              key = [model.connection_db_config.name, sql_type, text]
               known = @answers[key]
               return known unless known.nil?
 
+              answer = cast(model, sql_type, text)
+              return false if answer.nil?
+
               @answers.clear if @answers.size >= LIMIT
-              @answers[key] = cast?(model, sql_type, text)
+              @answers[key] = answer
             end
 
             # @param value [Object] a rule value
@@ -150,6 +166,15 @@ module PermissionForge
               value.to_s if numbers && value.is_a?(Numeric)
             end
 
+            # Whether the error is PostgreSQL refusing the value itself
+            # (SQLSTATE class 22, PG::DataException and its subclasses).
+            #
+            # @param error [ActiveRecord::StatementInvalid]
+            # @return [Boolean]
+            def refused_value?(error)
+              defined?(::PG::DataException) ? error.cause.is_a?(::PG::DataException) : false
+            end
+
             # Forgets the answers (tests).
             #
             # @return [void]
@@ -159,17 +184,18 @@ module PermissionForge
 
             private
 
-            # A failed statement aborts a PostgreSQL transaction: the CAST runs
-            # in a savepoint of its own.
-            def cast?(model, sql_type, text)
+            # true, false (the value refused: kept), or nil (any other
+            # failure: not kept). A failed statement aborts a PostgreSQL
+            # transaction: the CAST runs in a savepoint of its own.
+            def cast(model, sql_type, text)
               model.connection_pool.with_connection do |connection|
                 connection.transaction(requires_new: true) do
                   connection.select_value("SELECT CAST(#{connection.quote(text)} AS #{sql_type})")
                 end
               end
               true
-            rescue ActiveRecord::StatementInvalid
-              false
+            rescue ActiveRecord::StatementInvalid => e
+              refused_value?(e) ? false : nil
             end
           end
 
@@ -193,7 +219,9 @@ module PermissionForge
           # refused), a number — the id `current_user` stands for — is asked as its text.
           def read_back(value)
             text = ReadBack.text_of(value, numbers: @inner.nil?)
-            text && @model && ReadBack.reads?(@model, @sql_type, text) ? value : UNUSABLE
+            return UNUSABLE unless text && @model && SchemaRead.ordered_type?(@model, @sql_type)
+
+            ReadBack.reads?(@model, @sql_type, text) ? value : UNUSABLE
           end
         end
 

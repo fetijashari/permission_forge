@@ -16,20 +16,21 @@ module PermissionForge
     # text after all. A lookup that is more generous than the database costs
     # nothing: the database then rejects the name itself.
     #
-    # When the table is none of the rule's but exists, nothing is known
-    # ({UNKNOWN}) and the value is left as it is: the query may join it
-    # itself (a default scope's join, a host's `joins`) — the database
-    # resolves the name or rejects it. When no such table exists either, the
-    # name is {#unresolvable?} ({UNRESOLVABLE}) and the rule matches nothing
-    # — the database would reject the query (`no such column: nosuch.name`),
-    # and every holder would get an error instead of a denial — unless the
-    # rule follows an association path: then the name may be the alias
-    # ActiveRecord gives a table joined twice (`parents_customers` on a
-    # self-join), which is no data source, so it is left to the database as
-    # UNKNOWN. A table of the rule's that has no such column is {#missing?}:
-    # the database would reject the query, so a built-in operator matches
-    # nothing for it (ValueTyping.no_column?). A field_name that is not a
-    # name ({.name?}) is {#malformed?}: such a rule matches nothing.
+    # When the table is none of the rule's, what the name is depends on the
+    # names the rule's query gives its tables ({RuleSources}: the FROM and
+    # JOINs, with the aliases ActiveRecord assigns — never a name that merely
+    # appears in a join condition): a name the join gives that is no model
+    # table (`parents_customers` on a self-join) is {UNKNOWN} and left to the
+    # database; a real table that is none of the rule's is {FOREIGN} (a filter
+    # rule compares its model's own table: it matches nothing; a join rule's
+    # query has to join that table itself); anything else is {#unresolvable?}
+    # ({UNRESOLVABLE}) and the rule matches nothing — the database would
+    # reject the query (`no such column: supplier_id.id`), and every holder
+    # would get an error instead of a denial. A table of the rule's that has
+    # no such column is {#missing?}: the database would reject the query, so
+    # a built-in operator matches nothing for it (ValueTyping.no_column?). A
+    # field_name that is not a name ({.name?}) is {#malformed?}: such a rule
+    # matches nothing.
     class RuleColumn
       # Adapters whose database compares a quoted name as it is written. On
       # every other one — MySQL, SQLite — `Flag` is the column `flag`.
@@ -66,17 +67,18 @@ module PermissionForge
         # @param field_name [String] the rule's field_name
         # @param models [Array<Class>] the rule's model, then the model of each
         #   association on its path (see {.models_along})
+        # @param joined [Array<String>, nil] the names a join rule's query
+        #   gives its tables ({RuleSources.of}); nil for a filter rule, whose
+        #   query joins nothing of its own
         # @return [RuleColumn]
-        def find(field_name, models)
+        def find(field_name, models, joined: nil)
           return MALFORMED unless name?(field_name)
           return UNKNOWN if models.empty?
 
           *qualifier, name = field_name.to_s.split('.')
           table = qualifier.last
           model = table_model(table, models)
-          return on(model, name) if model
-
-          models.size > 1 || data_source?(models.last, table) ? UNKNOWN : UNRESOLVABLE
+          model ? on(model, name) : elsewhere(table, models.last, joined)
         end
 
         # Whether the connection has a data source (a table or view) named
@@ -129,8 +131,9 @@ module PermissionForge
           model = rule_model(rule)
           return unless model
 
-          models = models_along(model, rule.join_rule? ? path_segments(rule.field_accessor_path) : [])
-          find(rule.field_name, models) if readable?(models, verify)
+          chain = rule.join_rule? ? path_segments(rule.field_accessor_path) : []
+          models = models_along(model, chain)
+          find(rule.field_name, models, joined: rule_join_names(rule, model, chain)) if readable?(models, verify)
         rescue *UNTELLABLE
           nil
         end
@@ -165,6 +168,22 @@ module PermissionForge
         end
 
         private
+
+        # A qualifier that is none of the rule's models: a name the query
+        # gives a table (an alias), a real table, or nothing at all.
+        def elsewhere(table, model, joined)
+          return UNKNOWN if joined&.any? { |source| same_name?(source, table, exact_names?(model)) }
+
+          data_source?(model, table) ? FOREIGN : UNRESOLVABLE
+        end
+
+        # nil for a filter rule (no join of its own); a join rule's join
+        # names, read only for a qualified field_name.
+        def rule_join_names(rule, model, chain)
+          return unless rule.join_rule?
+
+          rule.field_name.to_s.include?('.') ? RuleSources.of_join(model, rule.join_type, chain) : []
+        end
 
         # Every table along the path is there (asking a missing one for its
         # columns fails the statement); compared with the database first when
@@ -219,9 +238,14 @@ module PermissionForge
       end
 
       # Nothing is known about the column: the name's table is none of the
-      # rule's — it exists (the query may join it), or the rule follows a
-      # path and the name may be an alias the join gives.
+      # rule's models but a name the rule's query gives a table (an alias a
+      # join gives), or the path cannot be followed.
       UNKNOWN = new(nil, nil, nil).freeze
+      # The name's table is a real table that is none of the rule's (not its
+      # model's, not one along its path or its query's joins): a filter rule
+      # matches nothing (RuleProblem :foreign_table); a join rule's query has
+      # to join it itself, or it matches nothing too.
+      FOREIGN = new(nil, nil, nil).freeze
       # The rule's field_name is not a name.
       MALFORMED = new(nil, nil, nil).freeze
       # The name's table is none of the rule's and no table of the database
@@ -230,6 +254,11 @@ module PermissionForge
 
       def malformed?
         equal?(MALFORMED)
+      end
+
+      # The name is qualified with a real table that is none of the rule's (see FOREIGN).
+      def foreign?
+        equal?(FOREIGN)
       end
 
       # The name is qualified with a table that is not there (see UNRESOLVABLE):

@@ -51,11 +51,13 @@ module PermissionForge
         end
       end
 
-      # PostgreSQL is asked whether it reads the text (ValueCasters::PostgresqlTypes::ReadBack).
+      # PostgreSQL is asked whether it reads the text (ValueCasters::PostgresqlTypes::ReadBack). Its
+      # relative words are computed per statement (review R1 #6); with more text they are FALSE.
       test 'a date or time that is not ISO 8601 is FALSE, except text PostgreSQL reads, which it gets as written' do
-        { %w[born_on less_than today] => "(#{col('born_on')} < 'today')",
+        { %w[born_on less_than today] => "(#{col('born_on')} < CAST(CURRENT_DATE AS date))",
           ['seen_at', 'not_equal', ' 10.01.2026 '] => "(#{col('seen_at')} <> ' 10.01.2026 ')",
-          ['born_on', 'in', '2026-01-10, yesterday'] => "(#{col('born_on')} IN ('2026-01-10', 'yesterday'))",
+          ['born_on', 'in', '2026-01-10, yesterday'] => "(#{col('born_on')} IN ('2026-01-10', CAST((CURRENT_DATE - 1) AS date)))",
+          ['seen_at', 'less_than', 'today 10:00'] => 'FALSE',
           ['born_on', 'in', '2026-01-10, someday'] => 'FALSE',
           %w[opens_at greater_than allballs] => "(#{col('opens_at')} > 'allballs')",
           %w[opens_at greater_than noon] => 'FALSE' }.each do |(field, operator, value), as_written|

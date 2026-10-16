@@ -399,17 +399,16 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/models/permission_set_rule_path_test.rb#each cause has its own message -->
   <!-- pin: test/permission_forge/api/permission_set_rules_controller_test.rb#POST create answers 422 on field_accessor_path for an association the model does not have -->
   <!-- pin: test/permission_forge/models/permission_set_rule_path_test.rb#a path ActiveRecord cannot join is refused with its cause, and one it joins is accepted -->
-- **A rule qualified with a table that is not there matches nothing, and is refused for a new or changed rule.** A
-  `field_name` such as `nosuch.name` or the typo `customer.name` — a table that is none of the rule's and not in the
-  database — on a rule that follows no relationship used to reach SQL as written and raise
-  `ActiveRecord::StatementInvalid` for every holder, on every query under `auto_query_scoping`. It now matches nothing
-  (every holder is denied, as for a missing column), a new or renamed rule gets "names nosuch, which is no table of
-  this database" on `field_name` (the JSON API answers 422), and the audit and Home list the stored ones. A qualifier
-  naming a **real** table of another model, and any qualifier on a rule **with** a relationship path (the alias a
-  self-join gives, `parents_customers.active`), are left to the database as before — `foreign_table_names` names the
-  former. **No opt-out:** none of these rules worked; run `rake permission_forge:audit` before upgrading to see the
-  rules concerned.
-  <!-- pin: test/permission_forge/models/permission_set_rule_column_test.rb#a qualifier naming no table is refused on a rule that joins nothing, and left to the query with a path -->
+- **A rule qualified with a name its query gives no table matches nothing, and is refused for a new or changed
+  rule:** `nosuch.name`, the typo `customer.name`, a column of a join's ON clause (`supplier_id.id` on a rule joining
+  `supplier`) and, on a filter rule, another model's table (`suppliers.name`: a filter rule compares its own table).
+  They reached SQL as written and raised for every holder, also under `auto_query_scoping`. The audit
+  (`missing_rule_columns`, `foreign_table_filter_rules`) and Home list stored ones. A join rule may still name a table
+  its query joins itself or an alias its join gives (`parents_customers`). **Opt out:** use a join rule (`join_type` +
+  `field_accessor_path`) for a column of another table.
+  <!-- pin: test/permission_forge/models/permission_set_rule_column_test.rb#a qualifier naming no table is refused; a join rule may name a table or an alias its query gives -->
+  <!-- pin: test/permission_forge/services/permission_rule_applier_test.rb#a filter rule qualified with a table of another model matches nothing in every gem-built query -->
+  <!-- pin: test/permission_forge/services/permission_rule_applier_test.rb#a join rule qualified with a name the ON clause mentions, which is no table or alias, matches nothing -->
 - **A rule value its column cannot hold is refused on save** (`field_value`: "is not a value Customer.supplier_id can
   hold"; the JSON API answers 422), for a new rule and when its value, operator, field name, path, join type or
   resource changes — `'5_id'` on an integer column, `'maybe'` on a boolean one, `'banana'` on a `uuid` one, a
@@ -469,13 +468,16 @@ and the RLS re-sync.
   sync or were skipped and left the policy wider than the application layer (a custom operator without SQL is still
   skipped and reported). It types `uuid` / `inet` / `cidr` / native enum / `json` / array values like the app layer,
   counts an assignment until its `expires_at` included (`>= now()`, as `PermissionSetUser.active_assignments`; it was
-  `>`), and grants the `view_all` bypass only to a set without an activation condition as
+  `>`), computes `today` / `now` / `tomorrow` / `yesterday` per statement (frozen at the sync before), grants the
+  bypass for View All alone (Modify All without it bypassed in the policy only), and only to a set without a condition as
   `PermissionSet.unconditional` reads it (`conditions_present_sql`): a set with only an end hour no longer bypasses
   the rules, and one whose condition texts are only blanks does. Existing installs see drift until they run `rake
   permission_forge:rls:sync`. **No opt-out:** a policy is never wider than the application layer; the old policies
   stay in force until the sync.
   <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#unknown_operator: a row written past the model is named, denies, is listed, compiles to FALSE -->
   <!-- pin: test/permission_forge/services/rls_policy_generator_test.rb#only unconditional sets grant the view_all bypass (consent guard) -->
+  <!-- pin: test/permission_forge/services/rls_policy_generator_test.rb#view_all bypass branch checks granting and muting sets -->
+  <!-- pin: test/rls/rls_rule_parity_test.rb#PostgreSQL's relative date words are read per statement by the app layer and by the policy -->
 - **PostgreSQL: a `uuid`, `inet`, `cidr` or native enum value the column cannot hold matches nothing** where it raised
   `ActiveRecord::StatementInvalid` for every holder (`find_by`, `permission_scoped`, every query under
   `auto_query_scoping`) — `'banana'` against a `uuid` column, an address IPAddr cannot read against an `inet` column, an
@@ -487,12 +489,15 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#each of these rules is named by RuleProblem and refused on save -->
 - **PostgreSQL: a rule value the gem cannot type itself is asked of PostgreSQL, once per process** (a `CAST` in a
   savepoint, `ValueCasters::PostgresqlTypes::ReadBack`): date and time text in another notation than ISO 8601
-  (`today`, `31 Jan 2026`) and every column type no caster knows (`hstore`, `money`, `interval`, `macaddr`, `xml`, ...).
+  (`today`, `31 Jan 2026`) and every column type no caster knows that PostgreSQL can compare (`money`, `interval`,
+  `macaddr`, ...; `xml`, `point`, `hstore` cannot: no value, only the null checks). A timeout is not kept as unreadable.
   What PostgreSQL reads is compared as written, as before; what it cannot read (`'banana'` for a date, `'noon'` for a
   time) now matches nothing and is refused on save — it raised for every holder of the rule, on every query, and failed
   `rake permission_forge:rls:sync`. `citext` is text. **No opt-out:** such a rule never matched anything; a custom
   operator still gets the value as written.
   <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#date text and types no caster knows are read back: what PostgreSQL cannot read matches nothing -->
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#a type PostgreSQL cannot compare takes no value: xml and point match nothing, the null checks work -->
+  <!-- pin: test/permission_forge/operators/read_back_memo_test.rb#a timeout, a lock timeout or a lost connection denies one read and is asked again -->
 - **PostgreSQL: a LIKE operator (`contains`, `starts_with`, ...) matches text columns only.** On an integer, decimal,
   boolean, date, `uuid`, `inet`, `cidr`, native enum, `json` or other non-text column it matches nothing and is refused
   on save — PostgreSQL has no LIKE for those, so the query raised for every holder (the RLS policy already compiled it
@@ -541,10 +546,12 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/conditional_sets_test.rb#a muting set with a broken condition applies in every mode; a granting one never passes -->
 - **A Permission Set's activation conditions are validated on a new row or a changed condition**: an `allowed_ips`
   entry that is not an IP address or CIDR range, a window whose start equals its end, one hour of the two (en/sq/mk
-  messages); the stored list is normalised to commas on save. A row stored before the check stays editable in its
-  other attributes. **No opt-out:** such a condition cannot be judged (see above).
+  messages); the stored list is normalised to commas on save, a text of whitespace alone (any Unicode space) to nil (a
+  row stored before keeps SQL's narrower reading); a copy keeps its original's. A row stored before the check stays
+  editable in its other attributes. **No opt-out:** such a condition cannot be judged (see above).
   <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#a legacy row with a broken list stays editable until the list changes -->
   <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#a new row with the same start and end hour is refused -->
+  <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#a condition text of whitespace alone is stored as nil, so Ruby and SQL read it the same -->
 - **`PermissionSet#conditional?` and the `conditional` / `unconditional` scopes agree**: a text of blanks is no
   condition (`TRIM`), one hour of the two is one. Counts on pages and in the audit may change for such rows.
   **No opt-out:** two readings of one row.
@@ -1001,14 +1008,28 @@ and the RLS re-sync.
   (`onwer_id` on `Customer`, written past the model, or a column renamed since) reached the database, so every
   `find_by` / `find_by!` / `permission_scoped` (and every query under `auto_query_scoping`) of each holder of its
   Permission Set raised `ActiveRecord::StatementInvalid` — a 500 in the host app. Under every built-in operator it now
-  matches nothing, like a value the column cannot hold: its holders are denied every record of the resource. A name
-  qualified with a real table that is none of the rule's and a custom operator's rule are still left to the database.
+  matches nothing, like a value the column cannot hold: its holders are denied every record of the resource. A custom
+  operator's rule is still left to the database.
   An RLS policy compiles such a rule to `FALSE` (the sync failed on it; see `GENERATOR_VERSION` 7 under Changed). A new
   such rule is refused on save (see Changed). See
   [Using the wrong field name](docs/row-level-rules.md#using-the-wrong-field-name).
   <!-- pin: test/permission_forge/services/rule_value_typing_test.rb#a column the table does not have matches nothing, under every built-in operator -->
-  <!-- pin: test/permission_forge/services/rule_value_typing_test.rb#a table that is none of the rule's, or a custom operator, is still left to the database -->
+  <!-- pin: test/permission_forge/services/rule_value_typing_test.rb#a table that is none of the rule's matches nothing; a custom operator is still left to the database -->
   <!-- pin: test/permission_forge/services/rls_operator_sql_test.rb#a column the table does not have compiles to FALSE, whatever the operator or value -->
+- **Duplicating a set no longer fails on a row stored before today's checks** (an unknown operator or join type, a
+  mask strategy that is not one, an IP entry that is no address): the copy keeps the stored values and behaves like
+  its original; whatever a copy still cannot hold is a flash naming the row, never a 500 (admin Duplicate, "Start
+  from", group Duplicate, API `clone`).
+  <!-- pin: test/permission_forge/services/copy_stored_values_test.rb#admin_duplicate copies a set holding a stored rule_operator and keeps it -->
+  <!-- pin: test/permission_forge/services/copy_stored_values_test.rb#a copy the validations still refuse is a flash naming the row, in the admin -->
+- **A join type this version does not know is applied by the default scope too** (it matches nothing); skipped there,
+  it left `auto_query_scoping` wider than `find_by` and `permission_scoped`. A stored rule whose field name holds a
+  control character can be edited (switched off). An IPv4-mapped request address (`::ffff:10.0.0.5`) matches IPv4
+  entries. `EditableLock.permits?` answers for a group membership.
+  <!-- pin: test/permission_forge/security/rule_join_type_test.rb#a blank join_type is a filter rule to the applier, the default scope and the model alike -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_validation_test.rb#a stored field name the format refuses stays editable in its other attributes, refused when it changes -->
+  <!-- pin: test/permission_forge/services/permission_set_condition_evaluator_test.rb#an IPv4-mapped IPv6 request address matches the IPv4 entries -->
+  <!-- pin: test/permission_forge/admin/editable_lock_test.rb#permits? answers for a group membership: refused both ways while the group is locked -->
 - **A rule whose association path cannot be joined denies instead of raising.** A join rule whose
   `field_accessor_path` names no association (`ownr` instead of `owner`, saved through the API with a 201 before this
   release) made every `find_by` / `find_by!` / `permission_scoped` of each holder of its Permission Set raise
@@ -1075,8 +1096,9 @@ and the RLS re-sync.
   changing nothing) and an "office only" granting set applied from any IP. `allowed_ips` now takes a String (commas,
   newlines or spaces between entries) or an Array of Strings, normalised by the one parser; hours take an integer (or a
   String of digits); a session flag a String; `null` clears. Any other shape (an object, a boolean, a number for a
-  list, an array for a flag or an hour) is a 422 keyed by the attribute.
+  list, an array for a flag or an hour) is a 422 keyed by the attribute, as is a list with no entry (`[]`, `[""]`).
   <!-- pin: test/permission_forge/api/permission_set_conditions_api_test.rb#the recorded scenario: an office-only granting set written as an array grants from the office only -->
+  <!-- pin: test/permission_forge/api/permission_set_conditions_api_test.rb#an IP list with no entry is a 422 saying null clears the condition -->
 - **A uniqueness race is no longer a 500.** Two requests that create the same assignment, group membership, Resource
   or field at the same moment both pass the uniqueness validation, and the unique index refuses the second INSERT
   (`ActiveRecord::RecordNotUnique`), which nothing rescued. The API now answers it with the validation's own 422,

@@ -49,6 +49,27 @@ module PermissionForge
       end
     end
 
+    # The rule applier quotes a rule's column on every scoped read: a holder
+    # of a rule would get an error for every record.
+    test 'a record rule is applied where the deprecated connection reader raises' do
+      user = create_user
+      set = create_permission_set
+      create_permission_set_user(user: user, permission_set: set)
+      resource = create_resource(permission_set: set, name: 'Customer', read_access: true)
+      create_permission_set_rule(permission_set: set, resource: resource, field_name: 'name', field_value: 'mine', include_nulls: false)
+      mine = create_customer(name: 'mine')
+      create_customer(name: 'theirs')
+      rules = user.permissions_hash.dig(:permissions, :resources, :Customer, :permission_set_rules)
+
+      with_connection_reader_disallowed do
+        ids = in_fresh_thread do
+          Services::PermissionRuleApplier.scope(model_class: Customer, rules: rules, current_user: user).pluck(:id)
+        end
+        assert_equal [mine.id], ids
+        assert_match(/CREATE POLICY/, in_fresh_thread { Services::RlsPolicyGenerator.call(model_class: Customer)[:statements].join })
+      end
+    end
+
     test 'the timestamps of a model are read where the deprecated connection reader raises' do
       with_connection_reader_disallowed do
         assert_equal(%w[created_at updated_at], in_fresh_thread { TimestampFields.names(Customer).sort })

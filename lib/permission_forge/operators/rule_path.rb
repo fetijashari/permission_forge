@@ -105,6 +105,20 @@ module PermissionForge
       end
 
       class << self
+        # The relation with the path joined, the way every rule's join is
+        # made (the applier's query, RuleColumn.join_names): one association
+        # by name, a longer path as the nested Hash ActiveRecord joins.
+        #
+        # @param relation [ActiveRecord::Relation]
+        # @param join_method [Symbol] one of PermissionRuleApplier::JOIN_METHODS — never a rule's own text
+        # @param association_chain [Array<String>] the rule's path, split
+        # @return [ActiveRecord::Relation]
+        def join(relation, join_method, association_chain)
+          return relation if association_chain.empty?
+
+          relation.public_send(join_method, join_structure(association_chain))
+        end
+
         # Where ActiveRecord would raise building a join through the
         # reflection, why (UNJOINABLE_CAUSES); nil when it builds one. A raise
         # of any kind counts: it would be raised in the holders' queries.
@@ -123,6 +137,12 @@ module PermissionForge
         end
 
         private
+
+        # `supplier` => :supplier; `supplier.owner` => { supplier: :owner }.
+        def join_structure(association_chain)
+          *outer, last = association_chain.map(&:to_sym)
+          outer.reverse.reduce(last) { |inner, name| { name => inner } }
+        end
 
         # nil when the block raises nothing (what it answers is not looked
         # at). When it raises: `cause` for what a definition or a check raises

@@ -41,7 +41,7 @@ module PermissionForge
       test 'every kind has a fixture, and every fixture is a kind' do
         assert_equal RuleProblem::KINDS.sort, FIXTURES.keys.sort
         assert_equal %i[missing_column unknown_association unjoinable_association unknown_operator unknown_join_type
-                        unknown_table unusable_value].sort, RuleProblem::KINDS.sort
+                        unknown_table foreign_table unusable_value].sort, RuleProblem::KINDS.sort
       end
 
       # A kind without a remedy has no control for the builder to point at

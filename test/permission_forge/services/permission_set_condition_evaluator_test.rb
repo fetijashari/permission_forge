@@ -94,7 +94,8 @@ module PermissionForge
         ps = create_permission_set(allowed_ips: '192.168.1.0/24')
         assert evaluate(ps, { ip: IPAddr.new('192.168.1.50') })
         assert_not evaluate(ps, { ip: IPAddr.new('10.0.0.1') })
-        assert_not evaluate(ps, { ip: IPAddr.new('::ffff:192.168.1.50') }), 'an IPv6 address is outside an IPv4 range'
+        assert evaluate(ps, { ip: IPAddr.new('::ffff:192.168.1.50') }), 'an IPv4-mapped address is its IPv4 address'
+        assert_not evaluate(ps, { ip: IPAddr.new('2001:db8::1') }), 'an IPv6 address is outside an IPv4 range'
       end
 
       # An entry that is not an address used to be skipped, so the set passed
@@ -250,6 +251,17 @@ module PermissionForge
         )
         context = { session_flags: ['mfa_verified'], ip: '192.168.1.5', time: time_at_hour(20) }
         assert_not evaluate(ps, context)
+      end
+
+      # Review R1 #11: a dual-stack server reports an IPv4 client as
+      # ::ffff:10.0.0.5, which never matched an IPv4 entry.
+      test 'an IPv4-mapped IPv6 request address matches the IPv4 entries' do
+        ps = stored(allowed_ips: '10.0.0.0/8')
+
+        assert evaluate(ps, ip: '::ffff:10.0.0.5')
+        assert evaluate(ps, ip: IPAddr.new('::ffff:10.0.0.5'))
+        assert_not evaluate(ps, ip: '::ffff:192.168.0.5')
+        assert evaluate(stored(allowed_ips: '2001:db8::/32'), ip: '2001:db8::1'), 'a native IPv6 address is read as it is'
       end
 
       private

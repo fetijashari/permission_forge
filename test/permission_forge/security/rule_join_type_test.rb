@@ -52,7 +52,13 @@ module PermissionForge
 
         %w[Filter joins garbage].each do |join_type|
           assert_not PermissionForge::PermissionSetRule.filter_join_type?(join_type), join_type
-          assert_not Customer.send(:pf_filter_rule?, own.merge(join_type: join_type)), join_type
+        end
+        assert_not Customer.send(:pf_filter_rule?, own.merge(join_type: 'joins')), 'a join rule is permission_scoped\'s'
+        # A join type this version does not know joins nothing and matches
+        # nothing: the default scope applies it too (review R1), or it would
+        # be wider than find_by and permission_scoped.
+        %w[Filter garbage].each do |join_type|
+          assert Customer.send(:pf_filter_rule?, own.merge(join_type: join_type)), join_type
         end
       end
 

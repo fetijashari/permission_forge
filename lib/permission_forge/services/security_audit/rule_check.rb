@@ -16,14 +16,15 @@ module PermissionForge
         FINDING_KINDS = {
           missing_rule_columns: %i[missing_column unknown_association unjoinable_association unknown_table],
           unknown_rule_operators: %i[unknown_operator unknown_join_type],
-          unusable_rule_values: %i[unusable_value]
+          unusable_rule_values: %i[unusable_value],
+          foreign_table_filter_rules: %i[foreign_table]
         }.freeze
 
         def call
           return [no_rules] unless active_rules.exists?
 
-          [unenforced, missing_columns, unknown_operators, unusable_values, secret_columns, foreign_table_names, bypassed,
-           text_operator_on_ids].compact
+          [unenforced, missing_columns, unknown_operators, unusable_values, foreign_table_filters, secret_columns,
+           foreign_table_names, bypassed, text_operator_on_ids].compact
         end
 
         private
@@ -140,6 +141,20 @@ module PermissionForge
                   items: findings.map { |item| rule_item(item.rule) })
         end
 
+        # Filter rules qualified with another model's table (RuleProblem
+        # :foreign_table): a filter rule compares its model's own table, so
+        # such a rule matches nothing (it raised in every query of its holders).
+        def foreign_table_filters
+          findings = broken(:foreign_table_filter_rules).presence or return
+
+          finding(held?(findings) ? :high : :medium, :foreign_table_filter_rules,
+                  'Filter rules naming a table of another model',
+                  'The field name of these filter rules is qualified with the table of another model. A filter rule ' \
+                  'compares its own model\'s table, so such a rule matches nothing: everyone it applies to is denied ' \
+                  'every record of the resource. For a column of another table, use a join rule (a join type and the ' \
+                  'relationship path in field_accessor_path).', items: findings.map { |item| rule_item(item.rule) })
+        end
+
         # Rules in effect comparing a column that holds a secret
         # (PermissionForge::SecretColumns) — what Home lists
         # (AttentionItems#secret_rules). Stored before the model refused them;
@@ -162,25 +177,25 @@ module PermissionForge
             "#{people(resource.permission_set_id)}"
         end
 
-        # Rules in effect whose field name is qualified with a table that is
-        # none of the rule's but exists (Operators::RuleColumn::UNKNOWN):
-        # left to the database — the query may join that table itself — so
-        # the value is compared untyped, and a column the table does not
-        # have raises in every query of the holders.
+        # Join rules in effect whose field name is qualified with a real table
+        # that is none of the rule's (Operators::RuleColumn::FOREIGN): the
+        # query has to join that table itself (a default scope's join) — the
+        # value is compared untyped, and where the query does not join it the
+        # rule matches nothing. (A filter rule's is a RuleProblem.)
         def foreign_table_names
           rules = rules_in_effect.select { |rule| foreign_table?(rule) }
           return if rules.empty?
 
-          finding(:info, :foreign_table_names, 'Rules naming a table of another model',
+          finding(:info, :foreign_table_names, 'Join rules naming a table of another model',
                   'The field name of these rules is qualified with a table that is none of the rule\'s — not the ' \
                   'model\'s, nor one along its relationship path — so it is left to the database: the query has to ' \
-                  'join that table itself, the value is compared as text, and a column the table does not have ' \
-                  'raises in every query of the holders. Name the relationship in field_accessor_path instead, so ' \
-                  'the column is checked and the value typed.', items: rules.map { |rule| rule_item(rule) })
+                  'join that table itself (where it does not, the rule matches nothing), and the value is compared as ' \
+                  'text. Name the relationship in field_accessor_path instead, so the column is checked and the value ' \
+                  'typed.', items: rules.map { |rule| rule_item(rule) })
         end
 
         def foreign_table?(rule)
-          rule.field_name.to_s.include?('.') && Operators::RuleColumn.for_rule(rule).equal?(Operators::RuleColumn::UNKNOWN)
+          rule.join_rule? && Operators::RuleColumn.for_rule(rule)&.foreign?
         end
 
         # The rules applied right now (AttentionItems#rules_in_effect).

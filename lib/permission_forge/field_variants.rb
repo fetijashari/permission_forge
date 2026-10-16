@@ -86,8 +86,7 @@ module PermissionForge
     def model
       return @model if defined?(@model)
 
-      klass = @resource_name.safe_constantize
-      @model = klass.is_a?(Class) && klass < ActiveRecord::Base ? klass : nil
+      @model = ModelLookup.model_for(@resource_name)
     end
 
     def virtual_fields

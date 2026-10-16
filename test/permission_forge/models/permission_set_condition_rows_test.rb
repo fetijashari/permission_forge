@@ -128,5 +128,20 @@ module PermissionForge
       assert_includes PermissionForge::PermissionSet.conditional, half
       assert_not_includes PermissionForge::PermissionSet.unconditional, half
     end
+
+    # Review R1 #10: Ruby reads any Unicode space as blank, SQL TRIM takes
+    # spaces only and the REPLACEs newlines and tabs: "\v" or U+00A0 was no
+    # condition to #conditional? and a condition to .conditional. A text of
+    # whitespace alone is now stored as nil, so both read it as none.
+    test 'a condition text of whitespace alone is stored as nil, so Ruby and SQL read it the same' do
+      ["\v", "\f", "\u00A0", "\u2003", " \n\u00A0\t"].each do |blank|
+        row = create_permission_set(name: PermissionForge::PermissionSet.unique_name('Blank'), allowed_ips: blank,
+                                    requires_session_flag: blank)
+
+        assert_nil row.reload.allowed_ips, blank.inspect
+        assert_nil row.requires_session_flag, blank.inspect
+        assert_includes PermissionForge::PermissionSet.unconditional, row, blank.inspect
+      end
+    end
   end
 end

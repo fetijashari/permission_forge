@@ -119,7 +119,7 @@ module PermissionForge
     # RuleProblemsHelper first).
     def pf_rule_field_labels(model_name, rule)
       segments = PermissionForge::Operators::RuleColumn.path_segments(rule.field_accessor_path)
-      models = pf_rule_path_models(model_name.to_s.safe_constantize, segments)
+      models = pf_rule_path_models(PermissionForge::ModelLookup.model_for(model_name), segments)
       labels = segments.each_with_index.map { |assoc, index| pf_attribute_label(models[index], assoc) }
       labels << pf_attribute_label(models[segments.size], rule.field_name)
     end

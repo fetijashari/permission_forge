@@ -148,9 +148,14 @@ module PermissionForge
         # Filter-type rules only: join-type rules inside a default_scope would
         # break includes/count/pluck and duplicate rows, so they remain the job
         # of permission_scoped (a boot warning fires when join rules exist while
-        # Level 1 is enabled).
+        # Level 1 is enabled). A join type this version does not know joins
+        # nothing — the applier makes such a rule match nothing — so it applies
+        # here too: skipped, it would leave the default scope wider than
+        # find_by and permission_scoped.
         def pf_filter_rule?(rule)
-          PermissionForge::PermissionSetRule.filter_join_type?(rule[:join_type])
+          join_type = rule[:join_type]
+          PermissionForge::PermissionSetRule.filter_join_type?(join_type) ||
+            !PermissionForge::Services::PermissionRuleApplier::JOIN_METHODS.key?(join_type.to_s)
         end
       end
     end

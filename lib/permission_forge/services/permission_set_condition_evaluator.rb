@@ -76,19 +76,18 @@ module PermissionForge
       end
 
       # IP restriction: set only active when request IP matches allowed CIDRs.
-      # The IP may be a String or an IPAddr; anything that is not an address
-      # fails the condition, as does a list that cannot be judged.
+      # The IP may be a String or an IPAddr (ActivationConditions.request_address:
+      # an IPv4-mapped IPv6 address is read as its IPv4 address); anything
+      # that is not an address fails the condition, as does a list that
+      # cannot be judged.
       def ip_passes?
         return true if @permission_set.allowed_ips.blank?
         return false if @conditions.ip_list_broken?
 
-        request_ip = @context[:ip]
-        return false if request_ip.blank?
+        address = PermissionForge::ActivationConditions.request_address(@context[:ip])
+        return false unless address
 
-        address = request_ip.is_a?(IPAddr) ? request_ip : IPAddr.new(request_ip.to_s)
         @conditions.allowed_ip_ranges.any? { |range| range.include?(address) }
-      rescue IPAddr::Error
-        false
       end
 
       # Login hours: set only active during the allowed hour window; a

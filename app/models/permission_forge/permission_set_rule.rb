@@ -9,6 +9,7 @@ module PermissionForge
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Operators::Constants
     include PermissionForge::Concerns::HasUuid
+    include PermissionForge::Concerns::KeepsCopiedValues
     include PermissionForge::Concerns::ValidatesColumnLengths
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -77,26 +78,37 @@ module PermissionForge
       in: JOIN_TYPES, message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.invalid_join_type') }
     }, allow_nil: true, allow_blank: false, if: :join_type_check_due?
     validates :field_name, presence: { message: ->(*) { I18n.t('permission_forge.validations.blank') } }
+    # Checked for a new rule and on a rename (field_name_check_due?): a row
+    # that already carries such a name — a control character, written past
+    # the model — matches nothing and stays editable in its other
+    # attributes (it can be switched off).
     validates :field_name, format: {
       with: /\A[a-zA-Z_][a-zA-Z0-9_.]*\z/,
       message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.invalid_field_name') }
-    }, allow_blank: true
+    }, allow_blank: true, if: :field_name_check_due?
 
-    validate :validate_field_name_segments, if: :field_name_changed?
+    validate :validate_field_name_segments, if: :field_name_check_due?
     validate :validate_field_accessor_path, if: :path_check_due?
     validate :validate_field_name_column, if: :column_check_due?
     validate :validate_secret_column
-    validate :validate_field_value_text, if: -> { new_record? || will_save_change_to_field_value? }
-    validate :validate_field_value_for_operator
+    validate :validate_field_value_text, if: -> { !copied_unchanged?(:field_value) && (new_record? || will_save_change_to_field_value?) }
+    validate :validate_field_value_for_operator, unless: -> { copied_unchanged?(:operator, :field_value) }
     validate :validate_field_value_column, if: :value_check_due?
+    # The rule's column, looked up once per validation run (the column and
+    # the value checks both read it): forgotten before each run.
+    before_validation { @verified_column = nil }
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
+
+    # A copy keeps these unchecked while they hold its original's values (KeepsCopiedValues).
+    keeps_copied :operator, :join_type, :field_name, :field_value
 
     # A copy (Services::Clonable) names what its original names. A rule
     # written before its column was checked is copied as it is: it matches
     # nothing, as the original does — leaving it out would widen the copy's
     # access, refusing it would fail the clone. `rake permission_forge:audit`
-    # reports both.
+    # reports both. So is one whose operator, join type, field name or value
+    # a check made since refuses (KeepsCopiedValues).
     def initialize_dup(other)
       super
       @copied_column = column_parts
@@ -141,11 +153,15 @@ module PermissionForge
     end
 
     def operator_check_due?
-      new_record? || will_save_change_to_operator?
+      !copied_unchanged?(:operator) && (new_record? || will_save_change_to_operator?)
     end
 
     def join_type_check_due?
-      new_record? || will_save_change_to_join_type?
+      !copied_unchanged?(:join_type) && (new_record? || will_save_change_to_join_type?)
+    end
+
+    def field_name_check_due?
+      !copied_unchanged?(:field_name) && (new_record? || will_save_change_to_field_name?)
     end
 
     # On a new rule and when what it names changes: a row that already names
@@ -218,7 +234,14 @@ module PermissionForge
     # predate a column a migration just added, or a table (a running server,
     # an old process in a rolling deploy).
     def column_problem
-      PermissionForge::Operators::RuleProblem.of_column(self, PermissionForge::Operators::RuleColumn.for_rule(self, verify: true))
+      PermissionForge::Operators::RuleProblem.of_column(self, verified_column || nil)
+    end
+
+    # RuleColumn.for_rule(self, verify: true), once per validation run.
+    def verified_column
+      return @verified_column if defined?(@verified_column) && !@verified_column.nil?
+
+      @verified_column = PermissionForge::Operators::RuleColumn.for_rule(self, verify: true) || false
     end
 
     def valueless_operator?
@@ -256,7 +279,7 @@ module PermissionForge
     def validate_field_value_column
       return if errors.any? || field_value.blank?
 
-      problem = PermissionForge::Operators::RuleProblem.of_value(self, PermissionForge::Operators::RuleColumn.for_rule(self, verify: true))
+      problem = PermissionForge::Operators::RuleProblem.of_value(self, verified_column || nil)
       errors.add(:field_value, problem.validation_message) if problem
     end
 

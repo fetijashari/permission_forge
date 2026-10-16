@@ -16,6 +16,8 @@ module PermissionForge
       unjoinable_class_not_loadable: 'names %<association>s, an association of %<model>s whose class cannot be loaded',
       unknown_column: 'names %<name>s, which is not a column of %<model>s',
       unknown_table: 'names %<name>s, which is no table of this database',
+      foreign_table: 'names %<name>s, a table that is not %<model>s\'s: a filter rule compares its own table. For a column ' \
+                     'of another table, use a join rule (a join type and the relationship path)',
       invalid_operator: 'is not a valid operator',
       invalid_join_type: 'is not a valid join type',
       unusable_value: 'is not a value %<model>s.%<name>s can hold'
@@ -39,9 +41,12 @@ module PermissionForge
     # - :missing_column — a field_name that is no column of its table
     #   ({RuleColumn#missing?}), or not a name at all ({RuleColumn#malformed?});
     #   `name` is the column as written, `model` the model whose table lacks it;
-    # - :unknown_table — a field_name qualified with a table that is none of
-    #   the rule's and not in the database ({RuleColumn#unresolvable?});
-    #   `name` is the qualifier;
+    # - :unknown_table — a field_name qualified with a name that is none of
+    #   the rule's tables, none its join gives and no table of the database
+    #   ({RuleColumn#unresolvable?}); `name` is the qualifier;
+    # - :foreign_table — a filter rule's field_name qualified with a real
+    #   table of another model ({RuleColumn#foreign?}): a filter rule compares
+    #   its model's own table; `name` is the qualifier;
     # - :unusable_value — a value the column cannot hold ({ValueTyping::UNUSABLE});
     #   `name` is the column, `value` the value as stored. Refused for a new
     #   or changed rule (on `field_value`); a stored one is listed and denied.
@@ -67,18 +72,18 @@ module PermissionForge
       # RULE_PROBLEM_MESSAGES (or MESSAGE_KEYS), one in REMEDIES, and the
       # message and the `ui.rules.problems` sentence in en, sq and mk.
       KINDS = %i[unknown_join_type unknown_association unjoinable_association unknown_operator missing_column
-                 unknown_table unusable_value].freeze
+                 unknown_table foreign_table unusable_value].freeze
       # What the admin changes to correct the rule, by kind — the rule
       # builder's control (`permission_set_rules.builder.problem_fixes.<remedy>`):
       # the join type (Advanced), the relationship, the condition, the field,
       # or the value.
       REMEDIES = { unknown_join_type: :join, unknown_association: :path, unjoinable_association: :path,
                    unknown_operator: :operator, missing_column: :field, unknown_table: :field,
-                   unusable_value: :value }.freeze
+                   foreign_table: :path, unusable_value: :value }.freeze
       # The kinds that are the rule's association path (not its column or value).
       PATH_KINDS = %i[unknown_association unjoinable_association].freeze
       # The kinds whose `name` is a name that is not there, shown as stored.
-      VERBATIM_KINDS = %i[missing_column unknown_association unknown_operator unknown_join_type unknown_table].freeze
+      VERBATIM_KINDS = %i[missing_column unknown_association unknown_operator unknown_join_type unknown_table foreign_table].freeze
       # key => the validations.permission_set_rule.* message, where it is not the key itself.
       MESSAGE_KEYS = { missing_column: :unknown_column, unknown_operator: :invalid_operator,
                        unknown_join_type: :invalid_join_type }.freeze
@@ -154,12 +159,19 @@ module PermissionForge
         return unless column
 
         field_name = rule.field_name.to_s
-        if column.malformed?
-          new(kind: :missing_column, name: field_name, model: RuleColumn.rule_model(rule))
-        elsif column.missing?
-          new(kind: :missing_column, name: field_name.split('.').last, model: column.model)
-        elsif column.unresolvable?
-          new(kind: :unknown_table, name: field_name.split('.')[-2], model: RuleColumn.rule_model(rule))
+        return new(kind: :missing_column, name: field_name.split('.').last, model: column.model) if column.missing?
+
+        kind = column_kind(rule, column)
+        new(kind: kind, name: kind == :missing_column ? field_name : field_name.split('.')[-2], model: RuleColumn.rule_model(rule)) if kind
+      end
+
+      # The kind of a column problem named after the rule's own model: a
+      # name that is none, a qualifier naming no table, or — on a filter
+      # rule — another model's table.
+      def self.column_kind(rule, column)
+        if column.malformed? then :missing_column
+        elsif column.unresolvable? then :unknown_table
+        elsif column.foreign? && !rule.join_rule? then :foreign_table
         end
       end
 
@@ -191,7 +203,7 @@ module PermissionForge
       rescue *RuleColumn::UNTELLABLE
         false
       end
-      private_class_method :column_found?, :unusable_value?
+      private_class_method :column_found?, :unusable_value?, :column_kind
 
       # The rule's path and field name as stored (a filter rule's path is not joined).
       #

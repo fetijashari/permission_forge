@@ -154,6 +154,25 @@ module PermissionForge
         assert_equal %w[30d eom never], EditableLock.expiry_choices(muting.reload, today: today)
       end
 
+      # A locked Permission Set Group freezes its members both ways: a
+      # holder change on a membership raised NoMethodError (no is_muting).
+      test 'permits? answers for a group membership: refused both ways while the group is locked' do
+        member = PermissionForge::PermissionSetGroupUser.create!(uuid: SecureRandom.uuid, user: create_user, permission_set_group: @group)
+
+        %i[grant revoke change_expiry].each do |change|
+          expiry = change == :change_expiry ? { from: nil, to: 1.day.from_now } : {}
+
+          assert EditableLock.permits?(member, change, **expiry), change
+          assert EditableLock.permits?(@group, change, **expiry), change
+        end
+        @group.update!(is_editable: false)
+
+        %i[grant revoke].each do |change|
+          assert_not EditableLock.permits?(member.reload, change), change
+          assert_not EditableLock.permits?(@group, change), change
+        end
+      end
+
       test 'ChangeSet skips a move into a locked group' do
         @group.update!(is_editable: false)
 
