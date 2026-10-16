@@ -2,6 +2,7 @@
 
 require 'test_helper'
 require_relative '../../support/doc_blocks'
+require_relative '../../support/docs_app/programs'
 
 module PermissionForge
   module Docs
@@ -132,6 +133,12 @@ module PermissionForge
         assert_equal %w[markdown ruby], blocks.map(&:lang)
         assert_includes blocks.first.body, '```ruby'
         assert_equal 8, blocks.last.line
+      end
+
+      test 'a file= block in a list item is written without its indent, blank lines kept' do
+        body = "  class Customer < ApplicationRecord\n    include X\n  \n\n    belongs_to :owner\n  end\n"
+        assert_equal "class Customer < ApplicationRecord\n  include X\n\n\n  belongs_to :owner\nend\n", DocsApp::Programs.dedent(body)
+        assert_equal "a\n\nb\n", DocsApp::Programs.dedent("a\n\nb\n")
       end
 
       test 'a document program is its file= and run blocks, in order; headings are kept' do

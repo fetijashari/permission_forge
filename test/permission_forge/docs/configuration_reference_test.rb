@@ -17,9 +17,8 @@ module PermissionForge
 
       test 'the Option reference in docs/configuration.md is what the code generates' do
         rendered = reference.render
-        assert_equal rendered, document,
-                     "docs/configuration.md is stale: run `bundle exec rake docs:configuration` and commit the result.\n" \
-                     "First difference:\n#{first_difference(rendered, document)}"
+        # assert, not assert_equal: Minitest's diff of two 60 KB documents buried the summary.
+        assert rendered == document, stale_message(rendered, document)
       end
 
       test 'regenerating is a no-op' do
@@ -63,6 +62,15 @@ module PermissionForge
 
       # --- the guard bites ---------------------------------------------------------
 
+      test 'a stale document is reported as a short summary, not the whole file' do
+        stale = document.sub("#### cache_ttl\n\n**Default:** `3600`", "#### cache_ttl\n\n**Default:** `1800`")
+        message = stale_message(document, stale)
+        assert_operator message.bytesize, :<, 2_000, message
+        assert_includes message, 'rake docs:configuration'
+        assert_includes message, '1 line(s) differ'
+        assert_includes message, '**Default:** `1800`'
+      end
+
       test 'a default changed in Configuration makes the document stale' do
         changed = Configuration.new
         changed.nil_user_strategy = :deny
@@ -96,13 +104,16 @@ module PermissionForge
                     flunk('docs/configuration.md has no option-reference markers')
       end
 
-      def first_difference(rendered, actual)
-        rendered.lines.zip(actual.lines).each_with_index do |(left, right), index|
-          next if left == right
-
-          return "line #{index + 1}\n  generated: #{left.inspect}\n  file:      #{right.inspect}"
+      # What a stale document reports: what to run, how many lines differ and the first few, each cut short.
+      def stale_message(rendered, actual)
+        generated = rendered.lines
+        file = actual.lines
+        differing = (0...[generated.size, file.size].max).reject { |index| generated[index] == file[index] }
+        shown = differing.first(3).map do |index|
+          "line #{index + 1}\n  generated: #{generated[index].to_s.truncate(200).inspect}\n  file:      #{file[index].to_s.truncate(200).inspect}"
         end
-        'the files differ only in length'
+        "docs/configuration.md is stale: run `bundle exec rake docs:configuration` and commit the result.\n" \
+          "#{differing.size} line(s) differ (generated #{generated.size} lines, file #{file.size}); the first:\n#{shown.join("\n")}"
       end
     end
   end
