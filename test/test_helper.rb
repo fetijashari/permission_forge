@@ -89,6 +89,7 @@ ConfigurationSnapshot.take!
 SUITE_LOGGER = Rails.logger
 
 require_relative 'support/parallel_workers'
+require_relative 'support/committed_rows'
 
 module ActiveSupport
   class TestCase
@@ -106,6 +107,7 @@ module ActiveSupport
 
     include InstallTemplates
     include MethodStubs
+    prepend CommittedRows::Check # every test leaves the database as it found it
 
     # The suite's configuration and logger are put back before every test as
     # well as after it: a subclass teardown that raises stops the teardown
