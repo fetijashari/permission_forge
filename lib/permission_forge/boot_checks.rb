@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'warnings'
+require_relative 'api_only_admin'
 
 module PermissionForge
   # What the engine checks while the host app boots: run (from
@@ -142,6 +143,18 @@ module PermissionForge
         # Table doesn't exist yet (pre-migration)
       end
 
+      # The admin screens in a `rails new --api` application: without the
+      # cookies, session and flash middlewares every admin page that renders
+      # a form is a 500 (ApiOnlyAdmin says which ones to add).
+      #
+      # @param application [Rails::Application]
+      def warn_api_only_admin(application = Rails.application)
+        missing = ApiOnlyAdmin.missing_middlewares(application)
+        return if missing.empty?
+
+        Warnings.emit(:api_only_admin, ApiOnlyAdmin.message(missing), severity: :config)
+      end
+
       private
 
       # Connects and pings. `ActiveRecord::Base.connection` alone is not enough:
@@ -178,6 +191,7 @@ module PermissionForge
         warn_api_authorization_gap(config)
         config.tenantless_admin_warning&.then { |message| warn_tenantless_admin(message) }
         QueryScopingWarnings.warn_unscoped_detection_raise_in_production(config)
+        warn_api_only_admin
       end
 
       # AdminUiSettings#tenantless_admin_warning composes the whole line; the

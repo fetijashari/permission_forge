@@ -69,9 +69,9 @@ module PermissionForge
         assert_match(/a `file` ruby block must be valid Ruby/, problems("```ruby file=app/x.rb\nfoo(\n```\n").first)
       end
 
-      # The denial handler was rewritten four times (R2 #68, R3 #66, R4 #74,
-      # R5 #65); each earlier version fails whatever its marker.
-      test 'the four handler versions the rounds went through are refused' do
+      # The denial handler was rewritten five times (R2 #68, R3 #66, R4 #74,
+      # R5 #65, R6 #99); each earlier version fails whatever its marker.
+      test 'the five handler versions the rounds went through are refused' do
         redirect_back = handler("redirect_back fallback_location: root_path, alert: 'Not allowed'")
         assert_includes problems(redirect_back), 'fixture.md:1: redirect_back loops when the refused page is the root (R2 #68)'
 
@@ -85,9 +85,21 @@ module PermissionForge
         assert_includes problems(unguarded),
                         'fixture.md:1: a redirect to the sign-in page must skip the sign-in page itself (request.path != new_session_path) (R5 #65)'
 
-        current = handler("if error.reason == :nil_user_denied && request.path != new_session_path\n      redirect_to new_session_path\n    " \
-                          "else\n      render 'errors/forbidden', status: :forbidden\n    end\n    format.any { head :forbidden }")
+        # The round-5 handler: a signed-in visitor on a public action (nothing resumed the session) is
+        # redirected to sign in, from where SessionsController#new sends them back — a loop.
+        round5 = handler("if error.reason == :nil_user_denied && request.path != new_session_path\n      redirect_to new_session_path\n    " \
+                         "else\n      render 'errors/forbidden', status: :forbidden\n    end\n    format.any { head :forbidden }")
+        assert_equal ['fixture.md:1: a redirect to the sign-in page must resume the session first (!authenticated?): on an action opened ' \
+                      'with allow_unauthenticated_access a signed-in visitor reads as signed out, and SessionsController#new sends them back ' \
+                      '(R6 #99)'], problems(round5)
+
+        current = handler("if error.reason == :nil_user_denied && !authenticated? && request.path != new_session_path\n      " \
+                          "redirect_to new_session_path\n    else\n      render 'errors/forbidden', status: :forbidden\n    end\n    " \
+                          'format.any { head :forbidden }')
         assert_empty problems(current)
+        via_generator = handler("if error.reason == :nil_user_denied && !authenticated? && request.path != new_session_path\n      " \
+                                "request_authentication\n    else\n      render 'errors/forbidden', status: :forbidden\n    end")
+        assert_empty problems(via_generator)
       end
 
       test 'a # => claim is asserted only when it is a literal' do

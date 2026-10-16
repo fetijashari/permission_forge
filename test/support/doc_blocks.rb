@@ -39,16 +39,20 @@ module DocBlocks
                       'bash' => %w[.sh], 'css' => %w[.css], 'html' => %w[.html], 'javascript' => %w[.js],
                       'json' => %w[.json], 'sql' => %w[.sql] }.freeze
 
-  # The denial handler the rounds rewrote four times. Every ruby block that
+  # The denial handler the rounds rewrote five times. Every ruby block that
   # rescues a denial error is held to the version that works in a Rails 8
-  # Turbo app; the four earlier versions fail.
+  # Turbo app; the five earlier versions fail.
   HANDLER = /rescue_from\b.*(?:ActionNotAuthorizedError|NotAuthorizedError)/
+  SIGN_IN_REDIRECT = /redirect_to\s+(?:main_app\.)?new_session_path|\brequest_authentication\b/
   HANDLER_RULES = [
     [/redirect_back\b/, 'redirect_back loops when the refused page is the root (R2 #68)'],
     [/format\.html\s*\{\s*head :forbidden/, 'head :forbidden for HTML leaves the sign-in form on screen (R3 #66)'],
     [/\brender\s+file:/, 'rendering public/403.html gives a static page Turbo reloads into (R4 #74)'],
-    [->(body) { body.match?(/redirect_to\s+(?:main_app\.)?new_session_path/) && !body.match?(/request\.path\s*!=\s*new_session_path/) },
-     'a redirect to the sign-in page must skip the sign-in page itself (request.path != new_session_path) (R5 #65)']
+    [->(body) { body.match?(SIGN_IN_REDIRECT) && !body.match?(/request\.path\s*!=\s*new_session_path/) },
+     'a redirect to the sign-in page must skip the sign-in page itself (request.path != new_session_path) (R5 #65)'],
+    [->(body) { body.match?(SIGN_IN_REDIRECT) && !body.match?(/!\s*authenticated\?/) },
+     'a redirect to the sign-in page must resume the session first (!authenticated?): on an action opened with ' \
+     'allow_unauthenticated_access a signed-in visitor reads as signed out, and SessionsController#new sends them back (R6 #99)']
   ].freeze
 
   SCALAR = /true|false|nil|-?\d+(?:\.\d+)?|:[A-Za-z_]\w*[?!]?|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/

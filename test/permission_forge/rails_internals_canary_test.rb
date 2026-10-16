@@ -113,6 +113,7 @@ module PermissionForge
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
       sandbox: 'application.sandbox?',
       generator_commands: 'Rails::Command::GenerateCommand',
+      lazy_routes: 'application.reload_routes! if application.routes.routes.empty?',
       journey_route: Regexp.union('@route.path.spec', '@route.verb', '@route.defaults', '@route.internal'),
       association_target: Regexp.union('association.target.sort_by!', 'association(:user).target', 'return association.target if'),
       host_translation_default: Regexp.union('human_attribute_name(name, default: MISSING)',
@@ -174,6 +175,7 @@ module PermissionForge
       preloader: 'adapt PermissionHashBuilder#preload',
       sandbox: 'adapt OpenTransaction.sandbox?',
       generator_commands: 'adapt BootChecks.generator_running? (GENERATOR_COMMANDS: what `bin/rails generate` loads before it boots)',
+      lazy_routes: 'adapt ApiOnlyAdmin.mounted? (how a boot check asks for routes Rails draws lazily)',
       journey_route: 'adapt Admin::ControllerCatalog::RoutedAction',
       association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)',
       host_translation_default: 'adapt Admin::FieldLabel.host_translation and Admin::ModelLabel.host_translation (how a host ' \
@@ -1531,6 +1533,42 @@ module PermissionForge
       assert_equal [], result['others'], 'a server, a console or a runner loads no generator command'
       assert_equal %w[Rails::Command::GenerateCommand Rails::Command::DestroyCommand], result['generators']
       assert_equal PermissionForge::BootChecks::GENERATOR_COMMANDS, result['generators']
+    end
+
+    canary_test :lazy_routes,
+                'with eager_load off, Rails 7.2+ draws the routes at their first use (LazyRouteSet): at after_initialize they ' \
+                'are empty (reload_routes_unless_loaded draws nothing before initialized?) and reload_routes! draws them' do
+      script = <<~RUBY
+        require 'json'
+        require 'tmpdir'
+        require 'rails'
+        require 'action_controller/railtie'
+        class Probe < Rails::Application
+          config.root = Dir.mktmpdir('pf_lazy_routes') # not the gem's root: its config/routes.rb is the engine's
+          config.eager_load = false
+          config.secret_key_base = 'x' * 32
+          config.logger = Logger.new(nil)
+          config.active_support.deprecation = :silence
+          routes.append { get '/probe', to: proc { [200, {}, ['ok']] } } # what config/routes.rb would draw
+        end
+        facts = {}
+        ActiveSupport.on_load(:after_initialize, yield: true) do |app|
+          facts['before'] = app.routes.routes.size
+          app.reload_routes! if app.routes.routes.empty?
+          facts['after'] = app.routes.routes.size
+          facts['probe'] = app.routes.routes.any? { |route| route.path.spec.to_s.start_with?('/probe') }
+        end
+        Rails.application.initialize!
+        puts JSON.generate(facts)
+      RUBY
+      output, status = Open3.capture2e(RbConfig.ruby, '-e', script)
+      assert status.success?, output
+      result = JSON.parse(output.lines.reverse.find { |line| line.start_with?('{') })
+
+      assert result['probe'], canary(
+        :lazy_routes, "the routes are still empty after reload_routes! at after_initialize (#{result.inspect})",
+        'ApiOnlyAdmin.mounted? then never sees the engine mounted, and an API-only host gets no api_only_admin warning'
+      )
     end
 
     canary_test :sandbox, 'Rails.application.sandbox?: false outside `rails console --sandbox`' do

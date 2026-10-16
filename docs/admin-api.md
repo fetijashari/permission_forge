@@ -92,6 +92,10 @@ When `api_enabled = false` (the default), all API routes return **404 Not Found*
 
 This 404 is deliberately not the JSON envelope the API answers once it is on: an empty 404 (`head :not_found`, with whatever content type Rails gives it, `text/html` for a plain `curl`) does not reveal that an API exists under the mount while it is off. A client that expects `{ "error": … }` on every answer reads an empty body here; check `api_enabled` first when an endpoint answers 404 to everything.
 
+#### API-only applications
+
+The API works in an application generated with `rails new --api` (`config.api_only = true`) without changes: its controllers answer JSON only, `api_auth` proves the caller, and the CSRF posture is `null_session`, so no cookie, session or flash middleware is needed. `api_base_controller_class` may then name your `ActionController::API` controller. The admin screens are another matter: they need the three middlewares an API-only app leaves out, and the boot says so — see [Admin UI: API-only applications](admin-ui.md#api-only-applications).
+
 #### Who the audit log names for an API change
 
 Every change made through the API is an [audit event](audit-log.md#who-did-it-actor-resolution). Its actor is the first of: `config.audit_actor_resolver` (called with the controller), the current user (`config.current_user_resolver`), else an anonymous `api` actor labelled **"API client"**. `api_auth` answers only yes or no, so it cannot name anyone by itself.
@@ -209,6 +213,7 @@ Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 ca
 - a single assignment or group membership whose `user_id` is missing, is not one user id (`"abc"` for an integer key, `[2]`, an object), or names nobody `user_list_resolver` lists: see [Permission Set Users](#permission-set-users-assign-users-to-sets);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
 - a `permission_set_group_id` that names no group of the current tenant;
+- a record another request saved a moment ago: two requests creating the same assignment, group membership, Resource or field at once both pass the uniqueness validation and the database's unique index refuses the second — the answer is the validation's own message, keyed by its attribute (`{"user_id": ["has already been taken"]}`, `{"name": ["already exists in this permission set"]}`). Through 0.14.1 this was a 500 (`ActiveRecord::RecordNotUnique`). When the index the database names belongs to no validation of the gem's models (an index you added yourself), the message is on `base`;
 - a rule whose `field_name` is not a column of its model (`{"field_name": ["is not a column of Customer"]}`), or a join rule whose `field_accessor_path` names an association the model does not have or one no join can be built through (`{"field_accessor_path": ["names ownr, which is not an association of Customer"]}`): see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name);
 - a string longer than its column: `is too long (at most N characters)`. Only columns that declare a limit are checked — a `string` on MySQL is `varchar(255)` (counted in characters) and a `text` holds 65,535 bytes; on PostgreSQL and SQLite the install's `string` and `text` columns declare none, so nothing is checked there. A Permission Set name keeps its own 255-character rule on every database.
 
@@ -321,6 +326,8 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/clone
 # numbered when taken ("<name> (copy) 2"). Through 0.14.1: "<name> (Copy)".
 ```
 
+**Activation conditions.** `allowed_ips` takes a String (commas, newlines or spaces between the entries) or an Array of Strings; the row stores the entries with commas and answers them as `allowed_ip_list` (an Array of Strings, beside `allowed_ips` in every permission set answer). `allowed_hours_start` / `allowed_hours_end` take an integer 0–23 (or a String of digits), both or neither; `requires_session_flag` a String; `null` clears a condition. Any other shape — an object, a boolean, a number for the list, an array for a flag or an hour — is a 422 keyed by the attribute (`{ "error": { "status": 422, "messages": { "allowed_ips": ["must be a string or an array of strings (IP addresses or CIDR ranges), or null"] } } }`). An entry that is not an address, one hour of the two, or `start == end` is a 422 from the model, keyed the same way. A condition named in the request is never dropped silently.
+
 #### Resources (nested under permission set)
 
 ```bash fragment
@@ -382,7 +389,9 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
 # :generate_fields) and refused with 403 when the resource or its permission
 # set is locked
 # On failure: 422 with a generic message — the underlying exception is logged
-# server-side, never returned to the client
+# server-side, never returned to the client. A Resource named after a constant
+# that is no ActiveRecord model with a table (Kernel, a model whose table is not
+# migrated) is 422 {"name": ["names no model this app can load"]}
 ```
 
 #### Resource Fields (nested under resource)
@@ -491,7 +500,10 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
 # it also lets through the rows whose field is NULL, for "equal", "not_equal",
 # "in" and "not_in". Send "include_nulls": false to keep them out.
 
-# Update a rule
+# Update a rule. A rule written before the current checks (an operator, join
+# type, field name or path this version refuses) can still be switched off
+# ("is_active": false), renamed or given another failure_message: what a rule
+# names is validated only when it changes.
 PATCH /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
 
 # Delete a rule
@@ -569,7 +581,11 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
   }'
 # Response: 200 OK — expires_at is optional (time-bound assignments; same formats
 # as above, an unreadable one is a 422 and changes nothing)
-# { "data": { "assigned": 3, "revoked": 0, "invalidated": 3, "skipped": [99] } }
+# { "data": { "assigned": 3, "revoked": 0, "invalidated": 3, "skipped": [99],
+#             "cache": { "confirmed": true, "process_local": false, "in_request": true, "unconfirmed": 0 } } }
+# "cache" says what the cache store confirmed, whether it lives in each process
+# (a per-process store: the other workers keep their entries), whether the run
+# was inside a request, and how many users the store did not confirm.
 # Ids outside config.user_list_resolver (or naming nobody) are skipped and listed
 # in "skipped" (cast to the user key type, else as sent; [] when none), on assign
 # and revoke alike: someone outside the resolver and an unknown id read the same.
@@ -734,7 +750,7 @@ PermissionForge.configure do |config|
 end
 ```
 
-`page` and `per_page` are read when they are positive whole numbers (a JSON number or digits, e.g. `"3"`). Anything else is ignored rather than refused: a `per_page` of `0`, a negative number, a typo (`abc`, `2abc`, `1.5`), a list or an object is `api_default_per_page`, and such a `page` is the first page. A `per_page` above `api_max_per_page` is that maximum, and a `page` above 2,147,483,647 is that page. `meta.pagination` always says which page and page size were used. Through 0.14.1 a `per_page` of `0` or one that was not a number read as 1, a page of one row.
+`page` and `per_page` are read when they are positive whole numbers (a JSON number or digits, e.g. `"3"`). Anything else is ignored rather than refused: a `per_page` of `0`, a negative number, a typo (`abc`, `2abc`, `1.5`), a list or an object is `api_default_per_page`, and such a `page` is the first page. A `per_page` above `api_max_per_page` is that maximum, and a `page` above 2,147,483,647 is that page. `meta.pagination` always says which page and page size were used. Through 0.14.1 a `per_page` of `0` or one that was not a number read as 1, a page of one row. `page` and `per_page` are read by the same rule as every whole-number parameter of the engine (`ParamShapes#pf_integer_param`): digits or a JSON number inside the allowed range, else the default — never 0, 1 or an error.
 
 To use a custom pagination handler (e.g., Kaminari, will_paginate):
 

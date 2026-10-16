@@ -37,7 +37,7 @@ in — see [Callback order](#callback-order).
 > with a handler that answers an empty 403, **Sign out seems to do nothing** (Turbo keeps the old page,
 > "Signed in as …" still in the header). Exclude them in the initializer:
 >
-> ```ruby
+> ```ruby fragment
 > config.controller_discovery_exclude += %w[sessions passwords]
 > ```
 
@@ -336,10 +336,14 @@ is what resumes the session (`resume_session` sets `Current.session`, and `Curre
 it). A controller that includes the guard after inheriting from it gets the right order. An action
 opened with `allow_unauthenticated_access` skips `require_authentication`, so nothing resumes the
 session there: `Current.user` is `nil` even for a signed-in visitor. The guard then treats them as
-signed out (refused under `action_guard_nil_user_strategy = :deny`: a signed-in visitor is sent
-back to the sign-in form, as if not signed in), and if the guard is skipped
-too, row-level rules and masking follow the nil-user strategies, whose default `:bypass` shows
-every row unmasked. Resume the session on those actions, ahead of the guard:
+signed out — refused under `action_guard_nil_user_strategy = :deny`: with the
+[Handling Denials](row-level-rules.md#rescuing-them-yourself) handler a signed-in visitor gets the
+403 page as if not signed in, and with a handler that sends every signed-out denial to the sign-in
+page (the version documented through 0.14.1) they loop between the two pages, because
+`SessionsController#new` sends a signed-in visitor back — and if the guard is skipped too,
+row-level rules and masking follow the nil-user strategies, whose default `:bypass` shows every
+row unmasked. On every guarded action opened this way, resume the session ahead of the guard
+(required: it is what gives the visitor the page instead of the 403 page):
 
 ```ruby fragment
 class CustomersController < ApplicationController
@@ -352,7 +356,11 @@ end
 `prepend_before_action` puts it ahead of the guard wherever the `include` is; a plain
 `before_action :resume_session` works only when it is declared before the `include`.
 `resume_session` reads the session cookie and never redirects, so a signed-out visitor still
-reaches the action, as `nil`.
+reaches the action, as `nil` — and under `action_guard_nil_user_strategy = :deny` the guard then
+refuses them (the handler sends them to sign in): a guarded action is never public to a
+signed-out visitor, whatever `allow_unauthenticated_access` says. Both variants are driven as
+requests in the test suite's docs app (`test/support/docs_app.rb`): without `resume_session` a
+signed-in visitor gets the 403 page, once; with it, the page.
 
 ## Hiding Buttons
 

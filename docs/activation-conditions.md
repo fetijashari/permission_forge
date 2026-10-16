@@ -63,10 +63,10 @@ ps = PermissionForge::PermissionSet.create!(
 )
 ```
 
-- Supports CIDR notation (`/24`, `/32`, etc.)
-- Multiple ranges separated by commas
-- Invalid CIDRs are silently skipped
-- When `ip` is missing from context, the condition fails (safe default)
+- Entries are IP addresses or CIDR ranges (`/24`, `/32`, IPv6 too), written with commas, newlines or spaces between them; the row stores them with commas (`PermissionSet#allowed_ip_list` reads them back as an Array).
+- Through the API, `allowed_ips` is a String as above or an Array of Strings (`["10.0.0.0/8", "192.168.0.0/16"]`); any other shape is a 422 keyed `allowed_ips`.
+- An entry that is not an address is refused when the row is new or the list changes (`contains "office", which is not an IP address or CIDR range`). A list stored before the check that holds one (or holds no entry at all) **cannot be judged**: a granting set never passes on it, a muting set applies to every request, in every mode. `rake permission_forge:audit` lists such rows under `incomplete_conditions`.
+- When `ip` is missing from the context, the condition fails (a muting set applies in [strict mode](#strict-mode)).
 
 ## Login Hour Restrictions
 
@@ -80,11 +80,10 @@ ps = PermissionForge::PermissionSet.create!(
 )
 ```
 
-- Hours are 0-23 (24-hour format)
-- Start is inclusive, end is exclusive
-- **Supports midnight wrap**: `allowed_hours_start: 22, allowed_hours_end: 6` = 10 PM to 5:59 AM
-- Uses `Time.current` when no `:time` in context (respects `Time.zone`)
-- Both `start` and `end` must be set; if either is nil, the condition passes
+- Hours are 0–23 (24-hour format); start is inclusive, end exclusive.
+- **Supports midnight wrap**: `allowed_hours_start: 22, allowed_hours_end: 6` = 10 PM to 5:59 AM.
+- Uses `Time.current` when no `:time` is in the context (respects `Time.zone`).
+- Both hours or none. A new row (or a changed hour) with one hour of the two, or with `start == end` (an empty window), is refused. A window stored before the check in one of those shapes, or with an hour outside 0–23, **cannot be judged**: a granting set never passes on it (one hour of the two used to pass), a muting set applies to every request. `rake permission_forge:audit` lists such rows under `incomplete_conditions`; the admin's condition sentence names the window as one nobody can judge.
 
 ## Combined Conditions
 
@@ -163,6 +162,8 @@ muting = PermissionForge::PermissionSet.create!(
 # Revokes in the sessions whose flags include 'lockdown' (and, in strict mode, in jobs and the console)
 ```
 
+A conditional muting set whose condition cannot be judged — an IP entry that is not an address, one hour of the two, the same hour twice — applies to every request, whether or not strict mode is on: a lockdown that never locked is the defect. Fix the condition on the set's Conditions tab.
+
 ## Model Methods & Scopes
 
 ```ruby run
@@ -171,7 +172,14 @@ ps.unconditional?  # true if no conditions
 
 PermissionForge::PermissionSet.conditional    # Sets with any condition
 PermissionForge::PermissionSet.unconditional  # Sets with no conditions
+
+ps.allowed_ip_list    # => ["10.0.0.0/8"] — the entries as the engine reads them
+ps.hours_window       # the window as data: set?, wraps?, broken?, include?(hour)
+ps.condition_problems # => [] — or [[:ip_entry, "office"], [:hours_equal, window]] for a row the validation refuses
+ps.conditions_broken? # true when a condition cannot be judged (see above)
 ```
+
+`conditional?` and the `conditional` / `unconditional` scopes agree: a text of blanks is no condition; one hour of the two is one.
 
 ## Backward Compatibility
 
@@ -191,3 +199,5 @@ PermissionForge::Services::PermissionSetConditionEvaluator.call(
 )
 # => true or false   (:ip may also be an IPAddr)
 ```
+
+`PermissionSetConditionEvaluator.broken?(permission_set:)` says whether the set holds a condition nobody can judge (such a set never passes); `unjudgeable?(permission_set:, context:)` adds the conditions the context cannot answer.

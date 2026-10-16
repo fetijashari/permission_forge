@@ -550,6 +550,29 @@ or switch caching off in development (`config.cache_backend = :null if Rails.env
 
 **The same store carries auto-applied masking.** While `auto_apply_masked_attributes` (or `mask_virtual_attributes`) is `:auto`, a process that commits the first `Resource` row for a model tells the others through a token in the cache store ([Masked attributes](masked-attributes.md#how-other-processes-learn-about-a-new-model-maskingsync)). A per-process store (`:memory`, a `:memory_store`) or one that keeps nothing (`:null`, a `:null_store`) carries it to no other process: a `Customer` row created from `bin/rails runner` left the server's `Customer` unmasked — emails in clear while `masked_field?` said `true` — until a restart. In development the server therefore re-reads the `Resource` names from the database instead, one query at most every 2 seconds, so such a model is masked at its next request; no other environment runs that query. The development boot says so when the store is one of these, and production warns that a model first named in another process stays unmasked there until a restart. The remedies: a store every process shares (as above), or `include PermissionForge::Concerns::MaskedAttributes` in each model that holds personal data with `auto_apply_masked_attributes = false` (the recommended production setup, [below](masked-attributes.md#recommended-in-production-include-the-concern-explicitly)), or a list of models in `auto_apply_masked_attributes`.
 
+### What reports the cache scope
+
+Every operation that clears cached permissions reports one outcome — whether the store confirmed the removal
+(`confirmed`), whether the store lives in each process (`process_local`: `cache_backend = :memory`, or `Rails.cache`
+a `:memory_store`), where it ran (`in_request`: inside a request the admin or the API served) and how many users the
+store did not confirm (`unconfirmed`) — the same way everywhere:
+
+| Operation | Terminal | Admin flash | API | Audit event |
+|---|---|---|---|---|
+| `rake permission_forge:cache:clear` / `PermissionCacheClearer` | "Cached permissions removed", "Cache scope", "Ran in" lines | — | — | `cache.cleared` |
+| `rake permission_forge:erasure` / Erase / `DataSubjectErasure` | same | Erased… (+ scope) | — | `erasure.performed` |
+| `rake permission_forge:cleanup_expired_assignments` / Home Clean-up / `ExpiredAssignmentCleaner` | same | Removed N expired assignments (+ scope) | — | `cleanup.expired_assignments` |
+| Withdraw consent / `ConsentWithdrawalHandler` | — | Removed N Permission Sets… (+ scope) | — | `consent.withdrawn` |
+| Bulk assign / revoke (admin, API) / `BulkPermissionSetAssignment` | — | Assigned/Revoked… (+ scope) | `cache: { confirmed, process_local, in_request, unconfirmed }` | the per-row `assignment.*` events |
+| Refresh cached permissions, Remove all access | — | (+ scope) | — | — |
+
+In Ruby the services answer the outcome under `cache:` (a Hash with the four keys); `confirmed` is `nil` inside a
+transaction of yours (the invalidation follows its commit). On a per-process store a run from a rake task, a runner,
+a console or a job clears nothing in the web and job processes; a run from an admin or API request clears the serving
+process's store only — the other workers and the job processes keep theirs until they restart or the entries expire
+(`cache_ttl`). A host controller that calls a service directly, without an audit request context, is reported as a
+process of its own (the answer never claims more than the servers saw).
+
 ### Where warnings appear
 
 Every boot and configuration warning of the gem — the per-process cache above, conditional sets with an empty request
@@ -782,7 +805,7 @@ Your User model needs no `uuid` column: `uuid` is then `nil`, and `permission_se
 
 **Default:** `{}`
 
-**Custom mask styles.** Extra masking styles defined in code, offered next to the built-in ones.
+**Custom mask styles.** Extra masking styles defined in code, offered next to the built-in ones. Removing a strategy that field rows still name does not break reads: those fields are masked fully until you pick another strategy in the admin (the rows stay editable), and `rake permission_forge:audit` lists them under `unknown_mask_strategies`.
 
 #### ignored_fields
 

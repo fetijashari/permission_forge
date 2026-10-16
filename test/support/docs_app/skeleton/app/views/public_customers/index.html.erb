@@ -1,0 +1,9 @@
+<% content_for :title, "Customers (public index)" %>
+
+<h1>Customers</h1>
+
+<div id="customers">
+  <% @customers.each do |customer| %>
+    <%= render customer %>
+  <% end %>
+</div>

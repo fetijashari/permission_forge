@@ -26,9 +26,11 @@ module PermissionForge
         'action_dispatch' => 'config.action_dispatch.rescue_responses, a Rails setting',
         'active_support' => 'config.active_support.*, Rails settings',
         'after_initialize' => 'config.after_initialize, a Rails hook',
+        'api_only' => 'config.api_only, a Rails setting (rails new --api)',
         'cache_store' => 'config.cache_store in config/environments, a Rails setting',
         'filter_parameters' => 'Rails.application.config.filter_parameters',
         'load_defaults' => 'config.load_defaults, Rails',
+        'middleware' => 'config.middleware.use, the Rails middleware stack',
         'rake_eager_load' => 'config.rake_eager_load, Rails',
         'to_prepare' => 'config.to_prepare, a Rails hook'
       }.freeze

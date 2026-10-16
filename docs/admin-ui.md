@@ -147,6 +147,20 @@ end
 | `true` (default) | No | **401 Unauthorized** (locked) |
 | `false` | N/A | No auth from gem — use `base_controller_class` or route constraints |
 
+### API-only applications
+
+An application generated with `rails new --api` (`config.api_only = true`) has no cookies, session or flash middleware, and its `ApplicationController` is an `ActionController::API`. The JSON [admin API](admin-api.md) works there as it is. The admin screens do not: they are plain Rails pages with forms, so every page raises until the three middlewares are back — first `NameError: undefined local variable or method 'flash'` (the flash's request methods are loaded with its middleware), then `ActionDispatch::Request::Session::DisabledSessionError` for the CSRF token. The boot says so (`[PermissionForge] The application is API-only … the admin screens need ActionDispatch::Cookies, ActionDispatch::Session::CookieStore, ActionDispatch::Flash …`) whenever the engine is mounted in such an app. Add them in `config/application.rb`, in this order:
+
+```ruby fragment
+# config/application.rb, inside the Application class
+config.api_only = true
+config.middleware.use ActionDispatch::Cookies
+config.middleware.use ActionDispatch::Session::CookieStore
+config.middleware.use ActionDispatch::Flash
+```
+
+Option A (HTTP Basic auth) then works as in any app, and so does Option B with a base controller of your own that inherits from `ActionController::Base` (not from your `ActionController::API` application controller: the admin renders views). Your own controllers stay API controllers; nothing else changes for them. The test suite drives this host (`test/support/docs_app.rb api_only`): the API answers, the admin names the middlewares, and behind them an admin page and a POST answer as in a full application.
+
 ---
 
 ## How It Works
@@ -184,6 +198,8 @@ The screens are thin: the logic lives in `PermissionForge::Admin::*` read models
 `Admin::FieldDetail` (the field drawer), `Admin::AuditEventDetail` (one audit event) and `Admin::RuleBuilder` (the rule builder) hold the logic of the three heaviest pages; the templates only draw them.
 
 ### Accessibility and markup
+
+**Phone width.** The admin holds at 360px. A grid too wide for the screen (the Permission Set matrix, the set, assignment and audit tables, a person's effective access) scrolls sideways inside its own frame — a region the Tab key reaches, named for a screen reader, with a shadow at the edge that has more — and never the page. A placeholder is a short hint; the sentence is under the control. Every bundled locale is measured in a browser before a release (`test/browser/layout_probe.js`, the `browser` CI job) and the structure is checked in every test run (`test/permission_forge/html/layout_lint_test.rb`). A host theme that overrides `.pf-scroll-x` keeps `position: relative` on it: an absolutely positioned descendant otherwise escapes the frame and widens the page.
 
 - Every page has one `h1`: a drawer or confirmation title is the page's `h1` when it stands alone (an `h2` inside the dialog), and the Permission Set and Group pages carry a screen-reader-only `h1` with the name. Section headings go through `pf_section_heading` (`h2` standalone, `h3` in a dialog), so levels never skip.
 - Filter chips that are links mark the current one with `aria-current`; links in footers and hints are underlined, so a link is never told apart by colour alone; every state has a glyph and a word.
@@ -367,6 +383,10 @@ Yes. The admin UI is optional: if you don't mount the engine, its pages are not 
 ### Will this conflict with my app's CSS/JS?
 
 No. The admin renders in its own layout, serves its own namespaced CSS/JS (`pf-*` classes, `data-pf-*` attributes, `pf_*` cookies scoped to the mount path), and doesn't touch your asset pipeline.
+
+### "Another request saved the same thing a moment ago."
+
+Two admins (or an admin and the API) created the same Resource, field, assignment or group membership at the same moment; the database kept the first. You are sent back to the page the form was on with that message, and nothing of yours was changed — the page shows what is there now. (Through 0.14.1 this was an error page.)
 
 ### I'm getting 401 Unauthorized — what's wrong?
 
