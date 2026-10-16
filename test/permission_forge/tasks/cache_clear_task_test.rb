@@ -46,7 +46,9 @@ module PermissionForge
       out, err = capture_io { Rake::Task['permission_forge:cache:clear'].invoke }
 
       assert_empty err
-      assert_match(/by key pattern .*The cache is cold: each user rebuilds on their next request\./, out)
+      assert_match(/\ARemoved every cached permission hash by key pattern:\n/, out)
+      assert_includes out, "Cached permissions removed: #{PermissionForge::RakeOutput::CONFIRMED_HERE}"
+      assert_not_includes out, 'The cache is cold', 'one outcome, one message: the scope line says what it means'
       assert_nil PermissionForge.cache.read(@user.permission_cache_key)
       assert_audit_event('cache.cleared', actor_type: 'system', actor_label: 'ops: TCK-12', source: 'rake', reason: 'deploy 0.14',
                                           data: { 'strategy' => 'pattern', 'unconfirmed' => 0 })
@@ -57,22 +59,26 @@ module PermissionForge
 
     # Packaging pre-release review N11 (PKG-N11): on a per-process store the
     # task said it removed everything, but only its own store was emptied.
+    # The scope line is the one Cache::Outcome every cache-touching task
+    # prints (RakeOutput).
     test 'PKG-N11 on a per-process store it says that only its own store was cleared' do
+      scope = "Cache scope: #{PermissionForge::RakeOutput::PROCESS_LOCAL_NOTE}"
       out, = capture_io { Rake::Task['permission_forge:cache:clear'].invoke }
-      assert_match(/Only the cache store of this rake process was cleared/, out)
+      assert_includes out, scope
 
       PermissionForge.configuration.cache_backend = ActiveSupport::Cache::MemoryStore.new
       PermissionForge.configuration.reset_cache_store!
       Rake::Task['permission_forge:cache:clear'].reenable
       out, = capture_io { Rake::Task['permission_forge:cache:clear'].invoke }
-      assert_match(/Only the cache store of this rake process was cleared/, out, ':memory_store')
+      assert_includes out, scope, ':memory_store'
 
       directory = Dir.mktmpdir
       PermissionForge.configuration.cache_backend = ActiveSupport::Cache::FileStore.new(directory)
       PermissionForge.configuration.reset_cache_store!
       Rake::Task['permission_forge:cache:clear'].reenable
       out, = capture_io { Rake::Task['permission_forge:cache:clear'].invoke }
-      assert_no_match(/Only the cache store/, out, 'a store the processes share')
+      assert_includes out, "Cache scope: #{PermissionForge::RakeOutput::SHARED_NOTE}", 'a store the processes share'
+      assert_not_includes out, 'this process only'
     ensure
       PermissionForge.configuration.cache_backend = :memory
       PermissionForge.configuration.reset_cache_store!

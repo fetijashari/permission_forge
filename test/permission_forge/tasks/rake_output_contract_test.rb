@@ -146,8 +146,9 @@ module PermissionForge
         assert_includes out, 'Rae Rake'
         assert_no_match PEOPLE_AS_IDS, out
 
+        create_permission_set_user(user: @user, permission_set: create_permission_set(name: 'Old Set')).update_columns(created_at: 100.days.ago)
         out, status = run_task('permission_forge:stale_assignments').values_at(0, 2)
-        assert_equal 1, status, 'a permanent assignment never reviewed is stale'
+        assert_equal 1, status, 'a permanent assignment not reviewed for 100 days is stale'
         assert_includes out, 'Rae Rake'
         assert_no_match PEOPLE_AS_IDS, out
       end

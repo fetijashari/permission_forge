@@ -13,12 +13,14 @@ namespace :permission_forge do
       task_name = 'permission_forge:cache:clear'
       result = PermissionForge::RakeAudit.changing(task_name) { PermissionForge::Services::PermissionCacheClearer.call }
       PermissionForge::RakeAudit.log(task_name, result.map { |key, value| "#{key}=#{value.inspect}" }.join(' '))
+      # what it means for the users is the outcome's "Cache scope" line (a shared store: every user rebuilds on their
+      # next request; a per-process store: this process's only), never a second claim here
       done = if result[:strategy] == :pattern
-               'Removed every cached permission hash by key pattern.'
+               'Removed every cached permission hash by key pattern:'
              else
-               'Invalidated the cached permissions of every user.'
+               'Invalidated the cached permissions of every user:'
              end
-      PermissionForge::RakeOutput.report("#{done} The cache is cold: each user rebuilds on their next request.", result)
+      PermissionForge::RakeOutput.report(done, result)
     end
   end
 end

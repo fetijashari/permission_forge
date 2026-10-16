@@ -18,7 +18,7 @@ module PermissionForge
     # fails: a new cache-touching operation is covered here or not at all.
     class CacheScopeEventsTest < Html::AdminTestCase
       # Each block runs as the test (instance_exec): the fixture helpers and
-      # `person` are its own.
+      # `person` are its own. Each returns the service's result.
       PRODUCERS = {
         'erasure.performed' => -> { PermissionForge::Services::DataSubjectErasure.call(user: person, actor: 'dpo') },
         'consent.withdrawn' => lambda do
@@ -29,12 +29,18 @@ module PermissionForge
         'cleanup.expired_assignments' => lambda do
           expiring = create_permission_set(name: "Temp #{SecureRandom.hex(2)}")
           create_permission_set_user(user: person, permission_set: expiring, expires_at: 1.day.from_now)
-          travel_to(2.days.from_now) { PermissionForge::Services::ExpiredAssignmentCleaner.call(actor: 'ops') }
+          result = nil
+          travel_to(2.days.from_now) { result = PermissionForge::Services::ExpiredAssignmentCleaner.call(actor: 'ops') }
+          result
         end,
         'cache.cleared' => -> { PermissionForge::Services::PermissionCacheClearer.call(actor: 'ops') }
       }.freeze
 
-      SUFFIX_KEY = 'permission_forge.audit_log.cache_scope.process_local'
+      # The suffix by where the operation ran (Cache::Outcome#in_request):
+      # a process of its own (a runner, a rake task, the test) or a request.
+      SUFFIX_KEYS = { false => 'permission_forge.audit_log.cache_scope.own_process',
+                      true => 'permission_forge.audit_log.cache_scope.server_process' }.freeze
+      OUTCOME_KEYS = %w[cache_confirmed process_local in_request unconfirmed].freeze
 
       attr_reader :person
 
@@ -57,22 +63,27 @@ module PermissionForge
         { without_producer: flagged - PRODUCERS.keys, not_flagged: PRODUCERS.keys - flagged }
       end
 
+      # The newest event of the name in the ambient tenant (a tenant-less
+      # summary — cache.cleared's totals — is not on the tenant's log).
       def newest(event)
-        PermissionForge::AuditEvent.unscoped.where(event: event).order(:id).last
+        PermissionForge::AuditEvent.where(event: event).order(:id).last
       end
 
+      # @return [Array(AuditEvent, Hash)] the event produced and the service's result
       def produce(event)
         before = PermissionForge::AuditEvent.unscoped.maximum(:id) || 0
-        instance_exec(&PRODUCERS.fetch(event))
+        result = instance_exec(&PRODUCERS.fetch(event))
         produced = newest(event)
         assert produced && produced.id > before, "#{event}: the producer recorded no such event"
-        produced
+        assert_kind_of Hash, result[:cache], "#{event}: the service answers no cache: outcome (#{result.inspect})"
+        [produced, result]
       end
 
+      # The detail page's heading is the sentence.
       def sentence_of(event, locale:)
         get pf("/audit/#{event.uuid}"), params: { locale: locale }
         assert_response :success
-        css_select('.pf-audit-event__sentence').map { |node| node.text.squish }.join(' ')
+        css_select('h1').map { |node| node.text.squish }.join(' ')
       end
 
       test 'the flagged events and PRODUCERS name the same operations' do
@@ -89,37 +100,61 @@ module PermissionForge
       end
 
       PRODUCERS.each_key do |name|
-        test "#{name} on the suite's memory store says process-local, with the outcome keys, in every locale" do
-          event = produce(name)
+        # Run from the test (a process of its own, like a runner): the event
+        # and the result say process-local, and the sentence says every web
+        # and job process kept theirs.
+        test "#{name} on the suite's memory store says process-local in the event and the result, in every locale" do
+          event, result = produce(name)
 
+          OUTCOME_KEYS.each { |key| assert event.data.key?(key), "#{name}: no #{key} in #{event.data.keys}" }
           assert_equal true, event.data['process_local'], event.data.inspect
-          assert event.data.key?('cache_confirmed'), "#{name}: no cache_confirmed in #{event.data.keys}"
-          assert event.data.key?('unconfirmed'), "#{name}: no unconfirmed in #{event.data.keys}"
+          assert_equal false, event.data['in_request'], event.data.inspect
+          assert_equal true, result[:cache][:process_local], "the result's cache outcome: #{result[:cache].inspect}"
+          assert_equal false, result[:cache][:in_request]
 
           PermissionForge::BUNDLED_LOCALES.each do |locale|
-            suffix = I18n.t(SUFFIX_KEY, locale: locale, raise: true)
+            suffix = I18n.t(SUFFIX_KEYS.fetch(false), locale: locale, raise: true)
             assert_includes sentence_of(event, locale: locale), suffix, "#{name} in #{locale}"
           end
         end
 
-        test "#{name} on a shared store says process_local false and reads without the suffix" do
+        # Run inside a request the admin served (the audit context says so):
+        # this server process did see it, so the sentence names the other
+        # web workers and the job processes, never "the web processes".
+        test "#{name} from an admin request says process-local for the other processes only" do
+          event, result = PermissionForge::Audit::Context.with(source: 'admin_ui') { produce(name) }
+
+          assert_equal true, event.data['process_local']
+          assert_equal true, event.data['in_request'], event.data.inspect
+          assert_equal true, result[:cache][:in_request]
+          sentence = sentence_of(event, locale: :en)
+          assert_includes sentence, I18n.t(SUFFIX_KEYS.fetch(true), locale: :en)
+          assert_not_includes sentence, 'the web and job processes kept theirs'
+        end
+
+        test "#{name} on a shared store says process_local false and reads without a suffix" do
           Dir.mktmpdir do |dir|
             PermissionForge.configuration.cache_backend = ActiveSupport::Cache::FileStore.new(dir)
             PermissionForge.configuration.reset_cache_store!
 
-            event = produce(name)
+            event, result = produce(name)
 
             assert_equal false, event.data['process_local'], event.data.inspect
-            assert_not_includes sentence_of(event, locale: :en), I18n.t(SUFFIX_KEY, locale: :en)
+            assert_equal false, result[:cache][:process_local]
+            sentence = sentence_of(event, locale: :en)
+            SUFFIX_KEYS.each_value { |key| assert_not_includes sentence, I18n.t(key, locale: :en) }
           end
         end
       end
 
-      test 'the suffix is one sentence per locale, with no interpolation' do
+      test 'each suffix is one sentence per locale, with no interpolation, and the two differ' do
         PermissionForge::BUNDLED_LOCALES.each do |locale|
-          suffix = I18n.t(SUFFIX_KEY, locale: locale, raise: true)
-          assert_no_match(/%\{/, suffix)
-          assert suffix.end_with?('.'), "#{locale}: #{suffix.inspect}"
+          suffixes = SUFFIX_KEYS.values.map { |key| I18n.t(key, locale: locale, raise: true) }
+          suffixes.each do |suffix|
+            assert_no_match(/%\{/, suffix)
+            assert suffix.end_with?('.'), "#{locale}: #{suffix.inspect}"
+          end
+          assert_equal 2, suffixes.uniq.size, locale
         end
       end
     end

@@ -55,6 +55,22 @@ module PermissionForge
         @process_local
       end
 
+      # Whether the operation runs inside a request a server process serves:
+      # the audit context says it came from the admin or the API. A rake
+      # task, a runner, a console, a job or a service called with no such
+      # context is a process of its own (a host controller that calls a
+      # service without an audit request context counts as one too: the
+      # answer never claims more than the servers saw).
+      #
+      # @return [Boolean]
+      def in_request?
+        @in_request = REQUEST_SOURCES.include?(PermissionForge::Audit::Source.current) if @in_request.nil?
+        @in_request
+      end
+
+      # The audit sources of a request a server process serves.
+      REQUEST_SOURCES = %w[admin_ui api].freeze
+
       # Those of `user_ids` whose invalidation the store confirmed.
       #
       # @param user_ids [Array]
@@ -68,7 +84,7 @@ module PermissionForge
       #
       # @return [Outcome]
       def pending
-        Outcome.deferred(process_local: process_local?)
+        Outcome.deferred(process_local: process_local?, in_request: in_request?)
       end
 
       # @param user_ids [Array, nil] the users invalidated, to count the
@@ -81,7 +97,7 @@ module PermissionForge
         return pending if deferred
 
         unconfirmed ||= count_unconfirmed(user_ids)
-        Outcome.new(confirmed: unconfirmed.zero?, process_local: process_local?, unconfirmed: unconfirmed)
+        Outcome.new(confirmed: unconfirmed.zero?, process_local: process_local?, unconfirmed: unconfirmed, in_request: in_request?)
       end
 
       private

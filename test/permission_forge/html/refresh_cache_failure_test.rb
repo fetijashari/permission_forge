@@ -8,6 +8,9 @@ module PermissionForge
     # The actions on a person's page that clear cached permissions — refresh,
     # erase, withdraw consent, remove all — say what happened: the cache store
     # may not confirm the removal, and the old entry is then still served.
+    # The store here is a MemoryStore, so every message also says that the
+    # other web workers and the job processes kept theirs (flash.cache_process_local:
+    # the one Cache::Outcome, CacheConfirmation#cache_flash).
     class RefreshCacheFailureTest < AdminTestCase
       setup do
         @store = PermissionForge::Cache::FailingStore.new
@@ -20,12 +23,28 @@ module PermissionForge
         PermissionForge.configuration.reset_cache_store!
       end
 
+      # The flash text for a people key, with the process-local scope appended.
+      def people_flash(key, **)
+        "#{I18n.t("permission_forge.flash.people.#{key}", **)} #{I18n.t('permission_forge.flash.cache_process_local')}"
+      end
+
       test 'a refresh the store confirmed is announced as done' do
         post pf("/people/#{@ana.id}/refresh_cache")
 
         assert_redirected_to pf("/people/#{@ana.id}")
-        assert_equal I18n.t('permission_forge.flash.people.cache_refreshed', name: 'Ana Krasniqi'), flash[:notice]
+        assert_equal people_flash(:cache_refreshed, name: 'Ana Krasniqi'), flash[:notice]
         assert_nil flash[:alert]
+      end
+
+      test 'on a shared store the message carries no scope' do
+        Dir.mktmpdir do |dir|
+          PermissionForge.configuration.cache_backend = ActiveSupport::Cache::FileStore.new(dir)
+          PermissionForge.configuration.reset_cache_store!
+
+          post pf("/people/#{@ana.id}/refresh_cache")
+
+          assert_equal I18n.t('permission_forge.flash.people.cache_refreshed', name: 'Ana Krasniqi'), flash[:notice]
+        end
       end
 
       test 'a refresh the store did not confirm is announced as failed' do
@@ -35,7 +54,7 @@ module PermissionForge
 
         assert_redirected_to pf("/people/#{@ana.id}")
         assert_nil flash[:notice]
-        assert_equal I18n.t('permission_forge.flash.people.cache_refresh_failed', name: 'Ana Krasniqi'), flash[:alert]
+        assert_equal people_flash(:cache_refresh_failed, name: 'Ana Krasniqi'), flash[:alert]
 
         @store.up!
         follow_redirect!
@@ -47,7 +66,7 @@ module PermissionForge
         post pf("/people/#{@ana.id}/erasure"), params: { confirmation: 'Ana Krasniqi' }
 
         assert_redirected_to pf('/people')
-        assert_equal I18n.t('permission_forge.flash.people.erased', name: 'Ana Krasniqi'), flash[:notice]
+        assert_equal people_flash(:erased, name: 'Ana Krasniqi'), flash[:notice]
         assert_nil flash[:alert]
       end
 
@@ -61,7 +80,7 @@ module PermissionForge
         end
 
         assert_redirected_to pf('/people')
-        assert_equal I18n.t('permission_forge.flash.people.erased', name: 'Ana Krasniqi'), flash[:notice]
+        assert_equal people_flash(:erased, name: 'Ana Krasniqi'), flash[:notice]
         assert_nil flash[:alert]
       end
 
@@ -73,7 +92,7 @@ module PermissionForge
         assert_redirected_to pf('/people')
         assert_not PermissionForge::PermissionSetUser.exists?(@assignment.id)
         assert_nil flash[:notice]
-        assert_equal I18n.t('permission_forge.flash.people.erased_cache_kept', name: 'Ana Krasniqi'), flash[:alert]
+        assert_equal people_flash(:erased_cache_kept, name: 'Ana Krasniqi'), flash[:alert]
 
         @store.up!
         follow_redirect!
@@ -89,7 +108,7 @@ module PermissionForge
         create_permission_set_user(user: @bo, permission_set: gated)
 
         post pf("/people/#{@bo.id}/consent"), params: { flag: 'marketing_consent' }
-        assert_equal I18n.t('permission_forge.flash.people.consent_withdrawn', count: 1, flag: 'marketing_consent'), flash[:notice]
+        assert_equal people_flash(:consent_withdrawn, count: 1, flag: 'marketing_consent'), flash[:notice]
 
         @store.down!
         reset! # a new session: the notice above is not carried along
@@ -97,7 +116,7 @@ module PermissionForge
 
         assert_not PermissionForge::PermissionSetUser.exists?(user: @ana, permission_set: gated)
         assert_nil flash[:notice]
-        assert_equal I18n.t('permission_forge.flash.people.consent_withdrawn_cache_kept', count: 1, flag: 'marketing_consent'), flash[:alert]
+        assert_equal people_flash(:consent_withdrawn_cache_kept, count: 1, flag: 'marketing_consent'), flash[:alert]
       end
 
       test 'withdrawing a consent the person holds nothing through stays a plain notice, also with the store down' do
@@ -107,7 +126,7 @@ module PermissionForge
 
         post pf("/people/#{@bo.id}/consent"), params: { flag: 'marketing_consent' }
 
-        assert_equal I18n.t('permission_forge.flash.people.consent_withdrawn', count: 0, flag: 'marketing_consent'), flash[:notice]
+        assert_equal people_flash(:consent_withdrawn, count: 0, flag: 'marketing_consent'), flash[:notice]
         assert_nil flash[:alert]
       ensure
         PermissionForge.configuration.admin_session_flags = flags
@@ -117,7 +136,7 @@ module PermissionForge
         create_permission_set_user(user: @bo, permission_set: @set)
 
         delete pf("/people/#{@bo.id}/remove_all")
-        assert_equal I18n.t('permission_forge.flash.people.removed_all', count: 1, name: 'Bo Berisha'), flash[:notice]
+        assert_equal people_flash(:removed_all, count: 1, name: 'Bo Berisha'), flash[:notice]
 
         @store.down!
         reset!
@@ -125,7 +144,7 @@ module PermissionForge
 
         assert_equal 0, PermissionForge::PermissionSetUser.where(user: @ana).count
         assert_nil flash[:notice]
-        assert_equal I18n.t('permission_forge.flash.people.removed_all_cache_kept', count: 1, name: 'Ana Krasniqi'), flash[:alert]
+        assert_equal people_flash(:removed_all_cache_kept, count: 1, name: 'Ana Krasniqi'), flash[:alert]
 
         @store.up!
         follow_redirect!
@@ -145,14 +164,14 @@ module PermissionForge
         end
 
         post pf("/people/#{@ana.id}/refresh_cache")
-        assert_equal I18n.t('permission_forge.flash.people.cache_refreshed', name: 'Ana Krasniqi'), flash[:notice],
+        assert_equal people_flash(:cache_refreshed, name: 'Ana Krasniqi'), flash[:notice],
                      'nothing failed: the override answered false'
 
         own.write("own:#{@ana.id}", 1)
         @store.down!
         reset!
         post pf("/people/#{@ana.id}/refresh_cache")
-        assert_equal I18n.t('permission_forge.flash.people.cache_refresh_failed', name: 'Ana Krasniqi'), flash[:alert],
+        assert_equal people_flash(:cache_refresh_failed, name: 'Ana Krasniqi'), flash[:alert],
                      'the store is down: the override answered true'
         assert_nil flash[:notice]
       ensure

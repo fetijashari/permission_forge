@@ -4,7 +4,7 @@ namespace :permission_forge do
   # Exits 1 when it finds stale assignments, 2 when THRESHOLD_DAYS is not a
   # number of days (rather than reading it as 0, which flags everything).
   # People are named as the admin names them (RakeOutput.people).
-  desc 'Find permanent assignments not reviewed within THRESHOLD_DAYS, by default admin_stale_assignment_days. ' \
+  desc 'Find permanent assignments not reviewed in THRESHOLD_DAYS, by default admin_stale_assignment_days. ' \
        'Exits 1 when it finds any. ACTOR= names who ran it, REASON= why (recorded as report.generated).'
   task stale_assignments: :environment do
     task_name = 'permission_forge:stale_assignments'

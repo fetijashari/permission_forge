@@ -176,8 +176,11 @@ sq:
         'false': Jo
         'true': Po
       cache_scope:
-        process_local: 'Lejet e ruajtura në cache u pastruan vetëm në procesin e vet
+        own_process: 'Lejet e ruajtura në cache u pastruan vetëm në procesin e vet
           (një ruajtje në memorie): proceset e uebit dhe të punëve i mbajtën të tyret.'
+        server_process: 'Lejet e ruajtura në cache u pastruan vetëm në këtë proces
+          të serverit (një ruajtje në memorie): punëtorët e tjerë të uebit dhe proceset
+          e punëve i mbajtën të tyret.'
       categories:
         access: Qasje
         admin: Administrim
@@ -424,8 +427,8 @@ sq:
             që lejet e tyre të ruajtura u pastruan. Lejet e vjetra mund të mbeten
             në përdorim derisa të mbarojë jetëgjatësia e cache-it."
       cache_process_local: 'Ruajtja e cache-it jeton vetëm në këtë proces të serverit
-        (një ruajtje në memorie): proceset e tjera të uebit dhe të punëve i mbajnë
-        lejet e tyre të ruajtura derisa të rinisen ose derisa hyrjet të skadojnë.'
+        (një ruajtje në memorie): punëtorët e tjerë të uebit dhe proceset e punëve
+        i mbajnë lejet e tyre të ruajtura derisa të rinisen ose derisa hyrjet të skadojnë.'
       fields:
         acknowledged: Në rregull. “%{field}” nuk do të shënohet më në auditimin e
           privatësisë.

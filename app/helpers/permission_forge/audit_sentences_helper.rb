@@ -34,21 +34,34 @@ module PermissionForge
     # key in each locale, and an event without one (a host's own) still reads
     # as "<actor>: <event name>". Interpolations: actor, record, set, person,
     # group, event, model (a runtime event's model). An event whose cache
-    # work reached its own process's in-memory store only (its
-    # Cache::Outcome: data['process_local']) ends with the one process-local
-    # suffix, whatever the event.
+    # work reached a per-process store (its Cache::Outcome:
+    # data['process_local']) ends with the one cache-scope suffix, whatever
+    # the event: which processes kept their entries depends on where it ran
+    # (data['in_request']).
     def pf_audit_sentence(event, lookups)
       parts = pf_audit_sentence_parts(event, lookups)
       variant = AUDIT_SENTENCE_VARIANTS[event.event]
       variant &&= instance_exec(event, parts, &variant)
       sentence = variant || pf_audit_plain_sentence(event, parts)
-      pf_audit_process_local?(event) ? "#{sentence} #{t('permission_forge.audit_log.cache_scope.process_local')}" : sentence
+      suffix = pf_audit_cache_scope_suffix(event)
+      suffix ? "#{sentence} #{suffix}" : sentence
     end
 
-    # Whether the event's cache work reached its own process's in-memory
-    # store only (data['process_local'], Cache::Base#process_local?).
+    # Whether the event's cache work reached a per-process in-memory store
+    # (data['process_local'], Cache::Base#process_local?).
     def pf_audit_process_local?(event)
       event.data.is_a?(Hash) && event.data['process_local'] == true
+    end
+
+    # The suffix for a per-process store (Cache::Outcome#kept_by): the
+    # operation ran in a server process (the other web workers and the job
+    # processes kept theirs) or in a process of its own (every web and job
+    # process kept theirs — also what an event recorded without
+    # `in_request` reads as).
+    def pf_audit_cache_scope_suffix(event)
+      return unless pf_audit_process_local?(event)
+
+      t("permission_forge.audit_log.cache_scope.#{event.data['in_request'] == true ? 'server_process' : 'own_process'}")
     end
 
     def pf_audit_plain_sentence(event, parts)

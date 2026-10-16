@@ -171,8 +171,11 @@ en:
         'false': 'No'
         'true': 'Yes'
       cache_scope:
-        process_local: 'The cached permissions were cleared in its own process only
+        own_process: 'The cached permissions were cleared in its own process only
           (an in-memory store): the web and job processes kept theirs.'
+        server_process: 'The cached permissions were cleared in this server process
+          only (an in-memory store): the other web workers and the job processes kept
+          theirs.'
       categories:
         access: Access
         admin: Admin
@@ -416,8 +419,8 @@ en:
             confirm that their cached permissions were cleared. The old permissions
             may stay in use until the cache lifetime ends.
       cache_process_local: 'The cache store lives in this server process only (an
-        in-memory store): other web and job processes keep their cached permissions
-        until they restart or the entries expire.'
+        in-memory store): the other web workers and the job processes keep their cached
+        permissions until they restart or the entries expire.'
       fields:
         acknowledged: Got it. “%{field}” won't be flagged in the privacy audit again.
         recommendation_applied: Applied the recommended mask to “%{field}”.

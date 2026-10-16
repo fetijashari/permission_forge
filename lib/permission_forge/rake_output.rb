@@ -38,7 +38,7 @@ module PermissionForge
       'purged' => 'Audit events deleted', 'count' => 'Audit events deleted', 'cutoff' => 'Deleted when older than',
       'period' => 'Retention period', 'period_seconds' => 'Retention period',
       'retention_configured' => 'Retention configured',
-      'cache_confirmed' => 'Cached permissions removed', 'process_local' => 'Cache scope',
+      'cache_confirmed' => 'Cached permissions removed', 'process_local' => 'Cache scope', 'in_request' => 'Ran in',
       'unconfirmed' => 'People the cache store did not confirm'
     }.freeze
 
@@ -49,15 +49,20 @@ module PermissionForge
     PEOPLE_SHOWN = 50
     STRATEGIES = { 'pattern' => 'pattern (the store removed the keys by pattern; users not counted)',
                    'enumerated' => 'enumerated (every user invalidated, in slices)' }.freeze
+    # "Cached permissions removed", by confirmed and by the store's scope: one
+    # outcome reads as one message, never as a success line contradicted by
+    # the scope line.
     CONFIRMED = { true => 'yes (the cache store confirmed it)',
                   false => 'NO — the cache store did not confirm it; the old permissions may be served until cache_ttl',
                   nil => 'not known yet — the invalidation follows the commit of the surrounding transaction' }.freeze
+    CONFIRMED_HERE = 'yes, in this process (its own store confirmed it; see Cache scope)'
     CALLBACK = { true => 'ran', false => 'none configured', nil => 'runs when the surrounding transaction commits' }.freeze
     # The "Cache scope" line of a process-local store (Cache::Outcome#process_local?) and of a shared one.
     PROCESS_LOCAL_NOTE = 'this process only — an in-memory store (cache_backend :memory, or :memory_store) lives in each ' \
                          'process, so the web and job processes keep their cached permissions until they restart or the ' \
                          'entries expire (cache_ttl). Invalidate the users from inside those processes, or restart them.'
-    SHARED_NOTE = 'a shared store — every process sees the change.'
+    SHARED_NOTE = 'a shared store — every process sees the change; each user rebuilds on their next request.'
+    RAN_IN = { true => 'a request served by a web process', false => 'a process of its own (rake, runner, console or job)' }.freeze
     NOT_IN_LIST = 'not in the people list'
 
     module_function
@@ -116,18 +121,22 @@ module PermissionForge
       name == I18n.t('permission_forge.shared.user_fallback', id: user.id) ? 'no name or email on record' : name
     end
 
+    # The outcome's lines: what the store confirmed (in this process, when
+    # the store is process-local), the store's scope, where it ran, and the
+    # unconfirmed count unless the result prints its own.
     def cache_lines(value, data)
       outcome = Cache::Outcome.wrap(value)
-      keys = %w[cache_confirmed process_local]
-      keys << 'unconfirmed' unless data.key?('unconfirmed')
-      outcome.event_data.slice(*keys).map { |key, item| "#{label(key)}: #{format_value(key, item)}" }
+      confirmed = outcome.confirmed? && outcome.process_local? ? CONFIRMED_HERE : CONFIRMED.fetch(outcome.confirmed)
+      lines = ["#{label('cache_confirmed')}: #{confirmed}",
+               "#{label('process_local')}: #{outcome.process_local? ? PROCESS_LOCAL_NOTE : SHARED_NOTE}",
+               "#{label('in_request')}: #{RAN_IN.fetch(outcome.in_request?)}"]
+      lines << "#{label('unconfirmed')}: #{plain(outcome.unconfirmed)}" unless data.key?('unconfirmed')
+      lines
     end
 
     # rubocop:disable Metrics/CyclomaticComplexity, Metrics/MethodLength -- one table of value shapes
     def format_value(key, value)
       case key
-      when 'cache_confirmed' then CONFIRMED.fetch(value)
-      when 'process_local' then value == true ? PROCESS_LOCAL_NOTE : SHARED_NOTE
       when 'callback_invoked' then CALLBACK.fetch(value)
       when 'strategy' then STRATEGIES.fetch(value.to_s, value.to_s)
       when 'users' then value.nil? ? 'not counted (removed by key pattern)' : value.to_s
