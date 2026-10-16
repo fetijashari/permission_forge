@@ -69,15 +69,15 @@ module PermissionForge
       def call
         validate_action!
 
-        deferred = PermissionForge::OpenTransaction.current
-        # what the store confirmed (Cache::Report) — not what a host's override of invalidate_permissions returns
+        # what the store confirmed (Cache::Report) — not what a host's override of invalidate_permissions returns;
+        # pending inside a caller's transaction (Report#deferred?)
         report = PermissionForge::Cache::Report.measure do
           ActiveRecord::Base.transaction { send(ACTION_STRATEGIES.fetch(@action)) }
         end
-        outcome = report.outcome(user_ids: @changed_user_ids, deferred: deferred)
+        outcome = report.outcome(user_ids: @changed_user_ids)
 
         { assigned: @assigned_count, revoked: @revoked_count,
-          invalidated: deferred ? nil : @changed_user_ids.size - outcome.unconfirmed, cache: outcome.to_h }
+          invalidated: report.deferred? ? nil : @changed_user_ids.size - outcome.unconfirmed, cache: outcome.to_h }
       end
 
       private

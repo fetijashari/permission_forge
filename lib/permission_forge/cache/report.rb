@@ -12,6 +12,9 @@ module PermissionForge
     #   outcome = Cache::Report.of { user.invalidate_permissions }        # one user
     #   outcome = Cache::Report.of(user_ids: ids) { ids.each { ... } }   # several: unconfirmed counted per user
     #
+    # Measured inside a caller's transaction the outcome is pending
+    # (#deferred?, the one reading): the invalidations follow its commit.
+    #
     #   report = Cache::Report.new                 # when the summary event is written inside the measured block
     #   report.pending.event_data                  # the scope known in advance, nothing confirmed yet
     #   report.measure { ... }.value
@@ -26,11 +29,9 @@ module PermissionForge
         # Measures the block's cache work.
         #
         # @param user_ids [Array, nil] the users invalidated (nil: one, unnamed)
-        # @param deferred [Boolean, Object] truthy when the invalidation follows
-        #   the caller's transaction: nothing is confirmed yet
-        # @return [Outcome]
-        def of(user_ids: nil, deferred: false, &)
-          measure(&).outcome(user_ids: user_ids, deferred: deferred)
+        # @return [Outcome] pending (#deferred?) inside a caller's transaction
+        def of(user_ids: nil, &)
+          measure(&).outcome(user_ids: user_ids)
         end
 
         # @return [Report] measured; `value` holds what the block returned
@@ -40,12 +41,24 @@ module PermissionForge
       end
 
       # Runs the block, collecting the cache failures reported inside it.
+      # Whether the work waits for a caller's transaction is read here, once,
+      # before the first block (#deferred?).
       #
       # @return [Report] self
       def measure
+        @deferred = PermissionForge::OpenTransaction.current ? true : false if @deferred.nil?
         @collected = Failure.collect { @value = yield }
         self
       end
+
+      # The one reading of "deferred" for every operation that measures its
+      # cache work: a caller's transaction was open when it was measured
+      # (OpenTransaction.current), so the invalidations follow its commit
+      # (the rows' own after_commit, Cache::Settlement) and nothing is
+      # confirmed yet. False before anything was measured.
+      #
+      # @return [Boolean]
+      def deferred? = @deferred == true
 
       # Whether the store lives in this process only — asked once per report.
       #
@@ -97,10 +110,9 @@ module PermissionForge
       #   unconfirmed ones (nil: one unnamed — any failure counts as one)
       # @param unconfirmed [Integer, nil] a count the caller made itself
       #   (PermissionCacheClearer counts by slice)
-      # @param deferred [Boolean, Object] truthy: nothing is confirmed yet
-      # @return [Outcome]
-      def outcome(user_ids: nil, unconfirmed: nil, deferred: false)
-        return pending if deferred
+      # @return [Outcome] pending while #deferred?
+      def outcome(user_ids: nil, unconfirmed: nil)
+        return pending if deferred?
 
         unconfirmed ||= count_unconfirmed(user_ids)
         Outcome.new(confirmed: unconfirmed.zero?, process_local: process_local?, unconfirmed: unconfirmed, in_request: in_request?)

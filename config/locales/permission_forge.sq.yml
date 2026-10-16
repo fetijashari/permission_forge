@@ -226,6 +226,9 @@ sq:
         cache_cleared_unconfirmed: "%{actor} kërkoi të pastrohen lejet e ruajtura
           në cache të çdo përdoruesi, por ruajtja e cache-it nuk e konfirmoi: lejet
           e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it."
+        cache_settled_unconfirmed: 'Lejet e ruajtura në cache të %{person} duhej të
+          pastroheshin pas ndryshimit nga %{actor}, por ruajtja e cache-it nuk e konfirmoi:
+          të vjetrat mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.'
         field_access_limited: "%{actor} lexoi %{record} me këto fusha të fshehura
           ose të maskuara: %{fields}."
         permissions_invalidated_unconfirmed: 'Lejet e ruajtura në cache të %{person}
@@ -255,6 +258,8 @@ sq:
           viewed: "%{actor} pa të dhëna auditimi."
         cache:
           cleared: "%{actor} pastroi lejet e ruajtura në cache të të gjithë përdoruesve."
+          settled: Lejet e ruajtura në cache të %{person} u pastruan pas ndryshimit
+            nga %{actor}.
         cleanup:
           expired_assignments: "%{actor} hoqi caktimet e skaduara."
         consent:

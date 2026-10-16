@@ -37,6 +37,11 @@ module PermissionForge
         next unless pf_audit_cache_unconfirmed?(event)
 
         t('permission_forge.audit_log.sentence_variants.permissions_invalidated_unconfirmed', **parts)
+      },
+      'cache.settled' => lambda { |event, parts|
+        next unless pf_audit_cache_unconfirmed?(event)
+
+        t('permission_forge.audit_log.sentence_variants.cache_settled_unconfirmed', **parts)
       }
     }.freeze
 

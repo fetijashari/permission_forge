@@ -380,6 +380,7 @@ require_relative 'permission_forge/api/schema'
 
 require_relative 'permission_forge/services/concerns/clonable'
 require_relative 'permission_forge/services/concerns/audited_operation'
+require_relative 'permission_forge/services/concerns/settles_cache'
 require_relative 'permission_forge/services/concerns/across_tenants'
 require_relative 'permission_forge/services/bulk_permission_set_assignment'
 require_relative 'permission_forge/services/consent_withdrawal_handler'

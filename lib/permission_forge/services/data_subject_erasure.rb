@@ -94,6 +94,7 @@ module PermissionForge
     class DataSubjectErasure
       include Concerns::AuditedOperation
       include Concerns::AcrossTenants
+      include Concerns::SettlesCache
 
       # The name labels erasure clears, by the count they are reported under.
       LABELS = { actor_labels: :actor_label, record_labels: :record_label }.freeze
@@ -127,6 +128,7 @@ module PermissionForge
         @report = PermissionForge::Cache::Report.new
         removed = ActiveRecord::Base.transaction { remove_and_record }
         outcome = clear_cache
+        settle_cache('erasure', @user, @report) { remove_user_cache }
 
         removed.merge(cache_cleared: outcome.confirmed, callback_invoked: run_callback, cache: outcome.to_h)
       end
@@ -252,20 +254,26 @@ module PermissionForge
       # An invalidation leaves the per-context variants of a user with
       # conditional sets to their TTL (unreachable). They hold the profile,
       # so they are removed as well (Cache::VariantRemoval) — inside the
-      # caller's transaction once it has committed, after the assignments'
-      # own invalidations: until then another request may still cache one
-      # from the rows as they were.
+      # caller's transaction once it has committed (SettlesCache runs the
+      # work again there, measured, and records cache.settled), after the
+      # assignments' own invalidations: until then another request may still
+      # cache one from the rows as they were.
       #
       # @return [PermissionForge::Cache::Outcome] confirmed nil inside an
       #   open transaction, where that is only known at its commit
       def clear_cache
-        transaction = PermissionForge::OpenTransaction.current
         @report.measure do
           invalidate_user
-          PermissionForge::Cache::VariantRemoval.call(**variant_removal) unless transaction
+          PermissionForge::Cache::VariantRemoval.call(**variant_removal) unless @report.deferred?
         end
-        remove_variants_after_commit(transaction) if transaction
-        @report.outcome(deferred: transaction)
+        @report.outcome
+      end
+
+      # The person's cache work after a caller's commit: the invalidation and
+      # every per-context variant.
+      def remove_user_cache
+        invalidate_user
+        PermissionForge::Cache::VariantRemoval.call(**variant_removal)
       end
 
       # The arguments of the person's Cache::VariantRemoval: the keys the
@@ -275,17 +283,6 @@ module PermissionForge
       def variant_removal
         named = @user.respond_to?(:permission_cache_key) ? { ambient_key: @user.permission_cache_key } : {}
         { user_ids: [@user.id], indexed_only: false, **named }
-      end
-
-      # Nothing raises out of the commit: a failure is reported, like every
-      # after-commit invalidation (Cache::Failure).
-      def remove_variants_after_commit(transaction)
-        removal = variant_removal
-        transaction.after_commit do
-          PermissionForge::Cache::VariantRemoval.call(**removal)
-        rescue StandardError => e
-          PermissionForge::Cache::Failure.report(operation: :invalidate, user_id: removal[:user_ids].first, error: e)
-        end
       end
 
       def invalidate_user

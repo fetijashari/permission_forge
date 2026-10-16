@@ -554,24 +554,28 @@ or switch caching off in development (`config.cache_backend = :null if Rails.env
 
 Every operation that clears cached permissions reports one outcome — whether the store confirmed the removal
 (`confirmed`), whether the store lives in each process (`process_local`: `cache_backend = :memory`, or `Rails.cache`
-a `:memory_store`), where it ran (`in_request`: inside a request the admin or the API served) and how many users the
+a `:memory_store`), where it ran (`in_request`: in a web server process — a request the admin or the API served, or any
+code of a server process such as a host controller) and how many users the
 store did not confirm (`unconfirmed`) — the same way everywhere:
 
 | Operation | Terminal | Admin flash | API | Audit event |
 |---|---|---|---|---|
 | `rake permission_forge:cache:clear` / `PermissionCacheClearer` | "Cached permissions removed", "Cache scope", "Ran in" lines | — | — | `cache.cleared` |
-| `rake permission_forge:erasure` / Erase / `DataSubjectErasure` | same | Erased… (+ scope) | — | `erasure.performed` |
+| `rake permission_forge:erasure` / Erase / `DataSubjectErasure` | same | Erased… (+ scope) | — | `erasure.performed`, then `cache.settled` |
 | `rake permission_forge:cleanup_expired_assignments` / Home Clean-up / `ExpiredAssignmentCleaner` | same | Removed N expired assignments (+ scope) | — | `cleanup.expired_assignments` |
-| Withdraw consent / `ConsentWithdrawalHandler` | — | Removed N Permission Sets… (+ scope) | — | `consent.withdrawn` |
+| Withdraw consent / `ConsentWithdrawalHandler` | — | Removed N Permission Sets… (+ scope) | — | `consent.withdrawn`, then `cache.settled` |
 | Bulk assign / revoke (admin, API) / `BulkPermissionSetAssignment` | — | Assigned/Revoked… (+ scope) | `cache: { confirmed, process_local, in_request, unconfirmed }` | the per-row `assignment.*` events |
+| One assignment (assign, change the end, keep, remove, restore, undo), a batch of edits (Review and save) | — | the usual notice, an alert when not confirmed (+ scope) | `POST …/users`, `DELETE …/users/:uuid`: `meta.cache` | the per-row events |
 | Refresh cached permissions, Remove all access | — | (+ scope) | — | — |
 
 In Ruby the services answer the outcome under `cache:` (a Hash with the four keys); `confirmed` is `nil` inside a
-transaction of yours (the invalidation follows its commit). On a per-process store a run from a rake task, a runner,
+transaction of yours (the invalidation follows its commit) — every service the same way (`Cache::Report#deferred?`).
+`erasure.performed` and `consent.withdrawn` are written before the cache work; `cache.settled`, on the same
+correlation id, records what the store answered (after your transaction's commit when there is one). On a per-process store a run from a rake task, a runner,
 a console or a job clears nothing in the web and job processes; a run from an admin or API request clears the serving
 process's store only — the other workers and the job processes keep theirs until they restart or the entries expire
-(`cache_ttl`). A host controller that calls a service directly, without an audit request context, is reported as a
-process of its own (the answer never claims more than the servers saw).
+(`cache_ttl`). A host controller that calls a service directly counts as the serving process too (its process is a
+web server).
 
 ### Where warnings appear
 
