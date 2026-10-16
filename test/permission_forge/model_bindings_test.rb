@@ -67,6 +67,23 @@ module PermissionForge
       Rails.logger = original
     end
 
+    # R2 review, P1-6: models loaded with another tenant model (or none)
+    # are not isolated as configured — access across tenants.
+    test 'a tenant_model mismatch is a SECURITY warning; a user_class one is not' do
+      log = StringIO.new
+      original = Rails.logger
+      Rails.logger = ActiveSupport::Logger.new(log)
+
+      PermissionForge.configure { |config| config.tenant_model = nil }
+      PermissionForge.configuration.tenant_model = @bound[:tenant_model]
+      PermissionForge.configure { |config| config.user_class = 'TextKeyUser' }
+
+      assert_includes log.string, '[PermissionForge] SECURITY warning: config.tenant_model is nil'
+      assert_includes log.string, '[PermissionForge] config.user_class is "TextKeyUser"'
+    ensure
+      Rails.logger = original
+    end
+
     test 'the check loads no model' do
       assert_equal PermissionForge::MODEL_NAMES.size, ModelBindings.loaded_models.size
       assert(ModelBindings.loaded_models.all? { |model| model < ActiveRecord::Base })

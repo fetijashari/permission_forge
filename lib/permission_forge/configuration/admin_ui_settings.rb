@@ -99,7 +99,8 @@ module PermissionForge
         names.select { |_, name| name.to_s.delete_prefix('::') == 'ActionController::Base' }.keys
       end
 
-      # The boot warning for default_admin_controllers_under_tenancy, or nil.
+      # The boot warning for default_admin_controllers_under_tenancy, or nil:
+      # the bare text (Warnings.emit puts the prefix and the severity on).
       #
       # @return [String, nil]
       def tenantless_admin_warning
@@ -112,7 +113,7 @@ module PermissionForge
                       else
                         'Every admin request with no tenant is refused (admin_tenantless_access :deny).'
                       end
-        '[PermissionForge] SECURITY warning: tenant_model is set but ActionController::Base, which sets no ' \
+        'tenant_model is set but ActionController::Base, which sets no ' \
           "tenant, is still the base of #{names.join(' and ')}. #{consequence} Point each at a controller " \
           'that sets the current tenant (or set the tenant in middleware).'
       end

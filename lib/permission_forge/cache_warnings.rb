@@ -48,18 +48,19 @@ module PermissionForge
       cache = PermissionForge.cache
       if cache.process_local?
         Warnings.emit(:cache_process_local,
-                      'WARNING: Using an in-process permission cache in production (cache_backend = :memory, or ' \
-                      'Rails.cache is a :memory_store). Permissions will be inconsistent across Puma workers. ' \
-                      'Configure config.cache_backend = :rails_cache with Redis, Memcached, or SolidCache.')
+                      'Using an in-process permission cache in production (cache_backend = :memory, or ' \
+                      'Rails.cache is a :memory_store). Permissions will be inconsistent across Puma workers: a ' \
+                      'revoked permission stays in use in the other workers until cache_ttl. ' \
+                      'Configure config.cache_backend = :rails_cache with Redis, Memcached, or SolidCache.', severity: :security)
       end
       return unless unannounced_masking?(cache)
 
       Warnings.emit(:cache_unannounced_masking,
-                    "WARNING: #{masking_setting} takes its models from the Resource rows, but the cache store is " \
+                    "#{masking_setting} takes its models from the Resource rows, but the cache store is " \
                     "#{store_description(config, cache)}: it cannot tell the other processes that a Resource row " \
                     'names a new model. A model first named by a row committed in another process (another ' \
                     'worker, a console, a rake task) stays unmasked in this process until it restarts. ' \
-                    "#{MASKING_REMEDIES}")
+                    "#{MASKING_REMEDIES}", severity: :security)
     end
 
     # Rails 8.0+ generates `config.cache_store = :memory_store` for

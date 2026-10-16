@@ -218,11 +218,10 @@ module PermissionForge
         QueryScopingWarnings.warn_unscoped_detection_raise_in_production(config)
       end
 
-      # AdminUiSettings#tenantless_admin_warning composes the whole line; the
-      # emitter puts the prefix on.
+      # AdminUiSettings#tenantless_admin_warning is the text; the emitter
+      # puts the prefix on.
       def warn_tenantless_admin(message)
-        Warnings.emit(:tenantless_admin, message.delete_prefix(Warnings::PREFIX + Warnings::SEVERITIES[:security]),
-                      severity: :security)
+        Warnings.emit(:tenantless_admin, message, severity: :security)
       end
 
       def warn_basic_auth_without_credentials(config)

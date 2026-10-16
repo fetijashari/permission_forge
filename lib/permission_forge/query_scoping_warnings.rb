@@ -47,9 +47,9 @@ module PermissionForge
 
       unless PermissionForge::RLS.postgres?
         Warnings.emit(:rls_not_postgresql,
-                      'WARNING: database_row_level_security is enabled but the database adapter is not ' \
+                      'database_row_level_security is enabled but the database adapter is not ' \
                       'PostgreSQL. RLS policies cannot be enforced — row-level security falls back to ' \
-                      'application-level scoping only.')
+                      'application-level scoping only.', severity: :security)
         return
       end
 

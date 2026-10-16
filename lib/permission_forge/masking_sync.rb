@@ -64,6 +64,8 @@ module PermissionForge
     SILENT_STORE = ' (it did not answer, or a read right after a write came back empty: the store is down, full, ' \
                    'or evicts the key at once)'
 
+    # check!'s warning when a sync raised: a SECURITY one, the process fails open until the next sync.
+    SYNC_FAILED = 'Auto-applied masking could not be synced: a model named in another process may stay unmasked here until the next sync'
     # The boot step's warning when a model could not be masked (boot!).
     INCOMPLETE_AT_BOOT = 'Auto-applied masking is not complete at boot (see the warnings above, or the Resource ' \
                          'table cannot be read): it is tried again at each request or job.'
@@ -97,7 +99,7 @@ module PermissionForge
         token = token_in_store? ? answered_token : nil
         sync(token) if changed?(token)
       rescue StandardError => e
-        Rails.logger&.error("[PermissionForge] auto-applied masking could not be synced — #{e.class}: #{e.message}")
+        Warnings.emit(:masking_sync_failed, "#{SYNC_FAILED} (#{e.class}: #{e.message}).", severity: :security)
       end
 
       # After a Resource row naming `name` has been created or renamed and
@@ -126,7 +128,7 @@ module PermissionForge
       # @return [Boolean] whether every selected model is masked
       def boot!
         done = sync(token_in_store? ? current_token : nil, always: true)
-        Warnings.emit(:masking_sync_incomplete_at_boot, INCOMPLETE_AT_BOOT) unless done
+        Warnings.emit(:masking_sync_incomplete_at_boot, INCOMPLETE_AT_BOOT, severity: :security) unless done
         done
       end
 
@@ -215,7 +217,7 @@ module PermissionForge
 
         Warnings.emit("masking_sync.token_not_taken.#{name}",
                       "The cache store did not take the masking token: other processes mask #{name} once the " \
-                      'store answers again and this process has written it.')
+                      'store answers again and this process has written it.', severity: :security)
       end
 
       # The token to check against — nil while the store is failing. A
@@ -301,7 +303,7 @@ module PermissionForge
                       'a Resource row names in another process is masked here once the store answers. A store ' \
                       'that is up but loses the token at once cannot sync masking: use a shared store that keeps ' \
                       'entries, or include PermissionForge::Concerns::MaskedAttributes in the models ' \
-                      '(docs/masked-attributes.md).')
+                      '(docs/masked-attributes.md).', severity: :security)
       end
 
       def now

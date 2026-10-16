@@ -96,7 +96,7 @@ module PermissionForge
       [ActiveSupport::Cache::MemoryStore.new, ActiveSupport::Cache::NullStore.new].each do |store|
         log = boot_log(env: 'production', backend: :rails_cache, rails_cache: store)
 
-        assert_match(/WARNING: auto-applied masking .* stays unmasked in this process until it restarts/, log, store.class)
+        assert_match(/SECURITY warning: auto-applied masking .* stays unmasked in this process until it restarts/, log, store.class)
         assert_match(/include PermissionForge::Concerns::MaskedAttributes/, log, store.class)
       end
     end
