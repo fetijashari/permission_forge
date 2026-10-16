@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 namespace :permission_forge do
-  desc 'Report fields that match the personal-data patterns but are not masked, and matching model columns with no ResourceField'
+  desc 'Report personal-data fields that are not masked, and matching model columns with no field row. ' \
+       'ACTOR= names who ran it, REASON= why (recorded as report.generated).'
   task audit_masks: :environment do
     report = PermissionForge::RakeAudit.reporting('permission_forge:audit_masks', counts: ->(r) { { findings: r.size } }) do
       PermissionForge::Services::GdprFieldAuditor.call
@@ -18,8 +19,8 @@ namespace :permission_forge do
   # when FAIL_ON names no severity (before the review runs).
   # It changes no permission data; every run is recorded (report.generated)
   # when the audit log is on.
-  desc 'Security review of the PermissionForge setup: changes no permission data, records the run in the audit log. ' \
-       'FORMAT=json, FAIL_ON=critical|high|medium|low|info'
+  desc 'Security review of the setup: changes no permission data, records the run in the audit log. ' \
+       'FORMAT=json, FAIL_ON=critical|high|medium|low|info; ACTOR= names who ran it, REASON= why.'
   task audit: :environment do
     audit = PermissionForge::Services::SecurityAudit
     given = ENV.fetch('FAIL_ON', nil).presence

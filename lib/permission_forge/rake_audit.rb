@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
+require_relative 'rake_output'
+
 module PermissionForge
   # What every rake task of the gem does about the audit log: names who ran it
   # (ACTOR=, stored as actor_label with actor_type 'system' and source 'rake'),
   # records `report.generated` for the read-only ones, and logs through
-  # Rails.logger. The tasks' own output is untouched.
+  # Rails.logger. What the tasks print is RakeOutput's.
   #
   #   PermissionForge::RakeAudit.changing('permission_forge:erasure') { ... }   # warns without ACTOR
   #   PermissionForge::RakeAudit.reporting('permission_forge:audit', counts: ->(r) { r.counts }) { report }
@@ -37,20 +39,6 @@ module PermissionForge
       # One line in the application log.
       def log(task, message)
         Rails.logger&.info("[permission_forge] #{task}: #{message}")
-      end
-
-      # What a task that invalidated cached permissions adds to its output
-      # when the store lives in its own process only (an in-memory store,
-      # Cache::Base#process_local?): the running servers kept theirs. Empty
-      # for a shared store.
-      #
-      # @return [String]
-      def process_local_note(cache = PermissionForge.cache)
-        return '' unless cache.process_local?
-
-        ' (in this rake process only: an in-memory store — cache_backend :memory, or :memory_store — lives in ' \
-          'each process, so the web and job processes keep their cached permissions until they restart or the ' \
-          'entries expire (cache_ttl))'
       end
 
       private

@@ -55,15 +55,15 @@ module PermissionForge
       return if pf_assignment_refused?(sets, @person.id, :revoke, path)
 
       count = @removable.size
-      confirmed = cache_confirmed? { PermissionForge::Audit.correlate { @removable.each(&:destroy!) } }
+      outcome = cache_outcome { PermissionForge::Audit.correlate { @removable.each(&:destroy!) } }
       redirect_to permission_forge.person_path(@person),
-                  **cache_flash(confirmed, { notice: :removed_all, alert: :removed_all_cache_kept }, count: count, name: person_name)
+                  **cache_flash(outcome, { notice: :removed_all, alert: :removed_all_cache_kept }, count: count, name: person_name)
     end
 
     def refresh_cache
-      confirmed = cache_confirmed? { @person.invalidate_permissions if @person.respond_to?(:invalidate_permissions) }
+      outcome = cache_outcome { @person.invalidate_permissions if @person.respond_to?(:invalidate_permissions) }
       redirect_to permission_forge.person_path(@person, tab: pf_tab_param(TABS)),
-                  **cache_flash(confirmed, { notice: :cache_refreshed, alert: :cache_refresh_failed }, name: person_name)
+                  **cache_flash(outcome, { notice: :cache_refreshed, alert: :cache_refresh_failed }, name: person_name)
     end
 
     # --- consent withdrawal -------------------------------------------------------
@@ -78,11 +78,11 @@ module PermissionForge
       flag = params[:flag].to_s
       return redirect_to(permission_forge.person_path(@person)) unless consent_flags.include?(flag)
 
-      count, invalidated = consent_service(flag, dry_run: false).values_at(:revoked_sets, :invalidated)
-      # nothing revoked means nothing to clear: that is not a failure
+      result = consent_service(flag, dry_run: false)
+      # the service's one cache outcome (nothing revoked: nothing to clear, confirmed)
       redirect_to permission_forge.person_path(@person),
-                  **cache_flash(count.zero? || invalidated, { notice: :consent_withdrawn, alert: :consent_withdrawn_cache_kept },
-                                count: count, flag: flag)
+                  **cache_flash(result[:cache], { notice: :consent_withdrawn, alert: :consent_withdrawn_cache_kept },
+                                count: result[:revoked_sets], flag: flag)
     end
 
     # --- erasure ----------------------------------------------------------------------
@@ -99,10 +99,9 @@ module PermissionForge
       end
 
       result = erasure_service(dry_run: false)
-      # nil: erased inside a transaction of the host's, the cache follows at its commit
-      confirmed = result[:cache_cleared] != false
+      # the service's one cache outcome (confirmed nil: erased inside a transaction of the host's, the cache follows at its commit)
       redirect_to permission_forge.people_path,
-                  **cache_flash(confirmed, { notice: :erased, alert: :erased_cache_kept }, name: person_name)
+                  **cache_flash(result[:cache], { notice: :erased, alert: :erased_cache_kept }, name: person_name)
     end
 
     private

@@ -29,12 +29,18 @@ module PermissionForge
                   'a controller that authenticates and authorizes admins, or turn HTTP Basic back on.')
         end
 
+        # The one definition of "process-local" is the store's own
+        # (Cache::Base#process_local?: `cache_backend = :memory`, or
+        # `Rails.cache` a `:memory_store`), asked of the store the reviewed
+        # configuration builds.
         def process_local_cache
-          return unless production? && configuration.cache_backend.to_s == 'memory'
+          return unless production? && configuration.cache_store.process_local?
 
           finding(:high, :process_local_cache, 'Permission cache is local to each process',
-                  'cache_backend is :memory in production: a revoked permission stays cached in other Puma ' \
-                  'workers until their TTL expires. Use :rails_cache with a shared store.')
+                  'The permission cache store lives in each process in production (cache_backend :memory, or ' \
+                  'Rails.cache a :memory_store): a revoked permission stays cached in the other Puma workers until ' \
+                  'cache_ttl, and an invalidation from a console, runner or rake task never reaches the servers. ' \
+                  'Use :rails_cache with a shared store (Redis, Memcached, Solid Cache).')
         end
 
         def unconfigured_fields_pass

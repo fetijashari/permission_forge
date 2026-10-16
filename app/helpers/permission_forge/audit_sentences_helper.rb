@@ -26,24 +26,6 @@ module PermissionForge
         next unless ended
 
         t('permission_forge.audit_log.sentence_variants.assignment_revoked_expired', **parts, date: pf_date(ended))
-      },
-      # A clear, an erasure or a clean-up that reached only the running
-      # process's own in-memory store (data['process_local']): the running
-      # servers kept their entries.
-      'cache.cleared' => lambda { |event, parts|
-        next unless pf_audit_process_local?(event)
-
-        t('permission_forge.audit_log.sentence_variants.cache_cleared_process_local', **parts)
-      },
-      'erasure.performed' => lambda { |event, parts|
-        next unless pf_audit_process_local?(event)
-
-        t('permission_forge.audit_log.sentence_variants.erasure_performed_process_local', **parts)
-      },
-      'cleanup.expired_assignments' => lambda { |event, parts|
-        next unless pf_audit_process_local?(event)
-
-        t('permission_forge.audit_log.sentence_variants.cleanup_expired_assignments_process_local', **parts)
       }
     }.freeze
 
@@ -51,22 +33,28 @@ module PermissionForge
     # (permission_forge.audit_log.sentences.<event>): a new event needs one
     # key in each locale, and an event without one (a host's own) still reads
     # as "<actor>: <event name>". Interpolations: actor, record, set, person,
-    # group, event, model (a runtime event's model).
+    # group, event, model (a runtime event's model). An event whose cache
+    # work reached its own process's in-memory store only (its
+    # Cache::Outcome: data['process_local']) ends with the one process-local
+    # suffix, whatever the event.
     def pf_audit_sentence(event, lookups)
       parts = pf_audit_sentence_parts(event, lookups)
       variant = AUDIT_SENTENCE_VARIANTS[event.event]
       variant &&= instance_exec(event, parts, &variant)
-      return variant if variant
-
-      fallback = t("#{AUDIT_SENTENCES}.fallback", **parts)
-      sentence = t("#{AUDIT_SENTENCES}.#{event.event}", **parts, default: fallback)
-      sentence.is_a?(String) ? sentence : fallback
+      sentence = variant || pf_audit_plain_sentence(event, parts)
+      pf_audit_process_local?(event) ? "#{sentence} #{t('permission_forge.audit_log.cache_scope.process_local')}" : sentence
     end
 
     # Whether the event's cache work reached its own process's in-memory
     # store only (data['process_local'], Cache::Base#process_local?).
     def pf_audit_process_local?(event)
       event.data.is_a?(Hash) && event.data['process_local'] == true
+    end
+
+    def pf_audit_plain_sentence(event, parts)
+      fallback = t("#{AUDIT_SENTENCES}.fallback", **parts)
+      sentence = t("#{AUDIT_SENTENCES}.#{event.event}", **parts, default: fallback)
+      sentence.is_a?(String) ? sentence : fallback
     end
 
     # The hidden and masked field names a field.access event lists.

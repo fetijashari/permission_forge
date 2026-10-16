@@ -1,3 +1,5 @@
+require_relative '../cache/report'
+
 module PermissionForge
   module Services
     # Removes expired PermissionSetUser records and invalidates the cached
@@ -5,15 +7,18 @@ module PermissionForge
     #
     # @example
     #   result = ExpiredAssignmentCleaner.call
-    #   # => { removed: 5, invalidated: 3 }
+    #   # => { removed: 5, invalidated: 3, affected_user_ids: [1, 2, 3], permission_sets: ["Temp"],
+    #   #      cache: { confirmed: true, process_local: false, unconfirmed: 0 } }
     #
     # `invalidated` counts the users whose invalidation the cache store
     # confirmed; a failure is reported through `config.on_cache_failure`.
-    # A store that lives in this process only (Cache::Base#process_local?:
-    # an in-memory store) confirms for this process alone: a run from a rake
-    # task leaves the web and job processes' entries until they restart or
-    # expire (cache_ttl), and `cleanup.expired_assignments` says
-    # `process_local: true`.
+    # `cache` is the one Cache::Outcome every cache-touching operation
+    # answers (Cache::Report), and `cleanup.expired_assignments` records the
+    # same keys: a store that lives in this process only
+    # (Cache::Base#process_local?: an in-memory store) confirms for this
+    # process alone — a run from a rake task leaves the web and job
+    # processes' entries until they restart or expire (cache_ttl), and the
+    # event says `process_local: true`.
     #
     # @example Dry run (inspect without removing)
     #   result = ExpiredAssignmentCleaner.call(dry_run: true)
@@ -63,7 +68,8 @@ module PermissionForge
         @invalidated_count = 0
       end
 
-      # @return [Hash] `{ removed:, invalidated: }` (plus `expired_count:` and `affected_user_ids:` for a dry run)
+      # @return [Hash] `{ removed:, invalidated:, affected_user_ids:, permission_sets:, cache: }`
+      #   (a dry run: `removed: 0, invalidated: 0, expired_count:, affected_user_ids:`)
       def call
         across_tenants do
           expired_records = PermissionForge::PermissionSetUser.expired
@@ -84,12 +90,17 @@ module PermissionForge
       def clean(candidate_ids)
         removed = candidate_ids.filter_map { |id| destroy_if_still_expired(id) }
         @removed_count = removed.size
+        user_ids = removed.map(&:user_id).uniq
 
-        confirmed = invalidate_users(removed.map(&:user_id).uniq)
+        report = invalidate_users(user_ids)
+        confirmed = report.confirmed(user_ids)
         @invalidated_count = confirmed.size
-        record_summary(removed, confirmed) if @removed_count.positive?
+        outcome = report.outcome(user_ids: user_ids)
+        sets = sets_of(removed)
+        record_summary(removed, sets, confirmed, outcome) if @removed_count.positive?
 
-        { removed: @removed_count, invalidated: @invalidated_count }
+        { removed: @removed_count, invalidated: @invalidated_count, affected_user_ids: user_ids,
+          permission_sets: sets.values.map(&:name).uniq, cache: outcome.to_h }
       end
 
       # The row as it is now, locked until it is gone; nil when it is no
@@ -101,12 +112,16 @@ module PermissionForge
         end
       end
 
+      # @return [Hash{Integer => PermissionSet}] the sets of the removed rows, by id
+      def sets_of(records)
+        PermissionForge::PermissionSet.where(id: records.map(&:permission_set_id).uniq).index_by(&:id)
+      end
+
       # One event, or one per tenant plus the totals (record_per_tenant),
-      # each with the counts of its own rows.
-      def record_summary(records, confirmed_user_ids)
-        sets = PermissionForge::PermissionSet.where(id: records.map(&:permission_set_id).uniq).index_by(&:id)
+      # each with the counts of its own rows and the run's cache outcome.
+      def record_summary(records, sets, confirmed_user_ids, outcome)
         record_per_tenant('cleanup.expired_assignments', records) do |rows|
-          SummaryData.new(rows, sets, confirmed_user_ids).to_h
+          SummaryData.new(rows, sets, confirmed_user_ids, outcome).to_h
         end
       end
 
@@ -114,12 +129,12 @@ module PermissionForge
       # rows it covers.
       #
       # @api private
-      SummaryData = Struct.new(:rows, :sets_by_id, :confirmed_user_ids) do
+      SummaryData = Struct.new(:rows, :sets_by_id, :confirmed_user_ids, :outcome) do
         def to_h
           { 'operation' => 'cleanup_expired_assignments', 'removed' => rows.size,
             'invalidated' => (user_ids & confirmed_user_ids).size, **bounded_user_ids,
             'set_uuids' => sets.map(&:uuid).uniq, 'set_names' => sets.map(&:name).uniq, 'dry_run' => false,
-            'process_local' => PermissionForge.cache.process_local? }
+            **outcome.event_data }
         end
 
         private
@@ -144,14 +159,15 @@ module PermissionForge
         { removed: 0, invalidated: 0, expired_count: expired_count, affected_user_ids: affected_user_ids }
       end
 
-      # @return [Array] the ids of the users whose invalidation the store
-      #   confirmed — not what a host's override of the method returns
+      # Every affected user's invalidation, measured (Cache::Report): what
+      # the store confirmed, per user — not what a host's override of the
+      # method returns.
+      #
+      # @return [PermissionForge::Cache::Report]
       def invalidate_users(user_ids)
-        confirmed = []
-        PermissionForge.configuration.user_model.where(id: user_ids).find_each do |user|
-          confirmed << user.id if PermissionForge::Cache::Failure.none? { user.invalidate_permissions }
+        PermissionForge::Cache::Report.measure do
+          PermissionForge.configuration.user_model.where(id: user_ids).find_each(&:invalidate_permissions)
         end
-        confirmed
       end
     end
   end

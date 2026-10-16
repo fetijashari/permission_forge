@@ -35,6 +35,7 @@ module PermissionForge
         'subject_user_id' => 'the title names the person',
         'across_tenants' => 'a rake run always covers every tenant (AcrossTenants)',
         'tenants' => 'the per-tenant count of a summary; cache:clear prints its own',
+        'counted' => 'under the pattern strategy the "User visits invalidated" line says "not counted"',
         'set_uuids' => 'the sets are printed by name',
         'group_uuids' => 'the groups are printed by name',
         'affected_user_count' => 'the people are printed, with their count',

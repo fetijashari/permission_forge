@@ -170,6 +170,9 @@ en:
       boolean:
         'false': 'No'
         'true': 'Yes'
+      cache_scope:
+        process_local: 'The cached permissions were cleared in its own process only
+          (an in-memory store): the web and job processes kept theirs.'
       categories:
         access: Access
         admin: Admin
@@ -207,15 +210,6 @@ en:
       sentence_variants:
         assignment_revoked_expired: "%{actor} removed %{set} from %{person} after
           it expired on %{date}."
-        cache_cleared_process_local: "%{actor} cleared the cached permissions of every
-          user in its own process only (an in-memory store): the web and job processes
-          kept theirs."
-        cleanup_expired_assignments_process_local: "%{actor} removed expired assignments;
-          the cached permissions were cleared in its own process only (an in-memory
-          store): the web and job processes kept theirs."
-        erasure_performed_process_local: "%{actor} erased the permission data of %{person};
-          the cached permissions were cleared in its own process only (an in-memory
-          store): the web and job processes kept theirs."
         field_access_limited: "%{actor} read %{record} with these fields hidden or
           masked: %{fields}."
       sentences:
@@ -404,9 +398,26 @@ en:
         assigned:
           one: Assigned %{set} to %{count} person.
           other: Assigned %{set} to %{count} people.
+        assigned_cache_kept:
+          one: Assigned %{set} to %{count} person, but the cache store did not confirm
+            that their cached permissions were cleared. The old permissions may stay
+            in use until the cache lifetime ends.
+          other: Assigned %{set} to %{count} people, but the cache store did not confirm
+            that their cached permissions were cleared. The old permissions may stay
+            in use until the cache lifetime ends.
         revoked:
           one: Revoked %{set} from %{count} person.
           other: Revoked %{set} from %{count} people.
+        revoked_cache_kept:
+          one: Revoked %{set} from %{count} person, but the cache store did not confirm
+            that their cached permissions were cleared. The old permissions may stay
+            in use until the cache lifetime ends.
+          other: Revoked %{set} from %{count} people, but the cache store did not
+            confirm that their cached permissions were cleared. The old permissions
+            may stay in use until the cache lifetime ends.
+      cache_process_local: 'The cache store lives in this server process only (an
+        in-memory store): other web and job processes keep their cached permissions
+        until they restart or the entries expire.'
       fields:
         acknowledged: Got it. “%{field}” won't be flagged in the privacy audit again.
         recommendation_applied: Applied the recommended mask to “%{field}”.
@@ -428,6 +439,13 @@ en:
         cleaned:
           one: Removed %{count} expired assignment.
           other: Removed %{count} expired assignments.
+        cleaned_cache_kept:
+          one: Removed %{count} expired assignment, but the cache store did not confirm
+            that the affected people's cached permissions were cleared. The old permissions
+            may stay in use until the cache lifetime ends.
+          other: Removed %{count} expired assignments, but the cache store did not
+            confirm that the affected people's cached permissions were cleared. The
+            old permissions may stay in use until the cache lifetime ends.
       not_editable: This record is not editable.
       people:
         cache_refresh_failed: Could not refresh %{name}'s cached permissions. The

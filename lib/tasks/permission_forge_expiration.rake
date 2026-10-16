@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 namespace :permission_forge do
-  desc 'Remove expired permission set assignments and invalidate affected users\' cached permissions'
+  # Prints the result the cleanup.expired_assignments event records
+  # (RakeOutput): the people by name, the sets, the cache outcome.
+  desc "Remove expired permission set assignments and invalidate affected users' cached permissions. " \
+       'ACTOR= names who ran it, REASON= why.'
   task cleanup_expired_assignments: :environment do
     task_name = 'permission_forge:cleanup_expired_assignments'
     result = PermissionForge::RakeAudit.changing(task_name) { PermissionForge::Services::ExpiredAssignmentCleaner.call }
@@ -9,12 +12,12 @@ namespace :permission_forge do
     if result[:removed].zero?
       puts 'No expired assignments found.'
     else
-      puts "Removed #{result[:removed]} expired assignment(s), invalidated #{result[:invalidated]} " \
-           "user(s)#{PermissionForge::RakeAudit.process_local_note}."
+      PermissionForge::RakeOutput.report("Removed #{result[:removed]} expired assignment(s):", result)
     end
   end
 
-  desc 'Show expired permission set assignments without removing (dry run)'
+  desc 'List expired permission set assignments without removing them, as a dry run. ' \
+       'ACTOR= names who ran it, REASON= why (recorded as report.generated).'
   task expired_assignments: :environment do
     result = PermissionForge::RakeAudit.reporting(
       'permission_forge:expired_assignments',
@@ -23,8 +26,10 @@ namespace :permission_forge do
     if result[:expired_count].zero?
       puts 'No expired assignments found.'
     else
-      puts "Found #{result[:expired_count]} expired assignment(s) affecting #{result[:affected_user_ids].size} user(s)."
-      puts "User IDs: #{result[:affected_user_ids].join(', ')}"
+      PermissionForge::RakeOutput.report(
+        "Dry run — would remove #{result[:expired_count]} expired assignment(s) affecting #{result[:affected_user_ids].size} person(s):",
+        result.slice(:expired_count, :affected_user_ids)
+      )
       puts 'Run `rake permission_forge:cleanup_expired_assignments` to remove them.'
     end
   end

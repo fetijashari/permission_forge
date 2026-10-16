@@ -1,3 +1,5 @@
+require_relative '../cache/report'
+
 module PermissionForge
   module Services
     # Assigns or revokes a permission set for multiple users in a single
@@ -10,7 +12,7 @@ module PermissionForge
     #   result = BulkPermissionSetAssignment.call(
     #     permission_set: ps, user_ids: [1, 2, 3], action: :assign
     #   )
-    #   # => { assigned: 3, revoked: 0, invalidated: 3 }
+    #   # => { assigned: 3, revoked: 0, invalidated: 3, cache: { confirmed: true, process_local: false, unconfirmed: 0 } }
     #
     # `invalidated` counts the users assigned or revoked whose invalidation
     # the cache store confirmed. Fewer means the store failed for the rest
@@ -18,7 +20,11 @@ module PermissionForge
     # may live until cache_ttl. A user who already held the set (assign) or
     # never did (revoke) changed nothing and is not invalidated. Inside a
     # transaction of the caller the invalidations happen at its commit, after
-    # this returns: `invalidated` is then nil (not known).
+    # this returns: `invalidated` is then nil (not known). `cache` is the one
+    # Cache::Outcome every cache-touching operation answers (Cache::Report):
+    # `confirmed` (nil inside the caller's transaction), `process_local`
+    # (the store lives in this process only, so other processes kept their
+    # entries), `unconfirmed`.
     #
     # Every row is created or destroyed through its callbacks, so each person
     # gets an assignment.granted / assignment.revoked audit event, all with
@@ -35,7 +41,7 @@ module PermissionForge
       VALID_ACTIONS = ACTION_STRATEGIES.keys.freeze
 
       # Assigns or revokes a Permission Set for many users in one transaction.
-      # @return [Hash] `{ assigned:, revoked:, invalidated: }`
+      # @return [Hash] `{ assigned:, revoked:, invalidated:, cache: }`
       def self.call(...) = new(...).call
 
       # @raise [ArgumentError] unless `action` is one of VALID_ACTIONS
@@ -59,17 +65,19 @@ module PermissionForge
         @changed_user_ids = []
       end
 
-      # @return [Hash] `{ assigned:, revoked:, invalidated: }`
+      # @return [Hash] `{ assigned:, revoked:, invalidated:, cache: }`
       def call
         validate_action!
 
         deferred = PermissionForge::OpenTransaction.current
-        failures = PermissionForge::Cache::Failure.collect do
+        # what the store confirmed (Cache::Report) — not what a host's override of invalidate_permissions returns
+        report = PermissionForge::Cache::Report.measure do
           ActiveRecord::Base.transaction { send(ACTION_STRATEGIES.fetch(@action)) }
         end
+        outcome = report.outcome(user_ids: @changed_user_ids, deferred: deferred)
 
-        # what the store confirmed (Cache::Failure) — not what a host's override of invalidate_permissions returns
-        { assigned: @assigned_count, revoked: @revoked_count, invalidated: deferred ? nil : failures.confirmed(@changed_user_ids).size }
+        { assigned: @assigned_count, revoked: @revoked_count,
+          invalidated: deferred ? nil : @changed_user_ids.size - outcome.unconfirmed, cache: outcome.to_h }
       end
 
       private
