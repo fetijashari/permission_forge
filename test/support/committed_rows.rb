@@ -28,10 +28,12 @@ module CommittedRows
   # Tables up to this many rows keep the key of every row.
   SNAPSHOT_LIMIT = 500
 
-  # `key`: the columns that tell a row apart; `pk`: the one-column primary
-  # key (nil otherwise); `signature`: [count, min pk, max pk]; `rows`: the
-  # Set of key tuples, nil above SNAPSHOT_LIMIT.
-  Table = Struct.new(:name, :key, :pk, :signature, :rows, keyword_init: true)
+  # `key`: the columns that tell a row apart; `pk`: the one-column integer
+  # or string primary key (nil otherwise: MIN / MAX would not work on every
+  # type, a uuid on PostgreSQL); `integer`: it is an integer;
+  # `signature`: [count, min pk, max pk]; `rows`: the Set of key tuples, nil
+  # above SNAPSHOT_LIMIT.
+  Table = Struct.new(:name, :key, :pk, :integer, :signature, :rows, keyword_init: true)
 
   class << self
     # { table => Table }, taken once per process before its first test (in a
@@ -113,8 +115,18 @@ module CommittedRows
 
     def describe(name)
       pk = connection.primary_key(name)
-      key = pk.nil? ? connection.columns(name).map(&:name) : Array(pk).map(&:to_s)
-      Table.new(name: name, key: key, pk: pk.is_a?(String) ? pk : nil)
+      columns = connection.columns(name)
+      key = pk.nil? ? columns.map(&:name) : Array(pk).map(&:to_s)
+      type = pk_type(pk, columns)
+      Table.new(name: name, key: key, pk: type && pk, integer: type == :integer)
+    end
+
+    # The type of a one-column integer or string primary key, else nil.
+    def pk_type(primary_key, columns)
+      return unless primary_key.is_a?(String)
+
+      type = columns.find { |column| column.name == primary_key }&.type
+      type if %i[integer string text].include?(type)
     end
 
     # One query for every table: [[table, [count, min pk, max pk]]].
@@ -123,7 +135,11 @@ module CommittedRows
 
       selects = tables.flat_map { |table| signature_sql(table) }
       values = connection.select_rows("SELECT #{selects.join(', ')}").first
-      tables.zip(values.each_slice(3).map { |count, min, max| [count.to_i, min, max] })
+      tables.zip(values.each_slice(3).zip(tables).map { |triple, table| signature(table, *triple) })
+    end
+
+    def signature(table, count, min, max)
+      table.integer ? [count.to_i, min&.to_i, max&.to_i] : [count.to_i, min, max]
     end
 
     def signature_sql(table)
