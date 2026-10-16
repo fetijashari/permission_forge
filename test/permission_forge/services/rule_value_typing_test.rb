@@ -265,15 +265,12 @@ module PermissionForge
         assert_equal NON_NULL, labels(:seen_at, 'between', '-infinity,infinity')
       end
 
-      test 'on PostgreSQL text it cannot read as a date still raises, as before values were typed' do
+      # It raised for every holder before (ValueCasters::PostgresqlTypes::ReadBack).
+      test 'on PostgreSQL text it cannot read as a date matches nothing, never raises' do
         skip 'only PostgreSQL reads such text itself' unless POSTGRES
 
         { born_on: ['abc', '2026-02-30', ''], seen_at: %w[abc 5], opens_at: ['abc', '25:00'] }.each do |column, values|
-          values.each do |value|
-            assert_raises(ActiveRecord::StatementInvalid, "#{column} #{value.inspect}") do
-              PfRuleRecord.transaction(requires_new: true) { labels(column, 'less_than', value) }
-            end
-          end
+          values.each { |value| assert_empty labels(column, 'less_than', value), "#{column} #{value.inspect}" }
         end
       end
 

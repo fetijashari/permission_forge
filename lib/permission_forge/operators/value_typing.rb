@@ -106,7 +106,7 @@ module PermissionForge
       # A LIKE pattern is built from the text of the value, on a column a
       # pattern can be matched against (ValueCasters.pattern?).
       def pattern(value, target)
-        ValueCasters.pattern?(target.caster) ? ValueCasters::TEXT.call(value) : UNUSABLE
+        target.pattern? ? ValueCasters::TEXT.call(value) : UNUSABLE
       end
 
       # Every element has to be a value of the column; a list of none is no list.

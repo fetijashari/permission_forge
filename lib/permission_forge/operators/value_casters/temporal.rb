@@ -12,8 +12,9 @@ module PermissionForge
       # offset is converted to it, and SQLite gets the text it compares with.
       # A date column takes the day of a date-time, a time column the time of
       # day. Anything else — another notation, `now`, `tomorrow`, the id that
-      # `current_user` stands for — is UNUSABLE, unless the caster is the one
-      # for a database that reads such text itself ({#as_written}).
+      # `current_user` stands for — is UNUSABLE. (On PostgreSQL, which reads
+      # date and time text itself, such text is asked of it:
+      # PostgresqlTypes::ReadBack.)
       class Temporal
         DAY = /(?<year>\d{4})-(?<month>\d\d?)-(?<day>\d\d?)/
         CLOCK = /(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?/
@@ -23,28 +24,13 @@ module PermissionForge
 
         # @param format [Regexp] what the text has to look like
         # @param type [ActiveModel::Type::Value] casts the text and serializes the result
-        # @param as_written [Boolean] hand text of another notation over as it is
-        def initialize(format, type, as_written: false)
+        def initialize(format, type)
           @format = format
           @type = type
-          @as_written = as_written
         end
 
         def call(value)
-          return UNUSABLE unless value.is_a?(String)
-
-          recognised(value.strip) || (@as_written ? value : UNUSABLE)
-        end
-
-        # The same caster for a database that reads date and time text itself
-        # and raises on what it cannot read (PostgreSQL). Text this caster does
-        # not recognise is handed over as it is written, as it was before
-        # values were typed: `today`, a date in a local notation. What is not
-        # text stays UNUSABLE.
-        #
-        # @return [Temporal]
-        def as_written
-          self.class.new(@format, @type, as_written: true)
+          recognised(value) || UNUSABLE
         end
 
         DATE = new(DAY_AND_CLOCK, ActiveRecord::Type::Date.new)
@@ -53,7 +39,10 @@ module PermissionForge
 
         private
 
-        def recognised(text)
+        def recognised(value)
+          return unless value.is_a?(String)
+
+          text = value.strip
           parts = @format.match(text)
           @type.serialize(@type.cast(text)) if parts && real_day?(parts)
         end

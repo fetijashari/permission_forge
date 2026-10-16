@@ -19,6 +19,8 @@ module PermissionForge
           attrs[:field_value] = '1,10'
         elsif op.in?(%w[in not_in])
           attrs[:field_value] = '1,2'
+        elsif PermissionForge::Operators::ValueTyping::SHAPES[op] == :pattern
+          attrs[:field_name] = 'name' # a LIKE pattern on a text column: PostgreSQL has no LIKE for an integer
         end
         rule = PermissionForge::PermissionSetRule.new(attrs)
         assert rule.valid?, "Expected rule with operator '#{op}' to be valid, errors: #{rule.errors.full_messages}"

@@ -8,10 +8,10 @@ require_relative '../permission_forge/rule_value_models'
 # matrix of operators, column types and values it compiles one rule with
 # RlsPolicyGenerator, evaluates that expression in a WHERE clause and compares
 # the rows with PermissionRuleApplier.scope for the same rule; a few rules then
-# go through a real policy, read as a role policies apply to. Where the
-# application layer's query raises (a LIKE operator on a number, text
-# PostgreSQL cannot read as a uuid), the policy raises as well or shows no row:
-# it is never the wider of the two.
+# go through a real policy, read as a role policies apply to. Should the
+# application layer's query raise (no built-in rule does since values are
+# typed and read back), the policy raises as well or shows no row: it is never
+# the wider of the two.
 class RlsRuleParityTest < ActiveSupport::TestCase
   include RuleValueTestSupport
 
@@ -200,20 +200,20 @@ class RlsRuleParityTest < ActiveSupport::TestCase
   test 'the parity matrix is not vacuous' do
     selected = compare(:small_count, 'greater_than', '4.5', false)
     unusable = compare(:small_count, 'not_equal', '5_id', true)
-    raising = compare(:small_count, 'contains', '5', false)
+    pattern_on_number = compare(:small_count, 'contains', '5', false)
 
     assert_equal [%w[big five], %w[big five]], selected
     assert_equal [[], []], unusable
-    assert_equal [:raises, []], raising
+    assert_equal [[], []], pattern_on_number
   end
 
-  # PostgreSQL has no LIKE for a number, so the app layer raises. The policy
+  # PostgreSQL has no LIKE for a number. The app layer raised and the policy
   # used to match the column's text instead, showing rows the app layer never
-  # shows; it compiles to FALSE now.
-  test 'a LIKE operator on a column that is not text raises in the app layer and shows no row in the policy' do
+  # showed; neither layer matches now (ValueCasters.pattern?).
+  test 'a LIKE operator on a column that is not text matches nothing in either layer' do
     %i[small_count amount flag born_on status].product(LIKE_OPERATORS).each do |column, operator|
-      assert_equal [:raises, []], compare(column, operator, '5', false), "#{column} #{operator}"
-      assert_equal [:raises, []], compare(column, operator, 'current_user', true), "#{column} #{operator} current_user"
+      assert_equal [[], []], compare(column, operator, '5', false), "#{column} #{operator}"
+      assert_equal [[], []], compare(column, operator, 'current_user', true), "#{column} #{operator} current_user"
     end
     # A uuid, network, json, array or native enum column: neither layer matches.
     %i[codes tags aliases settings ref ip net mood].product(LIKE_OPERATORS).each do |column, operator|
@@ -293,14 +293,16 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     assert_not_includes stored, 'tomorrow'
   end
 
-  test 'a date PostgreSQL cannot read fails the sync, as before values were typed' do
-    create_rules([{ field_name: 'born_on', operator: 'equal', field_value: 'someday' }])
+  # It failed the sync (and raised in the app layer) before
+  # ValueCasters::PostgresqlTypes::ReadBack asked PostgreSQL first.
+  test 'a date PostgreSQL cannot read compiles to FALSE and matches nothing in the app layer' do
+    rules = [{ field_name: 'born_on', operator: 'equal', field_value: 'someday' }]
+    create_rules(rules)
 
-    error = assert_raises(ActiveRecord::StatementInvalid) do
-      PfRuleRecord.transaction(requires_new: true) { PermissionForge::RLS.sync! }
-    end
+    PermissionForge::RLS.sync!
 
-    assert_match(/invalid input syntax for type date/, error.message)
+    assert_empty rows_through_policy(rules)
+    assert_equal app_layer_rows(rules), rows_through_policy(rules)
   end
 
   # The bypass is dynamic, so it needs no resync; it stops with the row's

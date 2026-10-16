@@ -37,6 +37,8 @@ ActiveRecord::Schema.define do
       t.inet    :ip
       t.cidr    :net
       t.column  :mood, :pf_rule_mood
+      t.interval :period
+      t.macaddr :mac
     end
   end
 end

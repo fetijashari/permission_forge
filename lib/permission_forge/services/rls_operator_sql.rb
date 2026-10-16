@@ -50,10 +50,6 @@ module PermissionForge
         Operators::Constants::IN, Operators::Constants::NOT_IN
       ].freeze
 
-      # The column types PostgreSQL has ILIKE for. On a column of any other
-      # type the app layer's LIKE query raises, so the rule compiles to FALSE.
-      LIKE_TYPES = %i[string text citext].freeze
-
       # How the session user's id is read for a comparison, by the caster the
       # column's type has in the app layer: the id itself where the column is
       # a number (or a uuid) the id is one of, or of a type nothing is known
@@ -61,6 +57,9 @@ module PermissionForge
       # boolean, a date, an address, a json or array column, a native enum)
       # cannot equal an id — the rule is UNUSABLE there, as it is in the app
       # layer.
+      # The database a policy is written for.
+      POLICY_ADAPTER = 'PostgreSQL'
+
       SESSION_USER_SQL = {
         Operators::ValueCasters::UNTYPED => :uid_sql,
         Operators::ValueCasters::NUMBER => :numeric_uid_sql,
@@ -74,7 +73,7 @@ module PermissionForge
       # @param target [Operators::RuleColumn] the column the rule names
       # @return [Object] a typed literal, an Array of them, a SessionUser, or UNUSABLE
       def typed_value(operator, value, target)
-        return UNUSABLE if Operators::ValueTyping.no_column?(operator, target) || unmatchable?(operator, target.column)
+        return UNUSABLE if Operators::ValueTyping.no_column?(operator, target) || unmatchable?(operator, target)
         return session_user(operator, target) if Operators::ValueTyping.current_user?(operator, value)
 
         Operators::ValueTyping.call(operator, value, target)
@@ -102,12 +101,14 @@ module PermissionForge
 
       private
 
-      # A LIKE operator on a column PostgreSQL cannot match a pattern with. (A
-      # column the model does not have is UNUSABLE, as in the app layer.)
-      def unmatchable?(operator, column)
-        return false unless column && Operators::ValueTyping::SHAPES[operator] == :pattern
+      # A LIKE operator on a column PostgreSQL cannot match a pattern with
+      # (ValueCasters.pattern? for PostgreSQL, the database every policy is
+      # for — as the app layer decides on PostgreSQL). A column the model
+      # does not have is UNUSABLE, as in the app layer.
+      def unmatchable?(operator, target)
+        return false unless target.column && Operators::ValueTyping::SHAPES[operator] == :pattern
 
-        column.try(:array?) || LIKE_TYPES.exclude?(column.type)
+        !Operators::ValueCasters.pattern?(target.caster, POLICY_ADAPTER)
       end
 
       # A comparison takes the id as the column's type lets it. A LIKE pattern

@@ -55,20 +55,36 @@ module PermissionForge
         enum: PostgresqlTypes::NativeEnum
       }.freeze
 
-      # PostgreSQL is typed like the others, with two things left the way it
-      # always did them, so that no rule that works there stops working:
+      # PostgreSQL is typed like the others, with three differences:
       #
       # - It reads date and time text itself and raises on what it cannot
-      #   read. Text the Temporal casters do not recognise is left to it
-      #   (`due_on less_than '31 Jan 2026'`, `due_on equal 'today'`); on SQLite
-      #   and MySQL, which compare or convert such text, it stays UNUSABLE.
+      #   read. Text the Temporal casters do not recognise is asked of it
+      #   (PostgresqlTypes::ReadBack): what it reads is handed over
+      #   (`due_on less_than '31 Jan 2026'`, `due_on equal 'today'`), anything
+      #   else is UNUSABLE. On SQLite and MySQL, which compare or convert such
+      #   text, it is UNUSABLE.
+      # - A column type no caster knows (hstore, money, interval, ...) is
+      #   asked of it the same way ({ADAPTER_RULES}); `citext` is text.
       # - A `real` column is compared in single precision (Number::SINGLE_PRECISION).
       #   The SQL type is the key: its ActiveRecord type is `float` as well.
-      POSTGRESQL = BY_TYPE.transform_values { |caster| caster.is_a?(Temporal) ? caster.as_written : caster }
-                          .merge('real' => Number::SINGLE_PRECISION).freeze
+      POSTGRESQL = BY_TYPE.transform_values { |caster| caster.is_a?(Temporal) ? PostgresqlTypes::ReadBack.wrapping(caster) : caster }
+                          .merge('real' => Number::SINGLE_PRECISION, 'citext' => TEXT).freeze
 
       # Adapter name => the casters of that database, where they are not BY_TYPE.
       BY_ADAPTER = { 'PostgreSQL' => POSTGRESQL, 'PostGIS' => POSTGRESQL }.freeze
+
+      # What a database's casters decide apart from the column types:
+      # - `unknown_type`: the caster of a column type none of its casters
+      #   knows. UNTYPED (the value is left to the database) where a value of
+      #   another notation is compared or converted; read back where the
+      #   database raises on one.
+      # - `patterns`: the casters a LIKE pattern can be matched against, where
+      #   not every type has LIKE. PostgreSQL has it for text alone (an
+      #   integer, a date, a boolean raise there) — and a column nothing is
+      #   known about (an alias a join gives) is left to it.
+      ADAPTER_RULES = {}.compare_by_identity.merge!(
+        POSTGRESQL => { unknown_type: PostgresqlTypes::ReadBack.wrapping(nil), patterns: [TEXT, UNTYPED].freeze }.freeze
+      ).freeze
 
       # The casters that read the two bounds of `between` together, where the
       # others cast one bound at a time. With nothing known about the column
@@ -89,17 +105,22 @@ module PermissionForge
         return OPAQUE if column.try(:array?)
 
         casters = BY_ADAPTER.fetch(adapter_name, BY_TYPE)
-        caster = casters.fetch(column.sql_type) { casters.fetch(column.type, UNTYPED) }
+        caster = casters.fetch(column.sql_type) { casters.fetch(column.type) { ADAPTER_RULES.dig(casters, :unknown_type) || UNTYPED } }
         caster.respond_to?(:of) ? caster.of(column, model) : caster
       end
 
       # Whether a LIKE pattern can be matched against a column of the
       # caster's type. Not a json or array column, nor one of the PostgreSQL
-      # types without LIKE (uuid, inet, cidr, a native enum): a rule with a
-      # LIKE operator on one matches nothing.
+      # types without LIKE (uuid, inet, cidr, a native enum), nor — on
+      # PostgreSQL — anything but text ({ADAPTER_RULES}): a rule with a LIKE
+      # operator on one matches nothing.
       #
       # @param caster [#call] a caster {.for} returned
-      def self.pattern?(caster)
+      # @param adapter_name [String, nil] the adapter of the column's model
+      def self.pattern?(caster, adapter_name = nil)
+        only = ADAPTER_RULES.dig(BY_ADAPTER[adapter_name], :patterns)
+        return only.any? { |allowed| allowed.equal?(caster) } if only
+
         !caster.equal?(OPAQUE) && PostgresqlTypes.pattern?(caster)
       end
     end

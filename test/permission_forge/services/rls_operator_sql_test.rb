@@ -51,11 +51,14 @@ module PermissionForge
         end
       end
 
-      test 'a date or time that is not ISO 8601 is FALSE, except for PostgreSQL, which gets it as written' do
+      # PostgreSQL is asked whether it reads the text (ValueCasters::PostgresqlTypes::ReadBack).
+      test 'a date or time that is not ISO 8601 is FALSE, except text PostgreSQL reads, which it gets as written' do
         { %w[born_on less_than today] => "(#{col('born_on')} < 'today')",
           ['seen_at', 'not_equal', ' 10.01.2026 '] => "(#{col('seen_at')} <> ' 10.01.2026 ')",
-          ['born_on', 'in', '2026-01-10, someday'] => "(#{col('born_on')} IN ('2026-01-10', 'someday'))",
-          %w[opens_at greater_than noon] => "(#{col('opens_at')} > 'noon')" }.each do |(field, operator, value), as_written|
+          ['born_on', 'in', '2026-01-10, yesterday'] => "(#{col('born_on')} IN ('2026-01-10', 'yesterday'))",
+          ['born_on', 'in', '2026-01-10, someday'] => 'FALSE',
+          %w[opens_at greater_than allballs] => "(#{col('opens_at')} > 'allballs')",
+          %w[opens_at greater_than noon] => 'FALSE' }.each do |(field, operator, value), as_written|
           assert_equal (postgres? ? as_written : 'FALSE'), compiled(field, operator, value), "#{field} #{operator} #{value}"
         end
       end

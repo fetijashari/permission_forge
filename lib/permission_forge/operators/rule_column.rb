@@ -243,6 +243,12 @@ module PermissionForge
       def caster
         ValueCasters.for(column, @adapter_name, model)
       end
+
+      # Whether a LIKE pattern can be matched against the column, on the
+      # database it is in (ValueCasters.pattern?).
+      def pattern?
+        ValueCasters.pattern?(caster, @adapter_name)
+      end
     end
   end
 end

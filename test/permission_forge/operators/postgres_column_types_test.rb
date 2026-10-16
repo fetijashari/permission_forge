@@ -117,6 +117,46 @@ module PermissionForge
         assert new_rule(field_name: 'settings', operator: 'is_not_null', field_value: '').valid?
       end
 
+      # Text PostgreSQL reads itself (ValueCasters::PostgresqlTypes::ReadBack):
+      # date and time text Temporal does not recognise, and every column type
+      # no caster knows. PostgreSQL is asked once; what it cannot read matches
+      # nothing instead of raising for every holder.
+      test 'date text and types no caster knows are read back: what PostgreSQL cannot read matches nothing' do
+        record('dated', born_on: Date.new(2026, 1, 31), period: 1.day, mac: '08:00:2b:01:02:03')
+
+        { born_on: ['31 Jan 2026', 'banana'], period: ['1 day', 'banana'], mac: ['08:00:2b:01:02:03', 'zz'] }.each do |column, (readable, unreadable)|
+          assert_equal %w[dated], labels(column, 'equal', readable), "#{column} #{readable}"
+          %w[equal not_equal greater_than in].each do |operator|
+            assert_equal [], labels(column, operator, unreadable), "#{column} #{operator} #{unreadable}"
+          end
+          assert_equal [], labels(column, 'between', "#{readable},#{unreadable}"), "#{column} between"
+        end
+        assert_equal %w[dated], labels(:label, 'equal', 'dated'), 'the transaction is still usable after a refused CAST'
+      end
+
+      test 'a value is asked of PostgreSQL once per process and type' do
+        ValueCasters::PostgresqlTypes::ReadBack.reset!
+        casts = 0
+        counter = ->(*, payload) { casts += 1 if payload[:sql].to_s.start_with?('SELECT CAST(') }
+        ActiveSupport::Notifications.subscribed(counter, 'sql.active_record') do
+          3.times { labels(:period, 'equal', 'banana') }
+          labels(:period, 'equal', '2 days')
+        end
+
+        assert_equal 2, casts
+      end
+
+      test 'LIKE matches text columns only: an integer, a date or a boolean matches nothing instead of raising' do
+        record('counted', small_count: 5, born_on: Date.new(2026, 5, 5), flag: true)
+
+        { small_count: '5', born_on: '2026', flag: 't', period: 'day', ref: '7d1f' }.each do |column, value|
+          %w[contains starts_with ends_with].each do |operator|
+            assert_equal [], labels(column, operator, value), "#{column} #{operator}"
+          end
+        end
+        assert_equal %w[counted], labels(:label, 'contains', 'unt')
+      end
+
       private
 
       def resource

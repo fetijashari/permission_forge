@@ -140,16 +140,29 @@ module PermissionForge
         ['930', '25:00', '09:60', '09:30+02:00', 'noon', '', nil, 7].each { |text| assert_unusable('less_than', text, 'opens_at') }
       end
 
-      test 'what is not ISO 8601 is unusable on MySQL and SQLite and left to PostgreSQL as written' do
-        { 'born_on' => ['today', ' tomorrow ', '10.01.2026', 'Jan 10 2026', '2026-02-30', 'abc', '5', ''],
-          'seen_at' => ['now', 'infinity', '10.01.2026 10:00', '2026-01-10 25:00:00', 'abc', ''],
-          'opens_at' => ['noon', '09:30+02:00', '25:00', 'abc', ''] }.each do |column, values|
-          values.each do |value|
-            %w[SQLite Mysql2 Trilogy].each { |adapter| assert_unusable('less_than', value, column, adapter: adapter) }
-            %w[PostgreSQL PostGIS].each do |adapter|
-              assert_equal value, typed('less_than', value, column, adapter: adapter), "#{column} #{value.inspect} on #{adapter}"
-            end
+      # PostgreSQL reads date and time text itself and raises on what it
+      # cannot read: it is asked (ValueCasters::PostgresqlTypes::ReadBack).
+      # What it reads is handed over as written, the rest is UNUSABLE.
+      READ_BY_POSTGRESQL = { 'born_on' => ['today', ' tomorrow ', '10.01.2026', 'Jan 10 2026'],
+                             'seen_at' => ['now', 'infinity', '10.01.2026 10:00'],
+                             'opens_at' => ['allballs', '09:30+02:00'] }.freeze
+      NOT_READ_BY_POSTGRESQL = { 'born_on' => ['2026-02-30', 'abc', ''],
+                                 'seen_at' => ['2026-01-10 25:00:00', 'abc', ''],
+                                 'opens_at' => ['25:00', 'noon', 'abc', ''] }.freeze
+
+      test 'what is not ISO 8601 is unusable on MySQL and SQLite and asked of PostgreSQL' do
+        [READ_BY_POSTGRESQL, NOT_READ_BY_POSTGRESQL].each do |texts|
+          texts.each do |column, values|
+            values.each { |value| %w[SQLite Mysql2 Trilogy].each { |adapter| assert_unusable('less_than', value, column, adapter: adapter) } }
           end
+        end
+        next unless POSTGRES # the database is asked: only PostgreSQL answers as PostgreSQL
+
+        READ_BY_POSTGRESQL.each do |column, values|
+          values.each { |value| assert_equal value, typed('less_than', value, column, adapter: 'PostgreSQL'), "#{column} #{value.inspect}" }
+        end
+        NOT_READ_BY_POSTGRESQL.each do |column, values|
+          values.each { |value| assert_unusable('less_than', value, column, adapter: 'PostgreSQL') }
         end
       end
 
@@ -336,7 +349,7 @@ module PermissionForge
       VALUED = Constants::OPERATORS - Validations::VALUELESS
       LIKE = %w[contains not_contains starts_with ends_with].freeze
 
-      test 'a uuid column takes the text of a uuid, in any case, and nothing else' do
+      test 'a uuid column takes the text of a uuid, in any case and in each notation PostgreSQL reads, and nothing else' do
         token = '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57'
 
         assert_equal token, typed('equal', token, UUID, adapter: 'PostgreSQL')
@@ -344,7 +357,11 @@ module PermissionForge
         assert_equal '00000000-0000-0000-0000-000000000000', typed('equal', '00000000-0000-0000-0000-000000000000', UUID)
         assert_equal [token, '00000000-0000-0000-0000-000000000000'],
                      typed('in', "#{token}, 00000000-0000-0000-0000-000000000000", UUID, adapter: 'PostgreSQL')
-        ['banana', '', ' ', '7d1f0c0e6f0a4a579f0d0f3f6f0a4a57', "{#{token}}", "urn:uuid:#{token}", "#{token}0", token.tr('a', 'g'),
+        ['7d1f0c0e6f0a4a579f0d0f3f6f0a4a57', "{#{token}}", "urn:uuid:#{token}", "URN:UUID:#{token.upcase}",
+         '{7d1f0c0e6f0a4a579f0d0f3f6f0a4a57}'].each do |notation|
+          assert_equal token, typed('equal', notation, UUID, adapter: 'PostgreSQL'), notation
+        end
+        ['banana', '', ' ', "{#{token}", "urn:uuid:{#{token}}", "#{token}0", token.tr('a', 'g'),
          '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a5', nil, 7, "#{token},banana"].each do |value|
           assert_unusable('equal', value, UUID, adapter: 'PostgreSQL')
         end
