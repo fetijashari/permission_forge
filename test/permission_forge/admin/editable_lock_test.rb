@@ -30,6 +30,55 @@ module PermissionForge
         assert_nil EditableLock.locked_record(create_permission_set)
       end
 
+      # "Locked" has one definition, the chain: a view's pf_locked? and a controller's refusal agree.
+      test 'locked? walks the chain; flagged? is the record alone' do
+        @set.update!(is_editable: false)
+
+        assert EditableLock.locked?(@field)
+        assert EditableLock.locked?(@rule)
+        assert EditableLock.locked?(@resource.resource_fields.build(name: 'phone'))
+        assert_not EditableLock.flagged?(@field)
+        assert EditableLock.flagged?(@set)
+        assert_not EditableLock.locked?(nil)
+        assert_not EditableLock.locked?(create_permission_set)
+      end
+
+      # The one table the controllers' refusals and the views' "show or disable" read.
+      test 'permits? refuses what changes a locked record, lets a copy, a review and narrowing through' do
+        assignment = create_permission_set_user(user: create_user, permission_set: @set)
+        assert EditableLock.permits?(@field, :edit)
+        @set.update!(is_editable: false)
+
+        %i[edit add toggle sync acknowledge apply_recommendation].each do |action|
+          assert_not EditableLock.permits?(@field, action), action
+          assert_not EditableLock.permits?(@resource, action), action
+        end
+        assert_not EditableLock.permits?(@rule, :delete)
+        assert EditableLock.permits?(@set, :duplicate)
+        assert EditableLock.permits?(assignment, :review)
+        assert EditableLock.permits?(assignment, :revoke), 'removing a holder of a granting set narrows'
+        assert_not EditableLock.permits?(assignment, :grant)
+        assert_not EditableLock.permits?(@set, :grant)
+        assert EditableLock.permits?(assignment, :change_expiry, from: nil, to: 1.day.from_now), 'setting an end date narrows'
+        assert_not EditableLock.permits?(assignment, :change_expiry, from: 1.day.from_now, to: nil)
+      end
+
+      test 'permits? flips the holder direction for a Muting Permission Set and asks the container for :delete' do
+        muting = create_permission_set(name: 'No exports', is_muting: true, is_editable: false)
+        held = create_permission_set_user(user: create_user, permission_set: muting)
+
+        assert EditableLock.permits?(muting, :grant)
+        assert_not EditableLock.permits?(held, :revoke)
+        assert EditableLock.permits?(held, :change_expiry, from: 1.day.from_now, to: nil), 'keeping a holder longer narrows'
+
+        @set.update!(permission_set_group: @group)
+        assert EditableLock.permits?(@set, :delete)
+        @group.update!(is_editable: false)
+
+        assert_not EditableLock.permits?(@set, :delete), 'deleting changes the locked group\'s list of sets'
+        assert EditableLock.permits?(@set, :edit), 'the set itself is editable'
+      end
+
       test 'a group move is locked when either group is' do
         other = create_permission_set_group(name: 'Other')
         @group.update!(is_editable: false)

@@ -32,13 +32,13 @@ module PermissionForge
       rule = build_rule(field_name: 'onwer_id')
 
       assert_not rule.valid?
-      assert_equal ['is not a column of Customer'], rule.errors[:field_name]
-      assert_equal ['Field name is not a column of Customer'], rule.errors.full_messages
+      assert_equal ['names onwer_id, which is not a column of Customer'], rule.errors[:field_name]
+      assert_equal ['Field name names onwer_id, which is not a column of Customer'], rule.errors.full_messages
       assert_not build_rule(field_name: 'customers.onwer_id').valid?
     end
 
     test 'the message is translated' do
-      { sq: 'nuk është kolonë e Customer', mk: 'не е колона на Customer' }.each do |locale, message|
+      { sq: 'përmend onwer_id, që nuk është kolonë e Customer', mk: 'го именува onwer_id, што не е колона на Customer' }.each do |locale, message|
         I18n.with_locale(locale) do
           rule = build_rule(field_name: 'onwer_id')
 
@@ -70,8 +70,9 @@ module PermissionForge
       on_path = build_rule(field_name: 'domain', **join)
 
       assert_not on_path.valid?
-      assert_equal ['is not a column of Supplier'], on_path.errors[:field_name]
-      assert_equal ['is not a column of Customer'], build_rule(field_name: 'customers.nope', **join).tap(&:valid?).errors[:field_name]
+      assert_equal ['names domain, which is not a column of Supplier'], on_path.errors[:field_name]
+      qualified = build_rule(field_name: 'customers.nope', **join).tap(&:valid?)
+      assert_equal ['names nope, which is not a column of Customer'], qualified.errors[:field_name]
     end
 
     test 'a filter rule is checked against its own model, whatever path it carries' do
@@ -127,7 +128,7 @@ module PermissionForge
 
       assert rule.reload.update(field_value: '5', is_active: false, name: 'Renamed'), rule.errors.full_messages.inspect
       assert_not rule.update(field_name: 'onwer')
-      assert_equal ['is not a column of Customer'], rule.errors[:field_name]
+      assert_equal ['names onwer, which is not a column of Customer'], rule.errors[:field_name]
 
       rule.reload
       assert_not rule.update(join_type: 'joins', field_accessor_path: 'supplier'), 'onwer_id is no column of Supplier either'
@@ -151,7 +152,7 @@ module PermissionForge
       copy.assign_attributes(uuid: SecureRandom.uuid, resource: supplier)
 
       assert_not copy.valid?, 'domain is a column of Customer, not of Supplier'
-      assert_equal ['is not a column of Supplier'], copy.errors[:field_name]
+      assert_equal ['names domain, which is not a column of Supplier'], copy.errors[:field_name]
     end
 
     # A column a migration added after the schema cache was read (a running

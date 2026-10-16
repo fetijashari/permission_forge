@@ -1,6 +1,7 @@
 require 'test_helper'
 require_relative '../virtual_field_models'
 require_relative '../field_variant_models'
+require 'permission_forge/sti_models'
 
 module PermissionForge
   module Admin
@@ -20,6 +21,38 @@ module PermissionForge
 
       def field(name, res = outcome)
         res.fields.find { |f| f.name == name }
+      end
+
+      # ResourceChain: the rules of every entry a subclass answers to apply,
+      # a bypass skips only its own entry's rules — the admin shows the same.
+      test 'a subclass entry lists the base entry\'s rules too, and View All on the subclass skips only its own' do
+        base = create_resource(permission_set: @sales, name: 'PfStiTicket', read_access: true)
+        create_permission_set_rule(permission_set: @sales, resource: base, name: 'Open only', field_name: 'status', field_value: 'open')
+        sub = create_resource(permission_set: @sales, name: 'PfStiBugTicket', read_access: true, view_all: true)
+        create_permission_set_rule(permission_set: @sales, resource: sub, name: 'Own bugs', field_name: 'owner_id',
+                                   field_value: 'current_user')
+
+        res = outcome('PfStiBugTicket')
+
+        assert_equal ['Open only'], res.rules.map { |source| source.rule.name }, 'the base rule applies; the own rule is bypassed'
+        assert_equal :rules, res.records
+        base.update!(view_all: true)
+
+        assert_empty outcome('PfStiBugTicket').rules
+        assert_equal :all, outcome('PfStiBugTicket').records
+      end
+
+      # PermissionHashBuilder.granted_flags: a row written past the validation
+      # grants edit only with read, Modify All only with View All.
+      test 'resource flags follow the engine for a row that grants edit without read' do
+        @customer.update_columns(read_access: false, edit_access: true, delete_access: true, view_all: false, modify_all: true)
+
+        res = outcome
+
+        assert_equal :none, res.op(:edit_access).state
+        assert_equal :none, res.op(:delete_access).state
+        assert_equal :none, res.op(:modify_all).state
+        assert_equal :none, res.records
       end
 
       test 'grants come with the set that gave them' do
