@@ -8,7 +8,7 @@
     </div>
   </div>
 <% end %>
-<% if pf_locked_record?(record) %>
+<% if pf_locked?(record) %>
   <div class="pf-banner" role="note">
     <span class="pf-banner__glyph" aria-hidden="true"><%= pf_lock_icon %></span>
     <div class="pf-banner__body">

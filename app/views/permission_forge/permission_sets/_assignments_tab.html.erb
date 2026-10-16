@@ -1,5 +1,7 @@
 <% back = permission_forge.permission_set_path(set, tab: 'assignments') %>
 <% creations = pf_audit_creations(@assignments) %>
+<%# Removing holders: always on a granting set (it narrows), refused on a locked Muting Permission Set (EditableLock.permits?). %>
+<% revoking = PermissionForge::Admin::EditableLock.permits?(set, :revoke) %>
 <div class="pf-stack pf-stack--loose" data-pf-bulk>
   <div class="pf-row pf-row--between">
     <p class="pf-text-2"><%= t('.immediate') %></p>
@@ -12,11 +14,13 @@
     <% end %>
   </div>
 
-  <%= form_with url: permission_forge.revoke_permission_set_bulk_assignment_path(set), method: :get, id: 'pf-revoke-form',
-                data: { pf_modal: 'dialog' } do %>
+  <% if revoking %>
+    <%= form_with url: permission_forge.revoke_permission_set_bulk_assignment_path(set), method: :get, id: 'pf-revoke-form',
+                  data: { pf_modal: 'dialog' } do %>
+    <% end %>
   <% end %>
 
-  <% if @assignments.any? %>
+  <% if @assignments.any? && revoking %>
     <div class="pf-bulk-bar" data-pf-bulk-bar>
       <span class="pf-fw-600" data-pf-selected-count data-pf-one="<%= t('.selected.one', count: '%{count}') %>"
             data-pf-other="<%= t('.selected.other', count: '%{count}') %>"><%= t('.select_hint') %></span>
@@ -28,7 +32,7 @@
     <div class="pf-table pf-table--assignments" role="table" aria-label="<%= t('.label') %>">
       <div class="pf-table__head" role="row">
         <span role="columnheader">
-          <% unless @assignments.empty? %>
+          <% if @assignments.any? && revoking %>
             <input type="checkbox" data-pf-select-all aria-label="<%= t('.select_all') %>" hidden data-pf-js-show>
           <% end %>
         </span>
@@ -41,8 +45,10 @@
         <% name = pf_person_name(a.user) %>
         <div class="pf-table__row" role="row">
           <span role="cell">
-            <input type="checkbox" name="user_ids[]" value="<%= a.user_id %>" form="pf-revoke-form" data-pf-select
-                   aria-label="<%= t('.select_person', name: name) %>">
+            <% if revoking %>
+              <input type="checkbox" name="user_ids[]" value="<%= a.user_id %>" form="pf-revoke-form" data-pf-select
+                     aria-label="<%= t('.select_person', name: name) %>">
+            <% end %>
           </span>
           <span role="cell"><%= pf_person_cell(a.user, href: permission_forge.person_path(a.user_id)) %></span>
           <span role="cell" class="pf-fs-13 pf-text-2"><%= t('.assigned_on', date: pf_date(a.created_at), by: pf_audit_creator(a, creations)) %></span>
@@ -67,7 +73,11 @@
                 <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-sexp-reason-#{a.id}" %>
               <% end %>
             <% end %>
-            <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.remove_assignment_path(a, return_to: back), class: 'pf-btn pf-btn--ghost-danger' %>
+            <% if revoking %>
+              <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.remove_assignment_path(a, return_to: back), class: 'pf-btn pf-btn--ghost-danger' %>
+            <% else %>
+              <%= pf_lock_badge(set) %>
+            <% end %>
           </span>
         </div>
       <% end %>

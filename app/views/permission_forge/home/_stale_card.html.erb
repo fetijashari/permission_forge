@@ -29,9 +29,11 @@
             <button type="submit" class="pf-btn pf-btn--sm"><%= t('permission_forge.ui.keep') %></button>
             <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-keep-reason-#{assignment.id}" %>
           <% end %>
-          <%= pf_lock_badge if pf_locked_record?(assignment.permission_set) %>
-          <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.remove_assignment_path(assignment, return_to: permission_forge.root_path),
-                            class: 'pf-btn pf-btn--ghost-danger' %>
+          <%= pf_lock_badge(assignment) %>
+          <% if PermissionForge::Admin::EditableLock.permits?(assignment, :revoke) %>
+            <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.remove_assignment_path(assignment, return_to: permission_forge.root_path),
+                              class: 'pf-btn pf-btn--ghost-danger' %>
+          <% end %>
         </div>
       </div>
     <% end %>

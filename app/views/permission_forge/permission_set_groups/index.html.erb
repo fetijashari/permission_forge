@@ -35,7 +35,7 @@
           <b><%= group.name %></b>
           <span class="pf-fs-13 pf-text-3"><%= t('.sets_count', count: group.permission_sets.size) %></span>
           <%= pf_off_badge unless group.is_active %>
-          <%= pf_lock_badge if pf_locked_record?(group) %>
+          <%= pf_lock_badge(group) %>
         </span>
         <% if group.description.present? %><span class="pf-fs-13 pf-text-2"><%= group.description %></span><% end %>
         <span class="pf-chips"><% group.permission_sets.sort_by(&:name).each do |ps| %><%= pf_set_chip(ps, href: nil) %><% end %></span>

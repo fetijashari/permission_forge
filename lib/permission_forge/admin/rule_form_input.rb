@@ -13,8 +13,9 @@ module PermissionForge
       end
 
       # @param rule [PermissionSetRule, nil] nil for a new rule
+      # A new rule starts on the model's defaults (include_nulls among them).
       def self.from_rule(rule)
-        rule ||= PermissionForge::PermissionSetRule.new(operator: 'equal', include_nulls: false, is_active: true)
+        rule ||= PermissionForge::PermissionSetRule.new(operator: 'equal', is_active: true)
         path = rule_path(rule)
         path.merge(rule_values(rule.field_value.to_s, RuleForm::ARITY.fetch(path[:operator], :one)), rule_options(rule))
       end
@@ -22,8 +23,10 @@ module PermissionForge
       def self.param_path(attrs)
         path = Array(attrs['path']).map(&:to_s).compact_blank
         remove = attrs['remove_step']
+        # The operator as posted: one that is not a condition is refused by
+        # RuleForm#valid?, never rewritten to another.
         { name: attrs['name'].to_s.strip, path: remove.present? ? path.first(remove.to_i) : path,
-          field_name: attrs['field_name'].to_s, operator: allowed(attrs['operator'], RuleForm::ARITY.keys, 'equal') }
+          field_name: attrs['field_name'].to_s, operator: attrs.key?('operator') ? attrs['operator'].to_s : 'equal' }
       end
 
       def self.param_values(attrs)
@@ -44,9 +47,12 @@ module PermissionForge
           is_active: attrs.key?('is_active') ? attrs['is_active'] == '1' : true }
       end
 
+      # A filter rule's path is never joined (PermissionSetRule#join_rule?,
+      # the one definition): the builder does not load one, so saving the
+      # rule again keeps it a filter rule.
       def self.rule_path(rule)
-        { name: rule.name.to_s, path: rule.field_accessor_path.to_s.split('.').compact_blank,
-          field_name: rule.field_name.to_s, operator: rule.operator.presence || 'equal' }
+        path = rule.join_rule? ? rule.field_accessor_path.to_s.split('.').compact_blank : []
+        { name: rule.name.to_s, path: path, field_name: rule.field_name.to_s, operator: rule.operator.presence || 'equal' }
       end
 
       def self.rule_values(raw, arity)
@@ -57,8 +63,8 @@ module PermissionForge
       end
 
       def self.rule_options(rule)
-        { include_nulls: rule.persisted? ? rule.include_nulls : false, failure_message: rule.failure_message.to_s,
-          join: rule.join_type.presence || 'auto', is_active: rule.is_active != false }
+        { include_nulls: rule.include_nulls == true, failure_message: rule.failure_message.to_s,
+          join: rule.join_rule? ? rule.join_type : 'auto', is_active: rule.is_active != false }
       end
 
       def self.allowed(value, choices, fallback)

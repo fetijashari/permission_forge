@@ -39,8 +39,14 @@ module PermissionForge
     # (InvalidatesInBatch#note_previous_value).
     after_save { note_previous_value('user_id') }
 
+    # The window of "ending soon": Home's card, the People page filter and
+    # the end-date cell ("ends in N days") all read it.
+    ENDING_SOON_DAYS = 7
+
     scope :active_assignments, -> { where(expires_at: nil).or(where(expires_at: Time.current..)) }
     scope :expired, -> { where.not(expires_at: nil).where(expires_at: ...Time.current) }
+    # Assignments that end within `days` from now (today's included, ended ones not).
+    scope :ending_within, ->(days = ENDING_SOON_DAYS) { where(expires_at: Time.current..days.days.from_now.end_of_day) }
 
     # Permanent assignments last reviewed before `cutoff` — the access
     # review list and StaleAssignmentAuditor. Reviewed means a "Keep"
@@ -50,6 +56,15 @@ module PermissionForge
     scope :stale_before, ->(cutoff) { where(expires_at: nil).where(last_reviewed_column.lt(cutoff)) }
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
+
+    # Whether an end date has passed: the one comparison behind #expired?,
+    # the `expired` scope and the admin's end-date cell.
+    #
+    # @param expires_at [Time, nil]
+    # @return [Boolean]
+    def self.ended?(expires_at)
+      expires_at.present? && expires_at < Time.current
+    end
 
     # The review columns exist (bin/rails generate permission_forge:upgrade).
     def self.review_supported?
@@ -97,7 +112,25 @@ module PermissionForge
     end
 
     def expired?
-      expires_at.present? && expires_at < Time.current
+      self.class.ended?(expires_at)
+    end
+
+    # Whether the assignment ends within `days` (see .ending_within).
+    #
+    # @param days [Integer]
+    # @return [Boolean]
+    def ending_soon?(days = ENDING_SOON_DAYS)
+      expires_at.present? && !expired? && expires_at <= days.days.from_now.end_of_day
+    end
+
+    # Whether a permanent assignment is due for review: last reviewed more
+    # than `days` ago (see .stale_before; Admin::AttentionItems.stale_days
+    # is the threshold the admin uses).
+    #
+    # @param days [Integer]
+    # @return [Boolean]
+    def stale?(days)
+      expires_at.nil? && last_reviewed_at < days.days.ago
     end
 
     def active_assignment?

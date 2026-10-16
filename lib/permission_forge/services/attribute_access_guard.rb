@@ -116,13 +116,8 @@ module PermissionForge
       end
 
       def unconfigured
-        strategy_key = PermissionForge.configuration.unconfigured_field_strategy
-        # Unknown strategy keys fall back to :block (fail closed), never pass-through.
-        strategy = FiltersResponseAttributes::UNCONFIGURED_FIELD_STRATEGIES.fetch(
-          strategy_key,
-          FiltersResponseAttributes::UNCONFIGURED_FIELD_STRATEGIES[:block]
-        )
-        include_field, value = strategy.call(@resource_name.to_s, @attribute, @raw_value)
+        # FiltersResponseAttributes.unconfigured_strategy: the one lookup (an unknown key blocks).
+        include_field, value = FiltersResponseAttributes.unconfigured_strategy.call(@resource_name.to_s, @attribute, @raw_value)
         notify(:unconfigured)
         [include_field, value]
       end

@@ -30,13 +30,16 @@ module PermissionForge
 
     # --- assignments --------------------------------------------------------
 
-    # [text, css tone class] for an assignment end date.
+    # [text, css tone class] for an assignment end date. "Ended" and "ends
+    # in" are PermissionSetUser's (.ended?, ENDING_SOON_DAYS — the window of
+    # Home's "ending soon" card and the People page filter).
     def pf_expiry(expires_at)
       days = PermissionForge::Admin::ExpiryPresets.days_left(expires_at)
+      assignments = PermissionForge::PermissionSetUser
       return [pf_ui('expiry.none'), 'pf-text-2'] if days.nil?
-      return [pf_ui('expiry.expired', date: pf_date(expires_at, year: false)), 'pf-text-3'] if expires_at < Time.current
+      return [pf_ui('expiry.expired', date: pf_date(expires_at, year: false)), 'pf-text-3'] if assignments.ended?(expires_at)
       return [pf_ui('expiry.today'), 'pf-text-warn'] if days.zero?
-      return [pf_ui('expiry.ends_in', count: days, date: pf_date(expires_at, year: false)), 'pf-text-warn'] if days <= 7
+      return [pf_ui('expiry.ends_in', count: days, date: pf_date(expires_at, year: false)), 'pf-text-warn'] if days <= assignments::ENDING_SOON_DAYS
 
       [pf_ui('expiry.until', date: pf_date(expires_at, year: false)), 'pf-text-2']
     end
@@ -91,9 +94,11 @@ module PermissionForge
       @pf_reviewers[id.to_s] = PermissionForge.configuration.user_model.find_by(id: id)
     end
 
+    # Due for review: PermissionSetUser#stale? at the admin's threshold
+    # (Admin::AttentionItems.stale_days — Home's Stale card and the audit's
+    # stale_assignments use the same one, also while the setting is nil).
     def pf_stale?(assignment)
-      assignment.expires_at.nil? &&
-        assignment.last_reviewed_at < PermissionForge.configuration.admin_stale_assignment_days.to_i.days.ago
+      assignment.stale?(PermissionForge::Admin::AttentionItems.stale_days)
     end
 
     # Calendar date (not time) for each expiry preset, for labels.

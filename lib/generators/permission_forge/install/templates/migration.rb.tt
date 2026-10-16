@@ -113,7 +113,7 @@ class CreatePermissionForgeTables < ActiveRecord::Migration<%= migration_version
       t.string     :field_value, null: false
       t.string     :field_accessor_path
       t.string     :operator, null: false, default: 'equal'
-      t.boolean    :include_nulls, null: false, default: true
+      t.boolean    :include_nulls, null: false, default: false
       t.boolean    :is_active, null: false, default: true
       t.boolean    :is_editable, null: false, default: true
 <% if tenant_column %>      t.<%= tenant_id_type %>     :<%= tenant_column %>

@@ -66,7 +66,7 @@
           <option value=""><%= t('.pick_field') %></option>
           <% if (kept = builder.kept_field) %><option value="<%= kept %>" selected><%= t('.stored_field', name: kept) %></option><% end %>
           <% form.field_options.each do |col| %>
-            <option value="<%= col.name %>" <%= 'selected' if builder.field_selected?(col) %>><%= col.label %> (<%= col.name %>)</option>
+            <option value="<%= col.name %>" <%= 'selected' if builder.field_selected?(col) %>><%= col.label %> (<%= col.name %>)<%= " — #{t('.ignored_field')}" if form.ignored_field?(col) %></option>
           <% end %>
         </select>
       </div>

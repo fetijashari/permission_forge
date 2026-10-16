@@ -169,7 +169,7 @@ module PermissionForge
 
     def lost_resource_labels(assignments)
       assignments.map(&:permission_set).reject(&:is_muting)
-                 .flat_map { |ps| ps.resources.select(&:is_active).map { |r| helpers.pf_resource_plural(r.name) } }.uniq
+                 .flat_map { |ps| ps.resources.in_effect.map { |r| helpers.pf_resource_plural(r.name) } }.uniq
     end
 
     # Flags gating sets this person has, plus configured flags.

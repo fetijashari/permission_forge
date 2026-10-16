@@ -58,9 +58,9 @@ module PermissionForge
       @action_record = @resource.resource_actions.find(params[:id])
     end
 
+    # The action's chain (action, Resource, Permission Set), or the Resource's for a new action.
     def reject_locked
-      locked = [@permission_set, @resource].find { |r| pf_locked?(r) }
-      pf_reject_locked!(locked, resource_path) if locked
+      pf_reject_locked!(@action_record || @resource, resource_path)
     end
 
     def resource_path

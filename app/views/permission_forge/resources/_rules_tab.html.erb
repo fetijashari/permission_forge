@@ -1,6 +1,8 @@
 <% scoping = PermissionForge.configuration.auto_query_scoping.to_s %>
 <div class="pf-stack pf-stack--loose">
-  <% unenforced = scoping == 'filter_only' ? @rules.any? { |r| r.is_active && r.join_rule? } : @rules.any?(&:is_active) %>
+  <%# Rules the app's query scoping leaves to permission_scoped: only where they count (Resource#in_effect?, not bypassed). %>
+  <% enforced_rules = resource.in_effect? && !resource.rules_bypassed? ? @rules.select(&:is_active) : [] %>
+  <% unenforced = scoping == 'filter_only' ? enforced_rules.any?(&:join_rule?) : enforced_rules.any? %>
   <% if muting %>
     <p class="pf-banner"><%= t('.muting') %></p>
   <% elsif unenforced && !resource.view_all %>
@@ -15,13 +17,13 @@
   <% end %>
   <% @rules.each do |rule| %>
     <% ignored = resource.view_all && rule.is_active %>
-    <% rule_locked = locked || pf_locked_record?(rule) %>
+    <% rule_locked = pf_locked?(rule) %>
     <div class="pf-rule<%= ' pf-rule--off' unless rule.is_active %>">
       <div class="pf-row">
         <b><%= rule.name %></b>
         <%= pf_off_badge unless rule.is_active %>
         <% if ignored %><%= pf_badge("⚠ #{resource.modify_all ? t('.ignored_both') : t('.ignored')}", variant: :warn) %><% end %>
-        <%= pf_lock_badge if pf_locked_record?(rule) %>
+        <%= pf_lock_badge(rule) %>
         <% unless rule_locked %>
           <span class="pf-actions pf-ml-auto">
             <%= form_with url: permission_forge.toggle_permission_set_resource_rule_path(set, resource.name, rule),

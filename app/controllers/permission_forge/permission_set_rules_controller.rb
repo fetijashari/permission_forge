@@ -65,9 +65,9 @@ module PermissionForge
       @rule = @resource.permission_set_rules.find(params[:id])
     end
 
+    # The rule's chain (rule, Resource, Permission Set), or the Resource's for a new rule.
     def reject_locked
-      locked = [@permission_set, @resource, @rule].compact.find { |r| pf_locked?(r) }
-      pf_reject_locked!(locked, rules_path) if locked
+      pf_reject_locked!(@rule || @resource, rules_path)
     end
 
     def rules_path

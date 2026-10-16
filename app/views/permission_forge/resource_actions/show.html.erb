@@ -1,6 +1,6 @@
 <% set = @permission_set %>
 <% back = permission_forge.permission_set_resource_path(set, @resource.name, tab: 'actions') %>
-<% locked = pf_locked_record?(set) || pf_locked_record?(@resource) %>
+<% locked = pf_locked?(@action_record) %>
 <% name = @action_record.display_name %>
 <% content_for :pf_title, name %>
 <%= form_with url: permission_forge.permission_set_resource_action_path(set, @resource.name, @action_record), method: :patch do %>

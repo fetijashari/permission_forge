@@ -25,11 +25,13 @@ module PermissionForge
     def warn_join_rules_not_auto_scoped(pf_config)
       return unless pf_config.auto_query_scoping_enabled?
 
-      join_rules = PermissionForge::PermissionSetRule.join_type_rules
-      return unless join_rules.exists?
+      # The join rules (PermissionSetRule#join_rule?, the one definition; the scope is the SQL pre-filter).
+      count = PermissionForge::PermissionSetRule.join_type_rules.pluck(:join_type)
+                                                .count { |join_type| !PermissionForge::PermissionSetRule.filter_join_type?(join_type) }
+      return if count.zero?
 
       Warnings.emit(:join_rules_not_auto_scoped,
-                    "auto_query_scoping is enabled but #{join_rules.count} join-type rule(s) exist. Join rules " \
+                    "auto_query_scoping is enabled but #{count} join-type rule(s) exist. Join rules " \
                     'are NOT applied by auto-scoping — queries relying on them must go through ' \
                     'Model.permission_scoped.', severity: :security)
     rescue ActiveRecord::StatementInvalid

@@ -43,10 +43,11 @@ module PermissionForge
           section('bulk')
         end
 
-        # Records flagged is_editable: false are managed by the system/API and
-        # are never changed from the admin UI (their disabled inputs still post).
+        # Locked records (is_editable: false on them or on what they belong
+        # to: EditableLock, the one definition) are managed by the system/API
+        # and never changed from the admin UI (their disabled inputs still post).
         def locked?(record)
-          record.respond_to?(:is_editable) && record.is_editable == false
+          EditableLock.locked?(record)
         end
 
         def truthy?(value)

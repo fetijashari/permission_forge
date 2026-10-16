@@ -257,7 +257,7 @@ module PermissionForge
       permission_set = @assignment.permission_set
       return [] if permission_set.is_muting
 
-      permission_set.resources.select(&:is_active).map { |r| helpers.pf_resource_plural(r.name) }
+      permission_set.resources.in_effect.map { |r| helpers.pf_resource_plural(r.name) }
     end
   end
 end

@@ -943,6 +943,7 @@ sq:
           value: Shkruaj një vlerë, ose zgjidh “përdoruesi aktual”.
         field: Fusha për t'u kontrolluar
         follow: Ndiq një lidhje
+        ignored_field: pa rresht fushe (ignored_fields)
         ignored_warning: Shiko të gjitha është aktiv për këtë burim, prandaj rregullat
           e regjistrimeve injorohen derisa të çaktivizohet.
         include_nulls: Shfaq edhe regjistrimet ku %{field} është bosh
@@ -2343,7 +2344,7 @@ sq:
           fusha e së cilës (ose një përgjatë :through) merr regjistrimin: një rregull
           nuk mund ta bashkojë'
         unknown_association: përmend %{association}, që nuk është lidhje e %{model}
-        unknown_column: nuk është kolonë e %{model}
+        unknown_column: përmend %{name}, që nuk është kolonë e %{model}
         unknown_table: emërton %{name}, që nuk është tabelë e kësaj baze të dhënash
         unusable_value: nuk është vlerë që %{model}.%{name} mund ta mbajë
         value_not_expected: nuk kërkon vlerë për këtë operator

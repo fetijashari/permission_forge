@@ -39,8 +39,9 @@ module PermissionForge
     # The entries of the configured fields by the names of their variants
     # (`owner_uuid` → the `owner_id` entry), to read a name that has no entry
     # of its own. A name two fields map to (custom field_variant_mappings)
-    # gets the strictest of their entries (.strictest): such a key is never
-    # more readable than any of its bases. This covers names the model does
+    # gets the strictest of their entries (ResourceChain.strictest, the one
+    # definition): such a key is never more readable than any of its bases.
+    # This covers names the model does
     # not have (serializer keys); a variant the model has gets its entry from
     # FieldPermissionMerger, which merges every base row like any granting row.
     #
@@ -50,25 +51,8 @@ module PermissionForge
       bases = fields.each_with_object({}) do |(base, entry), by_variant|
         configuration.field_variants_for(base).each { |variant| (by_variant[variant] ||= []) << entry }
       end
-      bases.transform_values { |entries| strictest(entries) }
+      bases.transform_values { |entries| ResourceChain.strictest(entries) }
     end
-
-    # One entry from several: read only if every entry reads, edit only if
-    # every entry edits, masked if any entry masks (with the first masking
-    # entry's strategy).
-    #
-    # @param entries [Array<Hash>] field entries of the permission hash
-    # @return [Hash]
-    def self.strictest(entries)
-      return entries.first if entries.one?
-
-      masking = entries.find { |entry| entry[:mask_access] }
-      entries.first.merge(read_access: entries.all? { |entry| entry[:read_access] },
-                          edit_access: entries.all? { |entry| entry[:edit_access] },
-                          mask_access: !masking.nil?,
-                          mask_strategy: (masking || entries.first)[:mask_strategy])
-    end
-    private_class_method :strictest
 
     # @param resource_name [String, Symbol] the Resource's name (a model's class name)
     # @param configuration [Configuration]

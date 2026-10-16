@@ -19,8 +19,9 @@ module PermissionForge
           PermissionForge::PermissionSetUser.active_assignments
         end
 
+        # The admin's threshold (Admin::AttentionItems.stale_days, the one definition).
         def stale_days
-          configuration.try(:admin_stale_assignment_days) || Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS
+          PermissionForge::Admin::AttentionItems.stale_days(configuration)
         end
 
         def stale

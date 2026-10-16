@@ -44,10 +44,12 @@ module PermissionForge
 
       private
 
+      # The rows in the order the hash builder merges them
+      # (PermissionHashBuilder.sort_rows, the one definition of row order).
       def clone_resources(target_set)
-        @permission_set.resources.includes(:resource_fields, :resource_actions, :permission_set_rules).find_each do |resource|
-          clone_resource(target_set, resource)
-        end
+        @permission_set.resources.includes(:resource_fields, :resource_actions, :permission_set_rules).load
+        PermissionForge::Services::PermissionHashBuilder.sort_rows(@permission_set)
+        @permission_set.resources.each { |resource| clone_resource(target_set, resource) }
       end
 
       def clone_resource(target_set, resource)
@@ -59,8 +61,9 @@ module PermissionForge
       end
 
       # One copy per action name. Rows that share a name (possible only on a
-      # table without the unique index) are OR-ed when permissions are built,
-      # so the copy is the single row they amount to.
+      # table without the unique index) are OR-ed when permissions are built
+      # (PermissionHashBuilder#merge_resource_actions: the active rows'
+      # is_permitted, ||=), so the copy is the single row they amount to.
       def clone_actions(resource, cloned_resource)
         resource.resource_actions.group_by(&:name).each_value do |rows|
           copy(rows.first, resource: cloned_resource, **combined_action_flags(rows))
