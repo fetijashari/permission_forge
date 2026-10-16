@@ -53,6 +53,10 @@ module PermissionForge
     # object_id), and the `columns` it read.
     Confirmed = Data.define(:token, :names, :columns)
 
+    # Seconds a table found missing stays missing before table? asks the
+    # database again.
+    TABLE_RECHECK = 30
+
     @confirmed = Concurrent::Map.new
     @claims = Concurrent::Map.new
     @tables = Concurrent::Map.new
@@ -136,7 +140,11 @@ module PermissionForge
       end
 
       # Whether the connection has a data source (a table or a view) named
-      # `table`; a "no" is asked of the database again once per process.
+      # `table`; a "no" is asked of the database again, at most once every
+      # TABLE_RECHECK seconds per model and name (a table a migration
+      # creates later is found within that interval, and a name that stays
+      # missing — a rule qualified with an alias — costs one query per
+      # interval, never one per call).
       #
       # @param model [Class] a model on the connection
       # @param table [String] the name as written
@@ -145,7 +153,7 @@ module PermissionForge
         table = table.to_s
         cache = schema_cache(model)
         return true if cache.data_source_exists?(table)
-        return false unless @tables.put_if_absent([slot(model), table], true).nil?
+        return false unless table_recheck_due?([slot(model), table])
 
         cache.clear_data_source_cache!(table)
         @rereads.increment
@@ -198,6 +206,17 @@ module PermissionForge
             WHERE enumtypid = to_regtype(#{connection.quote(type.to_s)}) ORDER BY enumsortorder
           SQL
         end
+      end
+
+      # Claims the re-read of a missing table when none ran in the last
+      # TABLE_RECHECK seconds (one thread wins; the others answer "no").
+      def table_recheck_due?(key)
+        now = Time.now.to_f
+        last = @tables[key]
+        return @tables.put_if_absent(key, now).nil? if last.nil?
+        return false if now - last < TABLE_RECHECK
+
+        @tables.replace_pair(key, last, now)
       end
 
       def table_columns(model)

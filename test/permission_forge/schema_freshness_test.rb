@@ -151,6 +151,24 @@ module PermissionForge
       connection.schema_cache.clear_data_source_cache!('pf_schema_fresh_late')
     end
 
+    test 'a table found missing is asked of the database again after TABLE_RECHECK seconds, not before' do
+      connection.drop_table(:pf_schema_fresh_later, if_exists: true)
+      assert_not SchemaRead.table?(MODEL, 'pf_schema_fresh_later')
+      # Another process's migration: this process's schema cache is not told.
+      connection.execute('CREATE TABLE pf_schema_fresh_later (id integer PRIMARY KEY)')
+      rereads = SchemaRead.rereads
+
+      assert_not SchemaRead.table?(MODEL, 'pf_schema_fresh_later'), 'a "no" read again a moment ago is the answer'
+      assert_equal rereads, SchemaRead.rereads, 'and costs nothing'
+      travel(SchemaRead::TABLE_RECHECK + 1) do
+        assert SchemaRead.table?(MODEL, 'pf_schema_fresh_later'), 'a "no" is asked again once the interval passed'
+      end
+      assert_equal rereads + 1, SchemaRead.rereads
+    ensure
+      connection.drop_table(:pf_schema_fresh_later, if_exists: true)
+      connection.schema_cache.clear_data_source_cache!('pf_schema_fresh_later')
+    end
+
     # What ResourceFieldGenerator creates for the model in a Permission Set
     # of its own, removed again so no other reader sees its rows.
     def generated_names
