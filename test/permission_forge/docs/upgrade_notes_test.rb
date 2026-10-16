@@ -57,6 +57,25 @@ module PermissionForge
         assert_includes others['CHANGELOG.md'], FROM_013, 'the Removed entry links to it'
       end
 
+      # Review of the round-7 fixes (P2-3): "From 0.13" told of the gap one
+      # way only. Since 0.15 no invalidation removes 0.13's bare keys
+      # (Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES is empty), so a
+      # revocation made by a 0.15 process leaves the 0.13 processes serving
+      # the revoked access until cache_ttl. Both directions are stated, with
+      # the two paths: through 0.14 (which still removes the bare keys), or
+      # straight to 0.15 accepting up to cache_ttl of stale grants.
+      test 'From 0.13 states the cache gap in both directions and the two paths' do
+        assert_empty Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES, 'the reverse gap exists: 0.15 removes no bare key'
+        from = section(read(GUIDE), '### From 0.13').squish
+
+        assert_match(/made by a 0\.13 process.*does not reach.*`pf:v2:`/, from, '0.13 → 0.15')
+        assert_match(/made by a 0\.15 process.*`PREVIOUS_ENTRY_NAMESPACES`.*0\.13 process.*revoked.*`cache_ttl`/, from, '0.15 → 0.13')
+        assert_match(/\*\*Through 0\.14\*\*.*still removes 0\.13's bare keys/, from, 'the path with no reverse window')
+        assert_match(/\*\*Straight to 0\.15\*\*.*`cache_ttl` of stale grants.*permission_forge:cache:clear.*last 0\.13 process is gone/,
+                     from, 'the direct path and what it accepts')
+        assert_includes read('README.md')[/^From 0\.13:.*$/], 'revocation', 'the README pointer names the gap'
+      end
+
       test 'the CHANGELOG intro links the checklist and names the Changed entries that need action' do
         intro = section(read('CHANGELOG.md'), '## [0.15.0]').split('### Added').first
 
