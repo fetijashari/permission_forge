@@ -4,7 +4,7 @@
   <% if outcome.nil? %>
     <span><%= t('.no_access', name: name, resources: pf_resource_plural(resource.name)) %></span>
   <% else %>
-    <div><%= pf_level_badge(outcome.level, strategy: (outcome.mask_strategy if outcome.level == 'masked')) %></div>
+    <div><%= pf_effective_field_badge(outcome) %></div>
     <span>
       <% if outcome.blocked_by.any? %>
         <%= t('.muted', name: name, sets: pf_to_sentence(outcome.blocked_by.map(&:name))) %>
@@ -19,6 +19,10 @@
       <% end %>
       <%= t('.capped') if outcome.capped %>
     </span>
+    <%# The entry that decides an inherited field, worded as the Why panel words it. %>
+    <% if (chain = pf_field_chain_reason(outcome)) %>
+      <span><span aria-hidden="true"><%= chain.first %></span> <%= chain.last %></span>
+    <% end %>
     <%= link_to t('.full_picture', name: name), permission_forge.person_path(explain[:user], tab: 'effective', why: "#{resource.name}.field.#{outcome.name}", open: [resource.name]), class: 'pf-fs-12' %>
   <% end %>
 </div>

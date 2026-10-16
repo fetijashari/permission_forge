@@ -23,7 +23,7 @@ module PermissionForge
                               resource: resource }.merge(attrs))
     end
 
-    def message = I18n.t('permission_forge.validations.permission_set_rule.secret_column')
+    def secret_message = I18n.t('permission_forge.validations.permission_set_rule.secret_column')
 
     test 'the default patterns name digests, tokens, encrypted columns and secrets — and nothing else here' do
       columns = SecretColumns.new
@@ -38,7 +38,7 @@ module PermissionForge
         rule = new_rule(field_name: name)
 
         assert_not rule.valid?, name
-        assert_includes rule.errors[:field_name], message, name
+        assert_includes rule.errors[:field_name], secret_message, name
       end
       assert_predicate new_rule(field_name: 'label'), :valid?
       %w[en sq mk].each do |locale|
@@ -50,7 +50,7 @@ module PermissionForge
       rule = new_rule(resource: @notes, join_type: 'joins', field_accessor_path: 'pf_secret_record', field_name: 'api_token')
 
       assert_not rule.valid?
-      assert_includes rule.errors[:field_name], message
+      assert_includes rule.errors[:field_name], secret_message
       assert_predicate new_rule(resource: @notes, join_type: 'joins', field_accessor_path: 'pf_secret_record',
                                 field_name: 'label'), :valid?
     end
@@ -59,7 +59,7 @@ module PermissionForge
       rule = create_permission_set_rule(permission_set: @set, resource: @records, field_name: 'label', field_value: 'x')
 
       assert_not rule.update(field_name: 'password_digest')
-      assert_includes rule.errors[:field_name], message
+      assert_includes rule.errors[:field_name], secret_message
     end
 
     test 'a rule stored before keeps evaluating and stays editable in its other attributes' do

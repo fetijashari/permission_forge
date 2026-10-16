@@ -14,7 +14,7 @@
     <% end %>
     <div class="pf-filters" role="group" aria-label="<%= t('.filter_label') %>">
       <% @rows.filters.each do |f| %>
-        <%= pf_filter_chip t(".filters.#{f}"), permission_forge.permission_set_resource_path(set, resource.name, filter: f, q: @query.presence),
+        <%= pf_filter_chip pf_field_filter_label(f), permission_forge.permission_set_resource_path(set, resource.name, filter: f, q: @query.presence),
                            selected: @filter == f, count: counts[f] %>
       <% end %>
     </div>
@@ -75,7 +75,7 @@
         <% elsif !row.in_force? %>
           <% implicit = row.implicit_grant %>
           <% behaviour = implicit ? t('.implicit_grant') : t("permission_forge.ui.unconfigured.#{strategy}", default: t('permission_forge.ui.unconfigured.block')) %>
-          <%= pf_badge(row.configured? ? t('.turned_off', behaviour: behaviour) : t('.not_configured', behaviour: behaviour),
+          <%= pf_badge(row.configured? ? t('.turned_off', behaviour: behaviour) : t('.not_configured', state: pf_state_word(:field_level, :none), behaviour: behaviour),
                        variant: :unconfigured, href: pf_setting_path(implicit ? 'extra_fields_default_access' : 'unconfigured_field_strategy')) %>
         <% end %>
         <%# The mask preview sits under the level control, as wide as it: every row's control lines up. %>

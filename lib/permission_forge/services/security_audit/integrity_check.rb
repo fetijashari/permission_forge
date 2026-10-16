@@ -151,10 +151,9 @@ module PermissionForge
                   items: fields.map { |field| unknown_strategy_item(field) })
         end
 
+        # The reading Home's card takes too (ResourceField.with_unknown_mask_strategy).
         def unknown_strategy_rows
-          PermissionForge::ResourceField.in_effect.where(mask_access: true).includes(resource: :permission_set)
-                                        .order(:resource_id, :id)
-                                        .reject { |field| Services::MaskValue.known?(field.mask_strategy) }
+          PermissionForge::ResourceField.with_unknown_mask_strategy
         end
 
         def unknown_strategy_item(field)

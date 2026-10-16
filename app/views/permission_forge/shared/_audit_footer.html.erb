@@ -2,17 +2,23 @@
   <% if PermissionForge.configuration.audit_trail_enabled %>
     <% last_event = pf_audit_last_change(record) %>
     <% creations = pf_audit_creations([record]) unless @pf_creations&.covers?(record) %>
+    <% creation = pf_audit_creation_event(record, creations) %>
+    <%# "Unknown" is said once: an edit by nobody known after a creation by nobody known names no actor again. %>
+    <% unknown_twice = pf_audit_unknown_actor?(creation) && pf_audit_unknown_actor?(last_event) %>
     <%= prefix %>
     <%= t('.created', created_by: pf_audit_creator(record, creations), created_at: pf_date(record.created_at)) %>
     ·
-    <% if last_event %>
+    <% if unknown_twice %>
+      <%= t('.edited_at', updated_at: pf_relative(last_event.occurred_at)) %>
+      · <%= link_to t('.history'), pf_audit_log_path(record_type: last_event.record_type, record_id: last_event.record_id) %>
+    <% elsif last_event %>
       <%= t('.edited', updated_by: pf_audit_actor_name(last_event), updated_at: pf_relative(last_event.occurred_at)) %>
       · <%= link_to t('.history'), pf_audit_log_path(record_type: last_event.record_type, record_id: last_event.record_id) %>
     <% else %>
       <%= t('.edited', updated_by: pf_person_name(record.try(:updated_by)), updated_at: pf_relative(record.updated_at)) %>
     <% end %>
     <%# "Unknown" is the audit log's own name for an event with no actor; say where it comes from. %>
-    <% if pf_audit_unknown_actor?(last_event) || pf_audit_unknown_actor?(pf_audit_creation_event(record, creations)) %>
+    <% if pf_audit_unknown_actor?(last_event) || pf_audit_unknown_actor?(creation) %>
       <span class="pf-audit-footer__hint"><%= pf_audit_unknown_actor_hint %></span>
     <% end %>
   <% else %>

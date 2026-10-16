@@ -98,14 +98,15 @@ module PermissionForge
         assert_includes health.text.squish, t('settings.show.attention', count: count)
       end
 
-      test 'Settings says the settings look good when Home has nothing either' do
+      test 'with nothing on Home, Settings does not send people there' do
         PermissionForge.configuration.unconfigured_field_strategy = :block
         PermissionForge.configuration.extra_fields_default_access = :unconfigured
         skip 'Home still lists something in the suite configuration' unless PermissionForge::Admin::AttentionItems.new.all_good?
 
         get pf('/settings')
 
-        assert_match(/look(s)? good/i, css_select('section[aria-labelledby=pf-health]').first.text)
+        health = css_select('section[aria-labelledby=pf-health]').first
+        assert_empty(health.css('a').select { |a| a['href'] == pf('/') })
       end
 
       # --- Home's cards -------------------------------------------------------------------

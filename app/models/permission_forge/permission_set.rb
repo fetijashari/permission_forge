@@ -74,6 +74,15 @@ module PermissionForge
     scope :conditional, -> { where(conditions_present_sql) }
     scope :unconditional, -> { where("NOT #{conditions_present_sql}") }
 
+    # The sets holding an activation condition nobody can judge
+    # (ActivationConditions#conditions_broken?), by id: the one reading the
+    # security audit's incomplete_conditions and Home's card both take.
+    #
+    # @return [Array<PermissionSet>]
+    def self.with_broken_conditions
+      conditional.order(:id).select(&:conditions_broken?)
+    end
+
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
     # Sets named `name`, ignoring case and surrounding spaces (compared by

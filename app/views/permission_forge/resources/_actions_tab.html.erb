@@ -55,7 +55,7 @@
           <span class="pf-row pf-row--tight">
             <b><%= row.label %></b>
             <code class="pf-mono-key"><%= row.name %></code>
-            <%= pf_badge(t('permission_forge.ui.badges.not_configured'), variant: :unconfigured) %>
+            <%= pf_badge(pf_state_word(:action, :none), variant: :unconfigured) %>
           </span>
           <%= render "#{partials}/endpoints", endpoints: row.endpoints %>
           <%= render "#{partials}/effect", row: row, muting: muting %>

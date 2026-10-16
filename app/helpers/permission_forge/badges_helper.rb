@@ -115,6 +115,20 @@ module PermissionForge
       pf_level_badge(field.level, strategy: (field.mask_strategy if masked), sample_for: (field.name if masked && sample))
     end
 
+    # [glyph, sentence] for the entry along a single-table-inheritance chain
+    # that decides a person's field (EffectiveAccess::FieldOutcome#decided_by,
+    # #unreadable), or nil when the resource's own entry decides and grants
+    # Read: the Why panel and the field drawer's "Explain for" both say it.
+    def pf_field_chain_reason(field)
+      base = field.decided_by
+      if field.unreadable
+        return ['∅', t('permission_forge.people.effective_why.field_own_unreadable')] unless base
+
+        return ['∅', t('permission_forge.people.effective_why.field_base_unreadable', resource: pf_resource_label(base))]
+      end
+      ['↑', t('permission_forge.people.effective_why.field_decided_by', resource: pf_resource_label(base))] if base
+    end
+
     # A level as a badge ("•• Masked (Email) · j***@acme.com"): a field level
     # by default, or a state of another kind (Admin::StateLabel) drawn the
     # same way — an effective outcome, an action state.

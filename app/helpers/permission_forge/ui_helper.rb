@@ -106,9 +106,9 @@ module PermissionForge
 
     # The glyph (hidden from assistive technology) and the word of a state,
     # for a cell or a legend that styles the glyph itself.
-    def pf_state_parts(kind, state, glyph_class: 'pf-cell__glyph', glyph_tag: :span)
+    def pf_state_parts(kind, state, glyph_class: 'pf-cell__glyph', glyph_tag: :span, separator: '')
       label = PermissionForge::Admin::StateLabel.for(kind, state)
-      safe_join([content_tag(glyph_tag, label.glyph, class: glyph_class, 'aria-hidden': true), label.word])
+      safe_join([content_tag(glyph_tag, label.glyph, class: glyph_class, 'aria-hidden': true), label.word], separator)
     end
 
     # Read-only state cell (effective access grid, across-sets lists).

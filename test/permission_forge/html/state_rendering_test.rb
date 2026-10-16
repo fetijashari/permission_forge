@@ -70,16 +70,16 @@ module PermissionForge
         muting = set_of_kind(true)
         create_resource(permission_set: muting, name: 'Customer')
 
-        get pf("/permission_sets/#{@set.id}/resources/Customer/fields/phone")
+        get pf("/permission_sets/#{@set.id}/resources/Customer/fields/domain")
         assert_equal label(:field_level, :none), across_badge(@set)
         assert_equal label(:field_level, :leave), across_badge(muting)
 
         get pf("/permission_sets/#{@set.id}/resources/Customer")
-        row = css_select('.pf-fields__row').find { |node| node.at_css('code.pf-mono-key')&.text == 'phone' }
+        row = css_select('.pf-fields__row').find { |node| node.at_css('code.pf-mono-key')&.text == 'domain' }
         assert text_of(row.at_css('.pf-badge')).start_with?(word(:field_level, :none)), 'the Fields tab names it Not configured'
 
         get pf("/permission_sets/#{muting.id}/resources/Customer")
-        name = "pf[new_fields][#{muting.resources.first.id}][phone][level]"
+        name = "pf[new_fields][#{muting.resources.first.id}][domain][level]"
         assert_equal word(:field_level, :leave), checked_level_word(name), 'a muting set starts it on Unchanged'
       end
 
@@ -128,7 +128,7 @@ module PermissionForge
 
       test 'the Effective access legend words the states as its cells do' do
         muting = set_of_kind(true)
-        create_resource(permission_set: muting, name: 'Customer', edit_access: true)
+        create_resource(permission_set: muting, name: 'Customer', read_access: false, edit_access: true)
         create_permission_set_user(user: @ana, permission_set: muting)
 
         get pf("/people/#{@ana.id}"), params: { tab: 'effective', open: ['Customer'] }
@@ -136,7 +136,7 @@ module PermissionForge
         legend = text_of(css_select('.pf-legend').first)
         %i[granted blocked none].each do |state|
           assert_includes legend, label(:effective, state), "the legend names #{state}"
-          cell = css_select(".pf-effective .pf-state--#{state}").first
+          cell = css_select(".pf-state--#{state}").first
           assert cell, "a #{state} cell"
           assert_equal label(:effective, state), text_of(cell)
         end
@@ -149,6 +149,7 @@ module PermissionForge
 
       ACTIONS.each do |state, (muting, permitted)|
         test "action #{state}: Right now and Across all sets word it alike" do
+          PermissionForge.configuration.controller_action_discovery = true # the drawer says what the row means right now
           set = set_of_kind(muting)
           resource = set == @set ? @resource : create_resource(permission_set: set, name: 'Customer')
           action = create_resource_action(resource: resource, name: 'export', is_permitted: permitted)

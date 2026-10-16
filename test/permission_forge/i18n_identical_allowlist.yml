@@ -4,7 +4,7 @@
 # one of them lower-case — must be listed here). Translate the key instead of
 # adding it here whenever the language has its own word.
 sq:
-  permission_forge.audit_log.actor_types.user: 'Albanian for a person is "person" (definite "personi"); the label keeps the English spelling'
+  permission_forge.ui.states.actor.user: 'Albanian for a person is "person" (definite "personi"); the label keeps the English spelling'
   permission_forge.bulk_assignments.new.paste_placeholder: 'a sample paste of an email and a name'
   permission_forge.layouts.application.title: 'the brand'
   permission_forge.permission_set_rules.value_input.values_placeholder: 'sample values of a status column, as stored'

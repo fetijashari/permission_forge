@@ -22,7 +22,7 @@ module PermissionForge
         def call
           return [no_rules] unless active_rules.exists?
 
-          [unenforced, missing_columns, unknown_operators, unusable_values, foreign_table_names, bypassed,
+          [unenforced, missing_columns, unknown_operators, unusable_values, secret_columns, foreign_table_names, bypassed,
            text_operator_on_ids].compact
         end
 
@@ -138,6 +138,29 @@ module PermissionForge
                   'denied every record of the resource. Correct the rule or remove it (see "How Values Are ' \
                   'Compared" in docs/row-level-rules.md).',
                   items: findings.map { |item| rule_item(item.rule) })
+        end
+
+        # Rules in effect comparing a column that holds a secret
+        # (PermissionForge::SecretColumns) — what Home lists
+        # (AttentionItems#secret_rules). Stored before the model refused them;
+        # they still apply. The item leaves the value out: it is a guess at the secret.
+        def secret_columns
+          findings = attention.secret_rules
+          return if findings.empty?
+
+          finding(:medium, :secret_rule_columns, 'Rules comparing a column that holds a secret',
+                  'These rules compare a password digest, a token, an encrypted value or a secret ' \
+                  '(config.rule_secret_column_patterns). They still apply, but who can read which record tells the ' \
+                  'secret apart, and the rule value is stored and shown in the admin and the API. Compare another ' \
+                  'column, or remove the rule; a new rule on such a column is refused.',
+                  items: findings.map { |item| secret_rule_item(item.rule) })
+        end
+
+        def secret_rule_item(rule)
+          resource = rule.resource
+          path = rule.field_accessor_path.presence if rule.join_rule?
+          "#{resource.permission_set.name} › #{[resource.name, path, rule.field_name].compact.join('.')}: #{rule.name} · " \
+            "#{people(resource.permission_set_id)}"
         end
 
         # Rules in effect whose field name is qualified with a table that is
