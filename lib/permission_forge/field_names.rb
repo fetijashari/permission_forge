@@ -9,8 +9,9 @@ module PermissionForge
   # A name is a field of the model when it is
   #
   # - a column of its table (a model's `ignored_columns` included), read
-  #   again from the database before the name is called unknown: the schema
-  #   cache may predate a column a migration just added;
+  #   again from the database before the name is called unknown
+  #   (PermissionForge::SchemaRead): the schema cache may predate a column a
+  #   migration just added;
   # - an attribute (`attribute :nickname`) or an `alias_attribute`;
   # - a virtual field: declared (extra_fields_method, also a key only a
   #   serializer computes) or discovered (store accessors, attribute-API
@@ -50,21 +51,28 @@ module PermissionForge
     # @return [FieldNames, nil] nil when the model cannot be told
     def self.for(resource_name, siblings: [], configuration: PermissionForge.configuration)
       model = resource_name.to_s.safe_constantize
-      return unless model.is_a?(Class) && model < ActiveRecord::Base && !model.abstract_class? && model.table_exists?
+      return unless model.is_a?(Class) && model < ActiveRecord::Base && !model.abstract_class? && SchemaRead.table?(model, model.table_name)
 
       new(model, siblings: siblings, configuration: configuration)
     rescue *UNREADABLE
       nil
     end
 
-    # An attribute, an alias, or a public reader or writer of the model.
+    # An attribute, an alias, or a public reader or writer of the model —
+    # the one answer to "the model has this name" (FieldNames, FieldVariants).
+    # A name the table has no column for is asked again after the schema is
+    # read again, once (PermissionForge::SchemaRead.has?): a column a
+    # migration just added is an attribute.
     #
     # @param model [Class]
     # @param name [String]
     # @return [Boolean]
     def self.declares?(model, name)
-      model.attribute_names.include?(name) || model.attribute_alias?(name) || model.public_method_defined?(name) ||
-        model.public_method_defined?("#{name}=")
+      name = name.to_s
+      SchemaRead.has?(model, name) do
+        model.attribute_names.include?(name) || model.attribute_alias?(name) || model.public_method_defined?(name) ||
+          model.public_method_defined?("#{name}=")
+      end
     end
 
     # @return [Class] the Resource's model
@@ -77,30 +85,31 @@ module PermissionForge
     end
 
     # @param name [String, Symbol]
-    # @return [Boolean] whether the model has the name (its table read again, once, before saying no)
+    # @return [Boolean] whether the model has the name (its table read again,
+    #   once, before saying no: PermissionForge::SchemaRead)
     def include?(name)
       name = name.to_s
-      return true if known?(name)
-      return false if @reread
-
-      reread!
-      known?(name)
+      SchemaRead.has?(@model, name) { known?(name) }
     rescue *UNREADABLE
       true
     end
 
     private
 
-    # Once per instance: the table's columns as they are now.
-    def reread!
-      @reread = true
-      @model.reset_column_information
-      @virtual_fields = nil
-      @models = nil
+    def known?(name)
+      forget_stale_memos
+      own?(name) || variant?(name)
     end
 
-    def known?(name)
-      own?(name) || variant?(name)
+    # The subclasses and virtual fields as of the schema the cache holds now:
+    # a re-read (SchemaRead) resets the model's attributes.
+    def forget_stale_memos
+      reads = SchemaRead.rereads
+      return if @reads == reads
+
+      @reads = reads
+      @virtual_fields = nil
+      @models = nil
     end
 
     def own?(name)
@@ -125,7 +134,7 @@ module PermissionForge
 
     # The table's columns as the database has them: ignored_columns too.
     def columns
-      @model.connection.schema_cache.columns_hash(@model.table_name).keys
+      SchemaRead.columns(@model).keys
     end
 
     def virtual_fields(model)

@@ -47,9 +47,12 @@ module PermissionForge
       @extra = extra_unreadable(e)
     end
 
-    # Declared names that are neither a column nor an ignored field.
+    # Declared names that are neither a column nor an ignored field. Whether
+    # a declared name is a column is asked once more after the schema is
+    # read again (PermissionForge::SchemaRead): a migration may have turned
+    # it into one.
     def declared
-      @declared ||= extra - excluded
+      @declared ||= extra.reject { |name| ignored_fields.include?(name) || SchemaRead.column?(@klass, name, ignored: false) }
     end
 
     # Listed only while discovery is on; never implicitly granted.
@@ -74,10 +77,13 @@ module PermissionForge
     end
 
     # Whether the model has `name` as a virtual field, listed or not (a
-    # field configured while discovery was on stays a virtual field).
+    # field configured while discovery was on stays a virtual field). A name
+    # that is no column is asked again after the schema is read again, once
+    # (PermissionForge::SchemaRead): a field a migration just turned into a
+    # column is a column.
     def include?(name)
       name = name.to_s
-      @klass.column_names.exclude?(name) && (extra.include?(name) || discoverable.include?(name))
+      !SchemaRead.column?(@klass, name, ignored: false) && (extra.include?(name) || discoverable.include?(name))
     end
 
     private
@@ -87,7 +93,11 @@ module PermissionForge
     end
 
     def excluded
-      @klass.column_names + Array(@configuration.ignored_fields).map(&:to_s)
+      SchemaRead.column_names(@klass) + ignored_fields
+    end
+
+    def ignored_fields
+      Array(@configuration.ignored_fields).map(&:to_s)
     end
 
     # Keeps the error for callers that must say what it costs them (reader

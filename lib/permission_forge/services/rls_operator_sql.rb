@@ -123,7 +123,7 @@ module PermissionForge
 
       # An id that is not a number (a uuid) is never the value of a number column.
       def numeric_uid_sql
-        column = PermissionForge::PermissionSetUser.columns_hash['user_id']
+        column = PermissionForge::SchemaRead.column(PermissionForge::PermissionSetUser, 'user_id')
         uid_sql if column.nil? || Operators::ValueCasters.for(column).equal?(Operators::ValueCasters::NUMBER)
       end
     end

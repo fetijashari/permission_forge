@@ -111,7 +111,7 @@ module PermissionForge
 
           def pf_virtual_reader?(name)
             return false unless name.match?(READER_NAME)
-            return false if Array(primary_key).map(&:to_s).include?(name) || columns_hash.key?(name)
+            return false if Array(primary_key).map(&:to_s).include?(name) || PermissionForge::SchemaRead.column?(self, name, ignored: false)
 
             attribute_names.include?(name) || (!pf_framework_method?(name) && pf_argumentless_reader?(name))
           end

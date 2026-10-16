@@ -1,5 +1,6 @@
 require 'test_helper'
 require_relative '../virtual_field_models'
+require_relative '../rule_path_models'
 
 module PermissionForge
   module Admin
@@ -392,6 +393,25 @@ module PermissionForge
         assert_equal 'Supplier', customer.association('supplier').class_name
         assert catalog.find('Supplier').column('owner_id').user_reference?
         assert_nil catalog.find('PermissionForge::PermissionSet')
+      end
+
+      # C.14: the rule builder offers the associations a rule's path can
+      # follow (Operators::RulePath), never one the applier refuses to join.
+      test 'associations are the ones a join can be built through' do
+        offered = ModelCatalog.new.find('PfRulePathRecord').associations.map(&:name)
+        one_segment = ->(paths) { paths.reject { |path| path.include?('.') } }
+
+        assert_equal one_segment.call(PfRulePathRecord::JOINED).sort, offered.sort
+        one_segment.call(PfRulePathRecord::NOT_JOINED.keys).each { |name| assert_not_includes offered, name }
+      end
+
+      test 'labels are the host translation, else the stored name verbatim' do
+        customer = ModelCatalog.new.find('Customer')
+
+        assert_equal 'Customer', customer.label
+        assert_equal Admin::ModelLabel.plural(Customer), customer.plural_label
+        assert_equal 'email', customer.column('email').label
+        assert_equal 'supplier', customer.association('supplier').label
       end
 
       test 'honors admin_model_resolver' do

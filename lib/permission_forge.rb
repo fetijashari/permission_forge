@@ -305,6 +305,7 @@ require_relative 'permission_forge/audit/job_context'
 require_relative 'permission_forge/audit/settings_observer'
 require_relative 'permission_forge/audit/boot_warnings'
 
+require_relative 'permission_forge/schema_read'
 require_relative 'permission_forge/resource_chain'
 require_relative 'permission_forge/unique_conflict'
 require_relative 'permission_forge/virtual_fields'

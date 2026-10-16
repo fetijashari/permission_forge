@@ -80,33 +80,15 @@ module PermissionForge
         end
 
         # Whether the connection has a data source (a table or view) named
-        # `table`, by the schema cache: asked only for a qualifier that is
-        # none of the rule's tables. A negative answer is cached with the
-        # rest of the schema; {.reread_schema} forgets it before a refusal.
+        # `table`: asked only for a qualifier that is none of the rule's
+        # tables. A "no" is asked of the database again once
+        # (PermissionForge::SchemaRead.table?): the schema cache may predate
+        # a table a migration just created.
         #
         # @param model [Class] a model on the connection
         # @param table [String] the name as written
         def data_source?(model, table)
-          model.connection.schema_cache.data_source_exists?(table)
-        end
-
-        # Reads the schema again for what a column problem names
-        # (RuleProblem.of_column), before a rule is refused for it: the
-        # schema cache may predate a column a migration just added, or a
-        # table (a running server, an old process in a rolling deploy). A
-        # model's columns for a missing column; the data sources for a
-        # table that is not there.
-        #
-        # @param problem [RuleProblem]
-        # @return [void]
-        def reread_schema(problem)
-          model = problem.model
-          return unless model
-
-          case problem.kind
-          when :missing_column then model.reset_column_information
-          when :unknown_table then model.connection.schema_cache.clear_data_source_cache!(problem.name)
-          end
+          PermissionForge::SchemaRead.table?(model, table)
         end
 
         # The columns a rule may compare on a model: every column of its
@@ -114,10 +96,14 @@ module PermissionForge
         # among them, as in .find) — the names the admin's rule builder
         # offers and the model's validation accepts, one list.
         #
+        # The list is compared with the database first
+        # (PermissionForge::SchemaRead, `verify: true`): a column a migration
+        # added since the schema was read is offered.
+        #
         # @param model [Class] a model with a table
         # @return [Array<String>]
         def names_for(model)
-          model.connection.schema_cache.columns_hash(model.table_name).keys
+          PermissionForge::SchemaRead.columns(model, verify: true).keys
         end
 
         # The column a rule row names, looked up the way PermissionRuleApplier
@@ -136,7 +122,7 @@ module PermissionForge
           return unless model
 
           models = models_along(model, rule.join_rule? ? path_segments(rule.field_accessor_path) : [])
-          find(rule.field_name, models) if models.any? && models.all?(&:table_exists?)
+          find(rule.field_name, models) if models.any? && models.all? { |model| PermissionForge::SchemaRead.table?(model, model.table_name) }
         rescue *UNTELLABLE
           nil
         end
@@ -179,10 +165,13 @@ module PermissionForge
           models.find { |model| same_name?(model.table_name.to_s.split('.').last, table, exact_names?(model)) }
         end
 
+        # The table's column of that name; a name the schema cache does not
+        # have is looked up again once after the schema is read again
+        # (PermissionForge::SchemaRead): a column a migration just added.
         def on(model, name)
-          connection = model.connection
-          column = column_named(connection.schema_cache.columns_hash(model.table_name), name, exact_names?(model))
-          new(column, column && model.defined_enums[column.name], connection.adapter_name, model)
+          exact = exact_names?(model)
+          column = PermissionForge::SchemaRead.column(model, name) { |columns| column_named(columns, name, exact) }
+          new(column, column && model.defined_enums[column.name], model.connection.adapter_name, model)
         end
 
         def column_named(columns, name, exact)

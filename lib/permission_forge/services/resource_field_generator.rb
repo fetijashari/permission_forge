@@ -91,7 +91,8 @@ module PermissionForge
 
       def generate_fields(model_class)
         existing_names = @resource.resource_fields.pluck(:name)
-        columns = model_class.column_names - ignored_fields + virtual_field_names(model_class) - existing_names
+        columns = PermissionForge::SchemaRead.column_names(model_class, verify: true) - ignored_fields +
+                  virtual_field_names(model_class) - existing_names
 
         rows = RowBuilder.new(@resource, muting: muting?)
         columns.filter_map do |column_name|

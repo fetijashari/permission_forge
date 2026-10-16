@@ -63,7 +63,7 @@ module PermissionForge
       end
 
       def self.acknowledgement_supported?
-        PermissionForge::ResourceField.column_names.include?('sensitive_acknowledged_at')
+        PermissionForge::SchemaRead.column?(PermissionForge::ResourceField, 'sensitive_acknowledged_at', ignored: false)
       rescue StandardError
         false
       end

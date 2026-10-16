@@ -174,7 +174,7 @@ module PermissionForge
       end
 
       def user_id_cast_type
-        PermissionForge::PermissionSetUser.columns_hash['user_id']&.sql_type || 'bigint'
+        PermissionForge::SchemaRead.column(PermissionForge::PermissionSetUser, 'user_id')&.sql_type || 'bigint'
       end
 
       # Granting-set view_all/modify_all bypasses rules; a muting set with
@@ -209,12 +209,13 @@ module PermissionForge
       end
 
       # Ties the resource row to the protected row's tenant, when tenancy is
-      # on and both tables have the tenant column: `AND r.account_id =
+      # on and both tables have the tenant column (SchemaRead: read again once
+      # before "no"): `AND r.account_id =
       # "customers"."account_id"`. A NULL tenant on either side matches
       # nothing. Empty otherwise (no tenant to compare).
       def tenant_predicate_sql
         column = @configuration.tenant_enabled? && @configuration.resolved_tenant_column.to_s
-        return '' unless column && [@model_class, PermissionForge::Resource].all? { |klass| klass.column_names.include?(column) }
+        return '' unless column && [@model_class, PermissionForge::Resource].all? { |klass| SchemaRead.column?(klass, column, ignored: false) }
 
         quoted = @conn.quote_column_name(column)
         "AND r.#{quoted} = #{quoted_table}.#{quoted}"
@@ -260,7 +261,7 @@ module PermissionForge
 
       def assignment_active_sql
         clauses = ['(psu.expires_at IS NULL OR psu.expires_at > now())']
-        clauses << 'psu.is_active = TRUE' if PermissionForge::PermissionSetUser.column_names.include?('is_active')
+        clauses << 'psu.is_active = TRUE' if PermissionForge::SchemaRead.column?(PermissionForge::PermissionSetUser, 'is_active', ignored: false)
         clauses.join(' AND ')
       end
 
