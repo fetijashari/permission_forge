@@ -21,7 +21,9 @@ module PermissionForge
       STATE_SCREENS = [
         %w[audit_off get / 200], %w[audit_off get /audit 200], %w[audit_off get /people/:ana?tab=audit 200],
         %w[audit_refused get /audit 403], %w[audit_refused get /people/:ana?tab=audit 403],
-        %w[audit_refused get /permission_sets/:set?tab=audit 403]
+        %w[audit_refused get /permission_sets/:set?tab=audit 403],
+        # Review of the round-7 fixes (P2-1): the record lists drawn only with audit_trail_enabled.
+        %w[audit_trail get /permission_sets/:set?tab=audit 200], %w[audit_trail get /people/:ana?tab=audit 200]
       ].map { |setting, verb, path, status| [setting.to_sym, verb.to_sym, path, status.to_i] }.freeze
 
       included do
@@ -87,17 +89,18 @@ module PermissionForge
       def state_screen(setting, verb, path, status, params) # rubocop:disable Metrics/AbcSize -- set, request, restore
         path = path.sub(':ana', @ana.id.to_s).sub(':set', @set.id.to_s)
         config = PermissionForge.configuration
-        previous = [config.audit_events, config.audit_log_authorization]
+        previous = [config.audit_events, config.audit_log_authorization, config.audit_trail_enabled]
         send(:"configure_#{setting}")
         send(verb, pf(path), params: params)
         assert_response status, "#{setting} #{verb.upcase} #{path}"
         ["#{setting} #{verb.upcase} #{path}", response.body]
       ensure
-        config.audit_events, config.audit_log_authorization = previous
+        config.audit_events, config.audit_log_authorization, config.audit_trail_enabled = previous
       end
 
       def configure_audit_off = PermissionForge.configuration.audit_events = false
       def configure_audit_refused = PermissionForge.configuration.audit_log_authorization = ->(_controller) { false }
+      def configure_audit_trail = PermissionForge.configuration.audit_trail_enabled = true
 
       # A record for every Home card (Admin::AttentionItems::CARDS) but the
       # audit log's, which a setting raises (STATE_SCREENS): an assignment

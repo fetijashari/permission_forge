@@ -15,9 +15,9 @@ module PermissionForge
       setup do
         @both = create_permission_set(name: 'Ticket desk')
         base = create_resource(permission_set: @both, name: 'PfStiTicket', read_access: true)
-        sub = create_resource(permission_set: @both, name: 'PfStiBugTicket', read_access: true)
+        @sub = create_resource(permission_set: @both, name: 'PfStiBugTicket', read_access: true)
         create_resource_field(resource: base, name: 'title', read_access: false)
-        create_resource_field(resource: sub, name: 'title', read_access: true)
+        create_resource_field(resource: @sub, name: 'title', read_access: true)
         @one = create_permission_set(name: 'Bug triage')
         create_resource_field(resource: create_resource(permission_set: @one, name: 'PfStiBugTicket', read_access: true),
                               name: 'title', read_access: true)
@@ -45,6 +45,34 @@ module PermissionForge
 
         assert_includes doc.text.squish, 'Ticket desk · PfStiBugTicket', 'the field source names the Resource whose entry decides'
         assert doc.css('[data-pf-host-data]').any? { |node| node.text == 'PfStiBugTicket' }, 'marked as host data'
+      end
+
+      # Review of the round-7 fixes (P2-6): the reasons a Muting Permission
+      # Set gives (a flag, a field, an action it takes away) named the set
+      # alone. They name the Resource whose row does the muting.
+      test 'a person\'s effective access names the muting Resource the same way' do
+        hold = create_permission_set(name: 'Contractor hold', is_muting: true)
+        create_resource(permission_set: hold, name: 'PfStiTicket', read_access: true)
+        held_sub = create_resource(permission_set: hold, name: 'PfStiBugTicket', read_access: false)
+        create_resource_action(resource: held_sub, name: 'export', is_permitted: true)
+        create_resource_field(resource: held_sub, name: 'status', read_access: true)
+        create_resource_action(resource: @sub, name: 'export', is_permitted: true)
+        create_resource_field(resource: @sub, name: 'status', read_access: true)
+        create_resource_field(resource: @both.resources.find_by!(name: 'PfStiTicket'), name: 'status', read_access: true)
+        create_permission_set_user(user: @bo, permission_set: hold)
+
+        get pf("/people/#{@bo.id}"), params: { tab: 'effective', open: ['PfStiBugTicket'] }
+        assert_response :success
+        doc = Nokogiri::HTML(response.body)
+        muted = doc.css('[id^="pf-why-PfStiBugTicket."] li.pf-why__reason').select { |node| node.at_css('span').text == '⊘' }
+                   .map { |node| node.at_css('.pf-stack > span').text.squish }
+        flag = I18n.t('permission_forge.ui.flags_short.read_access')
+
+        assert(muted.any? { |text| text.include?('Contractor hold · PfStiTicket') && text.include?(flag) }, "the read flag: #{muted}")
+        assert(muted.any? { |text| text.include?('Contractor hold · PfStiBugTicket') && !text.include?(flag) }, "the action: #{muted}")
+        status = doc.css('[id="pf-why-PfStiBugTicket.field.status"] li.pf-why__reason').map { |node| node.at_css('.pf-stack > span').text.squish }
+        assert(status.any? { |text| text.include?('Contractor hold · PfStiBugTicket') }, "the field: #{status}")
+        assert_not(muted.any? { |text| text.match?(/Contractor hold(?! ·)/) }, 'never the set alone')
       end
 
       test 'a set with one Resource of the chain is named alone' do

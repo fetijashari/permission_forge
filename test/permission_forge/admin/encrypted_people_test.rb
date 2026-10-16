@@ -67,6 +67,45 @@ module PermissionForge
         assert_equal 'ana@acme.test', PersonLabel.new(@ana, configuration: Config.new).email
       end
 
+      # Review of the round-7 fixes (P2-4): a `name` the model composes in a
+      # reader from encrypted columns read them decrypted through the public
+      # reader, and the default profile_builder cached that plaintext.
+      class EncryptedSplitPerson < ActiveRecord::Base
+        self.table_name = 'pf_encrypted_split_people'
+        self.primary_key = 'id'
+
+        encrypts :first_name, :last_name
+
+        def name = "#{first_name} #{last_name}"
+        def email_address = "#{first_name.downcase}@acme.test"
+      end
+
+      # The same table, nothing encrypted: its composed name is cached as before.
+      class PlainSplitPerson < ActiveRecord::Base
+        self.table_name = 'pf_encrypted_split_people'
+        self.primary_key = 'id'
+
+        def name = "#{first_name} #{last_name}"
+      end
+
+      test 'under decrypt: false no reader is asked for a name or email while the model encrypts one the label reads' do
+        ActiveRecord::Base.connection.create_table :pf_encrypted_split_people, temporary: true do |t|
+          t.text :first_name
+          t.text :last_name
+        end
+        [EncryptedSplitPerson, PlainSplitPerson].each(&:reset_column_information)
+        split = EncryptedSplitPerson.create!(first_name: 'Ana', last_name: 'Krasniqi')
+
+        profile = Configuration.new.profile_builder.call(split.reload)
+        assert_equal({ id: split.id, uuid: nil, name: nil, email: nil }, profile, 'never the plaintext a reader composes')
+        assert_equal 'Ana Krasniqi', PersonLabel.new(split, configuration: Config.new).name, 'the admin label still reads it'
+
+        plain = PlainSplitPerson.create!(first_name: 'Bo', last_name: 'Berisha')
+        assert_equal 'Bo Berisha', Configuration.new.profile_builder.call(plain)[:name], 'nothing encrypted: the reader answers'
+      ensure
+        ActiveRecord::Base.connection.drop_table :pf_encrypted_split_people, temporary: true, if_exists: true
+      end
+
       test 'the search never matches the ciphertext' do
         %w[iv p at {].each { |query| assert_empty search(query), query }
         assert_empty search('ana'), 'a non-deterministic name cannot be searched in SQL'

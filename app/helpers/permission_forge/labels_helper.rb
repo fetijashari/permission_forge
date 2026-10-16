@@ -75,6 +75,16 @@ module PermissionForge
       record ? PermissionForge::Admin::Prefill.text(record, attribute) : ''
     end
 
+    # Whether a required text field may be sent blank: the stored value is
+    # generated text the form shows as blank (#pf_prefill), and a blank
+    # posted over it is no change (Admin::Prefill.posted). Such a field
+    # drops `required`, so a page saves with and without JavaScript alike.
+    def pf_prefill_optional?(record, attribute)
+      return false unless record&.persisted?
+
+      record.public_send(attribute).to_s.present? && pf_prefill(record, attribute).empty?
+    end
+
     # A Permission Set named on a row about one of its Resources: "<set> ·
     # <Model>" when the set holds more than one Resource of `chain` (a
     # single-table-inheritance base and its subclass: Admin::ChainEntries),
@@ -96,9 +106,44 @@ module PermissionForge
     # the Resource the row's set acts through (an STI base whose entry
     # decides, or the leaf itself).
     def pf_chain_set_name(set, leaf_name, entry_name = leaf_name)
+      pf_set_entry_name(set, entry_name, pf_chain_names(leaf_name))
+    end
+
+    # #pf_chain_set_name for a Muting Permission Set's reason (a flag, a
+    # field or an action it takes away): the entry named is the set's active
+    # Resource of the leaf's chain whose row does the muting (the block
+    # answers for a Resource row; nearest the leaf first), else the leaf.
+    def pf_muting_set_name(set, leaf_name, &)
+      chain = pf_chain_names(leaf_name)
+      rows = set.resources.select { |resource| resource.is_active != false && chain.include?(resource.name) }
+      entry = rows.sort_by { |resource| chain.index(resource.name) }.find(&)
+      pf_set_entry_name(set, entry&.name || leaf_name, chain)
+    end
+
+    # Whether a Muting Permission Set's Resource row takes `field_name`
+    # away: it mutes the Resource's read or edit, or has an active row of
+    # the field that mutes something (#pf_muting_set_name's block).
+    def pf_row_mutes_field?(resource, field_name)
+      return true if resource.read_access || resource.edit_access
+
+      resource.resource_fields.any? { |field| field.is_active != false && field.name == field_name.to_s && pf_field_mutes?(field) }
+    end
+
+    # Whether a muting field row takes anything away (read, edit, or forces the mask).
+    def pf_field_mutes?(field)
+      field.read_access || field.edit_access || field.mask_access
+    end
+
+    # Whether a Muting Permission Set's Resource row blocks the action (an
+    # active, permitted row of that key: #pf_muting_set_name's block).
+    def pf_row_permits_action?(resource, key)
+      resource.resource_actions.any? { |action| action.is_active && action.is_permitted && action.name == key.to_s }
+    end
+
+    # The Resource names of the leaf's ResourceChain (memoized per page).
+    def pf_chain_names(leaf_name)
       @pf_chains ||= {}
-      chain = (@pf_chains[leaf_name.to_s] ||= PermissionForge::ResourceChain.names_for(leaf_name).map(&:to_s))
-      pf_set_entry_name(set, entry_name, chain)
+      @pf_chains[leaf_name.to_s] ||= PermissionForge::ResourceChain.names_for(leaf_name).map(&:to_s)
     end
   end
 end

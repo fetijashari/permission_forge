@@ -98,8 +98,11 @@ module PermissionForge
       render(:index, status: :unprocessable_entity)
     end
 
+    # A blank name over a generated one, or a blank description over none,
+    # is no change (Admin::Prefill.posted).
     def group_params
       attrs = pf_require_hash(:group).permit(:name, :description, :is_active).tap { |permitted| strip_name!(permitted) }
+      PermissionForge::Admin::Prefill.posted_attributes(@group, attrs, :name, :description)
       pf_boolean_attributes(attrs, :is_active)
     end
 

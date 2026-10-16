@@ -58,6 +58,7 @@ detectors:
       - PermissionForge::CopyRefusal#pf_copy_refused_record
       - PermissionForge::ApplicationHelper
       - PermissionForge::AuditHelper
+      - PermissionForge::AuditRecordsHelper
       - PermissionForge::AuditAttributionHelper
       - PermissionForge::BadgesHelper
       - PermissionForge::ChangesHelper
@@ -146,6 +147,7 @@ detectors:
       - PermissionForge::ApplicationHelper
       # Modules included into ApplicationHelper (same rationale)
       - PermissionForge::AuditHelper
+      - PermissionForge::AuditRecordsHelper
       - PermissionForge::AuditAttributionHelper
       - PermissionForge::BadgesHelper
       - PermissionForge::ChangesHelper

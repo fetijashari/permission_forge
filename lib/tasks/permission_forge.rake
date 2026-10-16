@@ -31,6 +31,9 @@ namespace :permission_forge do
       exit 2
     end
 
+    # A rake task does not eager-load: the review must see every model (an
+    # STI subclass's `encrypts`, the models on a table a rule joins).
+    PermissionForge::Admin::ModelCatalog.eager_load_app_models
     report = PermissionForge::RakeAudit.reporting('permission_forge:audit', counts: :counts.to_proc) { audit.call }
 
     if ENV['FORMAT'] == 'json'

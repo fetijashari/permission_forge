@@ -181,6 +181,16 @@ module PermissionForge
       assert_nil pf_raw_user_attribute(user, :not_a_column)
     end
 
+    # Review of the round-7 fixes (P2-7): a marker the caller did not pass
+    # (a stored value interpolated as text that holds one) raised KeyError —
+    # a 500 for the page. It is left as written, escaped.
+    test 'pf_t_markup leaves a marker it was not given as written' do
+      out = pf_t_markup(set: tag.b('S')) { |held| "#{held[:set]} and \u0001other\u0001 <i>" }
+
+      assert_equal "<b>S</b> and \u0001other\u0001 &lt;i&gt;", out
+      assert_predicate out, :html_safe?
+    end
+
     test 'pf_raw_user_attribute returns nil for non-ActiveRecord users without the method' do
       assert_nil pf_raw_user_attribute(BareUser.new(11), :name)
     end

@@ -55,7 +55,13 @@ module PermissionForge
       is_active && resource.in_effect?
     end
 
-    # @return [String] the label, or the name as stored when there is none (Admin::ActionLabel)
+    # The action's name as the admin shows it (Admin::ActionLabel): the
+    # label an admin wrote; a label the gem generated (blank, the key, the
+    # key humanized: GeneratedText.label?) counts as none, and then, on an
+    # English page, Rails' English for the key ("Export csv"), else the key
+    # as stored ("export_csv").
+    #
+    # @return [String]
     def display_name
       PermissionForge::Admin::ActionLabel.for(self).text
     end

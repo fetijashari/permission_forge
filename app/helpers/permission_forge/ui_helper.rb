@@ -48,12 +48,16 @@ module PermissionForge
     #
     #   pf_t_markup(set: pf_host_data(name)) { |held| t('.flag_granted', **held, flag: word) }
     #
+    # A marker no value was given for (text that happens to hold one, such
+    # as a stored value interpolated as text) is left as written, escaped.
+    #
     # @yieldparam held [Hash{Symbol => String}] the markers, by value name
     # @return [ActiveSupport::SafeBuffer]
     def pf_t_markup(**values)
       held = values.to_h { |name, _| [name, "\u0001#{name}\u0001"] }
+      by_name = values.transform_keys(&:to_s)
       pieces = yield(held).to_s.split(/\u0001(\w+)\u0001/)
-      safe_join(pieces.each_with_index.map { |piece, index| index.odd? ? values.fetch(piece.to_sym) : piece })
+      safe_join(pieces.each_with_index.map { |piece, index| index.odd? ? by_name.fetch(piece) { "\u0001#{piece}\u0001" } : piece })
     end
 
     # "Bob, Carol and Dan" in the page's language (Admin::ListSentence): never

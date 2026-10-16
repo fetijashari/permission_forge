@@ -23,6 +23,9 @@ module PermissionForge
       attr_reader :name, :path, :field_name, :operator, :value, :values, :value_from, :value_to,
                   :current_user, :include_nulls, :failure_message, :join, :is_active, :errors
 
+      # @param rule [PermissionSetRule, nil] the stored rule: the inputs with
+      #   no params; with params, what a blank name or blocked message is
+      #   compared with (Prefill.posted: blank over generated text keeps it)
       def initialize(resource:, params: nil, rule: nil, catalog: ModelCatalog.new)
         @resource = resource
         @catalog = catalog
@@ -32,6 +35,11 @@ module PermissionForge
         else
           assign_inputs(RuleFormInput.from_rule(rule))
         end
+        # What the save stores: as posted, or the stored generated text a
+        # blank leaves as it is (Prefill.posted); the builder keeps showing
+        # the inputs as posted.
+        @saved_name = Prefill.posted(rule, :name, @name)
+        @saved_failure_message = Prefill.posted(rule, :failure_message, @failure_message)
       end
 
       # --- choices ----------------------------------------------------------------
@@ -120,7 +128,7 @@ module PermissionForge
 
       def valid?
         @errors = {}
-        @errors[:name] = :name_blank if @name.blank?
+        @errors[:name] = :name_blank if @saved_name.blank?
         @errors[:field] = :field if column.nil?
         @errors[:operator] = :operator unless operators.include?(@operator)
         validate_value
@@ -129,9 +137,10 @@ module PermissionForge
 
       def attributes
         {
-          name: @name, field_name: @field_name, operator: @operator, field_value: field_value,
+          name: @saved_name, field_name: @field_name, operator: @operator, field_value: field_value,
           field_accessor_path: @path.any? ? @path.join('.') : nil, join_type: join_type,
-          include_nulls: nullable? && @include_nulls, failure_message: @failure_message.presence,
+          include_nulls: nullable? && @include_nulls,
+          failure_message: @saved_failure_message.presence,
           is_active: @is_active
         }
       end

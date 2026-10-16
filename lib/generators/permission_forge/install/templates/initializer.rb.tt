@@ -48,7 +48,8 @@ PermissionForge.configure do |config|
   # reports the assignments still held by users it calls inactive.
   config.user_active_check = ->(user) { user.respond_to?(:active_for_authentication?) ? user.active_for_authentication? : true }
 
-  # The profile cached with each user's permissions; the default is this, an encrypted attribute left out (nil):
+  # The profile cached with each user's permissions. The default is like this example but leaves an encrypted
+  # attribute out (nil); this lambda calls the public readers, which decrypt (and may be masked):
   # config.profile_builder = ->(user) { { id: user.id, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email).presence || user.try(:email_address) } }
 
   # Prefix of the PermissionForge tables ('' for none).

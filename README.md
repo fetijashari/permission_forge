@@ -267,7 +267,7 @@ and the preset as a commented line with what it costs. The rows that need your c
 
 Upgrading to 0.15: run `bin/rails permission_forge:audit` before you deploy (see the
 [Migration Guide](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015)).
-From 0.13: follow [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013).
+From 0.13: follow [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013) — a revocation made on 0.15 does not reach what 0.13 processes have cached.
 
 Already closed by default, keep them so: `api_require_authorization = true` (API changes need
 `api_action_authorization` and `api_assignment_authorization`), `admin_tenantless_access = :deny`,

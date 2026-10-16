@@ -15,7 +15,10 @@ module PermissionForge
     # ciphertext it stores — for the admin's display, which is never cached.
     # `decrypt: false` (the default profile_builder, whose profile is cached
     # with the permission hash in the cache store) reads such a column as
-    # nil instead: neither its ciphertext nor its plaintext.
+    # nil instead: neither its ciphertext nor its plaintext. Nor does it ask
+    # a public reader for a name or an email ({LABEL_ATTRIBUTES}) while the
+    # model encrypts any of them: a `name` composed from encrypted columns
+    # would hand over their plaintext.
     class PersonLabel
       NAME_METHODS = %i[name full_name display_name].freeze
       # The one definition of "the user's email attribute", in order: `email`,
@@ -23,6 +26,10 @@ module PermissionForge
       # creates). Labels, people search, bulk matching and the default
       # profile_builder all read it from here.
       EMAIL_ATTRIBUTES = %i[email email_address].freeze
+      # The split name attributes composed into a name.
+      NAME_PARTS = %i[first_name last_name firstname lastname].freeze
+      # Every attribute a name or an email is read from.
+      LABEL_ATTRIBUTES = (NAME_METHODS + NAME_PARTS + EMAIL_ATTRIBUTES).freeze
 
       # @param user [Object]
       # @param configuration [PermissionForge::Configuration]
@@ -52,7 +59,7 @@ module PermissionForge
           value = column_value(attr_name)
           return value if value.to_s.strip.present? || encrypted?(attr_name)
         end
-        @user.try(attr)
+        @user.try(attr) unless withheld_reader?(attr_name)
       end
 
       def name
@@ -123,7 +130,7 @@ module PermissionForge
       end
 
       def default_name
-        first_present(NAME_METHODS) || composed(:first_name, :last_name) || composed(:firstname, :lastname)
+        first_present(NAME_METHODS) || composed(*NAME_PARTS.first(2)) || composed(*NAME_PARTS.last(2))
       end
 
       def first_present(attrs)
@@ -154,6 +161,14 @@ module PermissionForge
 
       def encrypted?(attr_name)
         PermissionForge::EncryptedAttributes.encrypted?(@user.class, attr_name)
+      end
+
+      # Under `decrypt: false`, a name or email attribute's public reader is
+      # not asked while the model encrypts any LABEL_ATTRIBUTES: the reader
+      # may read them decrypted.
+      def withheld_reader?(attr_name)
+        !@decrypt && LABEL_ATTRIBUTES.include?(attr_name.to_sym) &&
+          LABEL_ATTRIBUTES.any? { |attribute| encrypted?(attribute) }
       end
 
       # True when attr_name is a loaded column on an AR-like user (guards

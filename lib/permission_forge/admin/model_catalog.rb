@@ -228,16 +228,32 @@ module PermissionForge
         true
       end
 
-      def eager_load_app_models
-        return unless defined?(Rails) && Rails.root && Rails.respond_to?(:autoloaders)
+      def eager_load_app_models = self.class.eager_load_app_models
 
-        eager_load_dir(Rails.autoloaders.main, Rails.root.join('app', 'models').to_s)
-      rescue StandardError => e
-        Rails.logger&.debug("[PermissionForge] model eager load skipped: #{e.class}")
-      end
+      class << self
+        # Loads the application's models (`app/models`, through its main
+        # autoloader), so `ActiveRecord::Base.descendants` lists them: the
+        # one definition for whatever must see every model in a process that
+        # does not eager-load — the admin's model list, and
+        # `rake permission_forge:audit` (a single-table subclass's `encrypts`
+        # or a model on a table a rule joins is seen only once loaded:
+        # PermissionForge::EncryptedAttributes). A failure is logged at debug
+        # and skipped: the caller sees the models already loaded.
+        #
+        # @return [void]
+        def eager_load_app_models
+          return unless defined?(Rails) && Rails.root && Rails.respond_to?(:autoloaders)
 
-      def eager_load_dir(loader, dir)
-        loader.eager_load_dir(dir) if File.directory?(dir) && loader.respond_to?(:eager_load_dir)
+          eager_load_dir(Rails.autoloaders.main, Rails.root.join('app', 'models').to_s)
+        rescue StandardError => e
+          Rails.logger&.debug("[PermissionForge] model eager load skipped: #{e.class}")
+        end
+
+        private
+
+        def eager_load_dir(loader, dir)
+          loader.eager_load_dir(dir) if File.directory?(dir) && loader.respond_to?(:eager_load_dir)
+        end
       end
     end
   end

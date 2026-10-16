@@ -3,7 +3,7 @@
     <h1 class="pf-sr-only"><%= pf_record_name(set) %></h1>
     <label class="pf-sr-only" for="pf-set-name"><%= t('.name') %></label>
     <input id="pf-set-name" class="pf-title-input" type="text" name="pf[set][name]" value="<%= pf_prefill(set, :name) %>" placeholder="<%= t('permission_forge.ui.untitled.permission_set') %>" form="pf-set-form"
-           maxlength="255" required <%= 'readonly' if locked %>>
+           maxlength="255" <%= 'required' unless pf_prefill_optional?(set, :name) %> <%= 'readonly' if locked %>>
     <label class="pf-sr-only" for="pf-set-desc"><%= t('.description') %></label>
     <input id="pf-set-desc" class="pf-desc-input" type="text" name="pf[set][description]" value="<%= set.description %>" form="pf-set-form"
            placeholder="<%= t('.description_placeholder') %>" <%= 'readonly' if locked %>>

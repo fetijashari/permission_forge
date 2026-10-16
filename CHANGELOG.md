@@ -13,7 +13,8 @@ Upgrading from 0.14 is the three steps of the
 no generator to run (`permission_forge:upgrade` is for installs older than 0.13), `bin/rails permission_forge:audit`
 before the deploy — it lists the stored rows this release reads differently (rules that match nothing, broken
 activation conditions, variant rows, unknown mask strategies) — and an RLS re-sync after it. From 0.13, see
-[From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013). Most Changed
+[From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013): a revocation
+made on 0.15 does not reach what 0.13 processes have cached. Most Changed
 entries need nothing from you. These may need a change in your app or its clients: **An unrescued denial answers 403
 Forbidden instead of 500.** (add `public/403.html`, or rescue the errors), **RLS: `RlsPolicyGenerator::GENERATOR_VERSION`
 is 7** (run `permission_forge:rls:sync` after the deploy), **`include_nulls` is off unless asked for — in code, through
@@ -1047,8 +1048,9 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   `between`, a list stored joined with commas (`["active", "lead"]` → `"active,lead"`: it was a 422 "can't be blank");
   `permission_set_group_id` goes on taking the group's id or uuid, `null` or `""` clearing it. Outside a section, a
   copy's `name` that is not text (`…/clone`; it became the default name) and a bulk `user_ids` element that is no id (it
-  was left out), `""` beside an id included, are 422s too (a JSON `null` in the list is removed by Rails' parameter
-  parsing before the API reads it). The admin reads its flags the same way (the field drawer, a group, an action, the set
+  was left out) — an object, a list, a fraction, a boolean — are 422s too; a blank string beside an id is ignored, as
+  Rails' own `collection_singular_ids=` ignores it (a form built with `collection_check_boxes` sends one), and a JSON
+  `null` in the list is removed by Rails' parameter parsing before the API reads it. The admin reads its flags the same way (the field drawer, a group, an action, the set
   editor): a crafted `group[is_active]=nope` switched the group on; it now goes back with "is_active must be true or
   false. Nothing was changed." A static guard keeps `.permit` out of the API controllers. **No opt-out:** send each
   attribute in its shape (docs/admin-api.md "Attribute shapes"); a dropped or miscast value was a silent no-op or an
@@ -1058,7 +1060,7 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#a list for field_value under in, not_in or between is joined with commas -->
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#a copy name that is not text is a 422 keyed by name, and nothing is copied -->
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids with an element that is no id is a 422 keyed by user_ids, and nobody is assigned -->
-  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids holding a blank string beside an id is a 422 keyed by user_ids, and nobody is assigned -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids holding a blank string beside an id ignores the blank, as Rails does -->
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#no .permit in the API controllers outside pf_record_attributes -->
   <!-- pin: test/permission_forge/security/route_fuzz_test.rb#~answers a wrong shape of each section attribute with a 422 keyed by it -->
   <!-- pin: test/permission_forge/html/admin_boolean_params_test.rb#a group flag the admin cannot read is a flash, and the group is unchanged -->
@@ -1153,11 +1155,15 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   it as it is), the audit lists it as `encrypted_rule_columns` (High while people hold the set) and Home under "Rules
   that match nothing" (`Operators::RuleProblem` kind `:encrypted_column`; one reader of the declarations,
   `PermissionForge::EncryptedAttributes`, a canary watches `encrypted_attributes`). The column is found wherever the
-  rule reaches it: through an alias its join gives (`twins_notes.body` on a self-join: the alias is resolved to the
-  model it joins, `Operators::RuleSources.tables`; one that cannot be resolved counts as encrypted when any model along
-  the rule's path encrypts a column of that name), and under single-table inheritance (a column is encrypted when the
+  rule reaches it: in any table its query joins — an alias (`twins_notes.body` on a self-join), a `has_many :through`'s
+  join table, a table a default scope or a host's join brings in (each name the query gives a table is resolved to that
+  table, `Operators::RuleSources.tables`, and to every loaded model on it, `EncryptedAttributes.models_on`; a name no
+  loaded model is on counts as encrypted when any model along the rule's path encrypts a column of that name) — and
+  under single-table inheritance (a column is encrypted when the
   class, its base class or any loaded class of the hierarchy on the same table encrypts it — a subclass's `encrypts`
-  also refuses a rule on its parent, and Rails' own answer for the parent depends on load order). Under
+  also refuses a rule on its parent, and Rails' own answer for the parent depends on load order; a class not loaded yet
+  is not seen, so `rake permission_forge:audit`, which runs without eager loading, loads the application's models
+  first, through the admin's model list's one definition, `Admin::ModelCatalog.eager_load_app_models`). Under
   `support_unencrypted_data` such a rule used to match the rows still stored in plaintext; it no longer does.
   **Opt out:** compare a deterministically encrypted attribute through a custom operator whose strategy calls
   `query.where(attribute => value)` (a custom operator gets the value as written).
@@ -1168,17 +1174,24 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   <!-- pin: test/rls/rls_rule_parity_test.rb#a rule on an encrypted attribute: the null checks agree, every other built-in operator matches nothing -->
   <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a stored one through the alias matches nothing, never the row it should hide, and is reported -->
   <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#an alias that cannot be resolved counts as encrypted when a model along the path encrypts the column -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a stored one on the join table matches nothing, never the row it should hide, and is reported -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a table a default scope joins is seen by the applier: the rule matches nothing -->
+  <!-- pin: test/permission_forge/tasks/audit_rake_tasks_test.rb#the audit loads the application models before it reviews -->
   <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a rule on the base class is refused, and a stored one matches nothing for the base and the subclass -->
 - **The default `profile_builder` leaves out an attribute the user model encrypts.** The profile is cached with each
   person's permission hash, in the cache store (Redis, Solid Cache, a file or memory store). With `encrypts :email` (or
   `:name`) on the user model, the default builder stored the ciphertext JSON there before 0.15; reading it decrypted
   would put the plaintext in the cache store. `permissions_hash[:profile][:email]` and `[:name]` are now `nil` for an
-  encrypted attribute (an encrypted `email` gives way to a plain `email_address`); the admin's labels, which are never
-  cached, still read it decrypted (`Admin::PersonLabel`, `decrypt: false` for the profile). The generated initializer
-  no longer sets `profile_builder` (the line is a commented example), so a new install uses this default; an initializer
-  generated before keeps its own lambda, which calls the public readers (they decrypt): remove the line to get the
-  default. **Opt out:** set a `config.profile_builder` of your own that returns what the cache store may hold.
+  encrypted attribute (an encrypted `email` gives way to a plain `email_address`), and so is a name or email the model
+  composes in a reader while it encrypts any attribute a name or email is read from (`name`, `full_name`,
+  `display_name`, `first_name`/`last_name`, `firstname`/`lastname`, `email`, `email_address`: such a reader would hand
+  over their plaintext; an encrypted attribute the label never reads is not looked at); the admin's labels, which are
+  never cached, still read them decrypted (`Admin::PersonLabel`, `decrypt: false` for the profile). The generated
+  initializer no longer sets `profile_builder`: the line is a commented example, which calls the public readers (they
+  decrypt), so a new install uses this default; an initializer generated before keeps its own lambda, which does the
+  same: remove the line to get the default. **Opt out:** set a `config.profile_builder` of your own that returns what the cache store may hold.
   <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#the default profile_builder leaves encrypted attributes out; the admin label reads them decrypted -->
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#under decrypt: false no reader is asked for a name or email while the model encrypts one the label reads -->
   <!-- pin: test/permission_forge/release_readiness/claims_regression_test.rb#CLAIMS-32 the generated initializer works without a Current class and keeps uuid in the profile -->
 - **A LIKE operator on a column that is not text is refused on `operator`, naming the column's type.** `seats
   contains '1'` on an integer column (PostgreSQL), or any LIKE operator on a `json` column, was refused as "is not a
@@ -1240,14 +1253,24 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   (`PermissionForge::GeneratedText.label?`) and fall back to the host's translation, then — only while `I18n.locale` is
   English — Rails' own English for the name (`human_attribute_name`: "Created at", what an English host saw before),
   then the name in `<code>`, shown once (the grid no longer reads "api_token api_token"); a label an admin wrote still
-  wins. The field drawer, the action form, a set's and a group's name and the rule builder pre-fill no generated text
-  (`Admin::Prefill`), and a Permission Set, group or rule stored under an install-default English name ("Untitled
-  Rule") is named in the page's language wherever the admin shows it (`Admin::RecordName`, `pf_record_name`; the
-  locale-leak walk stores those defaults on the walked records). **Opt out:** write a label or a name of your own, or
+  wins. The field drawer, the action form, a set's and a group's name and the rule builder show generated text as a
+  blank field with a translated placeholder (`Admin::Prefill.text`), and saving that blank back is no change: the
+  stored text stays and no change or audit event is recorded (`Admin::Prefill.posted`, asked by every one of those
+  saves; a set's and a group's name field is not `required` while it holds generated text, so a page under an
+  install-default name saves any other change; typed text renames, and a blank over a label an admin wrote is stored
+  as the name, as before). A blank sent for a description that holds nothing is no change either. A Permission Set,
+  group or rule stored under an install-default English name ("Untitled Rule") is named in the page's language
+  wherever the admin shows it (`Admin::RecordName`, `pf_record_name`; the locale-leak walk stores those defaults on the
+  walked records) — the record lists of a Permission Set's and a person's Audit tab included (under
+  `audit_trail_enabled`), whose CSV exports keep the stored values. **Opt out:** write a label or a name of your own, or
   translate the column (`activerecord.attributes.<model>.<column>`).
   <!-- pin: test/permission_forge/admin/generated_text_display_test.rb#a generated field label is no label: Rails English on an English page, the name verbatim elsewhere -->
   <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#a generated label and no row read the same on a muting set, in every language (B#26) -->
   <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#the field drawer pre-fills no generated label, and keeps an admin label -->
+  <!-- pin: test/permission_forge/html/generated_text_unchanged_submit_test.rb#an unchanged field drawer keeps a generated label: no change, no event -->
+  <!-- pin: test/permission_forge/html/generated_text_unchanged_submit_test.rb#a set under an install-default name: an unchanged submit changes nothing, a change saves -->
+  <!-- pin: test/permission_forge/html/generated_text_unchanged_submit_test.rb#a rule under an install-default name and message: an unchanged builder save changes nothing -->
+  <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#the Permission Set Audit tab names generated text in the page language; its CSV keeps the stored values -->
   <!-- pin: test/permission_forge/admin/generated_text_display_test.rb#a set, group or rule stored under an install default name is named in the page language -->
   <!-- pin: test/permission_forge/html/locale_leak_test.rb#every screen shows only translated words and host data -->
 - **The rule builder's preview says what the save would say.** It runs the save path in memory — the builder's own
@@ -1299,11 +1322,13 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
 - **The removal of 0.13's cache keys.** Through 0.14 every invalidation also removed the bare keys 0.13 wrote
   (`user_<id>`, `tenant_<t>_user_<id>`), so that a rolling deploy from 0.13 reached both versions' entries;
   `Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES` is now empty and an invalidation removes this version's (`v2:`) entries
-  only. An application still on 0.13 follows the one path of
-  [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013) (it ends with
-  `bin/rails permission_forge:cache:clear` once its 0.13 processes are gone).
+  only: a revocation made by a 0.15 process no longer reaches what a 0.13 process has cached, which keeps serving it
+  until `cache_ttl`. An application still on 0.13 follows
+  [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013), which states
+  both directions and its two paths (through 0.14, with no such window, or straight to 0.15, accepting it).
   <!-- pin: test/permission_forge/cache/user_keys_test.rb#an invalidation names the stamp and the v2 keys, and no bare key of 0.13 -->
   <!-- pin: test/permission_forge/cache/user_keys_test.rb#the entries live under one namespace, the previous ones are gone -->
+  <!-- pin: test/permission_forge/docs/upgrade_notes_test.rb#From 0.13 states the cache gap in both directions and the two paths -->
 
 ### Fixed
 
@@ -1941,9 +1966,12 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
 - **A Permission Set with two Resources of one single-table-inheritance chain is named with the Resource.** The field
   drawer's "Across all Permission Sets" showed "Sales rep ∅ Hidden" and "Sales rep ◉ Read-only" side by side, and a
   person's effective access "from Sales rep" (field test round 7, B#35); such a row reads "Sales rep · VipCustomer",
-  the model marked as host data (`Admin::ChainEntries`, `pf_set_entry_name`).
+  the model marked as host data (`Admin::ChainEntries`, `pf_set_entry_name`). A Muting Permission Set's reasons there —
+  a flag, a field or an action it takes away — name the Resource whose row does the muting the same way
+  (`pf_muting_set_name`).
   <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#the drawer's rows name the Resource when the set holds more than one of the chain -->
   <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#a person's effective access names the Resource the same way -->
+  <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#a person's effective access names the muting Resource the same way -->
 - **Home counts people with one Macedonian noun.** "1 лице го има овој сет" stood beside "1 корисник" (field test round
   7, C#92); every count of people on Home uses the noun of `ui.people_count`, in every locale (a glossary test).
   <!-- pin: test/permission_forge/locale_glossary_test.rb#mk: Home counts people with the noun of ui.people_count -->
