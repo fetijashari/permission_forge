@@ -1980,6 +1980,37 @@ none.** (code and API clients that create without a name, or with a blank one), 
 - **Home counts people with one Macedonian noun.** "1 лице го има овој сет" stood beside "1 корисник" (field test round
   7, C#92); every count of people on Home uses the noun of `ui.people_count`, in every locale (a glossary test).
   <!-- pin: test/permission_forge/locale_glossary_test.rb#mk: Home counts people with the noun of ui.people_count -->
+- **An app with no database configured boots.** A fresh `rails new --skip-kamal` app comments its production database
+  paths out (the deploy supplies `DATABASE_URL`), and `RAILS_ENV=production SECRET_KEY_BASE_DUMMY=1 bin/rails
+  assets:precompile` (the Dockerfile's build step) or any production runner aborted once the gem was installed: the
+  boot ping rescued Active Record's errors only, and the sqlite3 adapter refuses a configuration without a file with an
+  `ArgumentError` (field test round 8, E#7). `PermissionForge::DatabaseReach` is the one definition of "this process
+  cannot use its database" (`CONNECT_ERRORS`: Active Record's errors, an adapter's `ArgumentError` for its
+  configuration, the `LoadError` of a missing driver gem — rescued only around Rails' own connection code, a ping or
+  `table_exists?`); the boot ping and auto-applied masking's read of the Resource table ask it, so the boot skips its
+  database checks with one line naming the cause (`The database could not be reached at boot (ArgumentError: No
+  database file specified. ...)`) and a request or job of such a process no longer logs a SECURITY "masking could not
+  be synced" warning. A process that runs nothing but asset tasks (`assets:precompile`, `assets:clean`,
+  `assets:clobber`: `BootChecks.asset_build?`) runs the configuration warnings only and never connects.
+  <!-- pin: test/permission_forge/install/production_boot_without_database_test.rb#assets:precompile boots in production with no database file configured, and never connects -->
+  <!-- pin: test/permission_forge/install/production_boot_without_database_test.rb#a production runner with no database file configured boots, says the checks were skipped, and runs -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#DatabaseReach.problem counts an adapter that refuses its configuration or cannot load as no database -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#MaskedModels.apply answers false, without raising, when the database is not configured -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#asset_build? is true only when every task Rake was asked for is an asset task -->
+- **A production boot no longer calls a `:memory_store` "the Rails development default".** The masking warning of a
+  production boot with `config.cache_store = :memory_store` said so (field test round 8, E#66); the clause is now
+  added in a development boot only (`CacheWarnings::DEVELOPMENT_DEFAULT`).
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#a :memory_store is called the development default in a development boot only -->
+- **The JSON API says which authorization lambda it lacks before the first 403.** With `api_enabled` and `api_auth`
+  set but `api_action_authorization`, `api_assignment_authorization` or `api_stats_authorization` unset, the API refused
+  every change, assignment or stats read (each 403 names the option) and nothing said so earlier (field test round 8,
+  D#7; round 7 #12). The server's boot now logs one note naming each missing lambda and what the API refuses without
+  it (`api_authorization_unset`, audience `:server`), `rake permission_forge:audit` lists them as the info finding
+  `api_authorization_unset`, both read from `PermissionForge::ApiAuthorizations`, and the generated initializer shows
+  `api_stats_authorization` beside the other two.
+  <!-- pin: test/permission_forge/security/api_require_authorization_default_test.rb#the boot names each authorization lambda the API needs and does not have, and what it refuses -->
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#an API with api_auth whose authorization lambdas are unset gets an info note naming each and what it guards -->
+  <!-- pin: test/permission_forge/security/api_require_authorization_default_test.rb#the install initializer shows all three authorization lambdas -->
 ### Documentation
 
 - [Migration guide](docs/migration-guide.md#upgrading-to-015): "Upgrading to 0.15" — run `rake
@@ -2104,6 +2135,11 @@ none.** (code and API clients that create without a name, or with a blank one), 
   translation ([Your Models and Columns in the Admin](docs/i18n.md#your-models-and-columns-in-the-admin)).
   <!-- pin: test/permission_forge/docs/upgrade_notes_test.rb#Upgrading to 0.15 opens with the three-step checklist -->
   <!-- pin: test/permission_forge/docs/upgrade_notes_test.rb#the 0.13 path is stated once, in From 0.13, and the rest link to it -->
+- [Wiring a scaffold](docs/getting-started.md#wiring-a-scaffold) says what to change in the scaffold's migration:
+  `owner:references` writes `foreign_key: true`, a foreign key to a table `owners`, so the first insert failed on
+  SQLite (`no such table: main.owners`); the guide points it at the users table (`foreign_key: { to_table: :users }`)
+  (field test round 8, A#13).
+  <!-- pin: docs/getting-started.md#wiring-a-scaffold -->
 
 ## [0.14.1] - 2026-10-14
 

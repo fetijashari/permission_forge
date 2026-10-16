@@ -113,6 +113,31 @@ module PermissionForge
         assert_not_includes codes(audit(api_enabled: true, api_auth: ->(_c) { true })), :api_mutations_unguarded
       end
 
+      # Field test round 8 (D#7): an API with api_auth and none of the
+      # authorization lambdas refused every change, assignment and stats
+      # read (fail closed), and the audit had nothing to say about it.
+      test 'an API with api_auth whose authorization lambdas are unset gets an info note naming each and what it guards' do
+        finding = item_for(audit(api_enabled: true, api_auth: ->(_c) { true }), :api_authorization_unset)
+
+        assert_equal :info, finding.severity
+        assert_equal ['api_action_authorization: every create, update, delete and copy',
+                      'api_assignment_authorization: every assignment and group membership change',
+                      'api_stats_authorization: GET /api/stats (or set api_stats_require_admin = false)'], finding.items
+
+        partly = item_for(audit(api_action_authorization: ->(*) { true }, api_stats_require_admin: false), :api_authorization_unset)
+        assert_equal ['api_assignment_authorization: every assignment and group membership change'], partly.items
+      end
+
+      test 'no api_authorization_unset note when the API is off, has no api_auth, has every lambda, or does not require them' do
+        assert_not_includes codes(audit), :api_authorization_unset
+        assert_not_includes codes(audit(api_enabled: true)), :api_authorization_unset, 'api_without_auth says it'
+        assert_not_includes codes(audit(api_enabled: true, api_auth: ->(_c) { true }, api_action_authorization: ->(*) { true },
+                                        api_assignment_authorization: ->(*) { true }, api_stats_authorization: ->(_c) { true })),
+                            :api_authorization_unset
+        opted_out = audit(api_enabled: true, api_auth: ->(_c) { true }, api_require_authorization: false, api_stats_require_admin: false)
+        assert_not_includes codes(opted_out), :api_authorization_unset, 'api_mutations_unguarded says it'
+      end
+
       test 'conditional sets are flagged while strict mode is off' do
         create_permission_set(name: 'Office only', allowed_ips: '10.0.0.0/8')
 

@@ -121,6 +121,7 @@ module PermissionForge
       'audit_actor_shared_login' => [:config, 'every change is recorded; only the actor is the shared login'],
       'unmasked_gdpr_fields' => [:config, 'access is what the rows configure; a recommendation to mask a field that looks personal'],
       'api_only_admin' => [:config, 'the admin pages fail (no cookies or session): nothing is open'],
+      'api_authorization_unset' => [:config, 'the API refuses (403) what the missing lambda guards: it fails closed'],
       'boot_check_skipped.' => [:config, 'a check could not read the database; the runtime paths read it themselves'],
       'database_unreachable' => [:config, 'masking is applied by the first request or job that reaches the database'],
       'basic_auth_without_credentials' => [:config, 'the admin answers 401 to everything: it fails closed'],
@@ -144,6 +145,7 @@ module PermissionForge
       'api_only_admin' => [:server, 'the middlewares the admin screens need in the process that serves them'],
       'tenantless_admin' => [:server, 'what the admin and the API serve without a tenant'],
       'api_authorization_gap' => [:server, 'what the JSON API lets its callers change'],
+      'api_authorization_unset' => [:server, 'what the JSON API refuses its callers'],
       'audit_events_off' => [:all], 'audit_table_missing' => [:all], 'audit_table_unchecked' => [:all],
       'conditional_sets_without_context' => [:all], 'join_rules_not_auto_scoped' => [:all], 'rls_policy_drift' => [:all],
       'rls_not_postgresql' => [:all], 'virtual_readers.unmasked.' => [:all], 'masked_models.unknown_listed.' => [:all],
@@ -242,7 +244,8 @@ module PermissionForge
 
       assert_empty problems
       assert_equal SEVERITY.keys.sort, AUDIENCE.keys.sort, 'every warning has a severity and an audience'
-      assert_equal %w[api_authorization_gap api_only_admin audit_actor_shared_login basic_auth_without_credentials tenantless_admin],
+      assert_equal %w[api_authorization_gap api_authorization_unset api_only_admin audit_actor_shared_login
+                      basic_auth_without_credentials tenantless_admin],
                    AUDIENCE.select { |_, (audience)| audience == :server }.keys.sort
     end
 

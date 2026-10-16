@@ -32,6 +32,9 @@ module PermissionForge
                        '(the recommended production setup), or list the models in ' \
                        'config.auto_apply_masked_attributes. See docs/masked-attributes.md.'
 
+    # What store_description adds about a :memory_store in development.
+    DEVELOPMENT_DEFAULT = ', the Rails development default'
+
     module_function
 
     # @param config [Configuration]
@@ -110,12 +113,18 @@ module PermissionForge
       "auto-applied masking (#{on.map { |name, value| "#{name} = #{value.inspect}" }.join(', ')})"
     end
 
-    def store_description(config, cache)
+    # How the warnings name the store. A :memory_store is what Rails
+    # generates for development (DEVELOPMENT_DEFAULT): said in a development
+    # boot only — a production boot with one has chosen it (field test
+    # round 8, E#66).
+    #
+    # @param env [ActiveSupport::EnvironmentInquirer] the environment booting
+    def store_description(config, cache, env: Rails.env)
       return kept_nothing_description(config) unless cache.keeps_entries?
 
       case config.cache_backend
       when :memory then 'in memory (cache_backend = :memory)'
-      when :rails_cache then 'an in-memory store (Rails.cache is a :memory_store, the Rails development default)'
+      when :rails_cache then "an in-memory store (Rails.cache is a :memory_store#{DEVELOPMENT_DEFAULT if env.development?})"
       else 'an in-memory store (cache_backend is an ActiveSupport::Cache::MemoryStore)'
       end
     end

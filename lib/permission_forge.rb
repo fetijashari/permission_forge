@@ -493,6 +493,7 @@ require_relative 'permission_forge/admin/rule_preview'
 require_relative 'permission_forge/admin/bulk_people_matcher'
 
 # Security review (rake permission_forge:audit)
+require_relative 'permission_forge/api_authorizations'
 require_relative 'permission_forge/services/security_audit'
 require_relative 'permission_forge/services/security_audit/base_check'
 require_relative 'permission_forge/services/security_audit/config_check'
