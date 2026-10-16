@@ -68,7 +68,7 @@ module PermissionForge
 
     def send_audit_csv
       audit = PermissionForge::Admin::AuditTrail.new
-      csv = audit.to_csv(@entries, describe: helpers.method(:pf_audit_describe), person: helpers.method(:pf_audit_people))
+      csv = audit.to_csv(@entries, describe: helpers.method(:pf_audit_csv_describe), person: helpers.method(:pf_audit_people))
       response.headers['Cache-Control'] = 'no-store' # names of people, like the log's exports
       send_data csv, filename: "permission-forge-#{@permission_set.name.parameterize}-audit.csv", type: 'text/csv'
     end

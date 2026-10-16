@@ -163,7 +163,7 @@ module PermissionForge
 
     def send_changes_csv
       entries = audit.changes_by(@person.id).values.flatten
-      csv = audit.to_csv(entries, describe: helpers.method(:pf_audit_describe), person: helpers.method(:pf_audit_people))
+      csv = audit.to_csv(entries, describe: helpers.method(:pf_audit_csv_describe), person: helpers.method(:pf_audit_people))
       response.headers['Cache-Control'] = 'no-store' # names of people, like the log's exports
       send_data csv, filename: "permission-forge-changes-#{@person.id}.csv", type: 'text/csv'
     end

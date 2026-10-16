@@ -9,14 +9,32 @@ module PermissionForge
     CATEGORY_VARIANTS = { 'change' => :changed, 'admin' => :warn, 'system' => :default, 'access' => :mask }.freeze
     # The message Audit::EventQuery gives a filter that needs a value.
     QUERY_BLANK_MESSAGE = 'permission_forge.validations.blank'.freeze
-    # [record label, where] per audited type; evaluated in the view context.
+    # [record label, where] per audited type, for a page; evaluated in the
+    # view context. Names and labels read as everywhere else in the admin:
+    # a set's, group's or rule's install-default name in the page's
+    # language (pf_record_name), a field's or action's generated label as
+    # no label (Admin::FieldLabel, Admin::ActionLabel; a verbatim name in
+    # <code>).
     AUDIT_LABELS = {
+      'permission_set' => ->(record) { [pf_record_name(record), nil] },
+      'group' => ->(record) { [pf_record_name(record), nil] },
+      'resource' => ->(record) { [pf_resource_label(record), pf_record_name(record.permission_set).presence] },
+      'field' => ->(record) { [pf_field_label(record.resource&.name, record.name, row: record), pf_audit_resource_where(record.resource)] },
+      'action' => ->(record) { [pf_audit_action_label(record), pf_audit_resource_where(record.resource)] },
+      'rule' => ->(record) { [pf_record_name(record), pf_audit_resource_where(record.resource)] },
+      'assignment' => ->(record) { [pf_person_name(record.user), pf_record_name(record.permission_set).presence] },
+      'group_membership' => ->(record) { [pf_person_name(record.user), pf_record_name(record.permission_set_group).presence] }
+    }.freeze
+
+    # The same for the CSV export: the values as stored (an export is data,
+    # as the log's exports keep a stored reason).
+    AUDIT_CSV_LABELS = {
       'permission_set' => ->(record) { [record.name, nil] },
       'group' => ->(record) { [record.name, nil] },
       'resource' => ->(record) { [pf_resource_label(record), record.permission_set&.name] },
-      'field' => ->(record) { [record.label.presence || record.name, pf_audit_resource_where(record.resource)] },
-      'action' => ->(record) { [record.label.presence || record.name, pf_audit_resource_where(record.resource)] },
-      'rule' => ->(record) { [record.name, pf_audit_resource_where(record.resource)] },
+      'field' => ->(record) { [record.label.presence || record.name, pf_audit_csv_resource_where(record.resource)] },
+      'action' => ->(record) { [record.label.presence || record.name, pf_audit_csv_resource_where(record.resource)] },
+      'rule' => ->(record) { [record.name, pf_audit_csv_resource_where(record.resource)] },
       'assignment' => ->(record) { [pf_person_name(record.user), record.permission_set&.name] },
       'group_membership' => ->(record) { [pf_person_name(record.user), record.permission_set_group&.name] }
     }.freeze
@@ -37,21 +55,36 @@ module PermissionForge
       t("permission_forge.ui.audit.types.#{type}")
     end
 
-    # [type label, record label, where] — also used for CSV export.
+    # [type label, record label, where] of a page's row (AUDIT_LABELS).
     def pf_audit_describe(entry)
-      record = entry.record
-      label, where = pf_audit_label_and_where(entry.type, record)
+      label, where = pf_audit_lookup(AUDIT_LABELS, entry.type, entry.record)
       [pf_audit_type_label(entry.type), label, where]
     end
 
-    def pf_audit_label_and_where(type, record)
-      pf_audit_lookup(AUDIT_LABELS, type, record)
+    # [type label, record label, where] of a CSV row: stored values (AUDIT_CSV_LABELS).
+    def pf_audit_csv_describe(entry)
+      label, where = pf_audit_lookup(AUDIT_CSV_LABELS, entry.type, entry.record)
+      [pf_audit_type_label(entry.type), label, where]
     end
 
+    # "<set> › <model>" for a row under a Resource, the set named as the admin names it.
     def pf_audit_resource_where(resource)
       return nil unless resource
 
+      "#{pf_record_name(resource.permission_set)} › #{pf_resource_label(resource)}"
+    end
+
+    # The same with the set's stored name, for the CSV.
+    def pf_audit_csv_resource_where(resource)
+      return nil unless resource
+
       "#{resource.permission_set&.name} › #{pf_resource_label(resource)}"
+    end
+
+    # An action's label (Admin::ActionLabel), a verbatim key in <code>.
+    def pf_audit_action_label(action)
+      label = PermissionForge::Admin::ActionLabel.for(action)
+      label.verbatim? ? tag.code(label.text, class: 'pf-mono-key') : label.text
     end
 
     def pf_audit_path(entry)
