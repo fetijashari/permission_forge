@@ -18,6 +18,9 @@ module PermissionForge
       #   nothing; Hidden stays Hidden (a privacy default never grants). A
       #   Muting Permission Set gets the level chosen: there a row takes
       #   access away, and the privacy default has nothing to add;
+      # - then Editable is Read-only on a Resource without Edit
+      #   (FieldLevel.capped): chosen Editable, a personal-data field is
+      #   Read-only there, not Masked;
       # - Rails' timestamps at most Read-only on a granting set
       #   (PermissionForge::TimestampFields);
       # - the recommended mask strategy of a sensitive column, whether or not
@@ -61,7 +64,8 @@ module PermissionForge
           return unless row_level?(level)
 
           match = @sensitive.match(name)
-          flags = PermissionForge::FieldLevel.flags_for(effective_level(level, match), muting: @muting)
+          level = PermissionForge::FieldLevel.capped(effective_level(level, match), resource_edit: @resource.edit_access, muting: @muting)
+          flags = PermissionForge::FieldLevel.flags_for(level, muting: @muting)
           { name: name, label: name.humanize, is_active: true, is_editable: true, mask_strategy: match&.strategy || 'full' }
             .merge(flags)
             .merge(timestamps.overrides(name, read: flags[:read_access]))

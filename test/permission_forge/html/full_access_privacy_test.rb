@@ -106,6 +106,7 @@ module PermissionForge
       test 'sync: "with full access" masks nothing, "Read-only" masks the sensitive columns' do
         customer = add_customer('nothing')
         customer.resource_fields.where(name: %w[name email domain]).destroy_all
+        customer.update!(read_access: true, edit_access: true) # Editable needs the Resource's Edit (FieldLevel.capped)
         base = "/permission_sets/#{@admin.id}/resources/Customer"
 
         post pf("#{base}/sync"), params: { op: 'add_new', level: 'edit' }

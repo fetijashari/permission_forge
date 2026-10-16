@@ -10,7 +10,7 @@ module PermissionForge
 
       def rows(level, muting: false)
         set = create_permission_set(name: "Columns #{level} #{muting}", is_muting: muting)
-        resource = create_resource(permission_set: set, name: 'Customer', read_access: !muting)
+        resource = create_resource(permission_set: set, name: 'Customer', read_access: !muting, edit_access: !muting)
         ColumnFields.new(resource, muting: muting).create(%w[domain] + TIMESTAMPS, level)
         resource.resource_fields.reload.index_by(&:name)
       end
@@ -43,7 +43,7 @@ module PermissionForge
       end
 
       test 'a resource whose model does not load creates the rows at the level' do
-        resource = create_resource(permission_set: create_permission_set, name: 'PfNoSuchModel')
+        resource = create_resource(permission_set: create_permission_set, name: 'PfNoSuchModel', edit_access: true)
         ColumnFields.new(resource, muting: false).create(%w[created_at], 'edit')
 
         assert_equal 'edit', level(resource.resource_fields.find_by!(name: 'created_at'))

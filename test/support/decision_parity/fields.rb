@@ -7,6 +7,9 @@ module PermissionForge
   module ReleaseReadiness
     class DecisionParityTest
       PARITY_MODELS = %w[Customer PfVariantOrder].freeze
+      # The levels that write no row, by muting: written out here, not read
+      # from FieldLevel.row?, so breaking that definition turns (a) red.
+      LEVELS_WITHOUT_ROWS = { false => [], true => %w[leave] }.freeze
       # What a generated row is, for comparison: the flags, the strategy, the label.
       ROW = ->(field) { [field.name, field.read_access, field.edit_access, field.mask_access, field.mask_strategy, field.label] }
       # The generator's grant_all for an admin level, where it has one.
@@ -16,29 +19,51 @@ module PermissionForge
       # Fields tab's bulk "Add" (Admin::ChangeSet → NewFields) and
       # ResourceFieldGenerator (the API's generate_fields, grant_full_access!,
       # the console) write the same rows for the same level: name, read, edit,
-      # mask, strategy, label — timestamps, privacy defaults and virtual
-      # fields included. A level that is no row (Unchanged in a Muting
-      # Permission Set: FieldLevel.row?) is no row on every path — the
-      # generator without grant_all on a muting set writes none either.
+      # mask, strategy, label — timestamps, privacy defaults, virtual fields
+      # (PermissionForge::ManagedFields: the same names on every path, under
+      # either extra_fields_default_access) and a Resource without Edit
+      # (Editable is Read-only there: FieldLevel.capped) included. A level
+      # that is no row (Unchanged in a Muting Permission Set) is no row on
+      # every path — the generator without grant_all on a muting set writes
+      # none either. The first loop runs the library defaults (a Resource
+      # with Edit, extra_fields_default_access = :grant), the second the
+      # other combinations.
       PARITY_MODELS.each do |model_name|
         [false, true].each do |muting|
           [false, true].each do |gdpr|
             PermissionForge::Admin::FieldLevel.levels_for(muting: muting).each do |level|
               test "(a) #{model_name}, muting=#{muting}, gdpr_defaults=#{gdpr}, #{level}: presets, bulk and the generator write the same rows" do
-                PermissionForge.configuration.gdpr_defaults = gdpr
-                presets, bulk, generated = rows_by_path(model_name, muting: muting, level: level)
+                assert_paths_agree(model_name, level, muting: muting, gdpr: gdpr, resource_edit: true, extra: :grant)
+              end
 
-                assert_equal presets, bulk, 'presets vs bulk'
-                if generated.nil?
-                  assert_not_empty presets
-                else
-                  assert_equal presets, generated, 'presets vs generator'
+              [[false, :grant], [true, :unconfigured], [false, :unconfigured]].each do |resource_edit, extra|
+                test "(a) #{model_name}, resource edit=#{resource_edit}, extra fields #{extra}, muting=#{muting}, " \
+                     "gdpr_defaults=#{gdpr}, #{level}: presets, bulk and the generator write the same rows" do
+                  assert_paths_agree(model_name, level, muting: muting, gdpr: gdpr, resource_edit: resource_edit, extra: extra)
                 end
-                assert_equal PermissionForge::FieldLevel.row?(level, muting: muting), presets.any?, 'a level that is no row writes none'
               end
             end
           end
         end
+      end
+
+      test '(a) Editable on a Resource without Edit is Read-only on every path, and the privacy default does not mask it' do
+        PermissionForge.configuration.gdpr_defaults = true
+        presets, bulk, generated = rows_by_path('Customer', muting: false, level: 'edit', resource_edit: false)
+
+        assert_equal presets, bulk
+        assert_equal presets, generated
+        assert_includes presets, ['email', true, false, false, 'email', 'Email']
+        assert(presets.none? { |row| row[2] }, 'no row is editable on a Resource without Edit')
+      end
+
+      test '(a) a declared virtual field gets the level chosen on every path under extra_fields_default_access = :grant' do
+        PermissionForge.configuration.extra_fields_default_access = :grant
+        presets, bulk, generated = rows_by_path('PfVariantOrder', muting: false, level: 'hidden')
+
+        assert_equal presets, bulk
+        assert_equal presets, generated
+        assert_includes presets.map(&:first), 'region_uuid'
       end
 
       test '(a) a column named only by the host filter_parameters starts Masked on every path (Read-only, gdpr_defaults)' do
@@ -169,11 +194,27 @@ module PermissionForge
         findings.flat_map(&:items).any? { |item| item.include?(".#{row.name} ") }
       end
 
+      # The three paths agree, and a level writes rows exactly when it is
+      # one (LEVELS_WITHOUT_ROWS).
+      def assert_paths_agree(model_name, level, **setting)
+        muting, gdpr, resource_edit, extra = setting.values_at(:muting, :gdpr, :resource_edit, :extra)
+        PermissionForge.configuration.gdpr_defaults = gdpr
+        PermissionForge.configuration.extra_fields_default_access = extra
+        presets, bulk, generated = rows_by_path(model_name, muting: muting, level: level, resource_edit: resource_edit)
+
+        assert_equal presets, bulk, 'presets vs bulk'
+        if generated.nil?
+          assert_not_empty presets
+        else
+          assert_equal presets, generated, 'presets vs generator'
+        end
+        assert_equal LEVELS_WITHOUT_ROWS.fetch(muting).exclude?(level), presets.any?, 'a level that is no row writes none'
+      end
+
       # [presets rows, bulk rows, generator rows or nil] for `level` on fresh
       # sets of the same kind; rows as ROW, sorted.
-      def rows_by_path(model_name, muting:, level:)
-        PermissionForge.configuration.extra_fields_default_access = :unconfigured
-        resources = 3.times.map { |i| parity_resource(model_name, "parity #{i}", muting: muting) }
+      def rows_by_path(model_name, muting:, level:, resource_edit: true)
+        resources = 3.times.map { |i| parity_resource(model_name, "parity #{i}", muting: muting, edit: resource_edit) }
         generated = all_paths_wrote?(resources, level, muting: muting)
 
         rows = resources.map { |resource| resource.resource_fields.reload.map(&ROW).sort }
@@ -181,7 +222,7 @@ module PermissionForge
       end
 
       # Writes the rows on the three paths; false when the generator has no
-      # grant_all for `level` (Masked, Force mask).
+      # grant_all for `level` (Masked, Read-only, Force mask).
       def all_paths_wrote?(resources, level, muting:)
         names = PermissionForge::Admin::ModelCatalog.new.find(resources.first.name).managed_field_names
         PermissionForge::Admin::ColumnFields.new(resources[0], muting: muting).create(names, level)
@@ -193,8 +234,8 @@ module PermissionForge
         true
       end
 
-      def parity_resource(model_name, label, muting:)
-        create_resource(permission_set: parity_set(label, muting: muting), name: model_name, read_access: true, edit_access: true)
+      def parity_resource(model_name, label, muting:, edit: true)
+        create_resource(permission_set: parity_set(label, muting: muting), name: model_name, read_access: true, edit_access: edit)
       end
 
       # The Fields tab's bulk "Add" of unconfigured columns, as the controller posts it.

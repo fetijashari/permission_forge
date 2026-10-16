@@ -9,10 +9,10 @@ module PermissionForge
           ActiveModel::Type::Boolean.new.cast(value) == true
         end
 
-        # Edit on a resource without Edit is downgraded to Read (muting sets
-        # have inverted semantics, so Edit is always available there).
+        # Edit on a resource without Edit is downgraded to Read
+        # (FieldLevel.capped, the one definition).
         def self.effective_level(level, resource, muting:)
-          level == 'edit' && !(muting || resource.edit_access) ? 'read' : level
+          FieldLevel.capped(level, resource_edit: resource.edit_access, muting: muting)
         end
       end
     end

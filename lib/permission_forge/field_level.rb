@@ -51,6 +51,25 @@ module PermissionForge
       valid?(level, muting: muting) && !(muting && level.to_s == 'leave')
     end
 
+    # The level a row gets on its Resource: on a granting set Editable needs
+    # the Resource's Edit (the admin's level control disables it, turning
+    # the Resource's Edit off cascades Editable rows to Read-only, the
+    # effective-access views cap it), so without it Editable is Read-only —
+    # the row says what the field allows. A muting set's levels take access
+    # away and are never capped. The one definition every path that writes a
+    # level reads: the row builder (after the privacy default, so an
+    # Editable personal-data field becomes Read-only, never Masked) and the
+    # Fields tab's level edits.
+    #
+    # @param level [String]
+    # @param resource_edit [Boolean] the Resource grants Edit
+    # @param muting [Boolean]
+    # @return [String]
+    def capped(level, resource_edit:, muting:)
+      level = level.to_s
+      level == 'edit' && !muting && !resource_edit ? 'read' : level
+    end
+
     def flags_for(level, muting:)
       (muting ? MUTING : GRANTING).fetch(level.to_s) { raise ArgumentError, "Unknown field level: #{level.inspect}" }
     end

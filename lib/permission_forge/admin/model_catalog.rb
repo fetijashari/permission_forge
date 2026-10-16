@@ -40,9 +40,14 @@ module PermissionForge
         # read + edit entry from ExtraFieldDefaults right now.
         delegate :implicit_grant?, to: :virtual_fields
 
-        def initialize(klass, configuration)
+        # @param verify [Boolean] compare the column list with the database
+        #   (one metadata query per model and catalog); false for the
+        #   catalogs that only count (Home and the navigation's attention
+        #   items)
+        def initialize(klass, configuration, verify: true)
           @klass = klass
           @configuration = configuration
+          @verify = verify
         end
 
         def name = @klass.name
@@ -50,10 +55,9 @@ module PermissionForge
         def plural_label = ModelLabel.plural(@klass)
 
         # The model's columns (ignored_columns excluded), compared with the
-        # database once for this catalog (PermissionForge::SchemaRead).
-        def column_names
-          @column_names ||= PermissionForge::SchemaRead.column_names(@klass, verify: true)
-        end
+        # database once for this catalog unless it only counts
+        # (PermissionForge::SchemaRead).
+        def column_names = managed_fields.column_names
 
         # Whether `name` is a column of the model, asked again once after the
         # schema is read again before "no" (PermissionForge::SchemaRead).
@@ -62,13 +66,9 @@ module PermissionForge
         end
 
         # Columns PermissionForge manages (ignored_fields removed).
-        def managed_column_names
-          column_names - ignored_column_names
-        end
+        def managed_column_names = managed_fields.managed_column_names
 
-        def ignored_column_names
-          column_names & Array(@configuration.ignored_fields).map(&:to_s)
-        end
+        def ignored_column_names = managed_fields.ignored_column_names
 
         # Virtual fields the model declares through extra_fields_method.
         def declared_virtual_field_names
@@ -81,10 +81,10 @@ module PermissionForge
           virtual_fields.names
         end
 
-        # Every field the admin configures: managed columns, then virtual fields.
-        def managed_field_names
-          managed_column_names + virtual_field_names
-        end
+        # Every field the admin configures: managed columns, then virtual
+        # fields (PermissionForge::ManagedFields, the names every path that
+        # creates rows writes rows for).
+        def managed_field_names = managed_fields.names
 
         def virtual_field?(name)
           virtual_fields.include?(name)
@@ -120,8 +120,10 @@ module PermissionForge
 
         private
 
-        def virtual_fields
-          @virtual_fields ||= PermissionForge::VirtualFields.new(@klass, @configuration)
+        def virtual_fields = managed_fields.virtual_fields
+
+        def managed_fields
+          @managed_fields ||= PermissionForge::ManagedFields.new(@klass, configuration: @configuration, verify: @verify)
         end
 
         # nil for an association a rule's path cannot follow
@@ -167,13 +169,16 @@ module PermissionForge
         end
       end
 
-      def initialize(configuration: PermissionForge.configuration)
+      # @param verify [Boolean] whether the column lists are compared with
+      #   the database (ModelInfo); false for a catalog that only counts
+      def initialize(configuration: PermissionForge.configuration, verify: true)
         @configuration = configuration
+        @verify = verify
       end
 
       # @return [Array<ModelInfo>] sorted by label
       def models
-        @models ||= model_classes.map { |k| ModelInfo.new(k, @configuration) }.sort_by(&:label)
+        @models ||= model_classes.map { |k| ModelInfo.new(k, @configuration, verify: @verify) }.sort_by(&:label)
       end
 
       # @return [ModelInfo, nil] for a model name, whether or not it is listed.
@@ -189,7 +194,7 @@ module PermissionForge
 
       def build_info(name)
         klass = name.safe_constantize
-        ModelInfo.new(klass, @configuration) if usable?(klass)
+        ModelInfo.new(klass, @configuration, verify: @verify) if usable?(klass)
       end
 
       def model_classes

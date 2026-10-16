@@ -93,7 +93,9 @@ module PermissionForge
         configuration.try(:admin_stale_assignment_days) || Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS
       end
 
-      def initialize(configuration: PermissionForge.configuration, catalog: ModelCatalog.new,
+      # The catalog only counts (`verify: false`): every admin page draws the
+      # navigation's count, so it reads the schema cache, never the database.
+      def initialize(configuration: PermissionForge.configuration, catalog: ModelCatalog.new(verify: false),
                      sensitive: SensitiveColumns.new(configuration: configuration))
         @configuration = configuration
         @catalog = catalog

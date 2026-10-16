@@ -5,7 +5,8 @@ module PermissionForge
     class ResourceFieldGeneratorTest < ActiveSupport::TestCase
       setup do
         @permission_set = create_permission_set
-        @resource = create_resource(permission_set: @permission_set, name: 'Customer')
+        # With Edit: grant_all is not capped to Read-only (FieldLevel.capped).
+        @resource = create_resource(permission_set: @permission_set, name: 'Customer', edit_access: true)
       end
 
       test 'generates fields from model columns' do
@@ -138,7 +139,8 @@ module PermissionForge
 
       test 'persists fields to the database' do
         expected_count = Customer.column_names.size -
-                         PermissionForge.configuration.ignored_fields.count { |f| Customer.column_names.include?(f) }
+                         PermissionForge.configuration.ignored_fields.count { |f| Customer.column_names.include?(f) } +
+                         PermissionForge::VirtualFields.new(Customer).names.size
         assert_difference 'PermissionForge::ResourceField.count', expected_count do
           PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource)
         end
@@ -198,10 +200,21 @@ module PermissionForge
 
       # --- Virtual fields ---
 
-      test 'under :grant virtual fields get no row, so the implicit grant stays' do
-        fields = PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource)
+      # PermissionForge::ManagedFields: the names the admin's presets and
+      # Sync write rows for, under either extra_fields_default_access.
+      test 'under :grant virtual fields get a row at the level chosen, as in the admin' do
+        PermissionForge.configuration.extra_fields_default_access = :grant
+        fields = PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource).index_by(&:name)
 
-        assert_empty fields.map(&:name) & %w[full_address contact_count]
+        assert_equal [false, false], fields.fetch('full_address').values_at(:read_access, :edit_access)
+        assert_includes fields.keys, 'contact_count'
+      end
+
+      test 'grant_all on a Resource without Edit writes Read-only rows (FieldLevel.capped)' do
+        resource = create_resource(permission_set: create_permission_set, name: 'Customer', edit_access: false)
+        fields = PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: true)
+
+        assert(fields.all? { |field| field.read_access && !field.edit_access && !field.mask_access })
       end
 
       test 'under :unconfigured virtual fields get a row like columns do' do
