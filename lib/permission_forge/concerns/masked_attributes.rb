@@ -105,8 +105,10 @@ module PermissionForge
         # (`generated_attribute_methods`) and includes it in the model. Calling
         # `customer.email` hits that fast path, bypassing `read_attribute`. We
         # prepend an override module so direct getters (and setters, for the
-        # write-back guard) route through our logic. Captured at include time —
-        # column changes after this require a class reload to pick up.
+        # write-back guard) route through our logic: one per column the model
+        # has now, and one per column Rails finds each time it defines the
+        # attribute methods again (define_attribute_methods below: a column a
+        # migration added after the include, once the schema is read again).
         #
         # A getter raises ActiveModel::MissingAttributeError for a column that
         # was not loaded (`select(:id)`), as the getter Rails generates does.
@@ -116,16 +118,7 @@ module PermissionForge
         # the tenant model when computing cache keys). Masking `id` would create
         # a recursion: `id` → guard → `permissions_hash` → `current_tenant.id`.
         masked_attribute_module = ColumnAccessors.new
-        primary_key = self.primary_key&.to_s
-        columns_hash.each_key do |col_name|
-          next if col_name.to_s == primary_key
-
-          attr_sym = col_name.to_sym
-          masked_attribute_module.define_method(attr_sym) { read_attribute(attr_sym) { |name| missing_attribute(name, caller) } }
-          masked_attribute_module.define_method("#{attr_sym}=") do |value|
-            next super(value) unless pf_skip_masked_write?(attr_sym, value)
-          end
-        end
+        PermissionForge::Concerns::MaskedAttributes.define_column_accessors(self, masked_attribute_module)
         prepend(masked_attribute_module)
 
         const_set(:MaskedAttributeReaders, masked_attribute_module)
@@ -137,6 +130,50 @@ module PermissionForge
         end
         pf_mask_attribute_aliases
         @_pf_masked_attributes_applied = true
+      end
+
+      class_methods do
+        # Rails defines a model's attribute methods lazily, and again after
+        # the schema is read again (reset_column_information — what
+        # PermissionForge::SchemaRead does when the database's columns
+        # changed): each time, a column the guarded module lacks gets its
+        # guarded getter and setter, so `record.new_column` answers what
+        # `record[:new_column]` and `as_json` answer. A subclass asks its
+        # parent first (Rails), whose module then has the method: Rails
+        # generates none of its own for the subclass.
+        def define_attribute_methods
+          super.tap { |generated| pf_define_late_column_accessors if generated }
+        end
+
+        private
+
+        def pf_define_late_column_accessors
+          return unless const_defined?(:MaskedAttributeReaders, false)
+
+          PermissionForge::Concerns::MaskedAttributes.define_column_accessors(self, const_get(:MaskedAttributeReaders, false))
+        end
+      end
+
+      # Defines on `accessors` a guarded getter and setter for every column
+      # of `klass` it does not have yet (the primary key never: it is used by
+      # routing, associations and tenant scoping). The columns are the ones
+      # Rails just loaded for the model (`columns_hash`, ignored columns
+      # excluded): those it generates methods for.
+      #
+      # @param klass [Class]
+      # @param accessors [ColumnAccessors]
+      # @return [void]
+      def self.define_column_accessors(klass, accessors)
+        primary_key = klass.primary_key&.to_s
+        klass.columns_hash.each_key do |col_name|
+          next if col_name.to_s == primary_key || accessors.method_defined?(col_name, false)
+
+          attr_sym = col_name.to_sym
+          accessors.define_method(attr_sym) { read_attribute(attr_sym) { |name| missing_attribute(name, caller) } }
+          accessors.define_method("#{attr_sym}=") do |value|
+            next super(value) unless pf_skip_masked_write?(attr_sym, value)
+          end
+        end
       end
 
       # Whether MaskedAttributes has already been applied to a class. Used by the

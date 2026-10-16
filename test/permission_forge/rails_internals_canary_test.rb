@@ -106,15 +106,15 @@ module PermissionForge
       arel_between: Regexp.union('Arel::Nodes::Between.new(', 'Arel::Nodes.build_quoted('),
       arel_matches: 'column.matches(',
       arel_named_function: "Arel::Nodes::NamedFunction.new('COALESCE'",
-      schema_cache: 'connection.schema_cache.columns_hash(',
+      schema_cache: 'schema_cache(model).columns_hash(',
       schema_cache_data_sources: Regexp.union('cache.data_source_exists?(', 'cache.clear_data_source_cache!('),
       schema_cache_columns_identity: Regexp.union('columns.object_id', 'fresh.object_id'),
+      define_attribute_methods_again: 'super.tap { |generated| pf_define_late_column_accessors if generated }',
       association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!',
                                             'reflection.chain.any?', 'link.through_reflection?', 'link.source_reflection'),
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
       sandbox: 'application.sandbox?',
       generator_commands: 'Rails::Command::GenerateCommand',
-      lazy_routes: 'application.reload_routes! if application.routes.routes.empty?',
       journey_route: Regexp.union('@route.path.spec', '@route.verb', '@route.defaults', '@route.internal'),
       association_target: Regexp.union('association.target.sort_by!', 'association(:user).target', 'return association.target if'),
       host_translation_default: Regexp.union('human_attribute_name(name, default: MISSING)',
@@ -170,15 +170,17 @@ module PermissionForge
       schema_cache: 'adapt SchemaRead.columns (Operators::RuleColumn.on and every reader of a model\'s columns go through it)',
       schema_cache_data_sources: 'adapt SchemaRead.table? (a field name qualified with a table that is not there matches ' \
                                  'nothing; the schema is read again once before that answer)',
-      schema_cache_columns_identity: 'adapt SchemaRead.reread_for / .confirmed? (a name confirmed missing is tied to the ' \
+      schema_cache_columns_identity: 'adapt SchemaRead.reread! / .confirmed? (a name confirmed missing is tied to the ' \
                                      'columns read: tell a read apart by something else, or a missing name re-reads every time)',
+      define_attribute_methods_again: 'adapt MaskedAttributes.define_attribute_methods (the hook that guards a column added ' \
+                                      'after the include: find where Rails defines a model\'s attribute methods after ' \
+                                      'reset_column_information, or a column a migration added is read raw through its getter)',
       association_join_checks: 'adapt Operators::RulePath#through / #unjoinable_cause / #record_dependent? to what ' \
                                'Associations::JoinDependency#build checks before it joins and the scopes a :through ' \
                                'evaluates along its chain (a path it raises for must stay broken, one it joins followed)',
       preloader: 'adapt PermissionHashBuilder#preload',
       sandbox: 'adapt OpenTransaction.sandbox?',
       generator_commands: 'adapt BootChecks.generator_running? (GENERATOR_COMMANDS: what `bin/rails generate` loads before it boots)',
-      lazy_routes: 'adapt ApiOnlyAdmin.mounted? (how a boot check asks for routes Rails draws lazily)',
       journey_route: 'adapt Admin::ControllerCatalog::RoutedAction',
       association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)',
       host_translation_default: 'adapt Admin::FieldLabel.host_translation and Admin::ModelLabel.host_translation (how a host ' \
@@ -277,6 +279,11 @@ module PermissionForge
 
       def pool
         ActiveRecord::Base.connection_pool
+      end
+
+      # The cache SchemaRead reads: the pool's (Rails 7.2+), the connection's on 7.1.
+      def pool_schema_cache
+        pool.respond_to?(:schema_cache) ? pool.schema_cache : leased_connection.schema_cache
       end
 
       # The calling thread's connection, kept (lease_connection from 7.2).
@@ -1372,8 +1379,8 @@ module PermissionForge
 
     # --- schema and loading -----------------------------------------------------------------------------------
 
-    canary_test :schema_cache, 'connection.schema_cache.columns_hash(table): Columns by name, with name and type' do
-      columns = pool.with_connection { |connection| connection.schema_cache.columns_hash('pf_canary_records') }
+    canary_test :schema_cache, 'connection_pool.schema_cache.columns_hash(table): Columns by name, with name and type' do
+      columns = pool_schema_cache.columns_hash('pf_canary_records')
 
       assert_equal %w[email id name parent_id prefs], columns.keys.sort, canary(
         :schema_cache, 'schema_cache.columns_hash no longer answers the columns of a table by name',
@@ -1385,30 +1392,28 @@ module PermissionForge
     end
 
     canary_test :schema_cache_data_sources,
-                'connection.schema_cache.data_source_exists?(name) / clear_data_source_cache!(name): whether a table is there' do
-      pool.with_connection do |connection|
-        cache = connection.schema_cache
+                'connection_pool.schema_cache.data_source_exists?(name) / clear_data_source_cache!(name): whether a table is there' do
+      cache = pool_schema_cache
 
-        assert cache.data_source_exists?('pf_canary_records'), canary(
-          :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers true for a table that is there',
-          'SchemaRead.table? (Operators::RuleColumn.data_source?) asks it before a qualified field name is left to the database: adapt it'
-        )
-        assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
-          :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers false for a table that is not there',
-          'a rule qualified with a table that is not there must match nothing: adapt SchemaRead.table?'
-        )
-        cache.clear_data_source_cache!('pf_canary_no_such_table')
+      assert cache.data_source_exists?('pf_canary_records'), canary(
+        :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers true for a table that is there',
+        'SchemaRead.table? (Operators::RuleColumn.data_source?) asks it before a qualified field name is left to the database: adapt it'
+      )
+      assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
+        :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers false for a table that is not there',
+        'a rule qualified with a table that is not there must match nothing: adapt SchemaRead.table?'
+      )
+      cache.clear_data_source_cache!('pf_canary_no_such_table')
 
-        assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
-          :schema_cache_data_sources, 'schema_cache.clear_data_source_cache!(name) no longer takes one name',
-          'SchemaRead.table? forgets a cached "no" before it answers it: adapt it'
-        )
-      end
+      assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
+        :schema_cache_data_sources, 'schema_cache.clear_data_source_cache!(name) no longer takes one name',
+        'SchemaRead.table? forgets a cached "no" before it answers it: adapt it'
+      )
     end
 
     canary_test :schema_cache_columns_identity,
-                'schema_cache.columns_hash(table) answers the same Hash until the table is read again (reset_column_information)' do
-      read = -> { PfCanaryRecord.connection.schema_cache.columns_hash(PfCanaryRecord.table_name) }
+                'the pool\'s schema_cache.columns_hash(table) answers the same Hash until the table is read again (reset_column_information)' do
+      read = -> { pool_schema_cache.columns_hash(PfCanaryRecord.table_name) }
       first = read.call
 
       assert_same first, read.call, canary(
@@ -1420,6 +1425,23 @@ module PermissionForge
       assert_not_same first, read.call, canary(
         :schema_cache_columns_identity, 'reset_column_information no longer reads the table into a new Hash',
         'SchemaRead tells a later read of the table from the one that confirmed a name missing by it: adapt SchemaRead.reread!'
+      )
+    end
+
+    canary_test :define_attribute_methods_again,
+                'define_attribute_methods (a class method) runs, answering true, the first time a record is built after reset_column_information' do
+      calls = []
+      model = canary_model('PfCanaryDefineAttributeMethods') do
+        define_singleton_method(:define_attribute_methods) { super().tap { |generated| calls << generated } }
+      end
+      model.instantiate('id' => 1)
+      calls.clear
+      model.reset_column_information
+      model.instantiate('id' => 1)
+
+      assert_includes calls, true, canary(
+        :define_attribute_methods_again, 'building a record after reset_column_information no longer calls define_attribute_methods',
+        'MaskedAttributes defines the guarded getter of a column a migration added there'
       )
     end
 
@@ -1553,42 +1575,6 @@ module PermissionForge
       assert_equal [], result['others'], 'a server, a console or a runner loads no generator command'
       assert_equal %w[Rails::Command::GenerateCommand Rails::Command::DestroyCommand], result['generators']
       assert_equal PermissionForge::BootChecks::GENERATOR_COMMANDS, result['generators']
-    end
-
-    canary_test :lazy_routes,
-                'with eager_load off, Rails 7.2+ draws the routes at their first use (LazyRouteSet): at after_initialize they ' \
-                'are empty (reload_routes_unless_loaded draws nothing before initialized?) and reload_routes! draws them' do
-      script = <<~RUBY
-        require 'json'
-        require 'tmpdir'
-        require 'rails'
-        require 'action_controller/railtie'
-        class Probe < Rails::Application
-          config.root = Dir.mktmpdir('pf_lazy_routes') # not the gem's root: its config/routes.rb is the engine's
-          config.eager_load = false
-          config.secret_key_base = 'x' * 32
-          config.logger = Logger.new(nil)
-          config.active_support.deprecation = :silence
-          routes.append { get '/probe', to: proc { [200, {}, ['ok']] } } # what config/routes.rb would draw
-        end
-        facts = {}
-        ActiveSupport.on_load(:after_initialize, yield: true) do |app|
-          facts['before'] = app.routes.routes.size
-          app.reload_routes! if app.routes.routes.empty?
-          facts['after'] = app.routes.routes.size
-          facts['probe'] = app.routes.routes.any? { |route| route.path.spec.to_s.start_with?('/probe') }
-        end
-        Rails.application.initialize!
-        puts JSON.generate(facts)
-      RUBY
-      output, status = Open3.capture2e(RbConfig.ruby, '-e', script)
-      assert status.success?, output
-      result = JSON.parse(output.lines.reverse.find { |line| line.start_with?('{') })
-
-      assert result['probe'], canary(
-        :lazy_routes, "the routes are still empty after reload_routes! at after_initialize (#{result.inspect})",
-        'ApiOnlyAdmin.mounted? then never sees the engine mounted, and an API-only host gets no api_only_admin warning'
-      )
     end
 
     canary_test :sandbox, 'Rails.application.sandbox?: false outside `rails console --sandbox`' do

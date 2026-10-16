@@ -4,6 +4,8 @@ module PermissionForge
   #
   # @api private
   class PermissionSetGroupsController < ApplicationController
+    include PermissionForge::CopyRefusal
+
     before_action :set_group, except: %i[index create]
     before_action :reject_locked, only: %i[update destroy confirm_destroy add_set remove_set]
 
@@ -42,6 +44,8 @@ module PermissionForge
         unlock: true
       )
       redirect_to permission_forge.group_path(copy), notice: t('permission_forge.flash.groups.duplicated', name: @group.name)
+    rescue ActiveRecord::RecordInvalid => e
+      redirect_to permission_forge.group_path(@group), alert: pf_copy_refused_message(e, @group.name)
     end
 
     def confirm_destroy; end

@@ -20,6 +20,7 @@ en:
         flag_shape: must be a string or null
         forbidden: Forbidden
         hour_shape: must be a whole number from 0 to 23, or null
+        ip_list_empty: has no entry; send null to clear the condition
         ip_list_shape: must be a string or an array of strings (IP addresses or CIDR
           ranges), or null
         not_editable: This record is not editable
@@ -425,6 +426,17 @@ en:
       cache_process_local: 'The cache store lives in this server process only (an
         in-memory store): the other web workers and the job processes keep their cached
         permissions until they restart or the entries expire.'
+      copy_refused:
+        kinds:
+          permission_set: Permission Set “%{name}”
+          permission_set_group: Permission Set Group “%{name}”
+          permission_set_rule: rule “%{name}”
+          record: a row
+          resource: Resource “%{name}”
+          resource_action: action “%{name}”
+          resource_field: field “%{name}”
+        message: "“%{name}” was not copied: %{record} holds what a new row cannot
+          (%{errors}). Correct it, then copy again."
       fields:
         acknowledged: Got it. “%{field}” won't be flagged in the privacy audit again.
         recommendation_applied: Applied the recommended mask to “%{field}”.
@@ -2258,6 +2270,8 @@ en:
         problems:
           empty_association: The relationship path has an empty step (two dots in
             a row, or a dot at the start)
+          foreign_table_html: "%{name} is a table of another model: a filter rule
+            compares %{model}'s own columns"
           missing_column_html: "%{name} is not a column of %{model}"
           unjoinable_association: "%{name} is a relationship of %{model} that a rule
             cannot follow"
@@ -2360,6 +2374,9 @@ en:
         empty_association: has an empty association name (two dots in a row, or a
           dot at the start)
         field_value_required: is required for this operator
+        foreign_table: 'names %{name}, a table that is not %{model}''s: a filter rule
+          compares its own table. For a column of another table, use a join rule (a
+          join type and the relationship path)'
         in_requires_values: must contain at least 1 comma-separated value
         invalid_field_name: must be a valid column name (letters, numbers, underscores,
           dots)

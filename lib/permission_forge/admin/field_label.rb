@@ -57,7 +57,7 @@ module PermissionForge
         # stored Resource name (validated by Resource::NAME_FORMAT).
         def klass_of(model)
           return model.klass if model.respond_to?(:klass)
-          return model.to_s.safe_constantize if model.is_a?(String) || model.is_a?(Symbol)
+          return PermissionForge::ModelLookup.model_for(model) if model.is_a?(String) || model.is_a?(Symbol)
 
           model
         end

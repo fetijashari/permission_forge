@@ -4,7 +4,10 @@ module PermissionForge
   module Admin
     module ChangeSetParts
       # New fields: columns without a ResourceField row, picked one by one or
-      # through a bulk selection.
+      # through a bulk selection. Only the model's managed fields
+      # (PermissionForge::ManagedFields — the names the presets, Sync and the
+      # generator write rows for) can be added: a posted `id`, an ignored
+      # field or a name the model does not have is no row.
       class NewFields < Base
         def call
           explicit = section('new_fields').flat_map { |resource_id, columns| explicit_new_fields(resource_id, columns) }
@@ -20,7 +23,7 @@ module PermissionForge
           existing = existing_names(resource)
           columns.filter_map do |column, attrs|
             name = column.to_s
-            next if existing.include?(name) || !attrs.is_a?(Hash)
+            next if existing.include?(name) || !attrs.is_a?(Hash) || !addable?(resource, name)
 
             build_new_field(resource, name, attrs['level'].to_s)
           end
@@ -36,7 +39,21 @@ module PermissionForge
 
         # Bulk-selected columns that have neither a field nor an explicit pick.
         def bulk_columns(resource)
-          Array(bulk['keys']).map(&:to_s).uniq - existing_names(resource) - explicit_columns(resource)
+          (Array(bulk['keys']).map(&:to_s).uniq & addable_names(resource)) - existing_names(resource) - explicit_columns(resource)
+        end
+
+        def addable?(resource, name)
+          addable_names(resource).include?(name)
+        end
+
+        # The model's managed fields; none when the Resource names no model
+        # this app can load.
+        def addable_names(resource)
+          @addable_names ||= {}
+          @addable_names[resource.id] ||= begin
+            model = PermissionForge::ModelLookup.model_for(resource.name)
+            model ? PermissionForge::ManagedFields.new(model).names : []
+          end
         end
 
         def existing_names(resource)
@@ -55,7 +72,7 @@ module PermissionForge
         def build_new_field(resource, column, level)
           return nil unless valid_level?(level) && FieldLevel.row?(level, muting: muting?)
 
-          attrs = rows_of(resource).attrs(column, Values.effective_level(level, resource, muting: muting?))
+          attrs = rows_of(resource).attrs(column, level)
           return nil unless attrs
 
           field = resource.resource_fields.build(attrs)

@@ -91,6 +91,33 @@ module PermissionForge
         Array(value).flat_map { |part| part.to_s.split(SEPARATORS) }.reject(&:empty?)
       end
 
+      # A condition text as a row stores it: nil for text of whitespace
+      # alone — any Unicode space, which Ruby reads as blank while SQL's TRIM
+      # takes spaces only — so #conditional? and the SQL scopes read it the
+      # same. A row stored before keeps its text; SQL reads it as a
+      # condition (narrower: the set is selected per request and passes).
+      #
+      # @param value [String, nil]
+      # @return [String, nil]
+      def condition_text(value)
+        value.is_a?(String) && value.match?(/\A[[:space:]]*\z/) ? nil : value
+      end
+
+      # The address of a request, as the IP list is compared with it: an
+      # IPv4-mapped IPv6 address (`::ffff:10.0.0.5`, what a dual-stack
+      # server reports for an IPv4 client) as the IPv4 address it holds.
+      #
+      # @param value [String, IPAddr, nil]
+      # @return [IPAddr, nil] nil for anything that is not an address
+      def request_address(value)
+        return if value.blank?
+
+        address = value.is_a?(IPAddr) ? value : IPAddr.new(value.to_s)
+        address.ipv4_mapped? ? address.native : address
+      rescue IPAddr::Error
+        nil
+      end
+
       # @param entry [String]
       # @return [IPAddr, nil] nil for an entry that is not an IP address or a CIDR range
       def ip_range(entry)

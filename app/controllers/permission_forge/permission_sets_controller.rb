@@ -7,6 +7,7 @@ module PermissionForge
     include PermissionSetEditor
     include PermissionForge::ChangeReview
     include PermissionForge::AuditLogGate
+    include PermissionForge::CopyRefusal
 
     FILTERS = %w[all granting muting conditional off].freeze
     TABS = %w[resources assignments conditions audit].freeze
@@ -49,6 +50,9 @@ module PermissionForge
 
       set = build_set
       redirect_to permission_forge.permission_set_path(set), notice: t('permission_forge.flash.permission_sets.created', name: set.name)
+    rescue ActiveRecord::RecordInvalid => e
+      @error = pf_copy_refused_message(e, @name)
+      render :new, status: :unprocessable_entity
     end
 
     def show
@@ -90,17 +94,13 @@ module PermissionForge
     end
 
     def duplicate
-      name = PermissionForge::Admin::PermissionSetFactory.unique_name(
-        t('permission_forge.permission_sets.copy_name', name: @permission_set.name)
-      )
-      copy = PermissionForge::Admin::PermissionSetFactory.duplicate(@permission_set, name: name)
+      copy = PermissionForge::Admin::PermissionSetFactory.duplicate(@permission_set)
       group = @permission_set.permission_set_group
-      notice = if group && copy.permission_set_group_id.nil?
-                 t('permission_forge.flash.permission_sets.duplicated_outside_group', name: @permission_set.name, group: group.name)
-               else
-                 t('permission_forge.flash.permission_sets.duplicated', name: @permission_set.name)
-               end
-      redirect_to permission_forge.permission_set_path(copy), notice: notice
+      key = group && copy.permission_set_group_id.nil? ? 'duplicated_outside_group' : 'duplicated'
+      redirect_to permission_forge.permission_set_path(copy),
+                  notice: t("permission_forge.flash.permission_sets.#{key}", name: @permission_set.name, group: group&.name)
+    rescue ActiveRecord::RecordInvalid => e
+      redirect_to permission_forge.permission_set_path(@permission_set), alert: pf_copy_refused_message(e, @permission_set.name)
     end
 
     def confirm_destroy

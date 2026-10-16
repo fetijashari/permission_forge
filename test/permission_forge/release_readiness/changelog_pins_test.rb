@@ -2,6 +2,7 @@
 
 require 'test_helper'
 require 'open3'
+require 'tmpdir'
 
 module PermissionForge
   module ReleaseReadiness
@@ -43,10 +44,7 @@ module PermissionForge
 
       # Pins to a test another branch of this release writes: { 'path#name' => 'why it is not here yet' }.
       # An entry is removed once the test exists (the guard then checks it like any other pin).
-      PENDING_PINS = {
-        'test/permission_forge/tasks/gdpr_erasure_task_test.rb#test DRY_RUN values other than an explicit false are a dry run' =>
-          'written by fix/r5'
-      }.freeze
+      PENDING_PINS = {}.freeze
 
       SECTION = /\A## \[(?<name>[^\]]+)\]/
       HEADING = /\A### (?<name>.+?)\s*\z/
@@ -240,6 +238,27 @@ module PermissionForge
         assert status.success?, errors
         assert_match(/^### /, notes)
         assert_no_match(/<!--\s*pin:/, notes)
+      end
+
+      # Over GitHub's limit the body comes out condensed (headings, each
+      # bullet's bold lead, a link to the full section) instead of failing.
+      test 'a section too long for a GitHub Release comes out condensed, with a link to the full section' do
+        bullet = "- **A change worth a line.** #{'Detail ' * 40}\n  continued #{'more ' * 30}\n"
+        Dir.mktmpdir do |dir|
+          changelog = File.join(dir, 'CHANGELOG.md')
+          File.write(changelog, "# Changelog\n\n## [9.9.9] - 2026-01-01\n\nRun the audit first.\n\n### Added\n\n#{bullet * 400}\n" \
+                                "### Fixed\n\n- **Wrapped bold lead\n  across two lines.** text\n\n" \
+                                "## [9.9.8] - 2025-01-01\n\n### Added\n\n- **Old.**\n")
+          notes, errors, status = Open3.capture3('bash', ROOT.join('.github/scripts/release_notes.sh').to_s, '9.9.9', changelog)
+
+          assert status.success?, errors
+          assert_operator notes.bytesize, :<, 124_000
+          assert_equal 400, notes.scan('- **A change worth a line.**').size
+          assert_includes notes, '- **Wrapped bold lead across two lines.**'
+          assert_includes notes, 'Run the audit first.'
+          assert_no_match(/Detail|continued|Old\./, notes)
+          assert_includes notes, 'https://github.com/fetijashari/permission_forge/blob/v9.9.9/CHANGELOG.md'
+        end
       end
 
       test 'each pinned section uses Keep a Changelog headings, once each, in order' do

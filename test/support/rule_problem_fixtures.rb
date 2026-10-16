@@ -20,6 +20,7 @@ module RuleProblemFixtures
     unknown_operator: { attrs: { operator: 'regex' }, refused: :operator },
     unknown_join_type: { attrs: { join_type: 'inner', field_accessor_path: 'supplier' }, refused: :join_type },
     unknown_table: { attrs: { field_name: 'nosuch.name' }, refused: :field_name },
+    foreign_table: { attrs: { field_name: 'suppliers.name' }, refused: :field_name },
     unusable_value: { attrs: { field_name: 'supplier_id', field_value: '5_id' }, refused: :field_value }
   }.freeze
 

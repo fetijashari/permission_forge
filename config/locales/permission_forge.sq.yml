@@ -20,6 +20,7 @@ sq:
         flag_shape: duhet të jetë varg ose null
         forbidden: E ndaluar
         hour_shape: duhet të jetë numër i plotë nga 0 deri në 23, ose null
+        ip_list_empty: nuk ka asnjë hyrje; dërgoni null për ta hequr kushtin
         ip_list_shape: duhet të jetë varg ose listë vargjesh (adresa IP ose diapazone
           CIDR), ose null
         not_editable: Ky regjistrim nuk mund të redaktohet
@@ -435,6 +436,17 @@ sq:
       cache_process_local: 'Ruajtja e cache-it jeton vetëm në këtë proces të serverit
         (një ruajtje në memorie): punëtorët e tjerë të uebit dhe proceset e punëve
         i mbajnë lejet e tyre të ruajtura derisa të rinisen ose derisa hyrjet të skadojnë.'
+      copy_refused:
+        kinds:
+          permission_set: Permission Set “%{name}”
+          permission_set_group: Permission Set Group “%{name}”
+          permission_set_rule: rregulli “%{name}”
+          record: një rresht
+          resource: Resource “%{name}”
+          resource_action: veprimi “%{name}”
+          resource_field: fusha “%{name}”
+        message: "“%{name}” nuk u kopjua: %{record} mban diçka që një rresht i ri
+          nuk mund ta mbajë (%{errors}). Korrigjojeni, pastaj kopjoni përsëri."
       fields:
         acknowledged: Në rregull. “%{field}” nuk do të shënohet më në auditimin e
           privatësisë.
@@ -2314,6 +2326,8 @@ sq:
         problems:
           empty_association: Shtegu i lidhjeve ka një hap bosh (dy pika njëra pas
             tjetrës, ose një pikë në fillim)
+          foreign_table_html: "%{name} është tabelë e një modeli tjetër: një rregull
+            filtri krahason vetëm kolonat e %{model}"
           missing_column_html: "%{name} nuk është kolonë e %{model}"
           unjoinable_association: "%{name} është lidhje e %{model} që një rregull
             nuk mund ta ndjekë"
@@ -2419,6 +2433,9 @@ sq:
         empty_association: ka një emër bosh lidhjeje (dy pika njëra pas tjetrës, ose
           një pikë në fillim)
         field_value_required: kërkohet për këtë operator
+        foreign_table: 'emërton %{name}, një tabelë që nuk është e %{model}: një rregull
+          filtri krahason tabelën e vet. Për një kolonë të një tabele tjetër, përdorni
+          një rregull bashkimi (një lloj bashkimi dhe shtegun e lidhjes)'
         in_requires_values: duhet të përmbajë të paktën 1 vlerë të ndarë me presje
         invalid_field_name: duhet të jetë emër i vlefshëm kolone (shkronja, numra,
           nënviza, pika)

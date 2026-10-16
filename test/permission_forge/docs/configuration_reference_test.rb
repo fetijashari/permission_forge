@@ -17,9 +17,8 @@ module PermissionForge
 
       test 'the Option reference in docs/configuration.md is what the code generates' do
         rendered = reference.render
-        assert_equal rendered, document,
-                     "docs/configuration.md is stale: run `bundle exec rake docs:configuration` and commit the result.\n" \
-                     "First difference:\n#{first_difference(rendered, document)}"
+        # assert, not assert_equal: Minitest's diff of two 60 KB documents buried the summary.
+        assert rendered == document, stale_message(rendered, document)
       end
 
       test 'regenerating is a no-op' do
@@ -34,7 +33,7 @@ module PermissionForge
         definitions = Admin::SettingsCatalog::DEFINITIONS
         catalog = Admin::SettingsCatalog::SECTIONS.flat_map { |section| definitions.select { |d| d.section == section }.map(&:key) }
         assert_equal catalog, headings.first(catalog.size), 'the catalog options come first, section by section as the Settings page shows them'
-        assert_equal writers - catalog, headings.drop(catalog.size), 'the options the Settings page does not show follow'
+        assert_equal (writers - catalog).sort, headings.drop(catalog.size), 'the options the Settings page does not show follow, by name'
       end
 
       test 'every entry has a default line and a text' do
@@ -62,6 +61,15 @@ module PermissionForge
       end
 
       # --- the guard bites ---------------------------------------------------------
+
+      test 'a stale document is reported as a short summary, not the whole file' do
+        stale = document.sub("#### cache_ttl\n\n**Default:** `3600`", "#### cache_ttl\n\n**Default:** `1800`")
+        message = stale_message(document, stale)
+        assert_operator message.bytesize, :<, 2_000, message
+        assert_includes message, 'rake docs:configuration'
+        assert_includes message, '1 line(s) differ'
+        assert_includes message, '**Default:** `1800`'
+      end
 
       test 'a default changed in Configuration makes the document stale' do
         changed = Configuration.new
@@ -96,13 +104,22 @@ module PermissionForge
                     flunk('docs/configuration.md has no option-reference markers')
       end
 
-      def first_difference(rendered, actual)
-        rendered.lines.zip(actual.lines).each_with_index do |(left, right), index|
-          next if left == right
+      # What a stale document reports: what to run, how many lines differ and the first few, each cut short.
+      def stale_message(rendered, actual)
+        generated = rendered.lines
+        file = actual.lines
+        differing = differing_lines(generated, file)
+        shown = differing.first(3).map { |index| line_difference(index, generated[index], file[index]) }
+        "docs/configuration.md is stale: run `bundle exec rake docs:configuration` and commit the result.\n" \
+          "#{differing.size} line(s) differ (generated #{generated.size} lines, file #{file.size}); the first:\n#{shown.join("\n")}"
+      end
 
-          return "line #{index + 1}\n  generated: #{left.inspect}\n  file:      #{right.inspect}"
-        end
-        'the files differ only in length'
+      def differing_lines(generated, file)
+        (0...[generated.size, file.size].max).reject { |index| generated[index] == file[index] }
+      end
+
+      def line_difference(index, generated, file)
+        "line #{index + 1}\n  generated: #{generated.to_s.truncate(200).inspect}\n  file:      #{file.to_s.truncate(200).inspect}"
       end
     end
   end

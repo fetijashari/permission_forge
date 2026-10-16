@@ -53,6 +53,10 @@ module PermissionForge
     # object_id), and the `columns` it read.
     Confirmed = Data.define(:token, :names, :columns)
 
+    # Seconds a table found missing stays missing before table? asks the
+    # database again.
+    TABLE_RECHECK = 30
+
     @confirmed = Concurrent::Map.new
     @claims = Concurrent::Map.new
     @tables = Concurrent::Map.new
@@ -136,20 +140,24 @@ module PermissionForge
       end
 
       # Whether the connection has a data source (a table or a view) named
-      # `table`; a "no" is asked of the database again once per process.
+      # `table`; a "no" is asked of the database again, at most once every
+      # TABLE_RECHECK seconds per model and name (a table a migration
+      # creates later is found within that interval, and a name that stays
+      # missing — a rule qualified with an alias — costs one query per
+      # interval, never one per call).
       #
       # @param model [Class] a model on the connection
       # @param table [String] the name as written
       # @return [Boolean]
       def table?(model, table)
         table = table.to_s
-        cache = model.connection.schema_cache
+        cache = schema_cache(model)
         return true if cache.data_source_exists?(table)
-        return false unless @tables.put_if_absent([slot(model), table], true).nil?
 
-        cache.clear_data_source_cache!(table)
-        @rereads.increment
-        cache.data_source_exists?(table)
+        claim = [slot(model), table]
+        return false unless table_recheck_due?(claim)
+
+        reread_table?(cache, table, claim)
       end
 
       # Whether `label` is one of the labels of the native enum type `type`
@@ -168,11 +176,25 @@ module PermissionForge
         key = [model.connection_db_config.name, type.to_s]
         labels = @enum_labels.compute_if_absent(key) { enum_labels_of(model, type) }
         return true if labels.include?(label)
-        return false unless @enum_claims.put_if_absent([key, labels.object_id, label], true).nil?
+
+        claim = [key, labels.object_id, label]
+        return false unless @enum_claims.put_if_absent(claim, true).nil?
 
         @rereads.increment
         (@enum_labels[key] = enum_labels_of(model, type)).include?(label)
+      rescue ActiveRecord::StatementInvalid
+        # The labels could not be read (a timeout, a lost connection): no
+        # for this call only — nothing kept, asked again next time.
+        @enum_claims.delete(claim) if claim
+        false
       end
+
+      # Whether PostgreSQL can compare values of the type (SchemaRead::OrderedTypes).
+      #
+      # @param model [Class] a model on the connection
+      # @param sql_type [String] the column's SQL type, from the schema
+      # @return [Boolean]
+      def ordered_type?(model, sql_type) = OrderedTypes.ordered?(model, sql_type)
 
       # @return [Integer] how many times this process read a table's schema again
       def rereads
@@ -184,6 +206,7 @@ module PermissionForge
       # @return [void]
       def reset!
         [@confirmed, @claims, @tables, @enum_labels, @enum_claims].each(&:clear)
+        OrderedTypes.reset!
       end
 
       private
@@ -193,15 +216,51 @@ module PermissionForge
       # the statement, and with it the caller's transaction).
       def enum_labels_of(model, type)
         model.connection_pool.with_connection do |connection|
-          connection.select_values(<<~SQL.squish, 'SCHEMA').freeze
-            SELECT enumlabel::text FROM pg_catalog.pg_enum
-            WHERE enumtypid = to_regtype(#{connection.quote(type.to_s)}) ORDER BY enumsortorder
-          SQL
+          connection.transaction(requires_new: true) do
+            connection.select_values(<<~SQL.squish, 'SCHEMA').freeze
+              SELECT enumlabel::text FROM pg_catalog.pg_enum
+              WHERE enumtypid = to_regtype(#{connection.quote(type.to_s)}) ORDER BY enumsortorder
+            SQL
+          end
         end
       end
 
+      # Claims the re-read of a missing table when none ran in the last
+      # TABLE_RECHECK seconds (one thread wins; the others answer "no").
+      def table_recheck_due?(key)
+        now = Time.now.to_f
+        last = @tables[key]
+        return @tables.put_if_absent(key, now).nil? if last.nil?
+        return false if now - last < TABLE_RECHECK
+
+        @tables.replace_pair(key, last, now)
+      end
+
+      # The table asked of the database again, once per claim. A read that
+      # fails (a timeout, a lost connection) answers no for this call only:
+      # the claim is let go, so the next call asks again.
+      def reread_table?(cache, table, claim)
+        cache.clear_data_source_cache!(table)
+        @rereads.increment
+        cache.data_source_exists?(table)
+      rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished
+        @tables.delete(claim)
+        false
+      end
+
       def table_columns(model)
-        model.connection.schema_cache.columns_hash(model.table_name)
+        schema_cache(model).columns_hash(model.table_name)
+      end
+
+      # The pool's schema cache, never `model.connection`'s: that reader
+      # leases a connection to the thread for good and, from Rails 7.2,
+      # raises under ActiveRecord.permanent_connection_checkout =
+      # :disallowed. The pool's cache takes a connection only for the read
+      # it makes, and is the one the connection's own cache is. Rails 7.1
+      # has no pool cache (nor :disallowed): the connection's.
+      def schema_cache(model)
+        pool = model.connection_pool
+        pool.respond_to?(:schema_cache) ? pool.schema_cache : model.connection.schema_cache
       end
 
       # Reads the table again when one of `names` is no column of it and was

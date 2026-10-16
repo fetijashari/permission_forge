@@ -194,9 +194,16 @@ module PermissionForge
       assert_not rule.valid?
     end
 
-    # A table of another model: left to the query, which may join it.
-    test 'field_name users.email is valid' do
+    # A table of another model: a filter rule compares its own table
+    # (review R1 #2) — refused, pointing at a join rule; a join rule's query
+    # may join it itself.
+    test 'field_name users.email is refused on a filter rule and left to the query of a join rule' do
       rule = build_rule(field_name: 'users.email')
+
+      assert_not rule.valid?
+      assert_match(/join rule/, rule.errors[:field_name].join)
+      rule = build_rule(field_name: 'users.email', join_type: 'joins', field_accessor_path: 'supplier')
+
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
@@ -304,6 +311,23 @@ module PermissionForge
       rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
       assert rule.persisted?
       assert rule.valid?
+    end
+
+    # Review R1 #8: the format check ran on every save, so a stored rule
+    # with a control character in its field name could not be switched off.
+    test 'a stored field name the format refuses stays editable in its other attributes, refused when it changes' do
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
+      rule.update_columns(field_name: "supplier_id\n")
+      rule.reload
+
+      rule.is_active = false
+
+      assert rule.valid?, rule.errors.full_messages.inspect
+      assert rule.save
+      rule.field_name = "supplier\tid"
+
+      assert_not rule.valid?
+      assert rule.errors[:field_name].any?
     end
 
     private

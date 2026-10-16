@@ -202,9 +202,9 @@ PermissionForge::PermissionSetUser.create!(permission_set: pset, user: user)
 Only `name` has a field row here. A column with no row is refused by the default
 `unconfigured_field_strategy = :block`: its getter returns `nil` and `as_json` keeps the key as `null` (a Hidden row,
 read off, leaves the key out). `PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)` gives every
-column without a row one: Hidden, `created_at` / `updated_at` included — also the columns that look like personal
-data, which get their recommended mask strategy on the row. With `grant_all: true` every row is readable and editable,
-unmasked, and the timestamps read-only. The admin's "Sync fields with model" adds the rows at a level you pick (under
+column (and declared virtual field) without a row one: Hidden, `created_at` / `updated_at` included — also the columns
+that look like personal data, which get their recommended mask strategy on the row. With `grant_all: true` every row is
+readable and editable (Read-only on a Resource without Edit), unmasked, and the timestamps read-only. The admin's "Sync fields with model" adds the rows at a level you pick (under
 the default `gdpr_defaults`, "… as Read-only" starts the personal-data columns Masked). Then open the ones the set should read.
 
 Each change invalidates the cached permissions of the users it affects; the next read rebuilds them. The admin UI

@@ -64,7 +64,7 @@ module PermissionForge
       def declared_names
         return [] unless @configuration.grant_extra_fields_by_default?
 
-        PermissionForge::VirtualFields.extra_names(@resource_name.safe_constantize, @configuration)
+        PermissionForge::VirtualFields.extra_names(PermissionForge::ModelLookup.model_for(@resource_name), @configuration)
       end
     end
   end

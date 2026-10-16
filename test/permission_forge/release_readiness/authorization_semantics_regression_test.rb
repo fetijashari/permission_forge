@@ -387,7 +387,7 @@ module PermissionForge
       RAILS_OVERRIDES = %w[read_attribute attributes serializable_hash attribute_names_for_serialization
                            read_attribute_for_serialization read_attribute_for_validation run_validations!
                            attribute_for_inspect pretty_print read_store_attribute write_store_attribute].freeze
-      RAILS_CLASS_OVERRIDES = %w[alias_attribute].freeze
+      RAILS_CLASS_OVERRIDES = %w[alias_attribute define_attribute_methods].freeze
 
       def masking_modules(ancestors)
         ancestors.select { |mod| mod.name.to_s.start_with?('PermissionForge::Concerns::MaskedAttributes') }

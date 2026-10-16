@@ -80,11 +80,7 @@ module PermissionForge
         def locked? = !EditableLock.locked_record(rule).nil?
       end
 
-      def self.acknowledgement_supported?
-        PermissionForge::SchemaRead.column?(PermissionForge::ResourceField, 'sensitive_acknowledged_at', ignored: false)
-      rescue StandardError
-        false
-      end
+      def self.acknowledgement_supported? = PermissionForge::ResourceField.acknowledgement_supported?
 
       # The threshold of "due for review", in days: config.admin_stale_assignment_days,
       # or the default while it is nil. The one definition — Home's Stale
@@ -97,7 +93,9 @@ module PermissionForge
         configuration.try(:admin_stale_assignment_days) || Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS
       end
 
-      def initialize(configuration: PermissionForge.configuration, catalog: ModelCatalog.new,
+      # The catalog only counts (`verify: false`): every admin page draws the
+      # navigation's count, so it reads the schema cache, never the database.
+      def initialize(configuration: PermissionForge.configuration, catalog: ModelCatalog.new(verify: false),
                      sensitive: SensitiveColumns.new(configuration: configuration))
         @configuration = configuration
         @catalog = catalog
@@ -278,20 +276,14 @@ module PermissionForge
         @readable_resources ||= granting_resources.select(&:read_access)
       end
 
+      # Readable and unmasked, and not acknowledged as intentional
+      # (ResourceField#exposes_unacknowledged?).
       def unmasked_sensitive_fields
-        acknowledged = self.class.acknowledgement_supported?
         readable_resources.flat_map do |resource|
           resource.resource_fields.filter_map do |field|
-            sensitive_finding(resource, field.name, field: field) if exposed?(field, acknowledged)
+            sensitive_finding(resource, field.name, field: field) if field.exposes_unacknowledged?
           end
         end
-      end
-
-      # Readable and unmasked, and not acknowledged as intentional.
-      def exposed?(field, acknowledged)
-        return false unless field.exposes_in_clear?
-
-        !(acknowledged && field.sensitive_acknowledged_at.present?)
       end
 
       # Sensitive columns and virtual fields with no active field row are a

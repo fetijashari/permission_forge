@@ -70,6 +70,17 @@ module PermissionForge
                      %w[name email domain].map { |n| FieldLevel.level_of(@res.resource_fields.find_by(name: n), muting: false) })
       end
 
+      test 'a crafted post adds no row for a name the model does not manage (id, an ignored field, no such name)' do
+        ignored = Array(PermissionForge.configuration.ignored_fields).map(&:to_s)
+        assert_includes ignored, 'id'
+        crafted = { 'id' => { level: 'edit' }, 'xyz' => { level: 'read' }, 'domain' => { level: 'read' } }
+        change_set(new_fields: { @res.id.to_s => crafted },
+                   bulk: { resource_id: @res.id.to_s, keys: %w[id xyz uuid supplier_id], level: 'hidden' }).apply!
+
+        added = @res.resource_fields.reload.map(&:name) - %w[name email]
+        assert_equal %w[domain supplier_id], added.sort
+      end
+
       test 'locked resources and fields are never changed' do
         @res.update_columns(is_editable: false)
         assert_predicate change_set(resources: { @res.id.to_s => { read_access: '0' } }), :empty?

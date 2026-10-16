@@ -347,7 +347,7 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/clone
 # numbered when taken ("<name> (copy) 2"). Through 0.14.1: "<name> (Copy)".
 ```
 
-**Activation conditions.** `allowed_ips` takes a String (commas, newlines or spaces between the entries) or an Array of Strings; the row stores the entries with commas and answers them as `allowed_ip_list` (an Array of Strings, beside `allowed_ips` in every permission set answer). `allowed_hours_start` / `allowed_hours_end` take an integer 0–23 (or a String of digits), both or neither; `requires_session_flag` a String; `null` clears a condition. Any other shape — an object, a boolean, a number for the list, an array for a flag or an hour — is a 422 keyed by the attribute (`{ "error": { "status": 422, "messages": { "allowed_ips": ["must be a string or an array of strings (IP addresses or CIDR ranges), or null"] } } }`). An entry that is not an address, one hour of the two, or `start == end` is a 422 from the model, keyed the same way. A condition named in the request is never dropped silently.
+**Activation conditions.** `allowed_ips` takes a String (commas, newlines or spaces between the entries) or an Array of Strings; the row stores the entries with commas and answers them as `allowed_ip_list` (an Array of Strings, beside `allowed_ips` in every permission set answer). `allowed_hours_start` / `allowed_hours_end` take an integer 0–23 (or a String of digits), both or neither; `requires_session_flag` a String; `null` (or `""`) clears a condition, and a list with no entry (`[]`, `[""]`) is a 422 saying so. Any other shape — an object, a boolean, a number for the list, an array for a flag or an hour — is a 422 keyed by the attribute (`{ "error": { "status": 422, "messages": { "allowed_ips": ["must be a string or an array of strings (IP addresses or CIDR ranges), or null"] } } }`). An entry that is not an address, one hour of the two, or `start == end` is a 422 from the model, keyed the same way. A condition named in the request is never dropped silently.
 
 #### Resources (nested under permission set)
 
@@ -404,7 +404,9 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
 # only "true" and "1" granted: a JSON true created fields without edit.
 # With grant_all every field is readable and editable, unmasked — also the
 # personal-data columns under gdpr_defaults (their recommended mask_strategy
-# is returned, mask_access is false). Without it every field comes back
+# is returned, mask_access is false); on a Resource without edit_access the
+# rows are read-only (field Edit needs the Resource's Edit, as in the admin).
+# Virtual fields get rows too. Without it every field comes back
 # without access (Hidden), the personal-data columns included; their
 # recommended mask_strategy is on the row. The rows are the ones the admin's
 # presets and Sync write for the same level (one row builder since 0.15.0).

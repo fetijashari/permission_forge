@@ -2,8 +2,8 @@ require_relative 'resource_field_generator/row_builder'
 
 module PermissionForge
   module Services
-    # Creates a ResourceField for every column of a resource's model (and declared virtual fields
-    # under `extra_fields_default_access = :unconfigured`).
+    # Creates a ResourceField for every field of a resource's model that has none: its columns and its
+    # virtual fields (PermissionForge::ManagedFields, the names the admin's presets and Sync write rows for).
     #
     # @api public
     class ResourceFieldGenerator
@@ -18,7 +18,8 @@ module PermissionForge
       # is granted Read, and nothing is granted here. On a Muting Permission
       # Set `grant_all` takes everything away (Hide); without it nothing is
       # written — Unchanged is no row (FieldLevel.row?), as in the admin.
-      # Rails' timestamps
+      # On a Resource without Edit, Editable rows are Read-only
+      # (FieldLevel.capped). Rails' timestamps
       # (created_at / updated_at) are at most read-only on a granting set
       # (PermissionForge::TimestampFields).
       #
@@ -92,8 +93,8 @@ module PermissionForge
 
       def generate_fields(model_class)
         existing_names = @resource.resource_fields.pluck(:name)
-        columns = PermissionForge::SchemaRead.column_names(model_class, verify: true) - ignored_fields +
-                  virtual_field_names(model_class) - existing_names
+        names = PermissionForge::ManagedFields.new(model_class).names
+        columns = self.class.without_blank_names(model_class, names) - existing_names
 
         rows = RowBuilder.new(@resource, muting: muting?)
         columns.filter_map do |column_name|
@@ -115,22 +116,6 @@ module PermissionForge
         else
           @grant_all ? 'edit' : 'hidden'
         end
-      end
-
-      # Symbols or Strings, as the host wrote them.
-      def ignored_fields
-        Array(PermissionForge.configuration.ignored_fields).map(&:to_s)
-      end
-
-      # Virtual fields get rows only under extra_fields_default_access =
-      # :unconfigured. Under :grant ExtraFieldDefaults already gives declared
-      # names read + edit, and a generated row (no access unless grant_all)
-      # would take that away from callers that rely on it.
-      def virtual_field_names(model_class)
-        configuration = PermissionForge.configuration
-        return [] if configuration.grant_extra_fields_by_default?
-
-        self.class.without_blank_names(model_class, PermissionForge::VirtualFields.new(model_class, configuration).names)
       end
     end
   end

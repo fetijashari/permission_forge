@@ -115,8 +115,20 @@ module PermissionForge
             raise PermissionForge::ParamShapes::InvalidParam.new(key, I18n.t("permission_forge.api.errors.#{message}"))
           end
 
-          conditions[key] = key == 'allowed_ips' ? PermissionForge::ActivationConditions.entries(value).join(',').presence : value
+          conditions[key] = key == 'allowed_ips' ? ip_list_param(value) : value
         end
+      end
+
+      # The IP list, its entries joined by commas. A list with no entry
+      # (`[]`, `[""]`, `" , "`) is refused rather than read as "no
+      # condition": null (or "") is how a client clears the condition.
+      #
+      # @raise [ParamShapes::InvalidParam]
+      def ip_list_param(value)
+        return if value.nil?
+
+        PermissionForge::ActivationConditions.entries(value).join(',').presence ||
+          raise(PermissionForge::ParamShapes::InvalidParam.new('allowed_ips', I18n.t('permission_forge.api.errors.ip_list_empty')))
       end
     end
   end

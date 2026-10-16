@@ -204,24 +204,8 @@ module DocsApp
       { rows: rows, can_read: can_read, index_status: Visitor.new.sign_in(:erin).get('/customers').status }
     end
 
-    # README step 4 after an admin made a "Sales Team": the error the README
-    # warns about, then the same lines once the name is free.
-    def name_taken
-      PermissionForge::PermissionSet.create!(name: 'Sales Team', is_active: true)
-      first = readme_blocks
-      PermissionForge::PermissionSet.find_by!(name: 'Sales Team').destroy!
-      second = readme_blocks
-      { taken: errors_of(first), retried: errors_of(second),
-        claims: second.flat_map { |block| Array(block[:expectations]) }.map { |claim| claim[:passed] } }
-    end
-
-    # The README's program once more, on the database as it is.
-    def readme_blocks
-      readme = DocsApp.documents.find { |document| document.file == 'README.md' }
-      Programs.run_document(readme, fresh: false)[:blocks]
-    end
-
-    def errors_of(blocks) = blocks.filter_map { |block| block[:error] }
+    # README step 4 after an admin made a "Sales Team" (ReadmeAgain).
+    def name_taken = ReadmeAgain.name_taken
 
     # Under config.preset = :strict a seed with nobody signed in sees no
     # protected rows: find_or_create_by! duplicates unless the seed runs in
@@ -244,5 +228,56 @@ module DocsApp
       2.times { Customer.find_or_create_by!(name: name, owner: owner) }
       PermissionForge.without_permission_scope { Customer.where(name: name).count }
     end
+  end
+
+  # The README's program run again, on the database as installed (nobody
+  # holds a set): after an admin made a "Sales Team", once the name is free,
+  # and without step 4's assignment line.
+  module ReadmeAgain
+    # README step 4's assignment line.
+    ASSIGNMENT = /^PermissionForge::PermissionSetUser\.create!.*\n/
+
+    module_function
+
+    # README step 4 after an admin made a "Sales Team": the error the README
+    # warns about, then the same lines once the name is free. On the app as
+    # installed (nobody holds a set): step 5's claims hold because step 4
+    # assigned the set, and fail when it did not.
+    def name_taken
+      as_installed do
+        PermissionForge::PermissionSet.create!(name: 'Sales Team', is_active: true)
+        first = readme_blocks
+        PermissionForge::PermissionSet.find_by!(name: 'Sales Team').destroy!
+        second = readme_blocks
+        { taken: errors_of(first), retried: errors_of(second), claims: claims_of(second) }
+      end.merge(without_assignment: as_installed { claims_of(readme_blocks(without: ASSIGNMENT)) })
+    end
+
+    # The block run on the database as installed; the scenarios' database put back after.
+    def as_installed
+      Database.snapshot!(:scenarios)
+      Database.restore!
+      yield
+    ensure
+      Database.restore!(:scenarios)
+    end
+
+    # The README's program once more, on the database as it is; `without`
+    # takes a line out of the run blocks that have it.
+    def readme_blocks(without: nil)
+      readme = DocsApp.documents.find { |document| document.file == 'README.md' }
+      readme = DocBlocks::Document.new(file: readme.file, blocks: readme.blocks.map { |block| cut(block, without) }) if without
+      Programs.run_document(readme, fresh: false)[:blocks]
+    end
+
+    def cut(block, line)
+      return block unless block.run? && block.body.match?(line)
+
+      block.dup.tap { |copy| copy.body = block.body.sub(line, "\n") }
+    end
+
+    def errors_of(blocks) = blocks.filter_map { |block| block[:error] }
+
+    def claims_of(blocks) = blocks.flat_map { |block| Array(block[:expectations]) }.map { |claim| claim[:passed] }
   end
 end

@@ -50,10 +50,11 @@ namespace :permission_forge do
   # ends on a word, not a parenthesis. What it prints is the result the
   # erasure.performed event records (RakeOutput), the cache outcome included.
   desc "Erase a person's permission data (assignments, cache, audit-log names) for a GDPR Article 17 request. " \
-       'Ids and other event data stay. USER_ID= required; DRY_RUN=true by default; ACTOR= names who ran it, REASON= why.'
+       'Ids and other event data stay. USER_ID= required; a dry run unless DRY_RUN=false (or 0, no); ' \
+       'ACTOR= names who ran it, REASON= why.'
   task erasure: :environment do
     user_id = ENV.fetch('USER_ID', nil)
-    dry_run = ENV.fetch('DRY_RUN', 'true') == 'true'
+    dry_run = PermissionForge::RakeDryRun.dry_run?(ENV.fetch('DRY_RUN', nil), default: true)
 
     abort 'USER_ID is required. Usage: rake permission_forge:erasure USER_ID=123' if user_id.blank?
 

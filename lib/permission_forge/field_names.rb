@@ -50,8 +50,8 @@ module PermissionForge
     #   rows (variant bases), or what answers them (asked only when needed)
     # @return [FieldNames, nil] nil when the model cannot be told
     def self.for(resource_name, siblings: [], configuration: PermissionForge.configuration)
-      model = resource_name.to_s.safe_constantize
-      return unless model.is_a?(Class) && model < ActiveRecord::Base && !model.abstract_class? && SchemaRead.table?(model, model.table_name)
+      model = ModelLookup.model_for(resource_name)
+      return unless model
 
       new(model, siblings: siblings, configuration: configuration)
     rescue *UNREADABLE

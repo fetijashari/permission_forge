@@ -14,9 +14,10 @@ module PermissionForge
         PermissionForge::PermissionSet.create!(attrs.merge(is_active: true, is_editable: true))
       end
 
-      # An editable copy. A source in a locked Permission Set Group is copied
+      # An editable copy, named "<name> (copy)" (numbered when taken) unless
+      # a name is given. A source in a locked Permission Set Group is copied
       # outside it: the copy would change the locked group's list of sets.
-      def self.duplicate(source, name:)
+      def self.duplicate(source, name: PermissionForge::PermissionSet.copy_name(source.name))
         attrs = { name: name, is_editable: true }
         attrs[:permission_set_group] = nil if EditableLock.locked?(source.permission_set_group)
         clone_unlocked(source, attrs)

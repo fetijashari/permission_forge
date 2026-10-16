@@ -8,6 +8,7 @@ module PermissionForge
 
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Concerns::HasUuid
+    include PermissionForge::Concerns::KeepsCopiedValues
     include PermissionForge::Concerns::ValidatesColumnLengths
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -46,6 +47,25 @@ module PermissionForge
     # rows that reach someone's hash.
     scope :exposing_in_clear, -> { active.where(read_access: true, mask_access: false) }
 
+    # The rows in the clear nobody marked "This is intended" in the admin's
+    # privacy audit (sensitive_acknowledged_at) — the SQL twin of
+    # #exposes_unacknowledged?, what the GDPR audit, the security audit,
+    # Home and the boot warning report.
+    scope :exposing_unacknowledged, lambda {
+      acknowledgement_supported? ? exposing_in_clear.where(sensitive_acknowledged_at: nil) : exposing_in_clear
+    }
+
+    # Whether the table has the column "This is intended" writes (added by
+    # the upgrade generator; an older install has none, and nothing is
+    # acknowledged there).
+    #
+    # @return [Boolean]
+    def self.acknowledgement_supported?
+      PermissionForge::SchemaRead.column?(self, 'sensitive_acknowledged_at', ignored: false)
+    rescue StandardError
+      false
+    end
+
     # The rows in effect that mask with a strategy this app does not know
     # (Services::MaskValue.known?): written past the model, or a custom
     # strategy since removed. Masked fully until fixed. The one reading the
@@ -68,6 +88,20 @@ module PermissionForge
     # @return [Boolean]
     def exposes_in_clear?
       is_active && read_access && !mask_access
+    end
+
+    # In the clear and not marked "This is intended": the one definition of
+    # a personal-data exposure the four surfaces report (the field must
+    # also look like personal data: SensitiveColumns).
+    #
+    # @return [Boolean]
+    def exposes_unacknowledged?
+      exposes_in_clear? && !acknowledged_as_intended?
+    end
+
+    # @return [Boolean] an admin marked the field "This is intended"
+    def acknowledged_as_intended?
+      self.class.acknowledgement_supported? && has_attribute?(:sensitive_acknowledged_at) && sensitive_acknowledged_at.present?
     end
 
     # A duplicate (resource_id, name) row would let a second field entry with
@@ -94,6 +128,9 @@ module PermissionForge
     # other attributes. Its values are masked fully until it is fixed
     # (Services::MaskValue); `rake permission_forge:audit` lists it
     # (unknown_mask_strategies), the field drawer flags it.
+    # A copy keeps its original's strategy (KeepsCopiedValues): it masks
+    # fully, as the original does.
+    keeps_copied :mask_access, :mask_strategy
     validates :mask_strategy, presence: {
                                 message: ->(*) { I18n.t('permission_forge.validations.resource_field.mask_strategy_required') }
                               },
@@ -122,6 +159,8 @@ module PermissionForge
     end
 
     def mask_strategy_check_due?
+      return false if copied_unchanged?(:mask_access, :mask_strategy)
+
       mask_access? && (new_record? || will_save_change_to_mask_strategy? || will_save_change_to_mask_access?)
     end
   end

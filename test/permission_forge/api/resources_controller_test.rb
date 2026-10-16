@@ -130,7 +130,7 @@ module PermissionForge
       # gdpr_defaults says (the recommended strategy is kept for later).
       test 'POST generate_fields with grant_all applies no masks under gdpr_defaults' do
         PermissionForge.configuration.gdpr_defaults = true
-        resource = create_resource(permission_set: @ps, name: 'Customer')
+        resource = create_resource(permission_set: @ps, name: 'Customer', edit_access: true)
 
         post "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{resource.uuid}/generate_fields",
              params: { grant_all: 'true' }
@@ -187,7 +187,7 @@ module PermissionForge
       # Generates the fields of a fresh Customer resource with `params` as JSON.
       def generate_fields_with(params)
         PermissionForge::Resource.where(permission_set: @ps).find_each(&:destroy!)
-        resource = create_resource(permission_set: @ps, name: 'Customer')
+        resource = create_resource(permission_set: @ps, name: 'Customer', edit_access: true)
         post "#{resources_path}/#{resource.uuid}/generate_fields", params: params, as: :json
         JSON.parse(response.body)['data']
       end

@@ -39,6 +39,10 @@ ActiveRecord::Schema.define do
       t.column  :mood, :pf_rule_mood
       t.interval :period
       t.macaddr :mac
+      # Types PostgreSQL reads a value of but cannot compare (no `=` / `<`):
+      # no value is usable (review R1 #4).
+      t.xml     :doc
+      t.column  :spot, :point
     end
   end
 end

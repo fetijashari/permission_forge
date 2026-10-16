@@ -42,20 +42,38 @@ module PermissionForge
     # but AuditEvent, every column but the bookkeeping ones and the foreign
     # keys (a pointer is not interpreted). A column added to a model is
     # covered the day it is added; a column to leave out goes in SKIP with a
-    # reason, and an entry that matches nothing fails. PENDING_ON_WP1 names
-    # the columns whose fixes land with WP-1 (plan-final.md §3): their
-    # failures are reported, not counted, and an entry whose column no
-    # longer fails must be removed.
+    # reason, and an entry that matches nothing fails. PENDING names the
+    # (column, read path) failures that wait for a decision: they are
+    # reported, not counted, and an entry whose column no longer fails on
+    # one of its paths must be removed.
     class StoredDataFailClosedTest < ActiveSupport::TestCase
       BOOKKEEPING = %w[id uuid created_at updated_at].freeze
       # 'Model.column' => why it is not poisoned.
       SKIP = {}.freeze
-      # 'Model.column' => the WP-1 fix its failures wait for (plan-final.md §3 WP-1).
-      # The lead removes each entry once WP-1 is merged; an entry whose column
-      # no longer fails fails this test.
-      PENDING_ON_WP1 = {}.freeze
+      # Whole-entry loss: the poisoned row takes the user's whole entry out of
+      # the hash (a Resource renamed off its model, a field row renamed off
+      # its column, a granting set whose condition cannot be judged). The
+      # grant goes (can_read? is false), and with it the rules and masks the
+      # entry carried, so the record-level reads answer as for a user with
+      # no entry for the model: no rules (every row), no field row (no mask).
+      # A pre-existing reading, hidden until refusal was judged on the clean
+      # row (review R1): a decision for the lead, not a fix of R1's.
+      ENTRY_LOSS = 'the whole entry drops out: no grant, so no rules and no masks either (review R1 follow-up)'
+      ROW_PATHS = %i[scoped find_by_unowned filter_all filter_count].freeze
+      VALUE_PATHS = %i[effective getters bracket attributes as_json filtered].freeze
+      # 'Model.column' => { paths: the read paths it fails on, reason: }.
+      PENDING = {
+        'Resource.name' => { paths: ROW_PATHS + VALUE_PATHS, reason: ENTRY_LOSS },
+        'ResourceField.name' => { paths: VALUE_PATHS, reason: ENTRY_LOSS },
+        'PermissionSet.allowed_ips' => { paths: ROW_PATHS, reason: ENTRY_LOSS },
+        'PermissionSet.allowed_hours_start' => { paths: ROW_PATHS, reason: ENTRY_LOSS },
+        'PermissionSet.allowed_hours_end' => { paths: ROW_PATHS, reason: ENTRY_LOSS }
+      }.freeze
 
-      STRINGS = ['', 'zzz', 'a..b', 'nosuch.col', 'Kernel', 'regex', 'inner', 'gone',
+      # 'supplier_id.id': a qualifier the join rule's ON clause mentions as a
+      # column (review R1 #1); 'suppliers.name': another model's table on a
+      # filter rule (review R1 #2).
+      STRINGS = ['', 'zzz', 'a..b', 'nosuch.col', 'supplier_id.id', 'suppliers.name', 'Kernel', 'regex', 'inner', 'gone',
                  "10.0.0.0/8\n192.168.0.0/16", 'office', "x\u0000y", 'ü' * 300]
                 # PostgreSQL stores no NUL byte at all (the driver refuses the
                 # string), so no such value can be read back there.
@@ -280,6 +298,7 @@ module PermissionForge
       REPORT_PATHS = {
         effective: -> { effective_levels },
         rls: -> { PermissionForge::Services::RlsPolicyGenerator.call(model_class: Customer).fetch(:statements).join("\n") },
+        rls_bypass: -> { policy_bypass? },
         generate: -> { rolled_back { PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource.reload).size } },
         clone: lambda {
           rolled_back { PermissionForge::Services::PermissionSetCloner.call(permission_set: @granting.reload, attrs: { name: 'Clone' }).persisted? }
@@ -287,7 +306,7 @@ module PermissionForge
       }.freeze
       PATHS = PERMISSION_PATHS.merge(RECORD_PATHS, REPORT_PATHS).freeze
 
-      REPORTS = %i[effective rls generate clone].freeze
+      REPORTS = %i[effective rls rls_bypass generate clone].freeze
       # A smaller answer than the baseline's: a subset of rows, a false, a
       # masked or hidden value, fewer keys, a lower level.
       SUBSETS = %i[scoped filter_all permitted].freeze
@@ -391,13 +410,16 @@ module PermissionForge
 
       # --- assertions per poisoning ------------------------------------------------
 
-      def check(record, attrs, failures)
+      # `refused` is judged on the clean row, before it is poisoned: judged
+      # after, the "clean" copy would carry the poisoned value too and no
+      # poisoning would ever count as refused.
+      def check(record, attrs, failures, refused)
         fail_on = failure_recorder(record, attrs, failures)
-        refused = refused?(record, attrs)
         results = results_for(refused)
         results.each { |path, outcome| fail_on.call(path, "raised #{outcome.error.class}: #{outcome.error.message[0, 160]}") if outcome.error }
         return unless refused
 
+        assert_policy_bypass_not_wider(results, fail_on)
         assert_not_widened(results, fail_on)
         assert_named(record, attrs, fail_on) if changed?(results) && named_by_audit?(record, attrs)
       end
@@ -428,6 +450,35 @@ module PermissionForge
           base = @baseline[path].value
           fail_on.call(path, "widened: #{base.inspect[0, 120]} -> #{outcome.value.inspect[0, 120]}") if widening?(path, outcome.value, base)
         end
+      end
+
+      # The RLS policy's view_all bypass is never wider than the app layer's
+      # (review R1 #3: a Resource row with Modify All and no View All
+      # bypassed the rules in the policy only).
+      def assert_policy_bypass_not_wider(results, fail_on)
+        policy = results[:rls_bypass]
+        return unless policy && policy.error.nil? && policy.value == true
+        return if results[:can_view_all]&.value == true
+
+        fail_on.call(:rls_bypass, 'the policy bypasses the rules where the app layer does not')
+      end
+
+      # The policy's bypass (RlsPolicyGenerator#view_all_bypass_sql) for the
+      # user on the customer's row, evaluated on this database: the session
+      # variable read as the user's id, now() as CURRENT_TIMESTAMP, the row
+      # in the granting Resource's tenant (the bypass is tied to it).
+      def policy_bypass?
+        sql = policy_bypass_sql
+        tenant = @customer.reload.account_id
+        @customer.update_columns(account_id: @resource.reload.account_id)
+        Customer.unscoped.where(id: @customer.id).where(sql).exists?
+      ensure
+        @customer.update_columns(account_id: tenant)
+      end
+
+      def policy_bypass_sql
+        generator = PermissionForge::Services::RlsPolicyGenerator.new(model_class: Customer)
+        generator.send(:view_all_bypass_sql).gsub(generator.send(:uid_sql), @user.id.to_s).gsub('now()', 'CURRENT_TIMESTAMP')
       end
 
       def widening?(path, value, base)
@@ -496,7 +547,8 @@ module PermissionForge
           rows_of(model).each do |record|
             columns.each do |column|
               values_for(model, column).each do |attrs|
-                poison(record, attrs) { check(record, attrs, failures) }
+                refused = refused?(record, attrs)
+                poison(record, attrs) { check(record, attrs, failures, refused) }
               end
             end
           end
@@ -505,7 +557,7 @@ module PermissionForge
       end
 
       def report(name, columns, failures)
-        pending, real = failures.partition { |failure| PENDING_ON_WP1.key?(failure.key) }
+        pending, real = failures.partition { |failure| PENDING[failure.key]&.fetch(:paths)&.include?(failure.path) }
         report_pending(pending)
         assert_pending_current(name, columns, pending)
         assert_no_failures(name, real)
@@ -513,15 +565,17 @@ module PermissionForge
 
       def report_pending(pending)
         pending.group_by(&:key).each do |key, list|
-          puts "[G1 pending on WP-1] #{key} (#{PENDING_ON_WP1[key]}): #{list.size} failures, first: #{list.first}"
+          puts "[G1 pending] #{key} (#{PENDING.dig(key, :reason)}): #{list.size} failures, first: #{list.first}" if ENV['G1_VERBOSE']
         end
       end
 
-      # Every pending entry of the model names a column that still fails.
+      # Every pending entry of the model names a column that still fails, on each of its paths.
       def assert_pending_current(name, columns, pending)
-        PENDING_ON_WP1.keys.select { |key| key.start_with?("#{name}.") }.each do |key|
-          assert columns.include?(key.split('.').last), "#{key}: no such column — remove the PENDING_ON_WP1 entry"
-          assert pending.any? { |failure| failure.key == key }, "#{key} no longer fails: remove the PENDING_ON_WP1 entry"
+        PENDING.select { |key, _| key.start_with?("#{name}.") }.each do |key, entry|
+          assert columns.include?(key.split('.').last), "#{key}: no such column — remove the PENDING entry"
+          entry.fetch(:paths).each do |path|
+            assert pending.any? { |failure| failure.key == key && failure.path == path }, "#{key} no longer fails on #{path}: remove it from PENDING"
+          end
         end
       end
 
@@ -529,6 +583,21 @@ module PermissionForge
         grouped = real.group_by { |failure| [failure.key, failure.path, failure.message[0, 90]] }
         lines = grouped.map { |(key, path, message), list| "#{key} (#{list.size}×, e.g. #{list.first.value.inspect[0, 40]}): #{path} — #{message}" }
         assert_empty lines.first(60), "#{name}: #{real.size} failures in #{grouped.size} groups (first 60 shown)"
+      end
+
+      # The policy's bypass is read for real (negative fixture of
+      # assert_policy_bypass_not_wider): View All bypasses in both layers,
+      # Modify All without View All in neither.
+      test 'the policy bypass check bites: View All bypasses, Modify All alone does not' do
+        assert_not policy_bypass?
+        @resource.update_columns(view_all: true)
+
+        assert policy_bypass?
+        @resource.update_columns(view_all: false, modify_all: true)
+        reset_reads
+
+        assert_not fresh_user.can_view_all?(:Customer)
+        assert_not policy_bypass?, 'Modify All without View All grants no bypass in the app layer, nor in the policy'
       end
 
       test 'SKIP names columns that exist' do

@@ -222,7 +222,7 @@ module PermissionForge
         resource = create_resource(permission_set: set, read_access: true)
         rule_with(gone, name: 'Gone', field_name: 'owner_id', field_value: 'x')
         rule_with(resource, name: 'No column', field_name: 'no_such_column', field_value: 'x')
-        # With a path, a qualifier naming no table may be an alias the join gives: left to the query.
+        # With a path, a qualifier the join does not give (no table, no alias): matches nothing (review R1 #1).
         rule_with(resource, name: 'Elsewhere', field_name: 'elsewhere.supplier_id', field_value: 'x', join_type: 'joins',
                             field_accessor_path: 'supplier')
         # A path that cannot be followed matches nothing; the rule is not typed against its own model.
@@ -235,9 +235,10 @@ module PermissionForge
 
         assert_not_includes codes(report), :unusable_rule_values
         assert_equal ['Legacy › Customer.no_such_column equal "x": No column · 0 people',
+                      'Legacy › Customer.supplier.elsewhere.supplier_id equal "x": Elsewhere · 0 people',
                       'Legacy › Customer.nowhere.supplier_id equal "x": No path · 0 people',
                       'Legacy › Customer.supplier.nowhere.deactivated equal "maybe": Half a path · 0 people'],
-                     item_for(report, :missing_rule_columns).items, 'not the alias, not the model that is gone'
+                     item_for(report, :missing_rule_columns).items, 'not the model that is gone'
         assert_includes item_for(report, :unknown_models).items, 'FreightCost'
       end
 
@@ -263,7 +264,8 @@ module PermissionForge
         assert_match 'matches nothing', finding.detail
         assert_equal ['Sales › Customer.onwer_id equal "current_user": Owner · 1 person',
                       'Sales › Customer.customers.onwer_id is_null "": Qualified · 1 person',
-                      'Sales › Customer.supplier.domain equal "x": Joined · 1 person'], finding.items
+                      'Sales › Customer.supplier.domain equal "x": Joined · 1 person',
+                      'Sales › Customer.supplier.elsewhere.onwer_id equal "5": Alias · 1 person'], finding.items
         assert_equal ['Sales › Customer.supplier_id equal "5_id": Typed · 1 person'],
                      item_for(report, :unusable_rule_values).items, 'a missing column is not also an unusable value'
       end

@@ -9,6 +9,7 @@ module PermissionForge
 
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Concerns::HasUuid
+    include PermissionForge::Concerns::KeepsCopiedValues
     include PermissionForge::Concerns::ValidatesColumnLengths
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -49,18 +50,26 @@ module PermissionForge
     validates :permission_set_group,
               presence: { message: ->(*) { I18n.t('permission_forge.validations.permission_set.group_missing') } },
               if: -> { permission_set_group_id.present? && will_save_change_to_permission_set_group_id? }
-    validates :allowed_hours_start, :allowed_hours_end,
-              numericality: { in: 0..23, allow_nil: true,
-                              message: ->(*) { I18n.t('permission_forge.validations.permission_set.hours_range') } }
     # The activation conditions (ActivationConditions), checked for a new
     # row and when the condition changes — a row stored before the check
     # stays editable in its other attributes, and is read as unjudgeable:
-    # a granting set never passes on it, a muting set always applies. The
-    # IP list is stored with commas between the entries, whatever the
-    # request wrote (newlines, spaces, an Array through the API).
-    before_validation :normalize_allowed_ips, if: :will_save_change_to_allowed_ips?
-    validate :allowed_ips_are_addresses, if: -> { allowed_ips.present? && (new_record? || will_save_change_to_allowed_ips?) }
-    validate :hours_window_is_judgeable, if: -> { hours_window.set? && (new_record? || hours_changed?) }
+    # a granting set never passes on it, a muting set always applies. A
+    # copy keeps its original's conditions (KeepsCopiedValues). A condition
+    # text of whitespace alone (any Unicode space) is stored as nil — no
+    # condition, to Ruby and SQL alike; the IP list is stored with commas
+    # between the entries, whatever the request wrote (newlines, spaces, an
+    # Array through the API).
+    keeps_copied :allowed_ips, :allowed_hours_start, :allowed_hours_end, :requires_session_flag
+    validates :allowed_hours_start, :allowed_hours_end,
+              numericality: { in: 0..23, allow_nil: true,
+                              message: ->(*) { I18n.t('permission_forge.validations.permission_set.hours_range') } },
+              unless: -> { copied_unchanged?(:allowed_hours_start, :allowed_hours_end) }
+    before_validation :normalize_blank_conditions
+    before_validation :normalize_allowed_ips, if: -> { will_save_change_to_allowed_ips? && !copied_unchanged?(:allowed_ips) }
+    validate :allowed_ips_are_addresses, if: lambda {
+      allowed_ips.present? && !copied_unchanged?(:allowed_ips) && (new_record? || will_save_change_to_allowed_ips?)
+    }
+    validate :hours_window_is_judgeable, if: -> { hours_window.set? && hours_check_due? }
 
     scope :muting, -> { where(is_muting: true) }
     scope :granting, -> { where(is_muting: false) }
@@ -91,7 +100,9 @@ module PermissionForge
     # @param name [String]
     # @return [ActiveRecord::Relation]
     def self.named(name)
-      column = "#{connection.quote_table_name(table_name)}.#{connection.quote_column_name('name')}"
+      # The pool's connection, never `connection` (it raises under
+      # ActiveRecord.permanent_connection_checkout = :disallowed).
+      column = connection_pool.with_connection { |conn| "#{conn.quote_table_name(table_name)}.#{conn.quote_column_name('name')}" }
       where("LOWER(TRIM(#{column})) = LOWER(TRIM(?))", name.to_s)
     end
 
@@ -135,16 +146,20 @@ module PermissionForge
     #   written, e.g. `ps`); the quoted table name when nil
     # @return [String]
     def self.conditions_present_sql(table: nil)
-      qualifier = table || connection.quote_table_name(table_name)
-      quoted = ->(column) { "#{qualifier}.#{connection.quote_column_name(column)}" }
-      text_present = ->(column) { "COALESCE(TRIM(#{without_blank_lines_sql(quoted.call(column))}), '') <> ''" }
-      "(#{text_present.call('requires_session_flag')} OR #{text_present.call('allowed_ips')} " \
-        "OR #{quoted.call('allowed_hours_start')} IS NOT NULL OR #{quoted.call('allowed_hours_end')} IS NOT NULL)"
+      # The pool's connection, never `connection` (it raises under
+      # ActiveRecord.permanent_connection_checkout = :disallowed).
+      connection_pool.with_connection do |connection|
+        qualifier = table || connection.quote_table_name(table_name)
+        quoted = ->(column) { "#{qualifier}.#{connection.quote_column_name(column)}" }
+        text_present = ->(column) { "COALESCE(TRIM(#{without_blank_lines_sql(quoted.call(column), connection)}), '') <> ''" }
+        "(#{text_present.call('requires_session_flag')} OR #{text_present.call('allowed_ips')} " \
+          "OR #{quoted.call('allowed_hours_start')} IS NOT NULL OR #{quoted.call('allowed_hours_end')} IS NOT NULL)"
+      end
     end
 
     # A text of blanks is no condition, to SQL as to #conditional? (blank?):
     # TRIM takes the spaces, these REPLACEs the newlines and tabs a textarea leaves.
-    def self.without_blank_lines_sql(column_sql)
+    def self.without_blank_lines_sql(column_sql, connection)
       ["\n", "\r", "\t"].reduce(column_sql) { |sql, char| "REPLACE(#{sql}, #{connection.quote(char)}, '')" }
     end
     private_class_method :without_blank_lines_sql
@@ -199,6 +214,20 @@ module PermissionForge
 
     def hours_changed?
       will_save_change_to_allowed_hours_start? || will_save_change_to_allowed_hours_end?
+    end
+
+    # For a new row and when an hour changes; a copy keeps its original's.
+    def hours_check_due?
+      !copied_unchanged?(:allowed_hours_start, :allowed_hours_end) && (new_record? || hours_changed?)
+    end
+
+    # ActivationConditions.condition_text: whitespace alone is no condition.
+    def normalize_blank_conditions
+      %i[requires_session_flag allowed_ips].each do |attribute|
+        next unless will_save_change_to_attribute?(attribute) && !copied_unchanged?(attribute)
+
+        self[attribute] = PermissionForge::ActivationConditions.condition_text(self[attribute])
+      end
     end
 
     # The error goes on the hour that is missing, or on the end hour that

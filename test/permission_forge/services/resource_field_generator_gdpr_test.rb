@@ -5,7 +5,8 @@ module PermissionForge
     class ResourceFieldGeneratorGdprTest < ActiveSupport::TestCase
       setup do
         @permission_set = create_permission_set
-        @resource = create_resource(permission_set: @permission_set, name: 'Customer')
+        # With Edit: full access (grant_all, Editable) is not capped to Read-only (FieldLevel.capped).
+        @resource = create_resource(permission_set: @permission_set, name: 'Customer', edit_access: true)
       end
 
       # Full access is what grant_all asks for: no mask, the recommended

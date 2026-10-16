@@ -936,9 +936,9 @@ It does not govern model masking (`masked_attributes_nil_user_strategy`) or resp
 
 #### rule_secret_column_patterns
 
-**Default:** `[/\Apassword_digest\z/, /_digest\z/, /token/, /\Aencrypted_/, /_secret/]`
+**Default:** `[/\Apassword_digest\z/, /_digest\z/, /token/, /\Aencrypted_/, /_secret/, /passw/, /\Asecret(?:_|\z)/, /(?:\A|_)(?:api|private|secret|access)_key\z/, /(?:\A|_)crypted(?:_|\z)/, /(?:\A|_)salt\z/, /(?:\A|_)otp(?:_|\z)/]`
 
-**Secret column patterns.** The column names a record rule may not compare (`PermissionForge::SecretColumns`, matched against the column name — after the rule's association path, qualified or not — in lower case). A new rule on such a column, or a change of a rule's column, path, join type or model to one, is refused (`names a column that holds a secret`), and the admin's rule builder does not offer these columns. A rule stored before keeps evaluating as it did and stays editable in its other attributes; `rake permission_forge:audit` (`secret_rule_columns`) and the admin's Home list it. `[]` opts out; a narrower list (`[/\Apassword_digest\z/]`) keeps only those.
+**Secret column patterns.** The column names a record rule may not compare (`PermissionForge::SecretColumns`, matched against the column name — after the rule's association path, qualified or not — in lower case). The defaults also name passwords and their salts (`*passw*`, `*_salt`), `secret*`, API / private / secret / access keys (`*_key` after one of those words only: `sort_key` stays allowed) and OTP seeds (`otp_*`), each tied to a name segment. A new rule on such a column, or a change of a rule's column, path, join type or model to one, is refused (`names a column that holds a secret`), and the admin's rule builder does not offer these columns. A rule stored before keeps evaluating as it did and stays editable in its other attributes, except its value and operator (a new value would be another guess at the secret); `rake permission_forge:audit` (`secret_rule_columns`) and the admin's Home list it. `[]` opts out; a narrower list (`[/\Apassword_digest\z/]`) keeps only those.
 
 ### Controller actions
 
@@ -1018,7 +1018,7 @@ See [controller-actions.md](controller-actions.md).
 
 **Default:** `true`
 
-**Filter sensitive values from logs.** Adds the privacy patterns to Rails' filter_parameters so logs don't show them. The patterns also reach `ActiveRecord::Base.filter_attributes` (Rails copies `config.filter_parameters` there), so a matching attribute of your models (`name` and `email` included) prints as `[FILTERED]` in `#inspect`, `pretty_print` and error reports. The gem's own configuration models keep the other filters but show their `name`, `label` and `field_name` (a Permission Set's name is not personal data); `AuditEvent#actor_label` and `#record_label`, which hold people's names, are filtered whenever your filters hide a `name`. While on, the columns your `filter_parameters` name (`api_token`, `license_key`, …) also count as personal data for the admin's presets and Sync (Masked on Read-only under `gdpr_defaults`), `rake permission_forge:audit_masks`, the `personal_data` audit check and the boot warning (recommended strategy `full`).
+**Filter sensitive values from logs.** Adds the privacy patterns to Rails' filter_parameters so logs don't show them. The patterns also reach `ActiveRecord::Base.filter_attributes` (Rails copies `config.filter_parameters` there), so a matching attribute of your models (`name` and `email` included) prints as `[FILTERED]` in `#inspect`, `pretty_print` and error reports. The gem's own configuration models keep the other filters but show their `name`, `label` and `field_name` (a Permission Set's name is not personal data); `AuditEvent#actor_label` and `#record_label`, which hold people's names, are filtered whenever your filters hide a `name`. While on, the columns your `filter_parameters` name (`api_token`, `license_key`, …) also count as personal data for the admin's presets and Sync (Masked on Read-only under `gdpr_defaults`), `rake permission_forge:audit_masks`, the `personal_data` audit check and the boot warning (recommended strategy `full`). A String or Symbol entry names a column when one of the column name's `_`-separated segments starts with it (`:otp` names `otp_secret`, not `footprint`); a leading or trailing underscore ties it to a segment boundary (`:_key` names `api_key`, and also `sort_key`); a Regexp entry matches as written; a Proc entry names no column.
 
 **The patterns apply to the whole app, by parameter name.** Rails matches them against every parameter key, at any depth, whatever the form: a bare `name` key is filtered everywhere — a product's, a team's, and the admin's own forms (a Permission Set, a Resource, a field) — so request logs show `"name" => "[FILTERED]"` for values that are not personal data. To narrow it, add the patterns yourself without the one that matches a bare `name`, and filter `name` only under the forms that carry a person's name. Below the `configure` block of `config/initializers/permission_forge.rb`:
 
@@ -1312,6 +1312,12 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 **Languages.** Languages these screens are available in.
 
 ### Other options
+
+#### api_only_admin_warning
+
+**Default:** `true`
+
+**API-only boot warning.** In an application with `config.api_only = true` that mounts the engine, the log says which middlewares the admin screens need (cookies, session, flash; see [Admin UI](admin-ui.md#api-only-applications)) once the routes are drawn: at boot, or at the first request where Rails 8 draws them lazily (development and test). Set it to `false` in an app that uses only the JSON API and never opens the admin screens.
 
 #### nested_attributes_parent_fallback
 
