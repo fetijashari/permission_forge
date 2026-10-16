@@ -19,6 +19,15 @@ ENV['RAILS_ENV'] = 'test'
 
 require_relative 'dummy/config/environment'
 
+# The suite runs without rails-i18n: its sq/mk files would hand Rails-core
+# keys (errors.messages.*, support.array, datetime) to the admin and hide
+# every string the gem renders but does not own. i18n-tasks depends on it,
+# so it is installed; nothing may load it (test/dummy/config/application.rb
+# requires permission_forge alone; html/locale_leak_test.rb is the proof).
+if (loaded = $LOADED_FEATURES.grep(%r{/rails[-_]i18n[/.]}).first) || (path = I18n.load_path.grep(%r{/rails-i18n-}).first)
+  raise "rails-i18n is loaded in the test process (#{loaded || path}): the suite must prove the gem owns every key it renders"
+end
+
 # When DB=postgres or DB=mysql, create the test database on first run —
 # rails/test_help's maintain_test_schema! connects immediately, before the
 # schema load below.
