@@ -31,6 +31,27 @@ ActiveRecord::Schema.define do
     t.timestamps
   end
 
+  # Host shapes the models above do not have (host_shapes_test.rb): a
+  # namespaced model on a uuid primary key (Billing::Invoice), and one with
+  # an encrypted column and an enum (PfEncryptedNote).
+  create_table :billing_invoices, id: :string, primary_key: :uuid, force: true do |t|
+    t.string  :number
+    t.integer :amount_cents
+    t.string  :customer_email
+    t.bigint  :owner_id
+    t.bigint  :account_id
+    t.timestamps
+  end
+
+  create_table :pf_encrypted_notes, force: true do |t|
+    t.string  :title
+    t.text    :body
+    t.integer :status, null: false, default: 0
+    t.bigint  :owner_id
+    t.bigint  :account_id
+    t.timestamps
+  end
+
   # PermissionForge tables (no prefix for test simplicity)
   create_table :permission_set_groups, force: true do |t|
     t.string  :uuid, null: false

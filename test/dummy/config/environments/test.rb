@@ -11,4 +11,9 @@ Rails.application.configure do
   config.log_level = :warn
   # test_helper loads db/schema.rb itself; the dummy has no db:test:prepare.
   config.active_record.maintain_test_schema = false
+  # PfEncryptedNote (`encrypts :body`): the keys ActiveRecord::Encryption
+  # needs, test-only values.
+  config.active_record.encryption.primary_key = 'permission-forge-dummy-primary-key'
+  config.active_record.encryption.deterministic_key = 'permission-forge-dummy-deterministic-key'
+  config.active_record.encryption.key_derivation_salt = 'permission-forge-dummy-key-derivation-salt'
 end
