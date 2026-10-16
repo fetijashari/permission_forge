@@ -273,7 +273,7 @@ module PermissionForge
         twin.validate
         assert_response :see_other
         assert_redirected_to referer
-        assert_includes flash[:alert].to_s, twin.errors.full_messages.first
+        assert_includes flash[:alert].to_s, PermissionForge::Admin::ErrorSentence.first(twin.errors)
       end
 
       # The rest of a request whose one parameter is poisoned: valid.

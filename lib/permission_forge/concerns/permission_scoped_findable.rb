@@ -118,8 +118,9 @@ module PermissionForge
       # messages joined, the :message of a Hash, or the class name.
       #
       # `failure_messages` is what the denying rules say on their own (each
-      # rule's `failure_message`, as an admin wrote it), for a friendly 403
-      # without parsing `message`.
+      # rule's `failure_message`, as an admin wrote it, or the gem's default
+      # sentence for a rule without one), for a friendly 403 without parsing
+      # `message`.
       #
       # Unless the host rescues it, Rails answers this error with 403
       # Forbidden (the engine registers it in
@@ -137,11 +138,14 @@ module PermissionForge
         attr_reader :details, :user, :record, :record_id
 
         # The `failure_message` of each rule that denied the record, in rule
-        # order, without blanks and repeats (two Permission Sets may carry the
-        # same rule). Empty when no rule denied: nobody signed in under
-        # `nil_user_strategy = :raise`, or an error the host raised without
-        # `failure_messages:`. Rule messages are written by admins: decide
-        # whether they belong in a response.
+        # order, without repeats (two Permission Sets may carry the same
+        # rule); a rule left without one says the gem's own sentence in the
+        # current locale (`permission_forge.denials.rule_default`:
+        # `Services::PermissionRuleApplier.failure_message_for`). Empty when
+        # no rule denied: nobody signed in under `nil_user_strategy = :raise`,
+        # or an error the host raised without `failure_messages:`. Rule
+        # messages are written by admins: decide whether they belong in a
+        # response.
         #
         # @return [Array<String>] frozen
         attr_reader :failure_messages
@@ -285,7 +289,9 @@ module PermissionForge
                                                      data: { 'messages' => messages }
           )
           raise NotAuthorizedError.new(messages, user: current_user, record_id: record_id,
-                                                 failure_messages: denying_rules.map { |rule| rule[:failure_message] })
+                                                 failure_messages: denying_rules.map { |rule|
+                                                   PermissionForge::Services::PermissionRuleApplier.failure_message_for(rule)
+                                                 })
         end
 
         # The id of the row the rules denied, for access.denied and the error:

@@ -24,7 +24,8 @@ module PermissionForge
     # a RecordNotUnique 500 (and prevents silent duplicate rows on schemas that
     # predate the index). BulkPermissionSetAssignment already de-dupes; this
     # covers the single-assignment controller/API paths.
-    validates :user_id, uniqueness: { scope: :permission_set_id }
+    validates :user_id, uniqueness: { scope: :permission_set_id,
+                                      message: ->(*) { I18n.t('permission_forge.validations.permission_set_user.taken') } }
 
     # An integer user_id column would store a UUID or string user key as its
     # leading digits, handing this assignment to every user who shares them.

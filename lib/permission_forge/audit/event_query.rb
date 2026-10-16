@@ -60,10 +60,10 @@ module PermissionForge
         problem(name, :invalid)
       end
 
-      # Rails' own validation messages (errors.messages.<kind>), like the
-      # 422 bodies of the other endpoints.
+      # The gem's own validation messages (permission_forge.validations.<kind>:
+      # blank, invalid), like the 422 bodies of the other endpoints.
       def problem(name, kind)
-        @errors[name] << I18n.t("errors.messages.#{kind}")
+        @errors[name] << I18n.t("permission_forge.validations.#{kind}")
       end
 
       # A parameter's value as a String, nil when absent; an array or hash

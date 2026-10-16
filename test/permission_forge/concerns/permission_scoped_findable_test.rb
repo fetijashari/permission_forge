@@ -231,7 +231,13 @@ module PermissionForge
           Customer.find_by!(uuid: other.uuid)
         end
 
-        assert_equal ['You can only open your own customers'], error.failure_messages, 'blank and repeated messages are left out'
+        default_sentence = I18n.t('permission_forge.denials.rule_default')
+        assert_equal ['You can only open your own customers', default_sentence], error.failure_messages,
+                     'repeated messages are left out; a rule without one says the default sentence of the locale'
+        I18n.with_locale(:sq) do
+          sq_error = assert_raises(PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError) { Customer.find_by!(uuid: other.uuid) }
+          assert_equal I18n.t('permission_forge.denials.rule_default', locale: :sq), sq_error.failure_messages.last
+        end
         assert_predicate error.failure_messages, :frozen?
         assert_includes error.message, '[Forbidden by Rule: Own customers only] with message: You can only open your own customers'
         assert_equal 3, error.details.size, 'details still name every denying rule'

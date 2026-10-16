@@ -7,8 +7,8 @@ module PermissionForge
     # Every category has a glyph and a word (never colour alone).
     CATEGORY_GLYPHS = { 'change' => '✎', 'admin' => '⚑', 'system' => '⚙', 'access' => '◉' }.freeze
     CATEGORY_VARIANTS = { 'change' => :changed, 'admin' => :warn, 'system' => :default, 'access' => :mask }.freeze
-    # The message Audit::EventQuery gives a filter that needs a value (Rails' own).
-    QUERY_BLANK_MESSAGE = 'errors.messages.blank'.freeze
+    # The message Audit::EventQuery gives a filter that needs a value.
+    QUERY_BLANK_MESSAGE = 'permission_forge.validations.blank'.freeze
     # [record label, where] per audited type; evaluated in the view context.
     AUDIT_LABELS = {
       'permission_set' => ->(record) { [record.name, nil] },
@@ -106,16 +106,17 @@ module PermissionForge
       t('permission_forge.audit_events.show.unknown_actor_html', method: tag.code('PermissionForge.with_audit_actor'))
     end
 
+    # A type, category or source outside the catalogue is shown as stored.
     def pf_audit_actor_type_label(type)
-      t("permission_forge.audit_log.actor_types.#{type}", default: type.to_s.humanize)
+      t("permission_forge.audit_log.actor_types.#{type}", default: type.to_s)
     end
 
     def pf_audit_category_label(category)
-      t("permission_forge.audit_log.categories.#{category}", default: category.to_s.humanize)
+      t("permission_forge.audit_log.categories.#{category}", default: category.to_s)
     end
 
     def pf_audit_source_label(source)
-      t("permission_forge.audit_log.sources.#{source}", default: source.to_s.humanize)
+      t("permission_forge.audit_log.sources.#{source}", default: source.to_s)
     end
 
     def pf_audit_category_badge(category)
@@ -171,12 +172,14 @@ module PermissionForge
       id ? t('permission_forge.audit_log.deleted_group', id: id) : t('permission_forge.audit_log.unknown_group')
     end
 
-    # What the event is about: its label snapshot, else type and id.
+    # What the event is about: its label snapshot, else the type's label
+    # (Admin::AuditTrail::TYPES; a class outside them as stored) and id.
     def pf_audit_record_name(event)
       return event.record_label if event.record_label.present?
       return '' if event.record_type.blank?
 
-      [event.record_type.to_s.demodulize.titleize, event.record_id || event.record_uuid].compact.join(' #')
+      type = PermissionForge::Admin::AuditTrail::TYPES.key(event.record_type.to_s)
+      [type ? pf_audit_type_label(type) : event.record_type.to_s, event.record_id || event.record_uuid].compact.join(' #')
     end
 
     # A value of a before/after or snapshot table: text as it is, nothing as
@@ -191,11 +194,11 @@ module PermissionForge
       end
     end
 
-    # One line per refused filter, in the admin's own words (EventQuery's
-    # messages are Rails' errors.messages, which a host may not translate):
-    # a value that is needed, or the value that is not valid.
+    # One line per refused filter, in the admin's own words: a value that
+    # is needed, or the value that is not valid. A filter outside the
+    # catalogue is named as stored.
     def pf_audit_filter_error(name, messages, value)
-      field = t("permission_forge.audit_events.index.filters.#{name}", default: name.to_s.humanize)
+      field = t("permission_forge.audit_events.index.filters.#{name}", default: name.to_s)
       scope = 'permission_forge.audit_events.index.invalid'
       return t("#{scope}.blank", field: field) if Array(messages).include?(I18n.t(QUERY_BLANK_MESSAGE))
       return t("#{scope}.invalid", field: field) if value.blank?

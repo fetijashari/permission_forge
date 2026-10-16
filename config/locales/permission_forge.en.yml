@@ -351,6 +351,8 @@ en:
         will_assign:
           one: "%{count} will be assigned"
           other: "%{count} will be assigned"
+    denials:
+      rule_default: You do not have permission to perform this action.
     errors:
       admin:
         action_format: Use lowercase letters, numbers and underscores, starting with
@@ -846,8 +848,9 @@ en:
               tenant and clears their name from the audit log.
             title: Data subject erasure…
           refresh:
-            desc: 'Needed after a change from a console, runner or job if the cache
-              is per process (a memory store): this server keeps the old permissions
+            desc: 'Needed after a change from a console, runner or job when the cache
+              store is per process (an in-memory store): that process cleared only
+              its own entries, so this web process keeps serving the old permissions
               until they expire.'
             title: Refresh cached permissions
           remove_all:
@@ -1846,8 +1849,8 @@ en:
           to anyone who can read the resource.
       row:
         changed: Changed
-        default: 'Default: %{value}'
-        docs: 'Configuration docs: %{key} ↗'
+        default_html: 'Default: %{value}'
+        docs_html: 'Configuration docs: %{key} ↗'
         how_to_change: How to change
         risk: Risk
         secure: Secure
@@ -1996,8 +1999,6 @@ en:
         copied: Copied
         copy: Copy
         summary: Technical details
-      time_ago: "%{time} ago"
-      time_nil: "—"
       toasts:
         dismiss: Dismiss
         undo: Undo
@@ -2023,6 +2024,14 @@ en:
         reviewed_by: Reviewed by %{who} on %{date}
         reviewed_on: Reviewed on %{date}
       audit:
+        csv:
+          created_at: Created at
+          created_by: Created by
+          edited_at: Last edited at
+          edited_by: Last edited by
+          record: Record
+          type: Type
+          where: Where
         system: System
         types:
           action: Action
@@ -2208,6 +2217,9 @@ en:
       records: Records
       remove: Remove
       resource: Resource
+      resource_plural:
+        one: "%{name} record"
+        other: "%{name} records"
       rules:
         and: and
         current_user: the current user
@@ -2252,15 +2264,48 @@ en:
         warn: Passes through and is logged
       view_all: View All
     validations:
+      attributes:
+        allowed_hours_end: End hour
+        allowed_hours_start: Start hour
+        allowed_ips: Allowed IPs
+        create_access: Create
+        delete_access: Delete
+        description: Description
+        edit_access: Edit
+        expires_at: End date
+        failure_message: Blocked message
+        field_accessor_path: Relationship
+        field_name: Field
+        field_value: Value
+        is_active: Active
+        join_type: Join
+        label: Label
+        mask_access: Mask
+        mask_strategy: Mask strategy
+        modify_all: Modify All
+        name: Name
+        operator: Condition
+        permission_set_group: Permission Set Group
+        read_access: Read
+        requires_session_flag: Session flag
+        user_id: Person
+        uuid: UUID
+        view_all: View All
+      blank: can't be blank
+      full_message: "%{attribute} %{message}"
+      invalid: is invalid
       name_blank: can't be blank
       permission_set:
         group_missing: must be an existing Permission Set Group
         hours_equal: must differ from the start hour (a window from an hour to the
           same hour is empty; leave both blank for no window)
         hours_incomplete: must be set together with the other hour (or both left blank)
+        hours_range: must be between 0 and 23
         invalid_ip_entry: contains “%{entry}”, which is not an IP address or CIDR
           range
         name_taken: is already used by another Permission Set
+      permission_set_group_user:
+        taken: is already a member of this group
       permission_set_rule:
         between_requires_two_values: must contain exactly 2 comma-separated values
           for between operator
@@ -2292,9 +2337,14 @@ en:
         unusable_value: is not a value %{model}.%{name} can hold
         value_not_expected: does not require a value for this operator
         value_required: must not be blank for this operator
+      permission_set_user:
+        taken: already holds this Permission Set
+      requires: requires %{requires} to be enabled
       resource:
         invalid_name: must be a valid model class name (e.g. Customer or Admin::Report)
+        name_taken: already exists in this permission set
       resource_field:
         invalid_mask_strategy: is not a valid mask strategy
         mask_strategy_required: must be present when mask access is enabled
+      taken: has already been taken
       too_long: is too long (at most %{count} characters)

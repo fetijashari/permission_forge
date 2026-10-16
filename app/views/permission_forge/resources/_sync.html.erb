@@ -19,7 +19,8 @@
         <% fresh.each do |col| %>
           <% match = sensitive.match(col) %>
           <li class="pf-row pf-row--tight pf-fs-13">
-            <span><%= @rows.model.klass.human_attribute_name(col) %></span><code class="pf-mono-key"><%= col %></code>
+            <% col_label = pf_field_label_for(@rows.model, col) %>
+            <% unless col_label.verbatim? %><span><%= col_label.text %></span><% end %><code class="pf-mono-key"><%= col %></code>
             <%= pf_badge(t('permission_forge.ui.badges.virtual')) if @rows.row(col)&.virtual %>
             <% if match && !muting %><%= pf_badge(t('.sensitive_rec', strategy: pf_mask_strategy_label(match.strategy)), variant: :sensitive) %><% end %>
           </li>

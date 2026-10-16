@@ -147,7 +147,7 @@ module PermissionForge
 
       def build_row(key, action)
         endpoints = endpoints_by_key.fetch(key, [])
-        Row.new(name: key, label: action&.display_name || key.humanize, action: action, endpoints: endpoints,
+        Row.new(name: key, label: ActionLabel.for(action, key).text, action: action, endpoints: endpoints,
                 unlinked: discovery? && endpoints.empty?,
                 standing: Standing.new(key, action, across: @across, configuration: @configuration))
       end

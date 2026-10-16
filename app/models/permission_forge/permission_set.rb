@@ -39,7 +39,7 @@ module PermissionForge
     # blank before 0.14 stays editable in its other attributes.
     validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },
                      if: -> { new_record? || will_save_change_to_name? }
-    validates :name, length: { maximum: 255 }
+    validates :name, length: { maximum: 255, too_long: ->(*) { I18n.t('permission_forge.validations.too_long', count: 255) } }
     # Unique within its tenant, ignoring case — what the admin's "New
     # Permission Set" form refuses. Checked for a new row and on a rename
     # only: two sets that share a name from before 0.15 stay valid in their
@@ -49,8 +49,9 @@ module PermissionForge
     validates :permission_set_group,
               presence: { message: ->(*) { I18n.t('permission_forge.validations.permission_set.group_missing') } },
               if: -> { permission_set_group_id.present? && will_save_change_to_permission_set_group_id? }
-    validates :allowed_hours_start, numericality: { in: 0..23, allow_nil: true }
-    validates :allowed_hours_end, numericality: { in: 0..23, allow_nil: true }
+    validates :allowed_hours_start, :allowed_hours_end,
+              numericality: { in: 0..23, allow_nil: true,
+                              message: ->(*) { I18n.t('permission_forge.validations.permission_set.hours_range') } }
     # The activation conditions (ActivationConditions), checked for a new
     # row and when the condition changes — a row stored before the check
     # stays editable in its other attributes, and is read as unjudgeable:

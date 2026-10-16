@@ -360,6 +360,8 @@ sq:
         will_assign:
           one: "%{count} do të caktohet"
           other: "%{count} do të caktohen"
+    denials:
+      rule_default: Nuk keni leje për të kryer këtë veprim.
     errors:
       admin:
         action_format: Përdor shkronja të vogla, numra dhe nënviza, duke filluar me
@@ -864,8 +866,9 @@ sq:
             title: Fshirja e të dhënave të subjektit…
           refresh:
             desc: 'Nevojitet pas një ndryshimi nga konsola, një runner ose një punë
-              në sfond nëse cache-i është për proces (memory store): ky server i mban
-              lejet e vjetra derisa të skadojnë.'
+              në sfond kur cache-i është për proces (memory store): ai proces pastroi
+              vetëm hyrjet e veta, kështu që ky proces web vazhdon të japë lejet e
+              vjetra derisa të skadojnë.'
             title: Rifresko lejet e ruajtura
           remove_all:
             desc: 'Largim nga puna: heq çdo caktim.'
@@ -1291,7 +1294,7 @@ sq:
         not_configured_implicit: 'Nuk ka cilësim për këtë fushë në “%{set}”. Ndjek
           “Fushat virtuale pa cilësim”: me konfigurimin aktual është e lexueshme dhe
           e ndryshueshme si parazgjedhje.'
-        not_configured_muting: Asnjë cilësim për këtë kolonë në „%{set}“, prandaj
+        not_configured_muting: Asnjë cilësim për këtë kolonë në “%{set}”, prandaj
           ky Grup lejesh heshtës nuk heq asgjë prej saj.
         pick_person: Zgjidh një person…
         save: Ruaj
@@ -1302,7 +1305,7 @@ sq:
         turned_off_implicit: 'Cilësimi për këtë fushë në “%{set}” është i çaktivizuar,
           prandaj nuk zbatohet. Fusha ndjek “Fushat virtuale pa cilësim”: me konfigurimin
           aktual është e lexueshme dhe e ndryshueshme si parazgjedhje.'
-        turned_off_muting: Cilësimi për këtë fushë në „%{set}“ është i fikur, prandaj
+        turned_off_muting: Cilësimi për këtë fushë në “%{set}” është i fikur, prandaj
           ky Grup lejesh heshtës nuk heq asgjë prej saj.
         unknown_strategy: "(e panjohur — maskohet plotësisht derisa të zgjidhni një)"
         used_by_rules: Përdoret nga rregullat
@@ -1462,7 +1465,7 @@ sq:
         modify_all_needs: Kërkon Shiko të gjitha dhe Ndrysho.
         muting_hint: Veprimet e heshtura u hiqen personave me këtë grup, pavarësisht
           çfarë lejojnë grupet e tjera.
-        muting_note: Cilësimet këtu u heqin qasje të gjithë atyre që kanë „%{set}“.
+        muting_note: Cilësimet këtu u heqin qasje të gjithë atyre që kanë “%{set}”.
         needs_read_hint: Ndrysho dhe Fshi kërkojnë Lexo.
         record_scope: Shtrirja e regjistrimeve
         remove: Hiq %{resource} nga ky grup…
@@ -1896,8 +1899,8 @@ sq:
           pa maskim kujtdo që mund ta lexojë burimin.
       row:
         changed: Ndryshuar
-        default: 'Parazgjedhje: %{value}'
-        docs: 'Dokumentacioni i konfigurimit: %{key} ↗'
+        default_html: 'Parazgjedhje: %{value}'
+        docs_html: 'Dokumentacioni i konfigurimit: %{key} ↗'
         how_to_change: Si ta ndryshosh
         risk: Rrezik
         secure: I sigurt
@@ -1931,8 +1934,8 @@ sq:
         has_risk: Ka një cilësim të rrezikshëm
         health: Përmbledhja e gjendjes
         how_to_fix: Si ta rregullosh
-        intro_html: Cilësimet përcaktohen në %{file}. Ndryshimet kërkojnë deploy/rinisje.
-          Kjo faqe tregon vlerat aktuale dhe si t'i ndryshosh.
+        intro_html: Cilësimet përcaktohen në %{file}. Ndryshimet kërkojnë publikim
+          të ri ose rinisje. Kjo faqe tregon vlerat aktuale dhe si t'i ndryshosh.
         no_match: Asnjë cilësim nuk përputhet.
         read_only: Vetëm lexim
         search: Kërko cilësime
@@ -2046,8 +2049,6 @@ sq:
         copied: U kopjua
         copy: Kopjo
         summary: Detaje teknike
-      time_ago: "%{time} më parë"
-      time_nil: "—"
       toasts:
         dismiss: Mbyll
         undo: Zhbëj
@@ -2073,6 +2074,14 @@ sq:
         reviewed_by: Rishikuar nga %{who} më %{date}
         reviewed_on: Rishikuar më %{date}
       audit:
+        csv:
+          created_at: Krijuar më
+          created_by: Krijuar nga
+          edited_at: Ndryshuar së fundi më
+          edited_by: Ndryshuar së fundi nga
+          record: Regjistrimi
+          type: Lloji
+          where: Ku
         system: Sistemi
         types:
           action: Veprim
@@ -2088,8 +2097,9 @@ sq:
         column_missing: Kolona mungon
         conditional: Me kushte
         expired: Skaduar
-        fail_open: Fail-open
-        fail_open_long: 'Fail-open: aktiv kur mungojnë informacionet e kërkesës'
+        fail_open: Aktiv në mungesë
+        fail_open_long: 'Aktiv në mungesë: vlen edhe kur mungojnë informacionet e
+          kërkesës'
         fail_open_title: conditional_sets_strict_mode është joaktiv
         locked: I kyçur
         muting: Heshtës
@@ -2261,6 +2271,9 @@ sq:
       records: Regjistrimet
       remove: Hiq
       resource: Burim
+      resource_plural:
+        one: regjistrimi %{name}
+        other: regjistrimet %{name}
       rules:
         and: dhe
         current_user: përdoruesi aktual
@@ -2307,6 +2320,36 @@ sq:
         warn: Kalon dhe regjistrohet
       view_all: Shiko të gjitha
     validations:
+      attributes:
+        allowed_hours_end: Ora e mbarimit
+        allowed_hours_start: Ora e fillimit
+        allowed_ips: IP-të e lejuara
+        create_access: Krijim
+        delete_access: Fshirje
+        description: Përshkrimi
+        edit_access: Ndryshim
+        expires_at: Data e mbarimit
+        failure_message: Mesazhi i bllokimit
+        field_accessor_path: Lidhja
+        field_name: Fusha
+        field_value: Vlera
+        is_active: Aktiv
+        join_type: Bashkimi
+        label: Etiketa
+        mask_access: Maskim
+        mask_strategy: Strategjia e maskimit
+        modify_all: Ndrysho të gjitha
+        name: Emri
+        operator: Kushti
+        permission_set_group: Permission Set Group
+        read_access: Lexim
+        requires_session_flag: Flamuri i sesionit
+        user_id: Personi
+        uuid: UUID
+        view_all: Shiko të gjitha
+      blank: nuk mund të jetë bosh
+      full_message: "%{attribute} %{message}"
+      invalid: nuk është e vlefshme
       name_blank: nuk mund të jetë bosh
       permission_set:
         group_missing: duhet të jetë një grupim ekzistues i grupeve të lejeve
@@ -2314,9 +2357,12 @@ sq:
           në të njëjtën orë është bosh; lërini të dyja bosh për asnjë dritare)
         hours_incomplete: duhet të vendoset bashkë me orën tjetër (ose të dyja të
           lihen bosh)
+        hours_range: duhet të jetë midis 0 dhe 23
         invalid_ip_entry: përmban “%{entry}”, që nuk është adresë IP ose diapazon
           CIDR
         name_taken: përdoret tashmë nga një Grup lejesh tjetër
+      permission_set_group_user:
+        taken: është tashmë anëtar i këtij grupi
       permission_set_rule:
         between_requires_two_values: duhet të përmbajë saktësisht 2 vlera të ndara
           me presje për operatorin between
@@ -2348,11 +2394,16 @@ sq:
         unusable_value: nuk është vlerë që %{model}.%{name} mund ta mbajë
         value_not_expected: nuk kërkon vlerë për këtë operator
         value_required: nuk duhet të jetë bosh për këtë operator
+      permission_set_user:
+        taken: e ka tashmë këtë Permission Set
+      requires: kërkon që %{requires} të jetë e aktivizuar
       resource:
         invalid_name: duhet të jetë emër i vlefshëm klase modeli (p.sh. Customer ose
           Admin::Report)
+        name_taken: ekziston tashmë në këtë Permission Set
       resource_field:
         invalid_mask_strategy: nuk është strategji e vlefshme maskimi
         mask_strategy_required: duhet të jetë e pranishme kur aksesi i maskimit është
           i aktivizuar
+      taken: është marrë tashmë
       too_long: është shumë i gjatë (të shumtën %{count} karaktere)

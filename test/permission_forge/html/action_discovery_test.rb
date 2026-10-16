@@ -421,7 +421,7 @@ module PermissionForge
           assert_select 'input#pf-action-name[value=archive]'
           assert_match 'POST /stub/:id/archive', response.body
           assert_match 'pf_stub_guarded#archive', response.body
-          assert_match I18n.t('permission_forge.resource_actions.new.where', action: 'Archive'), response.body
+          assert_match I18n.t('permission_forge.resource_actions.new.where', action: 'archive'), response.body
           assert_match I18n.t('permission_forge.resource_actions.effect.permitted_by', sets: 'Managers'), response.body
           assert_select '.pf-listbox .pf-option', count: 2
           assert_select '.pf-listbox .pf-option', text: /Managers/

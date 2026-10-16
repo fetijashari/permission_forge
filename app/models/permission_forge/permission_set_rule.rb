@@ -53,9 +53,7 @@ module PermissionForge
     # Such a row matches nothing (Operators::RuleProblem — the applier, the
     # audit's rule check and the admin's Home all read it).
     validates :operator, inclusion: {
-      in: OPERATORS,
-      message: I18n.t('permission_forge.validations.permission_set_rule.invalid_operator',
-                      default: 'is not a valid operator')
+      in: OPERATORS, message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.invalid_operator') }
     }, if: :operator_check_due?
     # An operator that takes no value (Operators::Validations.valueless?)
     # stores an empty one: the column is NOT NULL, and the natural API payload
@@ -63,19 +61,15 @@ module PermissionForge
     before_validation { self.field_value = '' if field_value.nil? && valueless_operator? }
 
     validates :field_value, presence: {
-      message: I18n.t('permission_forge.validations.permission_set_rule.field_value_required',
-                      default: 'is required for this operator')
+      message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.field_value_required') }
     }, unless: :valueless_operator?
     validates :join_type, inclusion: {
-      in: JOIN_TYPES,
-      message: I18n.t('permission_forge.validations.permission_set_rule.invalid_join_type',
-                      default: 'is not a valid join type')
+      in: JOIN_TYPES, message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.invalid_join_type') }
     }, allow_nil: true, allow_blank: false, if: :join_type_check_due?
-    validates :field_name, presence: true
+    validates :field_name, presence: { message: ->(*) { I18n.t('permission_forge.validations.blank') } }
     validates :field_name, format: {
       with: /\A[a-zA-Z_][a-zA-Z0-9_.]*\z/,
-      message: I18n.t('permission_forge.validations.permission_set_rule.invalid_field_name',
-                      default: 'must be a valid column name (letters, numbers, underscores, dots)')
+      message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.invalid_field_name') }
     }, allow_blank: true
 
     validate :validate_field_name_segments, if: :field_name_changed?

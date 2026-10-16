@@ -613,9 +613,10 @@ module PermissionForge
         {
           id: user.id,
           uuid: user.try(:uuid),
-          name: user.try(:name),
+          # Raw-column-first (Admin::PersonLabel.raw_value): a masked User model never garbles the profile
+          name: Admin::PersonLabel.raw_value(user, :name),
           # The first present of `email`, Rails 8's `email_address` (Admin::PersonLabel::EMAIL_ATTRIBUTES)
-          email: Admin::PersonLabel::EMAIL_ATTRIBUTES.lazy.filter_map { |attr| user.try(attr).presence }.first
+          email: Admin::PersonLabel.new(user).email
         }
       }
     end

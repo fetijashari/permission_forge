@@ -53,7 +53,7 @@ module PermissionForge
         get pf('/')
         body = CGI.unescapeHTML(response.body)
 
-        assert_includes body, 'Matches nothing: Subject is a polymorphic relationship of Pf rule path record: a rule cannot follow it'
+        assert_includes body, 'Matches nothing: subject is a polymorphic relationship of PfRulePathRecord: a rule cannot follow it'
         assert_includes body, 'Matches nothing: The relationship path has an empty step (two dots in a row, or a dot at the start)'
         assert_no_missing_translations
       end
@@ -103,7 +103,7 @@ module PermissionForge
 
         get pf("/permission_sets/#{@set.id}/resources/Customer?tab=rules")
         assert_select '.pf-badge--block', count: 0
-        assert_includes CGI.unescapeHTML(response.body), 'Name is empty'
+        assert_includes CGI.unescapeHTML(response.body), 'name is empty', 'the column name as stored: the host has no translation'
 
         get pf("/permission_sets/#{@set.id}/resources/Customer/rules/#{@status.id}/edit")
         assert_select '.pf-banner--block', count: 0
@@ -154,11 +154,11 @@ module PermissionForge
       EXPECTED_LINES = {
         missing_column: 'Matches nothing: <code class="pf-mono-key">stauts</code> is not a column of Customer',
         unknown_association: 'Matches nothing: <code class="pf-mono-key">ownr</code> is not a relationship of Customer',
-        unjoinable_association: 'Matches nothing: Subject is a polymorphic relationship of Pf rule path record: a rule cannot follow it',
+        unjoinable_association: 'Matches nothing: subject is a polymorphic relationship of PfRulePathRecord: a rule cannot follow it',
         unknown_operator: 'Matches nothing: <code class="pf-mono-key">regex</code> is not a condition this version knows',
         unknown_join_type: 'Matches nothing: <code class="pf-mono-key">inner</code> is not a way of joining this version knows',
         unknown_table: 'Matches nothing: <code class="pf-mono-key">nosuch</code> is not a table of this database',
-        unusable_value: 'Matches nothing: <code class="pf-mono-key">5_id</code> is not a value Supplier of Customer can hold'
+        unusable_value: 'Matches nothing: <code class="pf-mono-key">5_id</code> is not a value supplier_id of Customer can hold'
       }.freeze
 
       test 'Home, the Rules tab and the edit page say why, for every kind, in every locale' do

@@ -52,7 +52,7 @@ module PermissionForge
     # blank before 0.14 stays editable in its other attributes.
     validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },
                      if: -> { new_record? || will_save_change_to_name? }
-    validates :name, uniqueness: { scope: :resource_id }
+    validates :name, uniqueness: { scope: :resource_id, message: ->(*) { I18n.t('permission_forge.validations.taken') } }
 
     validates_dependency :edit_access, requires: :read_access
     validates_dependency :mask_access, requires: :read_access
@@ -65,14 +65,12 @@ module PermissionForge
     # (Services::MaskValue); `rake permission_forge:audit` lists it
     # (unknown_mask_strategies), the field drawer flags it.
     validates :mask_strategy, presence: {
-                                message: I18n.t('permission_forge.validations.resource_field.mask_strategy_required',
-                                                default: 'must be present when mask access is enabled')
+                                message: ->(*) { I18n.t('permission_forge.validations.resource_field.mask_strategy_required') }
                               },
                               if: :mask_strategy_check_due?
     validates :mask_strategy, inclusion: {
                                 in: ->(_) { PermissionForge::Services::MaskValue.strategies.keys },
-                                message: I18n.t('permission_forge.validations.resource_field.invalid_mask_strategy',
-                                                default: 'is not a valid mask strategy')
+                                message: ->(*) { I18n.t('permission_forge.validations.resource_field.invalid_mask_strategy') }
                               },
                               if: :mask_strategy_check_due?
 

@@ -64,6 +64,17 @@ module PermissionForge
       # rules (the rule hashes themselves, in the same order); both empty when
       # nothing denied.
       #
+      # What a rule says when it denies: its `failure_message` as an admin
+      # wrote it, or — for a rule left without one — the gem's own sentence in
+      # the current locale (permission_forge.denials.rule_default). The one
+      # definition: NotAuthorizedError#failure_messages reads it too.
+      #
+      # @param rule [Hash] a rule hash of the permission hash
+      # @return [String]
+      def self.failure_message_for(rule)
+        rule[:failure_message].to_s.strip.presence || I18n.t('permission_forge.denials.rule_default')
+      end
+
       # @return [Array(ActiveRecord::Relation, Array<String>, Array<Hash>)]
       def call
         report_no_rules if @rules.empty?
@@ -89,7 +100,7 @@ module PermissionForge
       end
 
       def rule_failure_message(rule)
-        "[Forbidden by Rule: #{rule[:name]}] with message: #{rule[:failure_message]}"
+        "[Forbidden by Rule: #{rule[:name]}] with message: #{self.class.failure_message_for(rule)}"
       end
 
       # The rules that deny the record each on its own: the model's relation,

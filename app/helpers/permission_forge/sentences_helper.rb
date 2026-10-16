@@ -66,7 +66,7 @@ module PermissionForge
     def pf_flag_label(flag)
       configured = PermissionForge.configuration.admin_session_flags || {}
       configured[flag.to_s] || configured[flag.to_sym] ||
-        t("permission_forge.ui.flags.#{flag}", default: flag.to_s.humanize)
+        t("permission_forge.ui.flags.#{flag}", default: flag.to_s)
     end
 
     def pf_flag_phrase(flag)
@@ -109,7 +109,7 @@ module PermissionForge
     # --- record rules ---------------------------------------------------------
 
     def pf_operator_label(operator)
-      t("permission_forge.ui.operators.#{operator}", default: operator.to_s.humanize.downcase)
+      t("permission_forge.ui.operators.#{operator}", default: operator.to_s)
     end
 
     # Labels along a rule's relationship path and the final field, e.g.
@@ -124,10 +124,10 @@ module PermissionForge
       labels << pf_attribute_label(models[segments.size], rule.field_name)
     end
 
-    # An empty name (a doubled dot in a path) is no attribute:
-    # human_attribute_name raises for it.
+    # The label of a stored attribute or association name (Admin::FieldLabel),
+    # as text: the host's translation, else the name as stored.
     def pf_attribute_label(klass, attribute)
-      klass && attribute.present? ? klass.human_attribute_name(attribute) : attribute.to_s.humanize
+      pf_field_label_text(klass, attribute)
     end
 
     # The model, then the model of each association on the path; the model
@@ -158,24 +158,6 @@ module PermissionForge
 
     def pf_rule_nullable?(rule)
       rule.include_nulls && NULLABLE_OPERATORS.include?(rule.operator)
-    end
-
-    # Plural model label. model_name.human(count: 2) falls back to the singular
-    # when the host app has no model translations, so pluralize English then.
-    def pf_resource_plural(name)
-      klass = name.to_s.safe_constantize
-      return name.to_s.demodulize.pluralize unless klass.respond_to?(:model_name)
-
-      plural = klass.model_name.human(count: 2)
-      plural == klass.model_name.human && I18n.locale.to_s == 'en' ? plural.pluralize : plural
-    end
-
-    def pf_resource_label(resource_or_name)
-      name = resource_or_name.respond_to?(:name) ? resource_or_name.name : resource_or_name.to_s
-      return resource_or_name.label if resource_or_name.respond_to?(:label) && resource_or_name.label.present?
-
-      klass = name.safe_constantize
-      klass.respond_to?(:model_name) ? klass.model_name.human : name.demodulize.titleize
     end
 
     # Token sentence: Only show [Customers] where [Owner] [is] [the current user], or Owner is empty.

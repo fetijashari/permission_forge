@@ -356,6 +356,8 @@ mk:
         will_assign:
           one: "%{count} ќе биде доделен"
           other: "%{count} ќе бидат доделени"
+    denials:
+      rule_default: Немате дозвола да го извршите ова дејство.
     errors:
       admin:
         action_format: Користете мали букви, бројки и долни црти, почнувајќи со буква
@@ -863,9 +865,10 @@ mk:
               закупец и го чисти името од ревизискиот дневник.
             title: Бришење на податоци за субјектот…
           refresh:
-            desc: 'Потребно по промена од конзола, runner или задача во позадина ако
-              кешот е по процес (memory store): овој сервер ги чува старите дозволи
-              додека не истечат.'
+            desc: 'Потребно по промена од конзола, runner или задача во позадина кога
+              кешот е по процес (memory store): тој процес ги избриша само своите
+              записи, па овој веб-процес продолжува да ги дава старите дозволи додека
+              не истечат.'
             title: Освежи кеширани дозволи
           remove_all:
             desc: 'При заминување: го отстранува секое доделување.'
@@ -1893,8 +1896,8 @@ mk:
           немаскирани на секој што може да го чита ресурсот.
       row:
         changed: Променето
-        default: 'Стандардно: %{value}'
-        docs: 'Документација за конфигурација: %{key} ↗'
+        default_html: 'Стандардно: %{value}'
+        docs_html: 'Документација за конфигурација: %{key} ↗'
         how_to_change: Како да се промени
         risk: Ризик
         secure: Безбедно
@@ -1928,8 +1931,9 @@ mk:
         has_risk: Има ризична поставка
         health: Преглед на состојбата
         how_to_fix: Како да се поправи
-        intro_html: Поставките се дефинирани во %{file}. Промените бараат deploy/рестарт.
-          Оваа страница ги прикажува тековните вредности и како да се променат.
+        intro_html: Поставките се дефинирани во %{file}. Промените бараат ново издание
+          или рестарт. Оваа страница ги прикажува тековните вредности и како да се
+          променат.
         no_match: Ниедна поставка не одговара.
         read_only: Само читање
         search: Пребарај поставки
@@ -2044,8 +2048,6 @@ mk:
         copied: Копирано
         copy: Копирај
         summary: Технички детали
-      time_ago: пред %{time}
-      time_nil: "—"
       toasts:
         dismiss: Затвори
         undo: Врати
@@ -2071,6 +2073,14 @@ mk:
         reviewed_by: Прегледано од %{who} на %{date}
         reviewed_on: Прегледано на %{date}
       audit:
+        csv:
+          created_at: Создадено на
+          created_by: Создадено од
+          edited_at: Последна промена на
+          edited_by: Последна промена од
+          record: Запис
+          type: Тип
+          where: Каде
         system: Систем
         types:
           action: Акција
@@ -2086,8 +2096,9 @@ mk:
         column_missing: Колоната недостасува
         conditional: Условен
         expired: Истечено
-        fail_open: Fail-open
-        fail_open_long: 'Fail-open: активен кога недостасуваат информации за барањето'
+        fail_open: Активен при недостиг
+        fail_open_long: 'Активен при недостиг: важи и кога недостасуваат информации
+          за барањето'
         fail_open_title: conditional_sets_strict_mode е исклучен
         locked: Заклучено
         muting: Пригушувачки
@@ -2259,6 +2270,9 @@ mk:
       records: Записи
       remove: Отстрани
       resource: Ресурс
+      resource_plural:
+        one: запис %{name}
+        other: записи %{name}
       rules:
         and: и
         current_user: тековниот корисник
@@ -2305,6 +2319,36 @@ mk:
         warn: Се прикажува и се запишува во дневник
       view_all: Прикажи ги сите
     validations:
+      attributes:
+        allowed_hours_end: Краен час
+        allowed_hours_start: Почетен час
+        allowed_ips: Дозволени IP адреси
+        create_access: Создавање
+        delete_access: Бришење
+        description: Опис
+        edit_access: Уредување
+        expires_at: Краен датум
+        failure_message: Порака при блокирање
+        field_accessor_path: Релација
+        field_name: Поле
+        field_value: Вредност
+        is_active: Активно
+        join_type: Спојување
+        label: Етикета
+        mask_access: Маскирање
+        mask_strategy: Стратегија за маскирање
+        modify_all: Измени сè
+        name: Име
+        operator: Услов
+        permission_set_group: Permission Set Group
+        read_access: Читање
+        requires_session_flag: Ознака на сесија
+        user_id: Лице
+        uuid: UUID
+        view_all: Прегледај сè
+      blank: не смее да биде празно
+      full_message: "%{attribute} %{message}"
+      invalid: не е валидно
       name_blank: не смее да биде празно
       permission_set:
         group_missing: мора да биде постоечка група на сетови на дозволи
@@ -2312,8 +2356,11 @@ mk:
           истиот час е празен; оставете ги двата празни за без прозорец)
         hours_incomplete: мора да се постави заедно со другиот час (или двата да се
           остават празни)
+        hours_range: мора да биде помеѓу 0 и 23
         invalid_ip_entry: содржи „%{entry}“, што не е IP адреса или CIDR опсег
         name_taken: веќе се користи од друг сет на дозволи
+      permission_set_group_user:
+        taken: е веќе член на оваа група
       permission_set_rule:
         between_requires_two_values: мора да содржи точно 2 вредности одделени со
           запирка за операторот between
@@ -2345,10 +2392,15 @@ mk:
         unusable_value: не е вредност што %{model}.%{name} може да ја содржи
         value_not_expected: не бара вредност за овој оператор
         value_required: не смее да биде празно за овој оператор
+      permission_set_user:
+        taken: веќе го има овој Permission Set
+      requires: бара %{requires} да биде вклучено
       resource:
         invalid_name: мора да биде валидно име на класа модел (пр. Customer или Admin::Report)
+        name_taken: веќе постои во овој Permission Set
       resource_field:
         invalid_mask_strategy: не е валидна стратегија за маскирање
         mask_strategy_required: мора да биде присутна кога е овозможен пристап со
           маска
+      taken: е веќе зафатено
       too_long: е предолго (најмногу %{count} знаци)

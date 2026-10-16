@@ -61,7 +61,7 @@ module PermissionForge
 
         def initialize(record)
           @record = record
-          super(ListSentence.call(record.errors.full_messages))
+          super(ListSentence.call(ErrorSentence.all(record.errors)))
         end
       end
 

@@ -31,11 +31,11 @@
   </div>
   <% shown.each do |finding| %>
     <% resource = finding.resource %>
-    <% field_label = finding.field&.label.presence || resource.name.safe_constantize&.human_attribute_name(finding.name) || finding.name.humanize %>
+    <% field_label = pf_field_label_for(resource.name, finding.name, row: finding.field) %>
     <div class="pf-card__row pf-card__row--top">
       <div class="pf-stack pf-stack--tight pf-grow">
         <div class="pf-row pf-row--tight">
-          <strong><%= field_label %></strong>
+          <% unless field_label.verbatim? %><strong><%= field_label.text %></strong><% end %>
           <code class="pf-mono-key"><%= finding.name %></code>
           <%# A row that is turned off is not "not configured": the engine skips it, and Fix opens it. %>
           <% if finding.turned_off? %>

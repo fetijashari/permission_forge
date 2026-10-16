@@ -54,7 +54,7 @@
                   <%= pf_attrs_when(broken, aria: { invalid: true }) %>>
             <% if broken %><option value="<%= broken %>" selected><%= t('.pick_relationship') %></option><% end %>
             <% model.associations.each do |a| %>
-              <option value="<%= a.name %>" <%= 'selected' if assoc&.name == a.name %>><%= a.label %></option>
+              <option value="<%= a.name %>" <%= 'selected' if assoc&.name == a.name %>><%= pf_field_label_text(model, a.name) %></option>
             <% end %>
           </select>
           <button type="submit" formaction="<%= refresh %>" name="rule[remove_step]" value="<%= i %>" class="pf-btn pf-btn--ghost pf-btn--xs"
@@ -66,7 +66,8 @@
           <option value=""><%= t('.pick_field') %></option>
           <% if (kept = builder.kept_field) %><option value="<%= kept %>" selected><%= t('.stored_field', name: kept) %></option><% end %>
           <% form.field_options.each do |col| %>
-            <option value="<%= col.name %>" <%= 'selected' if builder.field_selected?(col) %>><%= col.label %> (<%= col.name %>)</option>
+            <% col_label = pf_field_label_for(form.target_model, col.name) %>
+            <option value="<%= col.name %>" <%= 'selected' if builder.field_selected?(col) %>><%= col_label.verbatim? ? col.name : "#{col_label.text} (#{col.name})" %></option>
           <% end %>
         </select>
       </div>
@@ -75,7 +76,7 @@
           <label class="pf-fs-13 pf-text-2" for="pf-rule-follow">+ <%= t('.follow') %></label>
           <select id="pf-rule-follow" name="rule[path][]" class="pf-select pf-select--sm pf-select--auto" data-pf-refresh>
             <option value="" selected>—</option>
-            <% builder.follow_options.each do |a| %><option value="<%= a.name %>"><%= a.label %></option><% end %>
+            <% builder.follow_options.each do |a| %><option value="<%= a.name %>"><%= pf_field_label_text(builder.target, a.name) %></option><% end %>
           </select>
           <button type="submit" formaction="<%= refresh %>" class="pf-btn pf-btn--xs" data-pf-js-hide><%= t('.update_form') %></button>
         </div>

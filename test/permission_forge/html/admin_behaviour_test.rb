@@ -74,7 +74,7 @@ module PermissionForge
         get pf("/people/#{@ana.id}"), params: { tab: 'effective', locale: 'en' }
 
         assert_response :success
-        assert_select '.pf-state--records .pf-state__summary', text: /Owner is the current user\z/
+        assert_select '.pf-state--records .pf-state__summary', text: /owner_id is the current user\z/
         assert_select '.pf-state--records .pf-ellipsis', count: 0
       end
 

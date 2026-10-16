@@ -23,6 +23,28 @@ module PermissionForge
         @configuration = configuration
       end
 
+      # A user attribute read raw-column-first (read_attribute_before_type_cast,
+      # past MaskedAttributes), the public reader for a virtual attribute or a
+      # blank column; nil when the user has neither. The one definition for the
+      # admin's labels (pf_raw_user_attribute) and the default profile_builder.
+      #
+      # @param user [Object]
+      # @param attr [Symbol, String]
+      # @return [Object, nil]
+      def self.raw_value(user, attr)
+        new(user).raw_value(attr)
+      end
+
+      # @see .raw_value
+      def raw_value(attr)
+        attr_name = attr.to_s
+        if readable_column?(attr_name)
+          value = @user.read_attribute_before_type_cast(attr_name)
+          return value if value.to_s.strip.present?
+        end
+        @user.try(attr)
+      end
+
       def name
         @name ||= formatted_name || default_name || email || fallback
       end
@@ -43,6 +65,11 @@ module PermissionForge
       # the domain.
       def initials
         initial_letters(initials_source.scan(/[[:alnum:]]+/)).join.upcase.presence || '?'
+      end
+
+      # Whether the label is the "User #<id>" fallback: neither a name nor an email.
+      def fallback?
+        name == fallback
       end
 
       # Lower-cased "name email" for in-memory search.
@@ -103,15 +130,6 @@ module PermissionForge
 
       def fallback
         I18n.t('permission_forge.shared.user_fallback', id: @user.id)
-      end
-
-      def raw_value(attr)
-        attr_name = attr.to_s
-        if readable_column?(attr_name)
-          value = @user.read_attribute_before_type_cast(attr_name)
-          return value if value.to_s.strip.present?
-        end
-        @user.try(attr)
       end
 
       # True when attr_name is a loaded column on an AR-like user (guards
