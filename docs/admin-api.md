@@ -209,6 +209,9 @@ It passes the same guards first: while the API is disabled it is the bodiless 40
 { "error": { "status": 422, "messages": { "user_ids": ["must name at least one user"] } } }
 { "error": { "status": 422, "messages": { "user_id": ["names nobody who can be assigned"] } } }
 { "error": { "status": 422, "messages": { "grant_all": ["must be true or false"] } } }
+{ "error": { "status": 422, "messages": { "is_active": ["must be true or false"] } } }
+{ "error": { "status": 422, "messages": { "name": ["must be a string"] } } }
+{ "error": { "status": 422, "messages": { "field_value": ["must be a string, a number, true or false; a list of them (none with a comma) only for in, not_in and between"] } } }
 { "error": { "status": 422, "messages": { "base": ["Could not generate fields for this resource"] } } }
 ```
 
@@ -226,11 +229,13 @@ Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 ca
 
 - a body section that is not an object (`"permission_set": "x"`), or one that is missing or empty (see below);
 - an `expires_at` that is not one of the [ISO 8601 forms below](#expires_at-formats) (`"tuesday"`, `"2026-13-45"`, `"22/10/2026"`, a number);
-- a `grant_all` that is not `true`, `false`, `1`, `0` or one of their strings (`"yes"`, `""`, `2`): see [generate_fields](#resources-nested-under-permission-set);
-- a bulk assignment without `user_ids` (missing, `[]`, `""` or only blanks), or with `user_ids` that is not a list (`"1,3"`, `3`): see [Bulk User Assignment](#bulk-user-assignment);
+- an attribute of a body section sent in a shape it does not take, keyed by the attribute — every such attribute of the request is named, and nothing is changed (see [Attribute shapes](#attribute-shapes) below). Through 0.15.0-rc a list or an object sent for a scalar was dropped with only an "Unpermitted parameter" log line (`{"is_active": [false]}` answered 200 with the set still active), and the rest was cast: `"nope"` read as `true`, a JSON `true` for a name stored `"t"`;
+- a `grant_all` that is not a boolean (see [Attribute shapes](#attribute-shapes): `"yes"`, `""`, `2`): see [generate_fields](#resources-nested-under-permission-set);
+- a bulk assignment without `user_ids` (missing, `[]`, `""` or only blanks), or with `user_ids` that is not a list of ids (`"1,3"`, `3`, `[1, {"id": 2}]`, `[1, 1.5]`): see [Bulk User Assignment](#bulk-user-assignment);
+- a copy's `name` that is not text (`true`, `7`, a list, an object) on `…/clone`: `{"name": ["must be a string"]}`, and nothing is copied (through 0.15.0-rc the default copy name was used);
 - a single assignment or group membership whose `user_id` is missing, is not one user id (`"abc"` for an integer key, `[2]`, an object), or names nobody `user_list_resolver` lists: see [Permission Set Users](#permission-set-users-assign-users-to-sets);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
-- `null` for an attribute whose column is NOT NULL (`"is_active": null`, `"label": null`, `"mask_strategy": null`), or `""` for a boolean sent as a form value: `{"is_active": ["can't be blank"]}` (through 0.15.0-rc a 500);
+- `null` for an attribute whose column is NOT NULL (`"is_active": null`, `"label": null`, `"mask_strategy": null`): `{"is_active": ["can't be blank"]}` (through 0.15.0-rc a 500). `""` for a boolean is no boolean: `{"is_active": ["must be true or false"]}`;
 - a `permission_set_group_id` that names no group of the current tenant;
 - a record another request saved a moment ago: two requests creating the same assignment, group membership, Resource or field at once both pass the uniqueness validation and the database's unique index refuses the second — the answer is the validation's own message, keyed by its attribute: `{"user_id": ["already holds this Permission Set"]}` for an assignment, `{"user_id": ["is already a member of this group"]}` for a group membership, `{"name": ["already exists in this permission set"]}` for a Resource, `{"name": ["has already been taken"]}` for a field. Through 0.14.1 this was a 500 (`ActiveRecord::RecordNotUnique`). When the index the database names belongs to no validation of the gem's models (an index you added yourself), the message is on `base`;
 - a rule whose `field_name` is not a column of its model (`{"field_name": ["names onwer_id, which is not a column of Customer"]}`), or a join rule whose `field_accessor_path` names an association the model does not have or one no join can be built through (`{"field_accessor_path": ["names ownr, which is not an association of Customer"]}`): see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name);
@@ -242,6 +247,20 @@ Every message of a 4xx envelope is a `permission_forge.*` translation in the req
 **A flat JSON body is accepted where Rails wraps parameters.** With JSON parameter wrapping on, which `config.load_defaults 7.0` and later turn on for every controller (`wrap_parameters_by_default`), Rails copies the keys of a JSON body that are attributes of the endpoint's model under the section name before the API reads it: `POST /api/permission_sets` with `{"name":"Flat payload"}` reads as `{"permission_set":{"name":"Flat payload"}}` and creates the set (201). Only a body sent as `application/json` is wrapped, never one that already has the section. A flat body with none of the model's attributes then gives an empty section, and without wrapping (older defaults, a form-encoded body, `wrap_parameters false` in your `api_base_controller_class`) a missing section stays missing: both answer 422 `{"permission_set": ["is missing, empty or not an object"]}`. Send the section explicitly to be independent of this setting.
 
 NUL bytes are dropped from every attribute hash and name the API reads. A rule with `is_null` / `is_not_null` needs no `field_value` (it is stored as empty).
+
+#### Attribute shapes
+
+Every attribute of a body section (`permission_set`, `resource`, `resource_field`, `resource_action`, `permission_set_rule`, `permission_set_group`) is taken in one shape, read from its column (`PermissionForge::Api::InputShapes`, the one table), and anything else is a 422 keyed by the attribute:
+
+| Attribute | Takes | Stored as |
+|-----------|-------|-----------|
+| a boolean (`is_active`, `read_access`, `is_muting`, `include_nulls`, …) | `true`, `false`, `1`, `0`, or one of the words `true`, `false`, `t`, `f`, `on`, `off`, `1`, `0` in any case (a form-encoded body sends words) | `true` / `false` |
+| text (`name`, `description`, `label`, `mask_strategy`, `field_name`, `operator`, …) | a String | as sent |
+| a rule's `field_value` | a String, a JSON number or a JSON boolean; a list of them, none containing a comma, under `in`, `not_in` and `between` (the operator of the request, else the stored rule's) | the text: `5` → `"5"`, `1.5` → `"1.5"`, `true` → `"true"`, `["active", "lead"]` → `"active,lead"` |
+| `allowed_ips`, the hours, `requires_session_flag` | see [Activation conditions](#permission-sets) | |
+| `permission_set_group_id` | the group's id, or its uuid under `api_record_identifier = :uuid`; `null` or `""` clears it | the group's id |
+
+`null` is passed on as a value: a nullable column is cleared, a NOT NULL one answers its own 422. A key the endpoint does not take is ignored, as strong parameters ignore it (logged, or raised under `action_on_unpermitted_parameters = :raise`).
 
 ## Endpoints Reference
 
@@ -343,9 +362,11 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/clone
 # Response: 201 Created — returns the cloned permission set
 # The copy and its rows are editable, like the admin's Duplicate. A copy of a
 # set in a locked group is created outside the group (permission_set_group_id: null).
-# Without "name" (or with one that is not text), the copy is named as the
-# admin's Duplicate names it: "<name> (copy)" in the request's locale,
-# numbered when taken ("<name> (copy) 2"). Through 0.14.1: "<name> (Copy)".
+# Without "name" (or with "name": null), the copy is named as the admin's
+# Duplicate names it: "<name> (copy)" in the request's locale, numbered when
+# taken ("<name> (copy) 2"). Through 0.14.1: "<name> (Copy)". A name that is
+# not text (true, a number, a list, an object) is a 422 {"name": ["must be a
+# string"]} and nothing is copied (through 0.15.0-rc: the default name).
 ```
 
 **Activation conditions.** `allowed_ips` takes a String (commas, newlines or spaces between the entries) or an Array of Strings; the row stores the entries with commas and answers them as `allowed_ip_list` (an Array of Strings, beside `allowed_ips` in every permission set answer). `allowed_hours_start` / `allowed_hours_end` take an integer 0–23 (or a String of digits), both or neither; `requires_session_flag` a String; `null` (or `""`) clears a condition, and a list with no entry (`[]`, `[""]`) is a 422 saying so. Any other shape — an object, a boolean, a number for the list, an array for a flag or an hour — is a 422 keyed by the attribute (`{ "error": { "status": 422, "messages": { "allowed_ips": ["must be a string or an array of strings (IP addresses or CIDR ranges), or null"] } } }`). An entry that is not an address, one hour of the two, or `start == end` is a 422 from the model, keyed the same way. A condition named in the request is never dropped silently.
@@ -540,7 +561,7 @@ DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
 
 **Rule attributes** (`permission_set_rule`): `name`, `field_name`, `field_value`, `operator`, `join_type`, `field_accessor_path`, `include_nulls` (default **`false`**: NULL rows pass an `equal`, `not_equal`, `in` or `not_in` rule only when you send `true`; see [The `include_nulls` Flag](row-level-rules.md#the-include_nulls-flag)), `is_active`, `is_editable`, `failure_message`.
 
-A `field_value` is compared in the type of the column the rule names; a value that column cannot hold (`"5_id"` on an integer column) is refused with 422 (`{"field_value": ["is not a value Customer.owner_id can hold"]}`); a rule stored with one before 0.15 matches nothing and stays editable in its other attributes. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
+A `field_value` is text: a JSON number or boolean is stored as its text (`5` → `"5"`), and under `in`, `not_in` and `between` a list is stored joined with commas (`["active", "lead"]` → `"active,lead"`; an element with a comma, a list under another operator or an object is a 422 keyed by `field_value`: see [Attribute shapes](#attribute-shapes)). It is compared in the type of the column the rule names; a value that column cannot hold (`"5_id"` on an integer column) is refused with 422 (`{"field_value": ["is not a value Customer.owner_id can hold"]}`); a rule stored with one before 0.15 matches nothing and stays editable in its other attributes. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
 
 Rule `field_value`s can contain sensitive data (user IDs, account numbers, business logic values). Set `config.api_redact_rule_field_values = true` (default: `false`) to have API responses replace `field_value` with `"[REDACTED]"` — useful for GDPR/HIPAA environments.
 
@@ -628,9 +649,12 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
 # {"user_ids": ["must name at least one user"]} on assign and revoke, and
 # changes nothing (through 0.14.1: 200 with nothing done). Like the other
 # 422s it records no audit event.
-# user_ids must be a JSON list: one string ("1,3"), a number or an object is
-# a 422 {"user_ids": ["must be a list of user ids"]} and changes nothing
-# (through 0.14.1 "1,3" was read as one unknown id: 200, nobody assigned).
+# user_ids must be a JSON list of ids (numbers or strings): one string
+# ("1,3"), a number, an object, or a list holding an object, a list, a
+# fraction or a boolean is a 422 {"user_ids": ["must be a list of user ids"]}
+# and changes nothing (through 0.14.1 "1,3" was read as one unknown id: 200,
+# nobody assigned; through 0.15.0-rc an element that was no id was left out
+# without a word).
 
 # Bulk revoke users from a permission set
 POST /permissions/api/permission_sets/:ps_uuid/users/bulk
@@ -686,7 +710,8 @@ curl -X POST http://localhost:3000/permissions/api/permission_set_groups/abc-123
 # Response: 201 Created — returns the cloned group
 # The copied group, its sets and their rows are editable. Without "name", the
 # group is named "<name> (copy)" in the request's locale, as the admin's
-# Duplicate names it (through 0.14.1: "<name> (Copy)").
+# Duplicate names it (through 0.14.1: "<name> (Copy)"). A name that is not
+# text is a 422 {"name": ["must be a string"]}, as for a set.
 ```
 
 #### Permission Set Group Users (group membership — grants nothing)

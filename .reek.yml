@@ -54,8 +54,6 @@ detectors:
   FeatureEnvy:
     exclude:
       - PermissionForge::Api::BaseController
-      # Reads the request section's condition values by shape, as BaseController's param readers do
-      - PermissionForge::Api::PermissionSetsController#condition_params
       # Describes the record a copy refused, as the helpers describe theirs
       - PermissionForge::CopyRefusal#pf_copy_refused_record
       - PermissionForge::ApplicationHelper
@@ -246,6 +244,12 @@ detectors:
       - PermissionForge::Services::PermissionRuleApplier
       # LIKE builder takes (col, rule, prefix:, suffix:) — mirrors the operator registry contract
       - PermissionForge::Services::RlsPolicyGenerator
+      # A warning: key, message, then the two keyword columns of the policy (severity:, audience:)
+      - PermissionForge::Warnings#emit
+      - PermissionForge::Warnings::Emitter#emit
+      # An attribute section: what to read (section or attrs, model, keys), plus the record an update changes (record:)
+      - PermissionForge::Api::InputShapes#call
+      - PermissionForge::Api::BaseController#pf_record_attributes
       - PermissionForge::Services::RlsOperatorSql
       # Audit event log: public keyword-argument APIs and value-object
       # constructors where each parameter is one field of the event (actor,

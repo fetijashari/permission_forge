@@ -12,10 +12,7 @@ module PermissionForge
         # @raise [ParamShapes::InvalidFlag] for anything else: ActiveModel's
         #   cast read "nope" as true (the admin answers with a flash)
         def self.truthy?(value)
-          return false if value.nil?
-
-          read = ParamShapes.boolean(value)
-          read.nil? ? raise(ParamShapes::InvalidFlag, 'pf') : read
+          value.nil? ? false : ParamShapes.flag('pf', value)
         end
 
         # Edit on a resource without Edit is downgraded to Read

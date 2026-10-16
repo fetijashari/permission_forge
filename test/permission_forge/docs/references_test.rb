@@ -46,6 +46,7 @@ module PermissionForge
         'permitted' => 'a local in a Rails 7 scaffold line',
         'require_tenant' => "acts_as_tenant's setting",
         'consider_all_requests_local' => 'a Rails setting',
+        'action_on_unpermitted_parameters' => 'a Rails setting (config.action_controller)',
         'is_editable' => 'a column of the permission models',
         'audit_event' => 'an api_serializer_overrides key',
         'extra_fields_for_permissions' => "extra_fields_method's default method name",

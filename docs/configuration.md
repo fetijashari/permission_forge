@@ -599,8 +599,21 @@ one policy:
 - **Standard error as well, where the log is not read:** in development (`bin/rails server` boots before it attaches
   its console logger; a console, `bin/rails runner`, a rake task and `db:seed` never attach one), and in every other
   environment but test in any process that is not a web server — a console, a runner, a rake task, a seed, a job worker.
-  A server (`bin/rails server`, the `puma` command) in production or staging gets the log only. Each warning is written
-  there once per process.
+  A server in production or staging gets the log only. Each warning is written there once per process.
+- **A warning about the admin screens or the JSON API is the server's:** HTTP Basic auth without credentials, a shared
+  Basic-auth login without `audit_actor_resolver`, an API-only host missing the admin's middlewares, tenantless admin
+  access and the API enabled without its authorization lambdas describe what a web server process serves. Every other
+  process (a console, `bin/rails runner`, a rake task, `db:seed`, a job worker) writes them to the log only, never to
+  standard error: it serves no admin, and credentials set for the server alone (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`)
+  would read as missing there. Every other warning (the cache, masking, rules, the audit table, RLS) is about data
+  every process uses and keeps the policy above.
+- **What counts as a web server process:** one started by `bin/rails server` (`Rails::Server`), `puma`
+  (`Puma::CLI`), `unicorn` or `unicorn_rails` (`Unicorn::Launcher`), Passenger (`PhusionPassenger::App`, its Rack
+  loader), `falcon serve` or `falcon host` (`Falcon::Command`), or `pitchfork` (by program name: its command defines
+  no constant of its own) — `PermissionForge::Warnings::SERVER_COMMANDS` and `SERVER_PROGRAMS`. Each constant is one
+  the server's command loads before it boots the app, never one `Bundler.require` loads in a runner. Another server
+  (thin, your own Rack launcher) counts as a process whose log is not read: its standard error gets the warnings, and
+  the admin and API warnings go to its log.
 - **Not twice:** when the logger already writes to standard output or error (a container, `RAILS_LOG_TO_STDOUT`, the
   Rails 7.1+ production default), nothing is written to standard error.
 - **Nothing while `bin/rails generate` or `destroy` runs:** the install generator boots the app before it writes the

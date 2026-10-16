@@ -139,6 +139,12 @@ module PermissionForge
           -> { post "#{users}/bulk", params: { bulk_action: 'assign', user_ids: [] }, as: :json },
           -> { post users, params: { user_id: 0 }, as: :json },
           -> { post "#{resources}/#{resource.uuid}/generate_fields", params: { grant_all: 'yes' }, as: :json },
+          -> { patch "#{API}/permission_sets/#{set.uuid}", params: { permission_set: { is_active: [false] } }, as: :json },
+          -> { patch "#{API}/permission_sets/#{set.uuid}", params: { permission_set: { name: true } }, as: :json },
+          lambda {
+            post "#{resources}/#{resource.uuid}/rules", params: { permission_set_rule: { name: 'Two', field_name: 'name', operator: 'equal',
+                                                                                         field_value: %w[active lead] } }, as: :json
+          },
           -> { failing_generator { post "#{resources}/#{resource.uuid}/generate_fields", params: { grant_all: true }, as: :json } }
         ]
       end

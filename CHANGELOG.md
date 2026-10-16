@@ -832,11 +832,28 @@ and the RLS re-sync.
   `PermissionForge::Warnings.emit`: the log always; standard error as well in development and, outside test, in any
   process that is not a web server (a console, a runner, a rake task, a job worker) — once per warning per process,
   and not when the logger already writes to standard output or error. Before, only the development cache warnings
-  reached standard error, and every SECURITY warning (a fail-open condition) was in the log alone. **No opt-out:** one
-  line per warning per process, only where the log is not on the terminal; each warning names the setting that removes
-  its condition.
+  reached standard error, and every SECURITY warning (a fail-open condition) was in the log alone. The warnings about
+  the admin and the API stay in the log outside a server process (next entry). **No opt-out:** one line per warning per
+  process, only where the log is not on the terminal; each warning names the setting that removes its condition.
   <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#the emitter writes where the policy table says -->
   <!-- pin: test/permission_forge/cache_warnings_test.rb#development writes both warnings to standard error as well, once each -->
+- **The warnings about the admin and the API are printed by the server, not by every runner.** HTTP Basic auth
+  without credentials ("The admin UI will return 401 for all requests"), a shared Basic-auth login without
+  `audit_actor_resolver`, an API-only host missing the admin's middlewares, tenantless admin access and the API without
+  its authorization lambdas went to standard error in every `bin/rails runner`, rake task, console and `db:seed`, which
+  serve no admin — and with the README's credentials set for the server only, the 401 sentence was untrue there.
+  `Warnings.emit` takes `audience: :server` (beside `severity:`): such a warning goes to the log only outside a server
+  process; the server prints it as before. Every other warning keeps reaching every process. A server process is now
+  also one started by `unicorn` / `unicorn_rails` (`Unicorn::Launcher`), Passenger (`PhusionPassenger::App`), `falcon`
+  (`Falcon::Command`) or `pitchfork` (by program name), as by `bin/rails server` and `puma`: in production these write
+  every warning to the log only, as Puma's processes do (they wrote them to standard error), and a change their host
+  controllers make reports `in_request: true` in its cache outcome (`Cache::Report.in_request?`). **No opt-out:** the
+  log keeps every warning; a runner that must check the admin's setup reads it there.
+  <!-- pin: test/permission_forge/install/runner_warnings_test.rb#bin/rails runner keeps the admin warnings off standard error; the log has them, the other warnings print -->
+  <!-- pin: test/permission_forge/install/runner_warnings_test.rb#bin/rails server prints the admin warnings -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#every warning has its audience in AUDIENCE, the one its site passes, and a reason when it is server -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#a server warning is written where the server policy table says -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#a server process is one bin/rails server or a web server command started -->
 - **Nothing is checked or logged while `bin/rails generate` or `destroy` boots the app.** The install generator boots
   the app before it writes the initializer and the migration that creates the audit table, and that boot logged six
   `[PermissionForge]` lines describing the defaults (the in-memory cache, HTTP Basic Auth without credentials, masking
@@ -987,8 +1004,9 @@ and the RLS re-sync.
   changes need config.api_action_authorization; …"); a lambda's refusal keeps its message. **No opt-out:** a message.
   <!-- pin: test/permission_forge/api/base_controller_test.rb#a mutation refused because an authorization lambda is unset says which option is missing -->
 - **`generate_fields` reads `grant_all` as a boolean.** Only the strings `"true"` and `"1"` granted: a JSON `true`
-  (or `1`) answered 201 with fields without edit. `true`, `"true"`, `1` and `"1"` now grant; `false`, `"false"`, `0`,
-  `"0"`, `null` and no `grant_all` do not; anything else (`"yes"`, `""`, `2`) is a 422
+  (or `1`) answered 201 with fields without edit. `true`, `1` and the words `true`, `t`, `on`, `1` (any case) now
+  grant; `false`, `0`, the words `false`, `f`, `off`, `0`, `null` and no `grant_all` do not — the one boolean reading
+  of the admin and the API (`ParamShapes.boolean`); anything else (`"yes"`, `""`, `2`) is a 422
   `{"grant_all": ["must be true or false"]}` and creates no field. **No opt-out:** send one of the values above.
   <!-- pin: test/permission_forge/api/resources_controller_test.rb#POST generate_fields reads grant_all as a JSON boolean, 1 or their strings -->
   <!-- pin: test/permission_forge/api/resources_controller_test.rb#POST generate_fields refuses a grant_all it cannot read with a 422 keyed by grant_all -->
@@ -1001,6 +1019,32 @@ and the RLS re-sync.
   `{"assigned": 0, "skipped": ["1,3"]}`; a string, a number or an object now answers
   `{"user_ids": ["must be a list of user ids"]}` and changes nothing. **No opt-out:** send a JSON list.
   <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#a bulk user_ids that is not a list is a 422 keyed by user_ids and changes nothing -->
+- **API: a value of the wrong shape for its attribute is a 422 keyed by it, never dropped or cast.** Every attribute
+  section (`permission_set`, `resource`, `resource_field`, `resource_action`, `permission_set_rule`,
+  `permission_set_group`) is read through one shape table, `PermissionForge::Api::InputShapes` (each attribute's shape
+  from its column; the activation conditions folded in), and every wrong attribute of the request is named. Strong
+  parameters dropped a list or an object sent for a scalar with a log line (`PATCH {"is_active": [false]}` answered 200
+  with the set still active: a deactivation or revocation that did nothing), and ActiveModel cast the rest: `"nope"`
+  read as `true`, a JSON `true` for a name stored `"t"`, `1.5` for a description `"1.5"`. A boolean now takes `true`,
+  `false`, `1`, `0` and the words `true`, `false`, `t`, `f`, `on`, `off`, `1`, `0` in any case (`""` is no boolean);
+  text a String; `null` is passed on (a nullable column is cleared, a NOT NULL one keeps its own 422). A rule's
+  `field_value` takes a JSON number or boolean (stored as its text, `5` → `"5"`) and, under `in`, `not_in` and
+  `between`, a list stored joined with commas (`["active", "lead"]` → `"active,lead"`: it was a 422 "can't be blank");
+  `permission_set_group_id` goes on taking the group's id or uuid, `null` or `""` clearing it. Outside a section, a
+  copy's `name` that is not text (`…/clone`; it became the default name) and a bulk `user_ids` element that is no id (it
+  was left out) are 422s too. The admin reads its flags the same way (the field drawer, a group, an action, the set
+  editor): a crafted `group[is_active]=nope` switched the group on; it now goes back with "is_active must be true or
+  false. Nothing was changed." A static guard keeps `.permit` out of the API controllers. **No opt-out:** send each
+  attribute in its shape (docs/admin-api.md "Attribute shapes"); a dropped or miscast value was a silent no-op or an
+  inverted flag.
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a list, an object, an unknown word, a fraction or "" for a boolean is a 422 keyed by it and changes nothing -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#true, a number, a list or an object for a text attribute is a 422 keyed by it; nothing is renamed -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a list for field_value under in, not_in or between is joined with commas -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a copy name that is not text is a 422 keyed by name, and nothing is copied -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids with an element that is no id is a 422 keyed by user_ids, and nobody is assigned -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#no .permit in the API controllers outside pf_record_attributes -->
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#~answers a wrong shape of each section attribute with a 422 keyed by it -->
+  <!-- pin: test/permission_forge/html/admin_boolean_params_test.rb#a group flag the admin cannot read is a flash, and the group is unchanged -->
 - **A single assignment or membership with an unusable `user_id` is a 422 keyed by `user_id`.**
   `POST …/permission_sets/:id/users` and `POST …/permission_set_groups/:id/users` answered 404 `"Record not found"`
   for a missing `user_id`, for one that is not an id (`"abc"`, `[2]`) and for one that names nobody, which read as if
@@ -1640,8 +1684,9 @@ and the RLS re-sync.
   `ActiveRecord::NotNullViolation`. The eight permission models now refuse nil for every column the schema declares
   NOT NULL (`ValidatesRequiredColumns`, read from the schema, so a new column is covered; the primary key, the
   timestamps and `uuid` are filled on create, a column with a presence rule of its own or of a required `belongs_to`
-  keeps that message): a 422 keyed by the attribute in the API, the form again with the message in the admin. A NOT
-  NULL violation no validation foresaw is the 422 envelope (`base`) in the API and a flash in the admin.
+  keeps that message): a 422 keyed by the attribute in the API, the form again with the message in the admin (a blank
+  flag is no boolean: "must be true or false"). A NOT NULL violation no validation foresaw is the 422 envelope (`base`)
+  in the API and a flash in the admin.
   <!-- pin: test/permission_forge/security/not_null_input_test.rb#API: JSON null or a blank form value on a NOT NULL column is a 422 keyed by the attribute, on create and update -->
   <!-- pin: test/permission_forge/security/not_null_input_test.rb#admin: a blank Active flag on the group form goes back to the group with the message -->
   <!-- pin: test/permission_forge/security/not_null_input_test.rb#API: an unforeseen NotNullViolation is a 422 envelope -->

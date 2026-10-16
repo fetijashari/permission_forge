@@ -77,6 +77,24 @@ module PermissionForge
       BOOLEAN_WORDS[value.downcase] if value.is_a?(String)
     end
 
+    # A flag `key` as true or false (.boolean).
+    #
+    # @raise [InvalidFlag] for anything else
+    # @return [Boolean]
+    def self.flag(key, value)
+      read = boolean(value)
+      read.nil? ? raise(InvalidFlag, key) : read
+    end
+
+    # `attrs` with each of `keys` it has read as a flag (.flag), in place.
+    #
+    # @raise [InvalidFlag] keyed by the first flag that is no boolean
+    # @return [Hash, ActionController::Parameters] attrs
+    def self.flags(attrs, keys)
+      keys.map(&:to_s).select { |key| attrs.key?(key) }.each { |key| attrs[key] = flag(key, attrs[key]) }
+      attrs
+    end
+
     # The time an ISO 8601 String names, in Time.zone: see IsoTime.
     #
     # @return [ActiveSupport::TimeWithZone, nil] nil for anything else
@@ -176,25 +194,17 @@ module PermissionForge
       value = params[key]
       return false if value.nil?
 
-      pf_boolean(key, value)
+      ParamShapes.flag(key, value)
     end
 
     # `attrs` (an attribute hash of a form) with each of `keys` it has read
-    # as true or false (ParamShapes.boolean): the admin's flags. ActiveModel
+    # as true or false (ParamShapes.flags): the admin's flags. ActiveModel
     # would read "nope" as true.
     #
     # @raise [InvalidFlag] keyed by the attribute for anything else (the
     #   admin answers it with a flash: nothing is changed)
     def pf_boolean_attributes(attrs, *keys)
-      keys.map(&:to_s).each do |key|
-        attrs[key] = pf_boolean(key, attrs[key]) if attrs.key?(key)
-      end
-      attrs
-    end
-
-    def pf_boolean(key, value)
-      boolean = ParamShapes.boolean(value)
-      boolean.nil? ? raise(InvalidFlag, key) : boolean
+      ParamShapes.flags(attrs, keys)
     end
 
     # The time params[key] names (an ISO 8601 date or date-time, IsoTime),
