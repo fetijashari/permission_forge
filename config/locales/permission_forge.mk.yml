@@ -834,8 +834,10 @@ mk:
           one: " и уште %{count}"
           other: " и уште %{count}"
         from: од %{set}
+        masked_by: Маскирано од %{set}
         muted_by: Скриено од %{set}
         none: Ниеден сет не го прикажува
+        read_only_by: Ограничено на Само читање од %{set}
         unconfigured: "%{state} · %{behaviour}"
         virtual: Виртуелно поле, читливо по основно
       effective_tab:
@@ -861,6 +863,7 @@ mk:
           на овој ресурс.
         field_decided_by: 'Одлучено од %{resource}, од кој наследува: победува најстрогата
           поставка по наследувањето.'
+        field_hidden_on: Скриено на %{resource}, од кој наследува.
         field_none: Ниеден сет на дозволи не го прикажува ова поле.
         field_own_unreadable: Скриено бидејќи Читање не е дозволено на овој ресурс.
         field_title: "%{resource} › %{field}"

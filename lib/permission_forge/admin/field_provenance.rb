@@ -7,8 +7,10 @@ module PermissionForge
     # second walk).
     # The entry is Admin::EffectiveFields': the engine's own flags
     # (FieldPermissionMerger.merge_row, then the muting phase), plus
-    # `sources` ([set, row level, row strategy] in merge order), `mutes`
-    # ([set, level] in muting order) and `before` (the flags before muting).
+    # `sources` ([set, row level, row strategy, Resource] in merge order),
+    # `mutes` ([set, level, Resource] in muting order) and `before` (the
+    # flags before muting). Each FieldSource names the Resource whose row
+    # it credits (B#38).
     #
     # - grants: the sets that make the field readable, one each at its most
     #   open level, most open first and, at one level, in merge order — the
@@ -42,13 +44,15 @@ module PermissionForge
       # read (ResourceChain::HIDDEN_ENTRY): no set grants it; the muting sets
       # that took that entry's read away hide it.
       #
-      # @param muting_sets [Array<PermissionForge::PermissionSet>]
+      # @param muted_on [Hash{PermissionForge::PermissionSet => String}] each
+      #   muting set => the Resource whose row takes the read away
+      #   (EffectiveAccess::Outcome#muted_on)
       # @param decided_by [String, nil] the entry's Resource, for a base's
       # @return [Hash] EffectiveAccess::FieldOutcome attributes but name and virtual
-      def self.hidden_by(muting_sets, decided_by:)
-        mutes = muting_sets.map { |set| FieldSource.new(permission_set: set, level: 'hide') }
+      def self.hidden_by(muted_on, decided_by:)
+        mutes = muted_on.map { |set, resource_name| FieldSource.new(permission_set: set, level: 'hide', resource_name: resource_name) }
         { level: 'hidden', capped: false, unconfigured: false, implicit: false, unreadable: true, decided_by: decided_by,
-          mask_strategy: ResourceChain::HIDDEN_ENTRY[:mask_strategy], granted_by: [], grants: [], blocked_by: muting_sets,
+          mask_strategy: ResourceChain::HIDDEN_ENTRY[:mask_strategy], granted_by: [], grants: [], blocked_by: muted_on.keys,
           mutes: mutes, blocked_level: mutes.first&.level }
       end
 
@@ -82,26 +86,28 @@ module PermissionForge
       def grants
         return [] if implicit?
 
-        rows = @entry[:sources].each_with_index.select { |(_, level, _), _| FieldLevel.rank(level) >= 1 }
-        rows.sort_by { |(_, level, _), index| [-FieldLevel.rank(level), index] }.map(&:first).uniq(&:first)
-            .map { |set, level, strategy| FieldSource.new(permission_set: set, level: level, mask_strategy: strategy) }
+        rows = @entry[:sources].each_with_index.select { |(_, level), _| FieldLevel.rank(level) >= 1 }
+        rows.sort_by { |(_, level), index| [-FieldLevel.rank(level), index] }.map(&:first).uniq(&:first)
+            .map { |set, level, strategy, name| FieldSource.new(permission_set: set, level: level, mask_strategy: strategy, resource_name: name) }
       end
 
       # @return [Array<EffectiveAccess::FieldSource>]
       def mutes
-        sources = credited_mutes.group_by(&:first).map { |set, rows| strongest(set, rows.map(&:last)) }
+        sources = credited_mutes.group_by(&:first).map { |set, rows| strongest(set, rows) }
         sources.each_with_index.sort_by { |source, index| [MUTING_ORDER.index(source.level), index] }.map(&:first)
       end
 
       private
 
-      # [set, level] for each muting row or resource that changed the entry.
+      # [set, level, Resource] for each muting row or resource that changed the entry.
       def credited_mutes
         (@entry[:mutes] || []).select { |_, level| changed?(level) }
       end
 
-      def strongest(permission_set, levels)
-        FieldSource.new(permission_set: permission_set, level: MUTING_ORDER.find { |level| levels.include?(level) })
+      # The set at its strongest level, through its first row at that level.
+      def strongest(permission_set, rows)
+        _, level, resource_name = MUTING_ORDER.lazy.filter_map { |name| rows.find { |_, row_level| row_level == name } }.first
+        FieldSource.new(permission_set: permission_set, level: level, resource_name: resource_name)
       end
 
       # The entry's level (FieldLevel.effective_level); Edit is capped to

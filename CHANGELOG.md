@@ -1980,6 +1980,33 @@ none.** (code and API clients that create without a name, or with a blank one), 
 - **Home counts people with one Macedonian noun.** "1 лице го има овој сет" stood beside "1 корисник" (field test round
   7, C#92); every count of people on Home uses the noun of `ui.people_count`, in every locale (a glossary test).
   <!-- pin: test/permission_forge/locale_glossary_test.rb#mk: Home counts people with the noun of ui.people_count -->
+- **A person's Effective access row names the Resource a Muting Permission Set acts through.** On a single-table-
+  inheritance subclass, Email (muted on Customer) and Phone (muted on VipCustomer) both read "Hidden by No PII exports"
+  beside "from Sales rep · VipCustomer", while the Why panel said "No PII exports · Customer" / "· VipCustomer" (field
+  test round 8, B#38): the row named the set by itself, and the Why panel found the Resource by walking the set's rows
+  again (a guess that missed a field variant and a row whose mute the resource's Read made moot). Each
+  `EffectiveAccess::FieldSource` now carries the Resource whose row it credits (`resource_name`: the deciding entry's
+  for a grant, the muting row's for a mute) and each blocked flag or action the Resource whose row blocks it
+  (`Outcome#muted_on`, the row nearest the model first); the row, the Why panel and "Explain for" name every set
+  through `pf_field_source_set_name` / `pf_muting_set_name`. The row also words the level the deciding mute gives
+  ("Masked by …", "Limited to Read-only by …") where it said "Hidden by" next to a Masked badge.
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#the row names the Resource whose row mutes the field, as the Why panel and the grants beside it do -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a muting reason words the level the mute decides, not always Hidden -->
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#each source names the Resource whose row it credits; a set with two rows, the one nearest the model -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: the Resource a set acts through on a person's effective access (FieldSource#resource_name, Outcome#muted_on) -->
+- **A field hidden by the entry it inherits says so on every surface.** Bob's VipCustomer › Notes row read "∅ Hidden ·
+  No set shows it" and "Explain for" said "No set shows this field to Bob.", beside "Sales rep · VipCustomer ◉
+  Read-only", while the Why panel said Customer decides (field test round 8, B#39). What decides is the granting
+  Customer entry, which hides Notes — not No PII exports, whose mute on Customer.notes changes nothing the granting
+  sets showed, so it still never reads "Hidden by muting". `EffectiveAccess::FieldOutcome#reason` is the one decision
+  (`:muted`, `:unconfigured`, `:granted`, `:implicit`, `:unreadable`, `:inherited`, `:none`) the row, its colour, the
+  Why panel and "Explain for" all word: an inherited hidden field reads "Hidden on Customer, which this inherits from."
+  on all three, and an entry without Read says why on the row too, where it read "No set shows it".
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a field hidden on the base reads the same on the row, the Why panel and Explain for, in every locale -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#every field of the subclass reads the same reason on the row, the Why panel and Explain for, in every locale -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#the hidden-on reason follows the decision: muting the subclass row too still leaves the base deciding -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a subclass entry without Read says so on the row, as the Why panel does -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: why a person's field is at its level (EffectiveAccess::FieldOutcome#reason) -->
 ### Documentation
 
 - [Migration guide](docs/migration-guide.md#upgrading-to-015): "Upgrading to 0.15" — run `rake

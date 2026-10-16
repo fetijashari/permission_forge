@@ -450,6 +450,35 @@ module PermissionForge
         assert_chain_parity('unreadable base', 'PfStiBugTicket')
       end
 
+      # Field test round 8 (B#38): every FieldSource and every blocked flag
+      # names the Resource whose row it credits, so a reason can say which
+      # Resource of a single-table-inheritance chain the set acts through.
+      test 'each source names the Resource whose row it credits; a set with two rows, the one nearest the model' do
+        base = create_resource(permission_set: @sales, name: 'PfStiTicket', read_access: true)
+        sub = create_resource(permission_set: @sales, name: 'PfStiBugTicket', read_access: true)
+        create_resource_field(resource: base, name: 'email', read_access: true)
+        create_resource_field(resource: sub, name: 'email', read_access: true)
+        create_resource_field(resource: sub, name: 'secret', read_access: true)
+        pii = create_permission_set(name: 'No PII', is_muting: true)
+        create_resource_field(resource: create_resource(permission_set: pii, name: 'PfStiTicket', read_access: false),
+                              name: 'email', read_access: true)
+        create_resource_field(resource: create_resource(permission_set: pii, name: 'PfStiBugTicket', read_access: false),
+                              name: 'secret', read_access: true)
+        hold = create_permission_set(name: 'Hold', is_muting: true)
+        create_resource(permission_set: hold, name: 'PfStiTicket', read_access: false, delete_access: true, create_access: true)
+        create_resource(permission_set: hold, name: 'PfStiBugTicket', read_access: false, create_access: true)
+        [pii, hold].each { |set| create_permission_set_user(user: @user, permission_set: set) }
+        sub.update!(create_access: true, delete_access: true)
+
+        res = outcome('PfStiBugTicket')
+
+        assert_equal([[pii, 'hide', 'PfStiTicket']], field('email', res).mutes.map { |s| [s.permission_set, s.level, s.resource_name] })
+        assert_equal([[pii, 'hide', 'PfStiBugTicket']], field('secret', res).mutes.map { |s| [s.permission_set, s.level, s.resource_name] })
+        assert_equal([[@sales, 'PfStiBugTicket']], field('secret', res).grants.map { |s| [s.permission_set, s.resource_name] })
+        assert_equal({ hold => 'PfStiBugTicket' }, res.op(:create_access).muted_on, 'both rows block: the nearest is named')
+        assert_equal({ hold => 'PfStiTicket' }, res.op(:delete_access).muted_on, 'only the base row blocks')
+      end
+
       test 'discovered virtual fields match the engine in both modes' do
         PermissionForge.configuration.virtual_field_discovery = true
         res = create_resource(permission_set: @sales, name: 'PfVirtualAccount', read_access: true, edit_access: true)

@@ -42,6 +42,23 @@ module PermissionForge
       pf_t_markup(set: set_name) { |held| pf_ui("level_sentences.#{source.level}", **held, strategy: strategy) }
     end
 
+    # A person's Effective access row for a field a Muting Permission Set
+    # decides (FieldOutcome#reason :muted): the level the deciding mute
+    # gives (FieldOutcome#blocked_level: hidden, masked or read-only) and
+    # the sets credited at that level, each named with the Resource whose
+    # row mutes (#pf_field_source_set_name; B#38).
+    def pf_field_muted_by(field, leaf_name)
+      level = field.blocked_level
+      names = field.mutes.select { |source| source.level == level }.map { |source| pf_field_source_set_name(source, leaf_name) }
+      pf_t_markup(set: pf_markup_sentence(names)) do |held|
+        case level
+        when 'mask' then t('permission_forge.people.effective_field_source.masked_by', **held)
+        when 'no_edit' then t('permission_forge.people.effective_field_source.read_only_by', **held)
+        else t('permission_forge.people.effective_field_source.muted_by', **held)
+        end
+      end
+    end
+
     # --- record rules ---------------------------------------------------------
 
     def pf_operator_label(operator)

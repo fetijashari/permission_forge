@@ -66,6 +66,13 @@ module PermissionForge
       PermissionForge::Admin::ListSentence.call(items, **)
     end
 
+    # #pf_to_sentence for items that carry markup (a set named with its
+    # Resource as host data): each item is kept as it is (#pf_t_markup).
+    def pf_markup_sentence(items)
+      values = items.each_with_index.to_h { |item, index| [:"item#{index}", item] }
+      pf_t_markup(**values) { |held| pf_to_sentence(held.values) }
+    end
+
     def pf_people_text(count)
       pf_ui('people_count', count: count)
     end

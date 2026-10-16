@@ -25,6 +25,18 @@ module PermissionForge
 
         permission_set.resources.count { |resource| names.include?(resource.name) } > 1
       end
+
+      # The Resource rows named by one of `names`, in the order of `names`
+      # (a chain: the model first, then its bases nearest first), so the row
+      # nearest the model comes first (EffectiveAccess: the Resource a muting
+      # set is named with, B#38).
+      #
+      # @param resources [Array<Resource>] one Permission Set's rows
+      # @param names [Array<String>]
+      # @return [Array<Resource>]
+      def self.in_chain_order(resources, names)
+        names.flat_map { |name| resources.select { |resource| resource.name == name } }
+      end
     end
   end
 end

@@ -823,8 +823,10 @@ en:
           one: " and %{count} more"
           other: " and %{count} more"
         from: from %{set}
+        masked_by: Masked by %{set}
         muted_by: Hidden by %{set}
         none: No set shows it
+        read_only_by: Limited to Read-only by %{set}
         unconfigured: "%{state} · %{behaviour}"
         virtual: Virtual field, readable by default
       effective_tab:
@@ -849,6 +851,7 @@ en:
         field_capped: Shown as Read-only because Edit isn't allowed on this resource.
         field_decided_by: 'Decided by %{resource}, which this inherits from: the strictest
           setting along the inheritance wins.'
+        field_hidden_on: Hidden on %{resource}, which this inherits from.
         field_none: No Permission Set shows this field.
         field_own_unreadable: Hidden because Read isn't allowed on this resource.
         field_title: "%{resource} › %{field}"

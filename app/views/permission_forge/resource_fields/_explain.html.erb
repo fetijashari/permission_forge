@@ -5,16 +5,20 @@
     <span><%= t('.no_access', name: name, resources: pf_resource_plural(resource.name)) %></span>
   <% else %>
     <div><%= pf_effective_field_badge(outcome) %></div>
+    <%# FieldOutcome#reason, the decision the person's Effective access row and Why panel word too (B#39);
+        sets named as there (B#38). Hidden by the entry that decides (:unreadable, :inherited): the line below says it. %>
+    <% sets = ->(sources) { pf_markup_sentence(sources.map { |src| pf_field_source_set_name(src, resource.name) }) } %>
     <span>
-      <% if outcome.blocked_by.any? %>
-        <%= t('.muted', name: name, sets: pf_to_sentence(outcome.blocked_by.map(&:name))) %>
-      <% elsif outcome.unconfigured %>
+      <% case outcome.reason %>
+      <% when :muted %>
+        <%= pf_t_markup(sets: sets.call(outcome.mutes)) { |held| t('.muted', name: name, **held) } %>
+      <% when :unconfigured %>
         <%= t('.unconfigured', name: name) %>
-      <% elsif outcome.granted_by.any? %>
-        <%= t('.granted', name: name, sets: pf_to_sentence(outcome.granted_by.map(&:name))) %>
-      <% elsif outcome.implicit %>
+      <% when :granted %>
+        <%= pf_t_markup(sets: sets.call(outcome.grants)) { |held| t('.granted', name: name, **held) } %>
+      <% when :implicit %>
         <%= t('.virtual_default', name: name) %>
-      <% else %>
+      <% when :none %>
         <%= t('.none', name: name) %>
       <% end %>
       <%= t('.capped') if outcome.capped %>
