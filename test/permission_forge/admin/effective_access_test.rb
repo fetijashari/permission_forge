@@ -2,6 +2,7 @@ require 'test_helper'
 require_relative '../virtual_field_models'
 require_relative '../field_variant_models'
 require 'permission_forge/sti_models'
+require_relative '../sti_variant_models'
 
 module PermissionForge
   module Admin
@@ -477,6 +478,23 @@ module PermissionForge
         assert_equal([[@sales, 'PfStiBugTicket']], field('secret', res).grants.map { |s| [s.permission_set, s.resource_name] })
         assert_equal({ hold => 'PfStiBugTicket' }, res.op(:create_access).muted_on, 'both rows block: the nearest is named')
         assert_equal({ hold => 'PfStiTicket' }, res.op(:delete_access).muted_on, 'only the base row blocks')
+      end
+
+      # Review P1 (round 8): a base row reaching a subclass entry mutes the
+      # subclass's own variants, in the engine as in the admin.
+      test 'a base row hides a variant only the subclass has, in the engine and here' do
+        %w[PfStiOrder PfStiVipOrder].each do |name|
+          create_resource_field(resource: create_resource(permission_set: @sales, name: name, read_access: true, edit_access: true),
+                                name: 'price_cents', read_access: true, edit_access: true)
+        end
+        mute = create_permission_set(name: 'No prices', is_muting: true)
+        create_resource_field(resource: create_resource(permission_set: mute, name: 'PfStiOrder', read_access: false),
+                              name: 'price_cents', read_access: true)
+        create_permission_set_user(user: @user, permission_set: mute)
+
+        assert_equal 'hidden', field('price', outcome('PfStiVipOrder')).level
+        assert_field_parity('variant of a subclass, muted on the base', 'PfStiVipOrder')
+        assert_chain_parity('variant of a subclass, muted on the base', 'PfStiVipOrder')
       end
 
       test 'discovered virtual fields match the engine in both modes' do

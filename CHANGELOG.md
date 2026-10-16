@@ -2007,6 +2007,15 @@ none.** (code and API clients that create without a name, or with a blank one), 
   <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#the hidden-on reason follows the decision: muting the subclass row too still leaves the base deciding -->
   <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a subclass entry without Read says so on the row, as the Why panel does -->
   <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: why a person's field is at its level (EffectiveAccess::FieldOutcome#reason) -->
+- **A muting row on a single-table-inheritance base mutes the variants of the subclass entries it reaches.** This
+  widens protection: a muting set whose base Resource hid `price_cents` left the subclass entry's `price` (a reader
+  only the subclass defines, a configured field variant) readable and editable in the permission hash, so the derived
+  value of a hidden column stayed readable through the subclass, while the admin showed it hidden (field test round 8,
+  review P1). `PermissionHashBuilder` took the variants from the muting row's Resource; it now takes each reached
+  entry's own (`FieldVariants` of the entry's model), the variants the granting phase wrote. The hash format is
+  unchanged.
+  <!-- pin: test/permission_forge/services/permission_hash_builder_muting_test.rb#a base row mutes the variants of each entry it reaches, a reader only the subclass has included -->
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#a base row hides a variant only the subclass has, in the engine and here -->
 ### Documentation
 
 - [Migration guide](docs/migration-guide.md#upgrading-to-015): "Upgrading to 0.15" — run `rake
