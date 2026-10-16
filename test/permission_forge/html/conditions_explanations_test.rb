@@ -124,7 +124,9 @@ module PermissionForge
         create_permission_set_user(user: @bo, permission_set: set)
 
         get pf("/people/#{@bo.id}"), params: { tab: 'access' }
-        assert_includes response.body, I18n.t('permission_forge.ui.conditions.ips_broken', ips: 'office-network')
+        page = Nokogiri::HTML(response.body)
+        assert_includes page.text.squish, I18n.t('permission_forge.ui.conditions.ips_broken', ips: 'office-network')
+        assert(page.css('code.pf-mono-key').any? { |code| code.text == 'office-network' }, 'the stored entry is marked as host data')
       end
     end
   end

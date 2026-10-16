@@ -78,7 +78,7 @@ module PermissionForge
           AdminPaths.new(ana: @ana.id, assignment: @assignment.id, set: @set.id, resource: @resource.id, email: @email.id,
                          muting: @muting.id, locked: @locked.id,
                          group: @group.id, action: @action.id, rule: @rule.id, broken: @broken.id,
-                         updated_event: updated.uuid, destroyed_event: destroyed.uuid)
+                         updated_event: updated.uuid, destroyed_event: destroyed.uuid, conditions: @hours.id)
         end
       end
 
@@ -111,7 +111,9 @@ module PermissionForge
         create_permission_set_user(user: @bo, permission_set: expired, expires_at: 1.day.from_now).update_columns(expires_at: 2.days.ago)
         create_permission_set_user(user: @bo, permission_set: @set).update_columns(created_at: 400.days.ago)
         hours = create_permission_set(name: 'Office hours', allowed_hours_start: 9, allowed_hours_end: 17)
-        hours.update_columns(allowed_hours_end: 9)
+        # Round 7 (B#48a): an IP entry that is no address too, so the Conditions tab's banner has two problems.
+        hours.update_columns(allowed_hours_end: 9, allowed_ips: '10.0.0.0/8,office-network')
+        @hours = hours
         create_permission_set_user(user: @bo, permission_set: hours)
         create_resource_field(resource: @resource, name: 'name', read_access: true, mask_access: true, mask_strategy: 'email')
           .update_columns(mask_strategy: 'rot13')

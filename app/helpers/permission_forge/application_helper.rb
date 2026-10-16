@@ -6,6 +6,7 @@ module PermissionForge
     include PermissionForge::PeopleHelper
     include PermissionForge::LabelsHelper
     include PermissionForge::SentencesHelper
+    include PermissionForge::ConditionsHelper
     include PermissionForge::RuleProblemsHelper
     include PermissionForge::AuditSentencesHelper
     include PermissionForge::ChangesHelper

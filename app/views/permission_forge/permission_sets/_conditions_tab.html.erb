@@ -11,7 +11,7 @@
   <%= form_with url: permission_forge.conditions_permission_set_path(set), method: :patch, class: 'pf-card__body pf-stack pf-stack--xl' do %>
     <div class="pf-stack pf-stack--tight">
       <div class="pf-row">
-        <strong><%= pf_condition_sentence(set, here: true) %></strong>
+        <strong><%= pf_condition_sentence(set, here: true, markup: true) %></strong>
         <%= pf_fail_open_badge(long: true) if set.conditional? && pf_fail_open? %>
       </div>
       <p class="pf-fs-13 pf-text-2"><%= t('.intro') %></p>

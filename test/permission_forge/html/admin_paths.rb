@@ -27,7 +27,8 @@ module PermissionForge
 
       # @param ids [Hash] :ana, :assignment, :set, :resource, :email, :muting,
       #   :locked, :group, :action, :rule, :broken (record ids); :updated_event,
-      #   :destroyed_event (event uuids, nil when none was recorded)
+      #   :destroyed_event (event uuids, nil when none was recorded); :conditions
+      #   (optional: a set whose conditions nobody can judge, its Conditions tab's banner)
       def initialize(**ids)
         @ids = ids
       end
@@ -75,7 +76,7 @@ module PermissionForge
           "#{set_path}?tab=assignments", "#{set_path}?tab=conditions", "#{set_path}?tab=audit",
           "#{set_path}/delete", "#{set_path}/switch_mode", "/permission_sets/#{id(:muting)}",
           "#{set_path}/bulk_assignment/new", "#{set_path}/bulk_assignment/revoke?user_ids[]=#{id(:ana)}",
-          "#{set_path}/resources/new"
+          "#{set_path}/resources/new", *("/permission_sets/#{ids[:conditions]}?tab=conditions" if ids[:conditions])
         ]
       end
 

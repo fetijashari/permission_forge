@@ -89,6 +89,7 @@ The gem's own locales are complete. Only a host whose locale files override one 
 | `settings.row.default`, `settings.row.docs` | `settings.row.default_html`, `settings.row.docs_html` |
 | `permission_set_rules.builder.message_placeholder` | `permission_set_rules.builder.message_help` (a hint under the field, not a placeholder) |
 | `home.index.search_placeholder` (the long sentence) | `home.index.search_placeholder` is now "Name or email"; the sentence moved to `home.index.search_help` |
+| `home.conditions_card.granting`, `home.conditions_card.muting` | `ui.conditions.effect.granting`, `.muting` (Home's card and the Conditions tab's banner say the same) |
 
 Removed without a replacement: `ui.levels.muted`, `ui.badges.not_configured`, `ui.audit.system`, `people.effective_tab.legend_muted`, `people.effective_tab.legend_none`, `shared.across_sets.muted_hidden`. See [i18n.md](i18n.md#overriding-translations).
 
