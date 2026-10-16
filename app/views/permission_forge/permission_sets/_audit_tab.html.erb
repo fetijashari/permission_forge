@@ -42,7 +42,7 @@
                   class: 'pf-btn pf-btn--sm' %>
     <% end %>
 
-    <div class="pf-card pf-scroll-x">
+    <%= pf_scroll_frame('aria-label': t('.label'), class: 'pf-card') do %>
       <div class="pf-table pf-table--audit" role="table" aria-label="<%= t('.label') %>">
         <div class="pf-table__head" role="row">
           <span role="columnheader"><%= t('.columns.type') %></span>
@@ -68,7 +68,7 @@
         <% end %>
       </div>
       <% if @entries.empty? %><p class="pf-empty"><%= t('.empty') %></p><% end %>
-    </div>
+    <% end %>
   <% else %>
     <div class="pf-banner pf-banner--warn" role="note">
       <span class="pf-banner__glyph" aria-hidden="true">⚠</span>

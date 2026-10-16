@@ -14,6 +14,7 @@
   --pf-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --pf-radius-xs: 4px;
+  --pf-scroll-shadow: rgba(16, 18, 22, .16);
   --pf-radius-sm: 6px;
   --pf-radius: 8px;
   --pf-radius-lg: 12px;
@@ -70,6 +71,7 @@
   --pf-bg: #111214;
   --pf-surface: #18191c;
   --pf-surface-2: #212327;
+  --pf-scroll-shadow: rgba(0, 0, 0, .55);
   --pf-border: #2c2e33;
   --pf-border-strong: #3c3f45;
   --pf-text: #ececee;
@@ -105,6 +107,7 @@
     --pf-bg: #111214;
     --pf-surface: #18191c;
     --pf-surface-2: #212327;
+    --pf-scroll-shadow: rgba(0, 0, 0, .55);
     --pf-border: #2c2e33;
     --pf-border-strong: #3c3f45;
     --pf-text: #ececee;
@@ -306,7 +309,7 @@
 .pf-root .pf-input:focus, .pf-root .pf-textarea:focus { outline: none; border-color: var(--pf-accent); box-shadow: 0 0 0 3px var(--pf-accent-soft); }
 .pf-input--sm, .pf-select--sm { padding: 6px 10px; font-size: 13px; }
 .pf-input--lg { padding: 10px 12px; font-size: 15px; }
-.pf-input--auto, .pf-select--auto { display: inline-block; width: auto; max-width: 100%; }
+.pf-input--auto, .pf-select--auto { display: inline-block; width: auto; min-width: 0; max-width: 100%; }
 .pf-textarea { min-height: 72px; resize: vertical; }
 .pf-textarea--mono { font-family: var(--pf-mono); font-size: 13px; max-width: 360px; }
 .pf-input[aria-invalid="true"], .pf-select[aria-invalid="true"], .pf-textarea[aria-invalid="true"] { border-color: var(--pf-block); }
@@ -375,8 +378,19 @@
 .pf-masonry__col { flex: 1 1 min(100%, 460px); min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .pf-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; align-items: start; }
 .pf-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px; align-items: start; }
-.pf-scroll-x { overflow-x: auto; }
-.pf-scroll-y { max-height: 260px; overflow-y: auto; }
+/* A frame that scrolls sideways when a grid is wider than the page (pf_scroll_frame: a tab
+   stop with a name). It is the containing block of what it clips (position: relative): an
+   absolutely positioned descendant (a .pf-sr-only header cell) would otherwise sit at its
+   static position in the page, outside the frame's clipping, and widen the document instead
+   of scrolling with the grid. The shadows at its edges are the cue that there is more: covers
+   that move with the content (`local`) hide them on a side with nothing left to scroll to.
+   Every scroll container is positioned for the same reason (layout_lint_test.rb). */
+.pf-scroll-x { position: relative; overflow-x: auto; background-color: var(--pf-surface);
+  background-image: linear-gradient(90deg, var(--pf-surface) 50%, transparent), linear-gradient(270deg, var(--pf-surface) 50%, transparent),
+    linear-gradient(90deg, var(--pf-scroll-shadow), transparent), linear-gradient(270deg, var(--pf-scroll-shadow), transparent);
+  background-position: left center, right center, left center, right center; background-repeat: no-repeat;
+  background-size: 32px 100%, 32px 100%, 12px 100%, 12px 100%; background-attachment: local, local, scroll, scroll; }
+.pf-scroll-y { position: relative; max-height: 260px; overflow-y: auto; }
 .pf-count-pill { display: inline-flex; align-items: center; min-width: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 20px; justify-content: center; background: var(--pf-surface-2); color: var(--pf-text-2); border: 1px solid var(--pf-border); }
 .pf-count-pill--warn { background: var(--pf-warn-soft); color: var(--pf-warn); border-color: var(--pf-warn-border); }
 
@@ -474,7 +488,7 @@
 .pf-avatar--sm { width: 28px; height: 28px; flex-basis: 28px; }
 .pf-avatar--lg { width: 48px; height: 48px; flex-basis: 48px; font-size: 16px; }
 .pf-person-name { font-weight: 600; }
-.pf-person-email { font-size: 12px; color: var(--pf-text-3); }
+.pf-person-email { font-size: 12px; color: var(--pf-text-3); overflow-wrap: anywhere; }
 
 /* ------------------------------------------------------------- matrices */
 .pf-matrix { min-width: 620px; }
@@ -482,7 +496,7 @@
 .pf-matrix__head { font-size: 12px; font-weight: 600; color: var(--pf-text-3); border-bottom: 1px solid var(--pf-border); }
 .pf-matrix__row { border-top: 1px solid var(--pf-border); }
 .pf-matrix__head + .pf-matrix__row { border-top: 0; }
-.pf-matrix__resource { display: flex; flex-direction: column; min-width: 0; }
+.pf-matrix__resource { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 .pf-matrix__resource a { font-weight: 600; color: var(--pf-text) !important; }
 .pf-matrix__chev { color: var(--pf-text-3) !important; font-size: 16px; text-align: center; text-decoration: none !important; }
 .pf-effective { min-width: 540px; }
@@ -608,7 +622,7 @@
 
 /* person picker / listbox rows */
 .pf-listbox { display: flex; flex-direction: column; border: 1px solid var(--pf-border); border-radius: var(--pf-radius); overflow: hidden; }
-.pf-listbox__scroll { max-height: 300px; overflow-y: auto; }
+.pf-listbox__scroll { position: relative; max-height: 300px; overflow-y: auto; }
 .pf-listbox--short .pf-listbox__scroll { max-height: 240px; }
 .pf-option { position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--pf-border); color: inherit !important; text-decoration: none !important; cursor: pointer; }
 .pf-option:first-child { border-top: 0; }
@@ -623,6 +637,7 @@
 
 /* home search toolbar */
 .pf-toolbar { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.pf-toolbar__help { flex: 1 1 100%; }
 .pf-search-field { position: relative; flex: 1 1 320px; min-width: 0; }
 .pf-search-field__icon { position: absolute; left: 12px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--pf-text-3); pointer-events: none; }
 .pf-root .pf-search-field__input { padding: 9px 12px 9px 36px; font-size: 14px; }
@@ -662,21 +677,21 @@
 /* ------------------------------------------------------------- settings */
 .pf-setting { display: flex; flex-wrap: wrap; gap: 10px 20px; padding: 12px 16px; border-top: 1px solid var(--pf-border); scroll-margin-top: 80px; }
 .pf-setting:target, .pf-setting[data-pf-focus="true"] { background: var(--pf-accent-soft); }
-.pf-setting__about { flex: 2 1 300px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.pf-setting__value { flex: 1 1 240px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.pf-setting__about { flex: 2 1 300px; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.pf-setting__value { flex: 1 1 240px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
 .pf-setting__how { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-.pf-setting__how[open] { flex: 1 1 100%; }
+.pf-setting__how[open] { flex: 1 1 100%; min-width: 0; }
 .pf-setting__how > summary { list-style: none; }
 .pf-setting__how > summary::-webkit-details-marker { display: none; }
-.pf-setting__panel { flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: var(--pf-radius); background: var(--pf-surface-2); border: 1px solid var(--pf-border); }
+.pf-setting__panel { flex: 1 1 100%; align-self: stretch; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: var(--pf-radius); background: var(--pf-surface-2); border: 1px solid var(--pf-border); }
 .pf-setting-section > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; }
 .pf-setting-section > summary::-webkit-details-marker { display: none; }
 .pf-setting-section + .pf-setting-section { border-top: 1px solid var(--pf-border); }
 .pf-pill { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--pf-border); background: var(--pf-surface-2); color: var(--pf-text-2); white-space: nowrap; }
 .pf-pill--on { background: var(--pf-grant-soft); color: var(--pf-grant); border-color: var(--pf-grant-border); }
-.pf-pill--opt { font-family: var(--pf-mono); font-weight: 500; background: transparent; }
+.pf-pill--opt { font-family: var(--pf-mono); font-weight: 500; background: transparent; white-space: normal; overflow-wrap: anywhere; }
 .pf-pill--current { background: var(--pf-text); color: var(--pf-surface); border-color: var(--pf-text); }
-.pf-code { margin: 0; padding: 12px 14px; border-radius: var(--pf-radius); background: var(--pf-surface); border: 1px solid var(--pf-border); font-family: var(--pf-mono); font-size: 12.5px; line-height: 1.6; overflow-x: auto; white-space: pre; }
+.pf-code { position: relative; margin: 0; padding: 12px 14px; border-radius: var(--pf-radius); background: var(--pf-surface); border: 1px solid var(--pf-border); font-family: var(--pf-mono); font-size: 12.5px; line-height: 1.6; overflow-x: auto; white-space: pre; }
 .pf-ladder { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; padding: 0 16px 14px; }
 .pf-ladder__tile { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--pf-radius); border: 1px solid var(--pf-border); background: var(--pf-surface-2); }
 .pf-ladder__tile--on { background: var(--pf-grant-soft); border-color: var(--pf-grant-border); color: var(--pf-grant); }
@@ -736,7 +751,7 @@
 .pf-close:hover { background: var(--pf-surface-2); }
 .pf-confirm { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
 .pf-confirm__title { font-size: 17px; font-weight: 600; text-wrap: balance; }
-.pf-confirm__list { max-height: 200px; overflow-y: auto; padding: 10px 12px; border-radius: var(--pf-radius); background: var(--pf-surface-2); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.pf-confirm__list { position: relative; max-height: 200px; overflow-y: auto; padding: 10px 12px; border-radius: var(--pf-radius); background: var(--pf-surface-2); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .pf-confirm--danger { border-top: 3px solid var(--pf-block); }
 .pf-toasts { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; width: max-content; max-width: min(640px, calc(100% - 32px)); }
 /* A page with a sticky savebar keeps the bottom edge for it: toasts go to the top, so neither hides the other. */

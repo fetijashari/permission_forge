@@ -24,7 +24,7 @@
     </div>
   <% end %>
 
-  <div class="pf-card pf-scroll-x pf-table-frame">
+  <%= pf_scroll_frame('aria-label': t('.label'), class: 'pf-card pf-table-frame') do %>
     <div class="pf-table pf-table--assignments" role="table" aria-label="<%= t('.label') %>">
       <div class="pf-table__head" role="row">
         <span role="columnheader">
@@ -75,5 +75,5 @@
     <% if @assignments.empty? %>
       <p class="pf-empty"><%= t('.empty') %></p>
     <% end %>
-  </div>
+  <% end %>
 </div>
