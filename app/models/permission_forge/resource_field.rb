@@ -40,6 +40,25 @@ module PermissionForge
             .merge(PermissionForge::Resource.active).merge(PermissionForge::PermissionSet.active)
     }
 
+    # The rows that show a field in the clear — the SQL twin of
+    # #exposes_in_clear? (a test pins that they agree). The set's direction
+    # is the caller's: `in_effect.merge(PermissionSet.granting)` for the
+    # rows that reach someone's hash.
+    scope :exposing_in_clear, -> { active.where(read_access: true, mask_access: false) }
+
+    # The one definition of "readable in the clear": an active row that
+    # grants read and no mask. On a granting set's row only — a muting row
+    # takes access away, so the question does not arise there. The GDPR
+    # audit (unmasked_field, cross_set_unmasking), the security audit's
+    # personal_data check, Home's privacy card and the boot warning all ask
+    # this; a Hidden row (read off) is never in the clear, nor is a row
+    # written past the validation with mask on and read off.
+    #
+    # @return [Boolean]
+    def exposes_in_clear?
+      is_active && read_access && !mask_access
+    end
+
     # A duplicate (resource_id, name) row would let a second field entry with
     # mask_access: false silently unmask the field via FieldPermissionMerger's
     # AND logic. Enforced by a DB unique index (idx_pf_resource_fields_unique)

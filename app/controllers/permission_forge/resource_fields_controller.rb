@@ -43,7 +43,7 @@ module PermissionForge
 
     # Applies the recommended mask for a sensitive column.
     def apply_recommendation
-      match = PermissionForge::Admin::SensitiveColumns.new.match(@key)
+      match = PermissionForge::SensitiveColumns.new.match(@key)
       return redirect_to(field_path) unless match
 
       level = @permission_set.is_muting ? 'mask' : 'masked'

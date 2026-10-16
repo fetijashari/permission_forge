@@ -142,7 +142,10 @@ module PermissionForge
         assert_equal([], fields.values.select { |field| field['mask_access'] }.map { |field| field['name'] })
       end
 
-      test 'POST generate_fields without grant_all keeps the privacy defaults' do
+      # Without grant_all nothing is granted, the personal-data columns
+      # included (through 0.14.1 they came back readable and masked); the
+      # recommended strategy is on the row.
+      test 'POST generate_fields without grant_all grants nothing: every field Hidden, the strategy recorded' do
         PermissionForge.configuration.gdpr_defaults = true
         resource = create_resource(permission_set: @ps, name: 'Customer')
 
@@ -150,8 +153,8 @@ module PermissionForge
 
         assert_response :created
         fields = JSON.parse(response.body)['data'].index_by { |field| field['name'] }
-        assert_equal [true, false, true, 'email'], fields.fetch('email').values_at('read_access', 'edit_access', 'mask_access', 'mask_strategy')
-        assert_equal [false, false, false], fields.fetch('domain').values_at('read_access', 'edit_access', 'mask_access')
+        assert_equal [false, false, false, 'email'], fields.fetch('email').values_at('read_access', 'edit_access', 'mask_access', 'mask_strategy')
+        assert_equal [false, false, false, 'full'], fields.fetch('domain').values_at('read_access', 'edit_access', 'mask_access', 'mask_strategy')
       end
 
       # A JSON true (or 1) used to read as false: 201 with fields without edit.

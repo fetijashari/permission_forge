@@ -325,7 +325,7 @@ module PermissionForge
 
     # Column names that are personal data, with the mask for each. One
     # definition for masking detection (ResourceFieldGenerator,
-    # GdprFieldAuditor, Admin::SensitiveColumns, the security audit) and for
+    # GdprFieldAuditor, SensitiveColumns, the security audit) and for
     # Rails' filter_parameters (PermissionForge.gdpr_filter_parameters), which
     # Rails also applies to ActiveRecord::Base.filter_attributes — so a match
     # prints as [FILTERED] in #inspect. A word matches anywhere in the name,
@@ -336,7 +336,7 @@ module PermissionForge
     # `home_tel`, `tel2`, `telNumber`, `cityName`, `zipcode` yes — `hotel_id`,
     # `capacity`, `telemetry_enabled`, `automobile_id`, `gzip_enabled` no.
     # Every alternative stands alone (no group with an inner `|`):
-    # Admin::SensitiveColumns names the one that matched. The first pattern
+    # SensitiveColumns names the one that matched. The first pattern
     # that matches decides the strategy: Rails 8's `email_address` is an
     # email (it also matches `address`, below).
     DEFAULT_GDPR_FIELD_PATTERNS = {

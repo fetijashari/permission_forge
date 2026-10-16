@@ -34,7 +34,7 @@ module PermissionForge
       assert_equal "GDPR audit found #{expected} issue(s):", output.lines.first.chomp
       assert_equal expected, output.lines.size - 1
       assert_includes output, '  [UNMASKED] Customer.email (Permission Set: Support) — personal data, not masked ' \
-                              "(suggested strategy: 'email')"
+                              "(suggested strategy: 'email'; matches 'email')"
     end
 
     private

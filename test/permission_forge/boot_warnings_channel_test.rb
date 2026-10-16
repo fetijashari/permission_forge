@@ -73,6 +73,8 @@ module PermissionForge
        "#{REQUEST_TIME} (unscoped_query_detection = :log)"],
       ['lib/permission_forge/services/resource_field_generator.rb', /skipped \#\{skipped\} blank field name/,
        "#{REQUEST_TIME} (field generation)"],
+      ['lib/permission_forge/services/permission_set_cloner.rb', /skipped \#\{@skipped\.size\} row\(s\) with a blank name/,
+       "#{REQUEST_TIME} (a copy that leaves blank-named rows out)"],
       ['lib/permission_forge/concerns/permission_scoped_findable.rb', /current_user is nil — permission_scoped returns unscoped/,
        "#{REQUEST_TIME} (nil_user_strategy)"],
       ['lib/permission_forge/concerns/permission_scoped_findable.rb', /current_user is nil — bypassing row-level rules/,

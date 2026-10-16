@@ -146,20 +146,26 @@ module PermissionForge
         assert_not email_field.mask_access
       end
 
-      test 'applies GDPR masks when gdpr_defaults is true' do
+      # Without grant_all nothing is granted, and a privacy default never
+      # grants: the personal-data columns are Hidden like the rest (through
+      # 0.14.1 they came back readable and masked). The recommended strategy
+      # is on the row for when someone opens them.
+      test 'without grant_all gdpr_defaults records the recommended strategy and grants nothing: every row Hidden' do
         PermissionForge.configuration.gdpr_defaults = true
         fields = PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource)
 
         email_field = fields.find { |f| f.name == 'email' }
-        assert email_field.mask_access
+        assert_not email_field.read_access
+        assert_not email_field.mask_access
         assert_equal 'email', email_field.mask_strategy
 
         name_field = fields.find { |f| f.name == 'name' }
-        assert name_field.mask_access
+        assert_not name_field.read_access
         assert_equal 'first1_last4', name_field.mask_strategy
 
         domain_field = fields.find { |f| f.name == 'domain' }
-        assert_not domain_field.mask_access
+        assert_not domain_field.read_access
+        assert_equal 'full', domain_field.mask_strategy
       ensure
         PermissionForge.configuration.gdpr_defaults = false
       end
@@ -167,16 +173,16 @@ module PermissionForge
       test 'respects custom gdpr_field_patterns' do
         PermissionForge.configuration.gdpr_defaults = true
         original = PermissionForge.configuration.gdpr_field_patterns
-        PermissionForge.configuration.gdpr_field_patterns = { /domain/ => 'full' }
+        PermissionForge.configuration.gdpr_field_patterns = { /domain/ => 'last4' }
 
         fields = PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource)
 
         domain_field = fields.find { |f| f.name == 'domain' }
-        assert domain_field.mask_access
-        assert_equal 'full', domain_field.mask_strategy
+        assert_equal 'last4', domain_field.mask_strategy
+        assert_not domain_field.read_access
 
         email_field = fields.find { |f| f.name == 'email' }
-        assert_not email_field.mask_access
+        assert_equal 'full', email_field.mask_strategy
       ensure
         PermissionForge.configuration.gdpr_defaults = false
         PermissionForge.configuration.gdpr_field_patterns = original
@@ -211,13 +217,13 @@ module PermissionForge
         assert virtual.edit_access
       end
 
-      test 'under :unconfigured virtual fields are generated once and get GDPR masks' do
+      test 'under :unconfigured virtual fields are generated once, Hidden, with the recommended strategy' do
         PermissionForge.configuration.extra_fields_default_access = :unconfigured
         PermissionForge.configuration.gdpr_defaults = true
         fields = PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource)
         address = fields.find { |f| f.name == 'full_address' }
 
-        assert address.mask_access
+        assert_not address.read_access
         assert_equal 'full', address.mask_strategy
         assert_empty PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource)
       ensure

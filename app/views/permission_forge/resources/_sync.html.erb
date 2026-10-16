@@ -1,7 +1,7 @@
 <% fresh = @rows.new_columns %>
 <% missing = @rows.missing_fields %>
 <% ignored = @rows.ignored_columns %>
-<% sensitive = PermissionForge::Admin::SensitiveColumns.new %>
+<% sensitive = PermissionForge::SensitiveColumns.new %>
 <%# A Muting Permission Set's columns with no setting mute nothing: that is information, not a warning. %>
 <% warn = @rows.sync_warning? %>
 <details class="pf-sync<%= ' pf-sync--info' unless warn %>" <%= 'open' if params[:sync] %>>

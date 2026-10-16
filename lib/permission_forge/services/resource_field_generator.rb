@@ -1,3 +1,5 @@
+require_relative 'resource_field_generator/row_builder'
+
 module PermissionForge
   module Services
     # Creates a ResourceField for every column of a resource's model (and declared virtual fields
@@ -5,21 +7,46 @@ module PermissionForge
     #
     # @api public
     class ResourceFieldGenerator
-      # Under `gdpr_defaults` a column that looks like personal data is
-      # created masked (readable, not editable). With `grant_all` the caller
-      # asked for full access, so no mask is applied: the field is readable
-      # and editable in the clear, keeps the recommended mask strategy for
-      # when someone masks it, and is still reported as personal data
-      # (GdprFieldAuditor, the admin's privacy audit). On a granting set
-      # Rails' timestamps (created_at / updated_at) are at most read-only:
-      # with `grant_all` read on, edit off, unmasked; without it hidden like
-      # every other column (PermissionForge::TimestampFields).
+      # Every generated row is built by {RowBuilder}, the one definition the
+      # admin's presets, "Sync fields" and the Fields tab's bulk add share.
+      # With `grant_all` the caller asked for full access (Editable): every
+      # field readable and editable, unmasked — also the columns that look
+      # like personal data, which keep the recommended mask strategy for
+      # when someone masks them and are still reported as personal data
+      # (GdprFieldAuditor, the admin's privacy audit). Without it every
+      # field is Hidden; under `gdpr_defaults` the privacy default masks what
+      # is granted Read, and nothing is granted here. On a Muting Permission
+      # Set `grant_all` takes everything away (Hide) and its absence writes
+      # the row that mutes nothing (Unchanged). Rails' timestamps
+      # (created_at / updated_at) are at most read-only on a granting set
+      # (PermissionForge::TimestampFields).
       #
       # @param resource [Resource]
       # @param grant_all [Boolean] grant read and edit, unmasked, on the generated fields
       # @return [Array<ResourceField>] the fields created
       def self.call(resource:, grant_all: false)
         new(resource: resource, grant_all: grant_all).call
+      end
+
+      # The attributes of one generated row — the one definition every path
+      # that creates rows for a model's columns uses ({RowBuilder#attrs}).
+      #
+      # @param resource [Resource] its Permission Set says whether the row is a muting one
+      # @param column [String, Symbol] a column or virtual field name
+      # @param level [String] a FieldLevel of the set's kind
+      # @return [Hash, nil] the row's attributes, nil for a blank name
+      def self.build(resource:, column:, level:)
+        rows(resource).attrs(column, level)
+      end
+
+      # A builder for several rows of one Resource (the model and the matcher
+      # are resolved once). Keywords as {RowBuilder#initialize}: `muting:`
+      # (default: the Resource's set says), `configuration:`, `sensitive:`.
+      #
+      # @param resource [Resource]
+      # @return [RowBuilder]
+      def self.rows(resource, **)
+        RowBuilder.new(resource, **)
       end
 
       def initialize(resource:, grant_all: false)
@@ -66,10 +93,10 @@ module PermissionForge
         existing_names = @resource.resource_fields.pluck(:name)
         columns = model_class.column_names - ignored_fields + virtual_field_names(model_class) - existing_names
 
-        timestamps = PermissionForge::TimestampFields.new(model_class, muting: muting?)
-        columns.map do |column_name|
-          attrs = build_field_attrs(column_name)
-          PermissionForge::ResourceField.create!(attrs.merge(timestamps.overrides(column_name, read: attrs[:read_access])))
+        rows = RowBuilder.new(@resource, muting: muting?)
+        columns.filter_map do |column_name|
+          attrs = rows.attrs(column_name, level)
+          PermissionForge::ResourceField.create!(attrs.merge(resource: @resource)) if attrs
         end
       end
 
@@ -77,23 +104,20 @@ module PermissionForge
         @resource.permission_set&.is_muting || false
       end
 
-      # The row's attributes; Rails' timestamps are then at most Read-only on
-      # a granting set (PermissionForge::TimestampFields).
-      def build_field_attrs(column_name)
-        attrs = {
-          resource: @resource,
-          name: column_name,
-          label: column_name.humanize,
-          is_active: true,
-          is_editable: true,
-          read_access: @grant_all,
-          edit_access: @grant_all
-        }
-        PermissionForge.configuration.gdpr_defaults ? attrs.merge(gdpr_default_attrs(column_name)) : attrs
+      # The level generated rows get: full access or none; on a Muting
+      # Permission Set the level that takes everything away, or the one that
+      # mutes nothing.
+      def level
+        if muting?
+          @grant_all ? 'hide' : 'leave'
+        else
+          @grant_all ? 'edit' : 'hidden'
+        end
       end
 
+      # Symbols or Strings, as the host wrote them.
       def ignored_fields
-        PermissionForge.configuration.ignored_fields
+        Array(PermissionForge.configuration.ignored_fields).map(&:to_s)
       end
 
       # Virtual fields get rows only under extra_fields_default_access =
@@ -105,16 +129,6 @@ module PermissionForge
         return [] if configuration.grant_extra_fields_by_default?
 
         self.class.without_blank_names(model_class, PermissionForge::VirtualFields.new(model_class, configuration).names)
-      end
-
-      # Full access (grant_all) records the recommended strategy without
-      # masking; otherwise the column becomes readable, masked.
-      def gdpr_default_attrs(column_name)
-        _pattern, strategy = PermissionForge.configuration.gdpr_field_patterns.find { |regex, _| column_name.match?(regex) }
-        return {} unless strategy
-        return { mask_strategy: strategy } if @grant_all
-
-        { mask_strategy: strategy, read_access: true, mask_access: true }
       end
     end
   end

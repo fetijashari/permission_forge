@@ -20,8 +20,11 @@ module OneDefinition
                    'gdpr_filter_parameters hands the same patterns to Rails filter_parameters: a list, not a match']],
       fixture: 'strategy = config.gdpr_field_patterns.find { |regex, _| name.match?(regex) }' },
     { name: '"readable in the clear" (ResourceField#exposes_in_clear? / .exposing_in_clear)',
-      globs: GEM_CODE, needle: /where\(mask_access: false\)|read_access && !\w+\.mask_access/,
-      canonical: %w[app/models/permission_forge/resource_field.rb], allowlist: [],
+      globs: GEM_CODE, needle: /mask_access: false\)|read_access && !(?:\w+\.)?mask_access/,
+      canonical: %w[app/models/permission_forge/resource_field.rb],
+      allowlist: [['lib/permission_forge/admin/attention_items.rb', /field\.is_active && field\.read_access && !field\.mask_access/,
+                   'WP-8b owns attention_items.rb: it applies the one-line change from tmp/pf-verify/plan/fragments/wp-8a.attention_items.md ' \
+                   '(`field.exposes_in_clear?`); remove this entry with it']],
       fixture: 'rows = fields.where(mask_access: false)' },
     { name: 'a generated field row (ResourceFieldGenerator::RowBuilder): timestamps',
       globs: GEM_CODE, needle: /TimestampFields\.new/, canonical: [ROW_BUILDER], allowlist: [],
@@ -37,11 +40,13 @@ module OneDefinition
                    'the level edits of existing rows (FieldLevels) assign flags; a new row goes through the builder'],
                   ['lib/permission_forge/admin/change_set_parts/base.rb', /FieldLevel\.flags_for\(level, muting: muting\?\)/,
                    'the level edits of existing rows (FieldLevels) assign flags; a new row goes through the builder'],
-                  ['lib/permission_forge/admin/change_set_parts/field_edit.rb', /@field\.assign_attributes\(FieldLevel\.flags_for\(level, muting: @muting\)\)/,
+                  ['lib/permission_forge/admin/change_set_parts/field_edit.rb', /@field\.assign_attributes\(FieldLevel\.flags_for\(level/,
                    'the field drawer changes the level of an existing row; a new row goes through the builder']],
       fixture: 'field.assign_attributes(FieldLevel.flags_for(level, muting: false))' },
+    # No canonical file: the alias is declared by name in a string
+    # (deprecate_constant), which the scanner blanks.
     { name: 'the deprecated PermissionForge::Admin::SensitiveColumns is not used by the gem itself',
-      globs: GEM_CODE, needle: /Admin::SensitiveColumns/, canonical: %w[lib/permission_forge/admin/sensitive_columns.rb], allowlist: [],
+      globs: GEM_CODE, needle: /Admin::SensitiveColumns/, canonical: [], allowlist: [],
       fixture: 'match = PermissionForge::Admin::SensitiveColumns.new.match(key)' }
   ].freeze
 end

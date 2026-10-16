@@ -74,7 +74,7 @@ module PermissionForge
 
         other = create_resource(permission_set: create_permission_set, name: 'PfBlankVirtualNames')
         PermissionForge::Admin::ChangeSet.new(permission_set: other.permission_set,
-                                             params: { bulk: { resource_id: other.id.to_s, keys: names, level: 'read' } }).apply!
+                                              params: { bulk: { resource_id: other.id.to_s, keys: names, level: 'read' } }).apply!
 
         assert_equal %w[domain virtual_ok], other.resource_fields.reload.map(&:name).sort
       end

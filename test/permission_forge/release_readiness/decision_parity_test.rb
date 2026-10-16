@@ -38,4 +38,4 @@ module PermissionForge
   end
 end
 
-Dir[File.expand_path('../../support/decision_parity/*.rb', __dir__)].sort.each { |file| require file }
+Dir[File.expand_path('../../support/decision_parity/*.rb', __dir__)].each { |file| require file }

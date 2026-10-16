@@ -79,7 +79,7 @@ module PermissionForge
           expected = names.filter_map { |name| (match = matcher.match(name)) && [name, match.strategy] }.to_h
 
           findings = Services::GdprFieldAuditor.call.select { |f| f[:type] == :unmasked_field && rows.values.map(&:id).include?(f[:resource_field_id]) }
-          assert_equal expected, findings.to_h { |f| [f[:field_name], f[:suggested_strategy]] }
+          assert_equal(expected, findings.to_h { |f| [f[:field_name], f[:suggested_strategy]] })
           assert_equal({ 'email' => 'email', 'phone_number' => 'last4', 'api_token' => 'full' }, expected)
 
           names.each do |name|
@@ -111,10 +111,10 @@ module PermissionForge
 
         report = Services::GdprFieldAuditor.call
         unmasked = report.select { |f| f[:type] == :unmasked_field && rows.map(&:id).include?(f[:resource_field_id]) }
-        assert_equal in_clear.map(&:id), unmasked.map { |f| f[:resource_field_id] }
+        assert_equal(in_clear.map(&:id), unmasked.map { |f| f[:resource_field_id] })
         set_names = rows.map { |row| row.resource.permission_set.name }
         cross = report.select { |f| f[:type] == :cross_set_unmasking && f[:field_name] == 'email' && set_names.include?(f[:permission_set]) }
-        assert_equal in_clear.map { |row| row.resource.permission_set.name }, cross.map { |f| f[:permission_set] }
+        assert_equal(in_clear.map { |row| row.resource.permission_set.name }, cross.map { |f| f[:permission_set] })
       end
 
       private
@@ -123,21 +123,34 @@ module PermissionForge
       # sets of the same kind; rows as ROW, sorted.
       def rows_by_path(model_name, muting:, level:)
         PermissionForge.configuration.extra_fields_default_access = :unconfigured
-        sets = 3.times.map { |i| parity_set("parity #{i}", muting: muting) }
-        resources = sets.map { |set| create_resource(permission_set: set, name: model_name, read_access: true, edit_access: true) }
-        names = PermissionForge::Admin::ModelCatalog.new.find(model_name).managed_field_names
+        resources = 3.times.map { |i| parity_resource(model_name, "parity #{i}", muting: muting) }
+        generated = all_paths_wrote?(resources, level, muting: muting)
 
+        rows = resources.map { |resource| resource.resource_fields.reload.map(&ROW).sort }
+        generated ? rows : rows.first(2) << nil
+      end
+
+      # Writes the rows on the three paths; false when the generator has no
+      # grant_all for `level` (Masked, Force mask).
+      def all_paths_wrote?(resources, level, muting:)
+        names = PermissionForge::Admin::ModelCatalog.new.find(resources.first.name).managed_field_names
         PermissionForge::Admin::ColumnFields.new(resources[0], muting: muting).create(names, level)
-        PermissionForge::Admin::ChangeSet.new(permission_set: sets[1],
-                                             params: { bulk: { resource_id: resources[1].id.to_s, keys: names, level: level } }).apply!
+        bulk_add(resources[1], names, level)
         grant_all = GENERATOR_GRANT_ALL[level]
-        Services::ResourceFieldGenerator.call(resource: resources[2], grant_all: grant_all) unless grant_all.nil?
+        return false if grant_all.nil?
 
-        resources.each_with_index.map do |resource, index|
-          next if index == 2 && grant_all.nil?
+        Services::ResourceFieldGenerator.call(resource: resources[2], grant_all: grant_all)
+        true
+      end
 
-          resource.resource_fields.reload.map(&ROW).sort
-        end
+      def parity_resource(model_name, label, muting:)
+        create_resource(permission_set: parity_set(label, muting: muting), name: model_name, read_access: true, edit_access: true)
+      end
+
+      # The Fields tab's bulk "Add" of unconfigured columns, as the controller posts it.
+      def bulk_add(resource, names, level)
+        params = { bulk: { resource_id: resource.id.to_s, keys: names, level: level } }
+        PermissionForge::Admin::ChangeSet.new(permission_set: resource.permission_set, params: params).apply!
       end
     end
   end

@@ -19,11 +19,11 @@ module PermissionForge
         LINES = {
           unmasked_field: lambda { |finding|
             "[UNMASKED] #{finding[:resource_name]}.#{finding[:field_name]} (Permission Set: #{finding[:permission_set]}) " \
-              "— personal data, not masked (suggested strategy: '#{finding[:suggested_strategy]}')"
+              "— personal data, not masked (suggested strategy: '#{finding[:suggested_strategy]}'#{TextReport.matched(finding)})"
           },
           unmapped_column: lambda { |finding|
             "[UNMAPPED] #{finding[:resource]}.#{finding[:column]} " \
-              "— personal data, no active ResourceField (suggested strategy: '#{finding[:pattern_matched]}')"
+              "— personal data, no active ResourceField (suggested strategy: '#{finding[:pattern_matched]}'#{TextReport.matched(finding)})"
           },
           implicit_virtual_grant: lambda { |finding|
             "[VIRTUAL] #{finding[:permission_set]} › #{finding[:resource_name]}.#{finding[:field_name]} " \
@@ -56,6 +56,18 @@ module PermissionForge
           return 'another Permission Set' if names.empty?
 
           "#{names.one? ? 'Permission Set' : 'Permission Sets'} #{names.join(', ')}"
+        end
+
+        # Why the column counts as personal data, when the finding says
+        # (SensitiveColumns::Match#pattern: the GDPR pattern's alternative
+        # that matched, or the host's filter_parameters); nothing otherwise.
+        #
+        # @return [String]
+        def self.matched(finding)
+          pattern = finding[:pattern]
+          return '' if pattern.blank?
+
+          pattern == SensitiveColumns::FILTER_PARAMETERS ? '; named by filter_parameters' : "; matches '#{pattern}'"
         end
 
         def initialize(report)

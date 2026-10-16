@@ -47,15 +47,25 @@ module PermissionForge
           (params.dig('new_fields', resource.id.to_s) || {}).keys.map(&:to_s)
         end
 
+        # The row comes from the one row builder (ResourceFieldGenerator::
+        # RowBuilder: privacy defaults, timestamps, the recommended strategy),
+        # so the change records the level the row really gets — Masked for a
+        # sensitive column added Read-only under gdpr_defaults, Read-only for
+        # a timestamp added Editable. A blank name is no row.
         def build_new_field(resource, column, level)
           return nil unless valid_level?(level) && level != 'leave'
 
-          level = Values.effective_level(level, resource, muting: muting?)
-          field = resource.resource_fields.build(name: column, label: column.humanize, is_active: true, is_editable: true)
-          field.assign_attributes(flags_for(level))
-          field.mask_strategy = sensitive.match(column)&.strategy || 'full'
-          change(kind: :new_field, record: field, attribute: 'level', from: nil, to: [level, field.mask_strategy],
-                 resource: resource)
+          attrs = rows_of(resource).attrs(column, Values.effective_level(level, resource, muting: muting?))
+          return nil unless attrs
+
+          field = resource.resource_fields.build(attrs)
+          change(kind: :new_field, record: field, attribute: 'level', from: nil,
+                 to: [FieldLevel.level_of(field, muting: muting?), field.mask_strategy], resource: resource)
+        end
+
+        def rows_of(resource)
+          @rows_of ||= {}
+          @rows_of[resource.id] ||= Services::ResourceFieldGenerator.rows(resource, muting: muting?, sensitive: sensitive)
         end
       end
     end

@@ -2,28 +2,30 @@
 
 module PermissionForge
   module Admin
-    # Creates ResourceFields for model columns and virtual fields at one level,
-    # applying privacy defaults: under gdpr_defaults sensitive names added
-    # Read-only start Masked, and the muting 'hide_sensitive' level hides only
-    # sensitive names. Editable is full access (the "Full access" preset, "Add
-    # all new with full access"): nothing is masked, every row keeps the
-    # recommended strategy, and the privacy audit still flags the names.
-    # Rails' timestamps are at most Read-only on a granting set
-    # (PermissionForge::TimestampFields).
+    # Creates ResourceFields for model columns and virtual fields at one
+    # level: the admin's presets ("Add resource"), "Add all new" and "Sync
+    # fields". The rows themselves come from the one row builder
+    # (Services::ResourceFieldGenerator::RowBuilder): privacy defaults,
+    # timestamps, the recommended strategy, the label. This class only turns
+    # a preset into a level per column — the muting 'hide_sensitive' preset
+    # hides the sensitive names and leaves the others alone — and skips the
+    # levels that are no row (Unchanged, a level the set's kind lacks).
     #
     # @api private
     class ColumnFields
-      # Granting levels that privacy defaults turn into Masked for a sensitive name.
-      MASKED_BY_PRIVACY_DEFAULTS = %w[read].freeze
+      # The muting levels that are a row (Unchanged is none).
+      MUTING_ROW_LEVELS = %w[mask hide].freeze
+      # The muting preset that hides the sensitive names and leaves the others.
+      HIDE_SENSITIVE = 'hide_sensitive'
 
       def initialize(resource, muting:, sensitive: SensitiveColumns.new, configuration: PermissionForge.configuration)
         @resource = resource
         @muting = muting
         @sensitive = sensitive
-        @configuration = configuration
+        @rows = Services::ResourceFieldGenerator.rows(resource, muting: muting, configuration: configuration, sensitive: sensitive)
       end
 
-      # @return [Integer] number of fields created (columns whose level resolves to nil are skipped)
+      # @return [Integer] number of fields created (columns whose level resolves to nil, and blank names, are skipped)
       def create(columns, level)
         columns.filter_map { |column| create_field(column, level) }.size
       end
@@ -31,32 +33,18 @@ module PermissionForge
       private
 
       def create_field(column, level)
-        match = @sensitive.match(column)
-        column_level = @muting ? muting_level(level, match) : granting_level(level, match)
+        column_level = column_level(column, level)
         return unless column_level
 
-        attrs = FieldLevel.flags_for(column_level, muting: @muting)
-        attrs = attrs.merge(timestamps.overrides(column, read: attrs[:read_access]))
-        @resource.resource_fields.create!(attrs.merge(name: column, label: column.humanize, is_active: true, is_editable: true,
-                                                      mask_strategy: match&.strategy || 'full'))
+        attrs = @rows.attrs(column, column_level)
+        @resource.resource_fields.create!(attrs) if attrs
       end
 
-      def timestamps
-        @timestamps ||= PermissionForge::TimestampFields.new(@resource.name.to_s.safe_constantize, muting: @muting)
-      end
+      # @return [String, nil] the level the column's row gets, nil for no row
+      def column_level(column, level)
+        return level if @muting ? MUTING_ROW_LEVELS.include?(level) : FieldLevel.valid?(level, muting: false)
 
-      def muting_level(level, match)
-        return 'hide' if level == 'hide_sensitive' && match
-        return nil if %w[hide_sensitive leave].include?(level) || level.blank?
-
-        FieldLevel.valid?(level, muting: true) ? level : nil
-      end
-
-      def granting_level(level, match)
-        return nil unless FieldLevel.valid?(level, muting: false)
-        return 'masked' if match && MASKED_BY_PRIVACY_DEFAULTS.include?(level) && @configuration.gdpr_defaults
-
-        level
+        'hide' if @muting && level == HIDE_SENSITIVE && @sensitive.sensitive?(column)
       end
     end
   end

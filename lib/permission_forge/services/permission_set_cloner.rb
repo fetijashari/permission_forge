@@ -45,15 +45,21 @@ module PermissionForge
       private
 
       def clone_resources(target_set)
+        @skipped = []
         @permission_set.resources.includes(:resource_fields, :resource_actions, :permission_set_rules).find_each do |resource|
           clone_resource(target_set, resource)
         end
+        log_skipped
       end
 
+      # A field or action row with a blank name (written before the names
+      # were checked) cannot be created again: the copy leaves it out —
+      # such a row names no column and no action — and the log says so,
+      # once per copy, instead of refusing the whole copy.
       def clone_resource(target_set, resource)
         cloned_resource = copy(resource, permission_set: target_set)
 
-        resource.resource_fields.each { |field| copy(field, resource: cloned_resource) }
+        copyable(resource.resource_fields).each { |field| copy(field, resource: cloned_resource) }
         clone_actions(resource, cloned_resource)
         resource.permission_set_rules.each { |rule| copy(rule, permission_set: target_set, resource: cloned_resource) }
       end
@@ -62,9 +68,22 @@ module PermissionForge
       # table without the unique index) are OR-ed when permissions are built,
       # so the copy is the single row they amount to.
       def clone_actions(resource, cloned_resource)
-        resource.resource_actions.group_by(&:name).each_value do |rows|
+        copyable(resource.resource_actions).group_by(&:name).each_value do |rows|
           copy(rows.first, resource: cloned_resource, **combined_action_flags(rows))
         end
+      end
+
+      def copyable(rows)
+        kept, skipped = rows.partition { |row| !refused_for_blank_name?(row) }
+        @skipped.concat(skipped)
+        kept
+      end
+
+      def log_skipped
+        return if @skipped.empty?
+
+        kinds = @skipped.map { |row| row.class.name.demodulize }.tally.map { |kind, count| "#{count} #{kind}" }.join(', ')
+        Rails.logger&.warn("[PermissionForge] copying #{@permission_set.name}: skipped #{@skipped.size} row(s) with a blank name (#{kinds})")
       end
 
       def combined_action_flags(rows)

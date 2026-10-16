@@ -123,17 +123,18 @@ module PermissionForge
                       '(the default, true, denies mutations until they are set).', severity: :security)
       end
 
-      # One query for the distinct unmasked names (no record is built), and
-      # one more for the resource of the first match.
+      # One query for the distinct names of the rows in the clear that reach
+      # someone's hash (in effect, in a granting set; no record is built),
+      # and one more for the resource of the first match. What counts as
+      # personal data is PermissionForge::SensitiveColumns' answer, as for
+      # the GDPR audit and the admin.
       def warn_unmasked_gdpr_fields(config)
-        patterns = config.gdpr_field_patterns
-        return if patterns.blank?
-
-        unmasked = PermissionForge::ResourceField.where(mask_access: false)
-        name = unmasked.distinct.pluck(:name).find { |field_name| gdpr_match?(field_name, patterns) }
+        sensitive = PermissionForge::SensitiveColumns.new(configuration: config)
+        in_clear = PermissionForge::ResourceField.in_effect.merge(PermissionForge::PermissionSet.granting).exposing_in_clear
+        name = in_clear.distinct.pluck(:name).find { |field_name| sensitive.sensitive?(field_name) }
         return unless name
 
-        resource = unmasked.where(name: name).first&.resource
+        resource = in_clear.where(name: name).first&.resource
         Warnings.emit(:unmasked_gdpr_fields,
                       "GDPR warning: field '#{name}' on resource '#{resource&.name}' matches GDPR pattern " \
                       'but is not masked. Consider enabling gdpr_defaults or masking this field manually.')
@@ -193,10 +194,6 @@ module PermissionForge
         Warnings.emit(:basic_auth_without_credentials,
                       'HTTP Basic Auth is enabled but credentials are not configured. The admin UI will return ' \
                       '401 for all requests. Set config.http_basic_auth_user and config.http_basic_auth_password.')
-      end
-
-      def gdpr_match?(field_name, patterns)
-        patterns.any? { |regex, _| field_name.match?(regex) }
       end
 
       # Taken as the per-read selection takes it: a Hash, or anything with

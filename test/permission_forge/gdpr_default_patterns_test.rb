@@ -5,7 +5,7 @@ require 'test_helper'
 module PermissionForge
   # The default GDPR field patterns serve two readers with one definition:
   # masking detection (ResourceFieldGenerator, GdprFieldAuditor,
-  # Admin::SensitiveColumns, the security audit) and, through
+  # SensitiveColumns, the security audit) and, through
   # PermissionForge.gdpr_filter_parameters, Rails' config.filter_parameters —
   # which Rails also copies into ActiveRecord::Base.filter_attributes, so a
   # matching attribute prints as [FILTERED] in #inspect and the logs. A
@@ -57,20 +57,20 @@ module PermissionForge
     # also matches `address`; the email pattern comes first and decides.
     test 'email_address is detected as an email, everywhere the patterns are read' do
       %w[email_address billing_email_address].each do |name|
-        match = Admin::SensitiveColumns.new.match(name)
+        match = SensitiveColumns.new.match(name)
         assert_equal %w[email email_address], [match&.strategy, match&.pattern], name
       end
       assert_equal 'email', PermissionForge.configuration.gdpr_field_patterns.find { |pattern, _| 'email_address'.match?(pattern) }&.last
       assert_equal 'j***@example.com', Services::MaskValue.call('jane@example.com', strategy: 'email')
-      assert_equal 'full', Admin::SensitiveColumns.new.match('street_address')&.strategy
-      assert_equal 'full', Admin::SensitiveColumns.new.match('email_address_verified_at')&.strategy, 'an address column, not an email'
+      assert_equal 'full', SensitiveColumns.new.match('street_address')&.strategy
+      assert_equal 'full', SensitiveColumns.new.match('email_address_verified_at')&.strategy, 'an address column, not an email'
     end
 
-    test 'Admin::SensitiveColumns still names the alternative that matched' do
-      assert_equal 'last4', Admin::SensitiveColumns.new.match('telephone')&.strategy
-      assert_equal 'full', Admin::SensitiveColumns.new.match('home_city')&.strategy
-      assert_equal(%w[tel city dob], %w[telNumber cityName dob2].map { |name| Admin::SensitiveColumns.new.match(name)&.pattern })
-      assert_nil Admin::SensitiveColumns.new.match('hotel_id')
+    test 'SensitiveColumns still names the alternative that matched' do
+      assert_equal 'last4', SensitiveColumns.new.match('telephone')&.strategy
+      assert_equal 'full', SensitiveColumns.new.match('home_city')&.strategy
+      assert_equal(%w[tel city dob], %w[telNumber cityName dob2].map { |name| SensitiveColumns.new.match(name)&.pattern })
+      assert_nil SensitiveColumns.new.match('hotel_id')
     end
 
     private

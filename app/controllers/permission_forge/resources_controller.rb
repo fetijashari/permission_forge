@@ -139,7 +139,7 @@ module PermissionForge
 
     def load_new_form
       load_models
-      @sensitive = PermissionForge::Admin::SensitiveColumns.new
+      @sensitive = PermissionForge::SensitiveColumns.new
       @existing = @permission_set.resources.pluck(:name)
       @presets = @permission_set.is_muting ? MUTING_PRESETS : GRANTING_PRESETS
       preset = params[:preset]

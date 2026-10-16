@@ -7,13 +7,19 @@ module PermissionForge
     # @api public
     class GdprFieldAuditor
       # @param configuration [Configuration]
+      # @param sensitive [SensitiveColumns] the matcher (default: one on `configuration`)
       # @return [Array<Hash>] one entry per finding
-      def self.call(configuration: PermissionForge.configuration)
-        new(configuration: configuration).call
+      def self.call(configuration: PermissionForge.configuration, sensitive: nil)
+        new(configuration: configuration, sensitive: sensitive).call
       end
 
-      def initialize(configuration: PermissionForge.configuration)
+      # What is personal data, and with which mask, is
+      # PermissionForge::SensitiveColumns' answer — the same the admin, the
+      # field generator and the boot warning get. A column the host's
+      # filter_parameters name counts while filter_parameters_integration is on.
+      def initialize(configuration: PermissionForge.configuration, sensitive: nil)
         @configuration = configuration
+        @sensitive = sensitive || PermissionForge::SensitiveColumns.new(configuration: configuration)
       end
 
       # @return [Array<Hash>] one entry per finding
@@ -37,16 +43,19 @@ module PermissionForge
         PermissionForge::ResourceField.in_effect.merge(PermissionForge::PermissionSet.granting)
       end
 
+      # Rows that show the field in the clear (ResourceField.exposing_in_clear:
+      # read on, no mask). A Hidden row is not one: it shows nothing.
       def audit_unmasked_fields(report)
-        granting_fields.where(mask_access: false).preload(resource: :permission_set).find_each do |field|
-          report << unmasked_finding(field) if gdpr_field?(field.name)
+        granting_fields.exposing_in_clear.preload(resource: :permission_set).find_each do |field|
+          match = @sensitive.match(field.name)
+          report << unmasked_finding(field, match) if match
         end
       end
 
-      def unmasked_finding(field)
+      def unmasked_finding(field, match)
         resource = field.resource
         { type: :unmasked_field, resource_field_id: field.id, field_name: field.name, resource_name: resource.name,
-          suggested_strategy: gdpr_strategy(field.name), permission_set: resource.permission_set.name }
+          suggested_strategy: match.strategy, pattern: match.pattern, permission_set: resource.permission_set.name }
       end
 
       def audit_unmapped_columns(report)
@@ -57,6 +66,8 @@ module PermissionForge
         # Tables don't exist yet (pre-migration)
       end
 
+      # `pattern_matched` is the recommended strategy (the key existing CI
+      # scripts read); `pattern` names what matched.
       def audit_unmapped_for_resource(report, resource_name)
         columns = model_columns_for(resource_name)
         return unless columns
@@ -64,10 +75,11 @@ module PermissionForge
         virtual = unmapped_virtual_names_for(resource_name)
         mapped_names = mapped_field_names_for(resource_name)
         (columns + virtual - mapped_names).each do |column_name|
-          match = gdpr_patterns.find { |regex, _| column_name.match?(regex) }
+          match = @sensitive.match(column_name)
           next unless match
 
-          finding = { type: :unmapped_column, resource: resource_name, column: column_name, pattern_matched: match[1] }
+          finding = { type: :unmapped_column, resource: resource_name, column: column_name,
+                      pattern_matched: match.strategy, pattern: match.pattern }
           report << (virtual.include?(column_name) ? finding.merge(virtual: true) : finding)
         end
       end
@@ -104,20 +116,21 @@ module PermissionForge
         end
       end
 
+      # Resources in effect in a granting Permission Set that grant read
+      # (Resource.in_effect: the one definition of "in effect").
       def granting_resources
-        granting_sets = PermissionForge::PermissionSet.active.granting.select(:id)
-        PermissionForge::Resource.active.where(read_access: true, permission_set_id: granting_sets)
-                                 .includes(:permission_set, :resource_fields)
+        PermissionForge::Resource.in_effect.merge(PermissionForge::PermissionSet.granting)
+                                 .where(read_access: true).preload(:permission_set, :resource_fields)
       end
 
       # [[name, suggested strategy]] for the model's implicitly granted names
-      # that match a GDPR pattern. Names in ignored_fields are left out: the
-      # admin does not manage those.
+      # that look like personal data. Names in ignored_fields are left out:
+      # the admin does not manage those.
       def implicit_pii_fields(resource_name)
         @implicit_pii_fields ||= {}
         @implicit_pii_fields[resource_name] ||= begin
           names = Array(virtual_fields(resource_name)&.implicit).uniq - Array(@configuration.ignored_fields).map(&:to_s)
-          names.filter_map { |name| [name, gdpr_strategy(name)] if gdpr_field?(name) }
+          names.filter_map { |name| (match = @sensitive.match(name)) && [name, match.strategy] }
         end
       end
 
@@ -131,17 +144,18 @@ module PermissionForge
       end
 
       def build_virtual_fields(resource_name)
-        return unless model_columns_for(resource_name)
+        model_class = model_for(resource_name)
+        return unless model_class && model_columns_for(resource_name)
 
-        PermissionForge::VirtualFields.new(resource_name.safe_constantize, @configuration)
+        PermissionForge::VirtualFields.new(model_class, @configuration)
+      end
+
+      def model_for(resource_name)
+        PermissionForge::ModelLookup.model_for(resource_name)
       end
 
       def model_columns_for(resource_name)
-        model_class = resource_name.safe_constantize
-        return unless model_class
-        return unless model_class.respond_to?(:column_names)
-
-        model_class.column_names
+        model_for(resource_name)&.column_names
       rescue ActiveRecord::StatementInvalid
         nil
       end
@@ -152,9 +166,10 @@ module PermissionForge
         granting_fields.merge(PermissionForge::Resource.where(name: resource_name)).distinct.pluck(:name)
       end
 
+      # A switched-off row counts as no row.
       def audit_view_all_on_pii_resources(report)
         resources_with_bypass.find_each do |resource|
-          pii_fields = resource.resource_fields.select { |field| gdpr_field?(field.name) }
+          pii_fields = resource.resource_fields.select { |field| field.is_active && @sensitive.sensitive?(field.name) }
           next if pii_fields.empty?
 
           report << build_view_all_finding(resource, pii_fields)
@@ -181,12 +196,12 @@ module PermissionForge
           pii_fields: pii_fields.map(&:name) }
       end
 
-      # Masks combine with AND, so an unmasked row wins over a masked row of
-      # the same field of the same resource in another Permission Set. The
-      # finding names both: the set that unmasks and the sets that mask.
+      # Masks combine with AND, so a row in the clear wins over a masked row
+      # of the same field of the same resource in another Permission Set.
+      # The finding names both: the set that unmasks and the sets that mask.
       def audit_cross_set_unmasking(report)
         masking_sets = sets_masking_pii_fields
-        granting_fields.where(mask_access: false).preload(resource: :permission_set).find_each do |field|
+        granting_fields.exposing_in_clear.preload(resource: :permission_set).find_each do |field|
           finding = cross_set_finding(field, masking_sets.fetch([field.resource.name, field.name], {}))
           report << finding if finding
         end
@@ -205,25 +220,15 @@ module PermissionForge
           permission_set: resource.permission_set.name, masked_in: masked_in }
       end
 
-      # { [resource name, field name] => { id => name } of the granting sets that mask it }
+      # { [resource name, field name] => { id => name } of the granting sets
+      # that mask it }. Only a row that grants read votes on the mask
+      # (FieldPermissionMerger.merge_row).
       def sets_masking_pii_fields
-        masked = granting_fields.where(mask_access: true).preload(resource: :permission_set)
-        masked.select { |field| gdpr_field?(field.name) }.each_with_object({}) do |field, sets|
+        masked = granting_fields.where(read_access: true, mask_access: true).preload(resource: :permission_set)
+        masked.select { |field| @sensitive.sensitive?(field.name) }.each_with_object({}) do |field, sets|
           resource = field.resource
           (sets[[resource.name, field.name]] ||= {})[resource.permission_set_id] = resource.permission_set.name
         end
-      end
-
-      def gdpr_field?(name)
-        gdpr_patterns.any? { |regex, _| name.match?(regex) }
-      end
-
-      def gdpr_strategy(name)
-        gdpr_patterns.find { |regex, _| name.match?(regex) }&.last
-      end
-
-      def gdpr_patterns
-        @configuration.gdpr_field_patterns
       end
     end
   end
