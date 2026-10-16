@@ -160,6 +160,19 @@ module PermissionForge
         assert_equal [cond], service.conditional_sets
       end
 
+      # Review R4 P1-1: such a set never applies (ConditionalSets), so it
+      # composes nothing here either.
+      test 'a granting set with a condition nobody can judge counts for nothing' do
+        broken = create_permission_set(name: 'Broken office', allowed_ips: '10.0.0.0/8')
+        broken.update_columns(allowed_ips: 'office')
+        create_resource(permission_set: broken, name: 'Supplier')
+        create_permission_set_user(user: @user, permission_set: broken)
+        service = EffectiveAccess.new(user: @user)
+
+        assert_not_includes service.call.map(&:name), 'Supplier'
+        assert_empty service.conditional_sets
+      end
+
       test 'unconfigured columns follow unconfigured_field_strategy' do
         PermissionForge.configuration.unconfigured_field_strategy = :block
         assert_equal 'hidden', field('domain').level

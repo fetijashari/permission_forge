@@ -526,13 +526,14 @@ and the RLS re-sync.
 - **A broken activation condition is unjudgeable in every mode.** An IP entry that is not an address, a list of
   separators, one hour of the two, the same hour twice, or an hour outside 0–23 (stored past the validation) now makes
   a **muting** set apply to every request (it never applied: a lockdown written with newlines through the API muted
-  nothing) and a **granting** set never pass. Called out: a granting set with **one hour of the two** used to pass (the
+  nothing) and a **granting** set never pass, with or without a request context (a blank one let it grant). Called out: a granting set with **one hour of the two** used to pass (the
   hours were ignored) and now never does; a granting set with `start == end` never passed before either. IP lists
   written with newlines or spaces are now read entry by entry (they used to be one invalid entry). The audit's
   `incomplete_conditions` lists every such set — run `rake permission_forge:audit` before upgrading; the admin's
-  Conditions tab and the API normalise the list on the next save. **No opt-out:** a lockdown that never locked is the
-  defect.
+  Conditions tab and the API normalise the list on the next save. **No opt-out:** fix the condition on the set's
+  Conditions tab.
   <!-- pin: test/permission_forge/conditional_sets_test.rb#a muting set with a broken condition applies in every mode; a granting one never passes -->
+  <!-- pin: test/permission_forge/concerns/conditional_sets_per_context_test.rb#a granting set with a broken condition grants nothing, not even without a context -->
 - **A Permission Set's activation conditions are validated on a new row or a changed condition**: an `allowed_ips`
   entry that is not an IP address or CIDR range, a window whose start equals its end, one hour of the two (en/sq/mk
   messages); the stored list is normalised to commas on save. A row stored before the check stays editable in its

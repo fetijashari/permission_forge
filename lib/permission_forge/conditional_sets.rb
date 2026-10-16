@@ -58,7 +58,8 @@ module PermissionForge
   #   - a context with an IP or session flags: those whose conditions pass
   #     (Services::PermissionSetConditionEvaluator), granting and muting alike;
   #   - no context at all — the resolver returned nothing (no resolver, as
-  #     shipped): every conditional set, as before;
+  #     shipped): every conditional set, as before, but a granting set whose
+  #     condition nobody can judge (Member#never_grants?), which never applies;
   #   - under config.conditional_sets_strict_mode, no request context — the
   #     resolver returned nothing, or neither an IP nor session flags (a job,
   #     the console; the time alone is not a request context): only the
@@ -122,6 +123,10 @@ module PermissionForge
       end
 
       def muting? = muting
+
+      # A granting set whose condition nobody can judge: it never applies,
+      # with a context or without one (review R4 P1-1).
+      def never_grants? = !muting && conditions_broken?
 
       # Whether the set counts in `context`: its conditions pass — or it is
       # a muting set whose condition cannot be judged: one nobody can judge
@@ -359,7 +364,7 @@ module PermissionForge
       klass = self.class
       strict = klass.strict?
       return sets.select(&:muting?) if strict && klass.no_context?(context)
-      return sets if context.blank?
+      return sets.reject(&:never_grants?) if context.blank?
 
       sets.select { |member| member.applies?(context, strict) }
     end

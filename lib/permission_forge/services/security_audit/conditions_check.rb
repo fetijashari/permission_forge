@@ -26,14 +26,14 @@ module PermissionForge
                   'These rows hold a condition the validation refuses today: an IP entry that is not an IP address or ' \
                   'CIDR range, a list with no entry, the same start and end hour, one hour of the two, or an hour outside ' \
                   '0–23. Such a condition cannot be judged, so a muting set applies to every request and a granting set ' \
-                  'never passes. Fix the condition on the set\'s Conditions tab (the admin and the API normalise the list; ' \
+                  'never passes, with or without a request context: it grants nothing. Fix the condition on the set\'s Conditions tab (the admin and the API normalise the list; ' \
                   'newline or comma lists and arrays are accepted).',
                   items: sets.map { |set| condition_item(set) })
         end
 
         def condition_item(set)
           what = set.condition_problems.map { |kind, value| describe_problem(kind, value, set) }.join('; ')
-          effect = set.is_muting ? 'applies to every request' : 'never passes'
+          effect = set.is_muting ? 'applies to every request' : 'never passes, grants nothing'
           "#{set.name}#{' (muting)' if set.is_muting}: #{what} — #{effect} · #{people(set.id)}"
         end
 

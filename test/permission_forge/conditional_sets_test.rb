@@ -252,6 +252,8 @@ module PermissionForge
         assert_equal muting_ids, conditional.variant(office).ids, "strict=#{strict}, office"
         assert_equal muting_ids, conditional.variant(elsewhere).ids, "strict=#{strict}, elsewhere"
         assert_equal muting_ids, conditional.variant(office.merge(time: Time.current.change(hour: 23))).ids
+        assert_equal muting_ids, conditional.variant({}).ids, "strict=#{strict}, no context"
+        assert_equal muting_ids, conditional.variant(nil).ids, "strict=#{strict}, nil context"
       end
     end
 

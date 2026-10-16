@@ -96,11 +96,14 @@ module PermissionForge
       private
 
       # Same selection as PermissionCacheAccessor#active_non_expired_permission_sets
-      # minus the request-context filter.
+      # minus the request-context filter — a granting set whose condition
+      # nobody can judge never passes it, so it is left out
+      # (ConditionalSets::Member#never_grants?).
       def select_live_sets
         ids = PermissionForge::PermissionSetUser.where(user_id: @user.id).active_assignments.select(:permission_set_id)
         sets = PermissionForge::PermissionSet.active.where(id: ids).in_hash_order
                                              .includes(resources: %i[resource_fields resource_actions permission_set_rules]).to_a
+        sets.reject! { |permission_set| permission_set.granting? && permission_set.conditions_broken? }
         # Same row order as the hash builder (a variant tie goes to the older row).
         sets.each { |permission_set| PermissionForge::Services::PermissionHashBuilder.sort_rows(permission_set) }
       end

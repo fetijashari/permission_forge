@@ -65,7 +65,7 @@ ps = PermissionForge::PermissionSet.create!(
 
 - Entries are IP addresses or CIDR ranges (`/24`, `/32`, IPv6 too), written with commas, newlines or spaces between them; the row stores them with commas (`PermissionSet#allowed_ip_list` reads them back as an Array).
 - Through the API, `allowed_ips` is a String as above or an Array of Strings (`["10.0.0.0/8", "192.168.0.0/16"]`); any other shape is a 422 keyed `allowed_ips`.
-- An entry that is not an address is refused when the row is new or the list changes (`contains "office", which is not an IP address or CIDR range`). A list stored before the check that holds one (or holds no entry at all) **cannot be judged**: a granting set never passes on it, a muting set applies to every request, in every mode. `rake permission_forge:audit` lists such rows under `incomplete_conditions`.
+- An entry that is not an address is refused when the row is new or the list changes (`contains "office", which is not an IP address or CIDR range`). A list stored before the check that holds one (or holds no entry at all) **cannot be judged**: a granting set never passes on it, a muting set applies to every request, in every mode and with or without a request context. `rake permission_forge:audit` lists such rows under `incomplete_conditions`.
 - When `ip` is missing from the context, the condition fails (a muting set applies in [strict mode](#strict-mode)).
 
 ## Login Hour Restrictions
@@ -141,7 +141,7 @@ How each context is treated:
 | Context | Strict mode on | Strict mode off (default) |
 |---|---|---|
 | An IP or session flags | Each set evaluated; a conditional muting set whose condition cannot be judged (no IP for an IP allowlist, no `:session_flags` key for a flag) applies | Each set evaluated |
-| No request context: blank, or neither an IP nor session flags (a job, the console; the time alone is not a request context) | Conditional **granting** sets dropped; conditional **muting** sets applied, whatever their conditions | Blank: every conditional set applies. Not blank (for example `{ ip: nil, session_flags: [], time: }`): each set evaluated |
+| No request context: blank, or neither an IP nor session flags (a job, the console; the time alone is not a request context) | Conditional **granting** sets dropped; conditional **muting** sets applied, whatever their conditions | Blank: every conditional set applies, except a granting set whose condition cannot be judged. Not blank (for example `{ ip: nil, session_flags: [], time: }`): each set evaluated |
 
 - With strict mode on and no request context, a lockdown still applies and nothing is granted on a condition: a job cannot pick up an MFA-, IP- or hours-gated grant, nor lose a conditional muting set.
 - A context with session flags but no IP is a request context: each set is evaluated, and an IP condition fails without an IP — except, in strict mode, a conditional **muting** set whose condition cannot be judged: an IP allowlist with no IP, or a session flag when the context has no `:session_flags` at all. That lockdown applies (a missing context must never lift one).
@@ -162,7 +162,7 @@ muting = PermissionForge::PermissionSet.create!(
 # Revokes in the sessions whose flags include 'lockdown' (and, in strict mode, in jobs and the console)
 ```
 
-A conditional muting set whose condition cannot be judged — an IP entry that is not an address, one hour of the two, the same hour twice — applies to every request, whether or not strict mode is on: a lockdown that never locked is the defect. Fix the condition on the set's Conditions tab.
+A conditional muting set whose condition cannot be judged — an IP entry that is not an address, one hour of the two, the same hour twice — applies to every request, whether or not strict mode is on: a lockdown that never locked is the defect. A granting set with such a condition never applies, not even with a blank context. Fix the condition on the set's Conditions tab.
 
 ## Model Methods & Scopes
 
