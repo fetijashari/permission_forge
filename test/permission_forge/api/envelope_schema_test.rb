@@ -171,6 +171,17 @@ module PermissionForge
         assert_equal %i[permission_set_id resource_id], Schema.foreign_identifiers(:permission_set_rule)
       end
 
+      # Through 0.14.1 the resources routes drew new/edit, which no API
+      # controller has: AbstractController::ActionNotFound, Rails' own 404.
+      test '…/new and …/:identifier/edit answer the JSON 404 envelope' do
+        ['/api/permission_sets/new', "/api/permission_sets/#{@set.uuid}/edit", '/api/permission_set_groups/new',
+         "/api/permission_sets/#{@set.uuid}/resources/#{@resource.uuid}/fields/new"].each do |path|
+          get ROOT + path
+          assert_response :not_found, path
+          assert_empty Schema.error_problems(404, response.parsed_body), path
+        end
+      end
+
       test 'a foreign identifier still answers the numeric id (unchanged until a later version)' do
         get "#{ROOT}/api/permission_sets/#{@set.uuid}"
         assert_equal @group.id, response.parsed_body.dig('data', 'permission_set_group_id')
