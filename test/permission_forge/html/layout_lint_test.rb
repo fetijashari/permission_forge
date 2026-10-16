@@ -18,7 +18,16 @@ module PermissionForge
       CSS_PATH = 'app/frontend/permission_forge/pf_admin.css'.freeze
       VIEWS = 'app/views/permission_forge/**/*.erb'.freeze
       PLACEHOLDER_CALL = /placeholder="<%= t\('([^']+)'/
+      # Every placeholder attribute a view writes, whatever its form.
+      PLACEHOLDER_ATTR = /placeholder="([^"]*)"/
       CONTROL = /<(input|textarea)\b/
+      # Placeholders that show host data (not a translation, not a literal):
+      # the view, and why. Their rendered value is checked on every walked
+      # screen (review R4 P2-6).
+      HOST_PLACEHOLDERS = {
+        'app/views/permission_forge/resource_fields/show.html.erb' =>
+          "the field's label or its name: the Label input shows what the drawer calls the field when it is empty"
+      }.freeze
 
       test 'every placeholder fits a phone-width box in every locale' do
         problems = placeholders.flat_map do |view, kind, key|
@@ -44,6 +53,35 @@ module PermissionForge
 
       test 'every scroll container in the stylesheet is a containing block, and the frame paints its cue' do
         assert_empty lint.css_problems, lint.css_problems.join("\n")
+      end
+
+      # A literal is checked as written; a placeholder that is neither a
+      # translation nor a literal is host data and must be listed.
+      test 'every placeholder is a translation, a literal that fits, or listed host data' do
+        problems = placeholder_forms.flat_map do |view, kind, value|
+          case value
+          when /\A<%= t\('/ then [] # the per-locale test above
+          when /<%/ then HOST_PLACEHOLDERS.key?(view) ? [] : ["#{view}: placeholder #{value.inspect} is host data: list it in HOST_PLACEHOLDERS"]
+          else [LayoutLint.placeholder_problem(kind, value, locale: 'en')].compact.map { |problem| "#{view}: #{problem}" }
+          end
+        end
+
+        assert_operator placeholder_forms.count { |_, _, value| !value.include?('<%') }, :>=, 3, 'the literal placeholders were not found'
+        assert_empty problems, problems.join("\n")
+        assert_empty HOST_PLACEHOLDERS.keys - placeholder_forms.select { |_, _, value| value.match?(/<%=(?! t\()/) }.map(&:first),
+                     'HOST_PLACEHOLDERS names a view without such a placeholder: remove it'
+      end
+
+      test 'every placeholder a walked screen renders fits its box' do
+        problems = screens.flat_map do |label, body|
+          Nokogiri::HTML5(body).css('input[placeholder], textarea[placeholder]').filter_map do |control|
+            kind = control.name == 'textarea' ? :textarea : :input
+            problem = LayoutLint.placeholder_problem(kind, control['placeholder'], locale: 'en')
+            "#{label}: #{problem}" if problem
+          end
+        end
+
+        assert_empty problems.uniq, problems.uniq.join("\n")
       end
 
       test 'pf-nowrap never wraps interpolated text' do
@@ -98,6 +136,18 @@ module PermissionForge
             match = Regexp.last_match
             kind = source[0...match.begin(0)][/.*#{CONTROL}/m, 1]
             [view, kind.to_sym, full_key(view, match[1])]
+          end
+        end
+      end
+
+      # [view, :input | :textarea, raw attribute value] for every placeholder of every view.
+      def placeholder_forms
+        @placeholder_forms ||= Dir[File.join(ROOT_DIR, VIEWS)].flat_map do |file|
+          view = file.delete_prefix("#{ROOT_DIR}/")
+          source = File.read(file)
+          source.to_enum(:scan, PLACEHOLDER_ATTR).map do
+            match = Regexp.last_match
+            [view, source[0...match.begin(0)][/.*#{CONTROL}/m, 1].to_sym, match[1]]
           end
         end
       end

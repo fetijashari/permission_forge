@@ -280,6 +280,14 @@ module PermissionForge
     # value there is a second name for one state that can drift (R3 #38:
     # "Unchanged 0 · Not configured 8" for one state). Two namespaces keep
     # their own words until the 0.16 merge; the allow-list says why.
+    #
+    # Left out on purpose (review R4 P2-2), though a word of theirs equals a
+    # state's: the list filters (people.index.filters, permission_sets.index
+    # .filters: "Muting", "Expired" name a query whose rows carry the badge,
+    # not a second label of it), the audit log's boolean values (audit_log
+    # .boolean: "No" is a stored false, not an outcome), the new-Resource
+    # presets (resources.new.presets: "Read-only" names a preset, with its
+    # description) and column headings ("Person"). None renders a state.
 
     LABEL_NAMESPACES = %w[ui.states ui.levels ui.badges shared.crud_cell resource_actions.states
                           resources.fields_tab.filters audit_log.actor_types].freeze

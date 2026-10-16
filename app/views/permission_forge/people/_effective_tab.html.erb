@@ -94,7 +94,9 @@
                       <%= link_to permission_forge.person_path(@person, tab: 'effective', why: key, open: (@open + [res.name]).uniq),
                                   class: "pf-state pf-state--#{outcome.state} pf-action-pill", data: { pf_why: key },
                                   'aria-current': (@why == key ? 'true' : nil) do %>
-                        <span aria-hidden="true"><%= pf_state(:effective, outcome.state).glyph %></span> <%= pf_action_label_text(nil, name) %>
+                        <% state = pf_state(:effective, outcome.state) %>
+                        <span aria-hidden="true"><%= state.glyph %></span> <%= pf_action_label_text(nil, name) %>
+                        <span class="pf-fs-12">· <%= state.word %></span>
                       <% end %>
                     <% end %>
                   </div>

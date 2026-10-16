@@ -161,6 +161,18 @@ module PermissionForge
           assert_equal label(:action, state), across_badge(set), 'Across all Permission Sets'
         end
       end
+
+      # Review R4 P2-3: the action pill on Effective access said its state
+      # by an aria-hidden glyph alone.
+      test 'an action pill on Effective access words its state, not only its glyph' do
+        create_resource_action(resource: @resource, name: 'export', is_permitted: true)
+
+        get pf("/people/#{@ana.id}"), params: { tab: 'effective' }
+        assert_response :success
+        pill = css_select('a.pf-action-pill').first
+        assert pill, 'the action pill is drawn'
+        assert_includes text_of(pill), word(:effective, :granted)
+      end
     end
   end
 end
