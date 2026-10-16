@@ -22,24 +22,24 @@ module PermissionForge
         skip 'PostgreSQL-only column types' unless POSTGRES
 
         @user = create_user
-        record('five', token: TOKEN, ip: '10.0.0.1', net: '10.0.0.0/24', settings: { 'a' => 1 }, aliases: %w[a b], mood: 'calm')
-        record('zero', token: '00000000-0000-0000-0000-000000000000', ip: '2001:db8::1', net: '2001:db8::/32', settings: {},
+        record('five', ref: TOKEN, ip: '10.0.0.1', net: '10.0.0.0/24', settings: { 'a' => 1 }, aliases: %w[a b], mood: 'calm')
+        record('zero', ref: '00000000-0000-0000-0000-000000000000', ip: '2001:db8::1', net: '2001:db8::/32', settings: {},
                        aliases: [], mood: 'angry')
         PfRuleRecord.create!(label: 'blank')
       end
 
       test "'banana' against a uuid column matches nothing, is refused on save and is listed by the audit" do
         %w[equal not_equal in not_in between].each do |operator|
-          assert_equal [], labels(:token, operator, 'banana'), operator
+          assert_equal [], labels(:ref, operator, 'banana'), operator
         end
-        assert_equal [], labels(:token, 'not_equal', 'banana', include_nulls: true)
+        assert_equal [], labels(:ref, 'not_equal', 'banana', include_nulls: true)
 
-        refused = new_rule(field_name: 'token', field_value: 'banana')
+        refused = new_rule(field_name: 'ref', field_value: 'banana')
 
         assert_not refused.valid?
-        assert_includes refused.errors[:field_value], 'is not a value PfRuleRecord.token can hold'
+        assert_includes refused.errors[:field_value], 'is not a value PfRuleRecord.ref can hold'
 
-        rule = stored_rule(field_name: 'token', field_value: 'banana')
+        rule = stored_rule(field_name: 'ref', field_value: 'banana')
 
         assert_equal :unusable_value, RuleProblem.for(rule).kind
         assert_raises(NotAuthorizedError) { PfRuleRecord.find_by(label: 'five') }
@@ -48,17 +48,17 @@ module PermissionForge
       end
 
       test 'a uuid column is compared with a uuid' do
-        assert_equal %w[five], labels(:token, 'equal', TOKEN.upcase)
-        assert_equal %w[zero], labels(:token, 'not_equal', " #{TOKEN} ")
-        assert_equal %w[five zero], labels(:token, 'in', "#{TOKEN}, 00000000-0000-0000-0000-000000000000")
-        assert_equal [], labels(:token, 'in', "#{TOKEN}, banana")
+        assert_equal %w[five], labels(:ref, 'equal', TOKEN.upcase)
+        assert_equal %w[zero], labels(:ref, 'not_equal', " #{TOKEN} ")
+        assert_equal %w[five zero], labels(:ref, 'in', "#{TOKEN}, 00000000-0000-0000-0000-000000000000")
+        assert_equal [], labels(:ref, 'in', "#{TOKEN}, banana")
       end
 
       test 'current_user on a uuid column is a uuid only when the user id is one' do
-        rule = stored_rule(field_name: 'token', field_value: 'current_user')
+        rule = stored_rule(field_name: 'ref', field_value: 'current_user')
 
         assert_nil RuleProblem.for(rule), 'whoever the user is: an id may be a uuid'
-        assert_equal [], labels(:token, 'equal', 'current_user'), 'an integer id is no uuid'
+        assert_equal [], labels(:ref, 'equal', 'current_user'), 'an integer id is no uuid'
       end
 
       test 'an inet or cidr column is compared with an address or a network' do
@@ -101,17 +101,17 @@ module PermissionForge
       end
 
       test 'a LIKE operator on a uuid, network, json, array or enum column matches nothing instead of raising' do
-        %i[token ip net settings aliases mood].product(%w[contains not_contains starts_with ends_with]).each do |column, operator|
+        %i[ref ip net settings aliases mood].product(%w[contains not_contains starts_with ends_with]).each do |column, operator|
           assert_equal [], labels(column, operator, 'a'), "#{column} #{operator}"
         end
       end
 
       test 'each of these rules is named by RuleProblem and refused on save' do
-        { token: 'banana', ip: 'banana', net: '10.0.0.5/24', settings: '{"a":1}', aliases: '{a}', mood: 'banana' }.each do |column, value|
+        { ref: 'banana', ip: 'banana', net: '10.0.0.5/24', settings: '{"a":1}', aliases: '{a}', mood: 'banana' }.each do |column, value|
           assert_equal :unusable_value, RuleProblem.for(stored_rule(field_name: column.to_s, field_value: value))&.kind, column
           assert_not new_rule(field_name: column.to_s, field_value: value).valid?, column
         end
-        { token: TOKEN, ip: '10.0.0.1', net: '10.0.0.0/24', mood: 'calm' }.each do |column, value|
+        { ref: TOKEN, ip: '10.0.0.1', net: '10.0.0.0/24', mood: 'calm' }.each do |column, value|
           assert new_rule(field_name: column.to_s, field_value: value).valid?, column
         end
         assert new_rule(field_name: 'settings', operator: 'is_not_null', field_value: '').valid?

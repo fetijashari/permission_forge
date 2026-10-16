@@ -31,7 +31,7 @@ ActiveRecord::Schema.define do
       t.integer :codes, array: true
       t.string  :tags, array: true
       t.text    :aliases, array: true
-      t.uuid    :token
+      t.uuid    :ref
       t.column  :code, 'char(4)'
       t.jsonb   :settings
       t.inet    :ip

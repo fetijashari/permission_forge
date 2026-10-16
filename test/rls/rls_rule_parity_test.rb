@@ -55,7 +55,7 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     flag: BOOLEANS, label: TEXTS, notes: TEXTS,
     born_on: DATES, seen_at: DATES, opens_at: TIMES,
     status: STATUSES, tier: TIERS, code: CODES,
-    token: UUIDS, ip: INETS, net: CIDRS, mood: MOODS
+    ref: UUIDS, ip: INETS, net: CIDRS, mood: MOODS
   }.freeze
   # Columns no value is typed for (json, jsonb, arrays): every built-in
   # operator but the null checks matches nothing, in both layers. They used
@@ -78,7 +78,7 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     unknown_operator: { field_name: 'label', operator: 'regex', field_value: 'five' },
     missing_column: { field_name: 'onwer_id', operator: 'equal', field_value: 'current_user' },
     unknown_table: { field_name: 'nosuch.label', operator: 'equal', field_value: 'five' },
-    unusable_value: { field_name: 'token', operator: 'equal', field_value: 'banana' }
+    unusable_value: { field_name: 'ref', operator: 'equal', field_value: 'banana' }
   }.freeze
   # A field name that is not a name is a missing column to RuleProblem.
   MALFORMED_RULE = { field_name: 'label.', operator: 'not_equal', field_value: 'five' }.freeze
@@ -130,12 +130,12 @@ class RlsRuleParityTest < ActiveSupport::TestCase
   end
 
   test 'current_user on a uuid column is the session id only where user ids are uuids' do
-    rule = PermissionForge::PermissionSetRule.new(permission_set: @permission_set, resource: @resource, field_name: 'token',
+    rule = PermissionForge::PermissionSetRule.new(permission_set: @permission_set, resource: @resource, field_name: 'ref',
                                                   operator: 'equal', field_value: 'current_user', include_nulls: false)
 
     assert_equal 'FALSE', generator.send(:rule_sql, rule), 'an integer user id is never a uuid'
     with_user_id_column(:uuid, 'uuid') do
-      assert_match(/token" = NULLIF\(current_setting\('[^']+', true\), ''\)::uuid\)\z/,
+      assert_match(/ref" = NULLIF\(current_setting\('[^']+', true\), ''\)::uuid\)\z/,
                    PermissionForge::Services::RlsPolicyGenerator.new(model_class: PfRuleRecord).send(:rule_sql, rule))
     end
   end
@@ -216,7 +216,7 @@ class RlsRuleParityTest < ActiveSupport::TestCase
       assert_equal [:raises, []], compare(column, operator, 'current_user', true), "#{column} #{operator} current_user"
     end
     # A uuid, network, json, array or native enum column: neither layer matches.
-    %i[codes tags aliases settings token ip net mood].product(LIKE_OPERATORS).each do |column, operator|
+    %i[codes tags aliases settings ref ip net mood].product(LIKE_OPERATORS).each do |column, operator|
       assert_equal [[], []], compare(column, operator, '5', false), "#{column} #{operator}"
       assert_equal [[], []], compare(column, operator, 'current_user', true), "#{column} #{operator} current_user"
     end
@@ -381,11 +381,11 @@ class RlsRuleParityTest < ActiveSupport::TestCase
   def create_records
     record('five', small_count: 5, owner_id: @user.id, amount: '5.5', ratio: 0.5, rate: 0.1, flag: true, notes: '50%_off',
                    born_on: '2026-01-10', seen_at: Time.utc(2026, 1, 10, 10), opens_at: '09:00', status: :active, tier: :basic,
-                   codes: [1, 2], tags: %w[a b], token: '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', code: 'ab',
+                   codes: [1, 2], tags: %w[a b], ref: '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', code: 'ab',
                    aliases: %w[a b], settings: { 'a' => 1 }, ip: '10.0.0.1', net: '10.0.0.0/24', mood: 'calm')
     record('zero', small_count: 0, owner_id: @other.id, amount: 0, ratio: 0.0, rate: 0.5, flag: false, notes: '50x_OFF',
                    born_on: '2025-06-01', seen_at: Time.utc(2025, 6, 1), opens_at: '17:30', status: :archived, tier: :gold,
-                   codes: [3], tags: %w[c], token: '00000000-0000-0000-0000-000000000000', code: 'xyz',
+                   codes: [3], tags: %w[c], ref: '00000000-0000-0000-0000-000000000000', code: 'xyz',
                    aliases: [], settings: {}, ip: '2001:db8::1', net: '2001:db8::/32', mood: 'angry')
     record('big', small_count: 2_000_000_000, owner_id: 9_000_000_000, amount: '12345678901234567.1234567891', ratio: 1e10,
                   rate: 16_777_216, flag: true, notes: 'a\\b', born_on: '2030-12-31', seen_at: Time.utc(2030, 12, 31, 23, 59, 59),
