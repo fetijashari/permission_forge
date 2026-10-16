@@ -191,20 +191,22 @@ module PermissionForge
       #
       # @return [String, nil] why the concern cannot be included now
       def unmaskable_reason(klass)
-        return 'its table cannot be read' unless readable_table?(klass)
-
-        'an earlier attempt failed halfway; restart the process' if klass.include?(PermissionForge::Concerns::MaskedAttributes)
+        unreadable_table(klass) ||
+          ('an earlier attempt failed halfway; restart the process' if klass.include?(PermissionForge::Concerns::MaskedAttributes))
       end
 
-      # The table exists and can be read. A table found missing is looked up
-      # again next time (the cached answer is dropped): a migration may run.
-      # Its database may be another one than the gem's (a host on several
-      # databases): DatabaseReach answers false for one that cannot be used.
-      def readable_table?(klass)
-        return true if DatabaseReach.table_exists?(klass)
+      # Why the table cannot be read, nil when it exists and can be. A table
+      # found missing is looked up again next time (the cached answer is
+      # dropped): a migration may run. Its database may be another one than
+      # the gem's (a host on several databases); a check that raised names
+      # the error (DatabaseReach): the model's own table_name, its database
+      # not configured.
+      def unreadable_table(klass)
+        cause = nil
+        return if DatabaseReach.table_exists?(klass) { |error| cause = error }
 
         klass.reset_column_information
-        false
+        cause ? "its table cannot be read (#{cause.class}: #{cause.message.lines.first&.strip})" : 'its table cannot be read'
       end
 
       # Warns once per model and process (MaskingSync retries every request).

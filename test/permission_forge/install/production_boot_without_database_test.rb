@@ -21,7 +21,8 @@ module PermissionForge
     #
     # A generated app on disk (the real install generator, run in
     # development), booted in production with Rails 8.1's database.yml as
-    # `rails new --skip-kamal` writes it. `assets:precompile` is a stand-in
+    # `rails new --skip-kamal` writes it, and a cache store that raises as
+    # Solid Cache does without its database. `assets:precompile` is a stand-in
     # task here (the test bundle has no asset pipeline), with the same
     # prerequisite as Propshaft's and Sprockets': :environment.
     class ProductionBootWithoutDatabaseTest < ActiveSupport::TestCase
@@ -46,7 +47,28 @@ module PermissionForge
               config.load_defaults Rails::VERSION::STRING.to_f
               config.eager_load = Rails.env.production?
               config.active_support.deprecation = :silence
+              # Rails 8.1's production cache_store is :solid_cache_store, whose
+              # database is not configured either: every read and write raises
+              # the adapter's ArgumentError (UnconfiguredStore stands in for it).
+              if Rails.env.production?
+                require_relative '../lib/unconfigured_store'
+                config.cache_store = UnconfiguredStore.new
+              end
             end
+          end
+        RUBY
+        'lib/unconfigured_store.rb' => <<~RUBY,
+          require 'active_support/cache'
+
+          class UnconfiguredStore < ActiveSupport::Cache::Store
+            def self.supports_cache_versioning? = true
+
+            private
+
+            def unconfigured = raise(ArgumentError, 'No database file specified. Missing argument: database')
+            def read_entry(*) = unconfigured
+            def write_entry(*) = unconfigured
+            def delete_entry(*) = unconfigured
           end
         RUBY
         'config/environment.rb' => <<~RUBY,
@@ -146,7 +168,7 @@ module PermissionForge
 
         assert status.success?, "assets:precompile aborted (exit #{status.exitstatus}):\n#{out}\n#{err}"
         assert_includes out, 'PRECOMPILED'
-        assert_no_match(/ArgumentError|could not be reached/, err, 'an asset build does not run the database boot checks')
+        assert_no_match(/ArgumentError|could not be reached|SECURITY warning/, err, 'an asset build does not run the database boot checks')
       end
 
       test 'a production runner with no database file configured boots, says the checks were skipped, and runs' do
@@ -155,7 +177,7 @@ module PermissionForge
         assert status.success?, "the runner aborted (exit #{status.exitstatus}):\n#{out}\n#{err}"
         assert_includes out, 'ran'
         assert_equal 1, err.scan(UNREACHABLE_WARNING).size, err
-        assert_no_match(/masking could not be synced/, err, 'no SECURITY warning for a database that is not configured')
+        assert_no_match(/SECURITY warning/, err, 'no SECURITY warning for a database (or a cache store) that is not configured')
       end
 
       private

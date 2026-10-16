@@ -12,6 +12,11 @@ module PermissionForge
   # (BootChecks, :api_authorization_unset) and the audit finding
   # (ConfigCheck#api_authorization_unset) both read `unset`.
   #
+  # The stats note cannot see an api_auth that still sets the deprecated
+  # 0.14 `@admin = true` on the controller (Api::DashboardController
+  # #legacy_admin_flag?, until 0.16): that host is not refused, and the note
+  # says so.
+  #
   # api_require_authorization = false with a lambda unset is another
   # condition (every caller api_auth admits may change permissions: the
   # api_authorization_gap warning, the api_mutations_unguarded finding).
@@ -23,7 +28,9 @@ module PermissionForge
     LAMBDAS = {
       api_action_authorization: [:api_require_authorization, 'every create, update, delete and copy'],
       api_assignment_authorization: [:api_require_authorization, 'every assignment and group membership change'],
-      api_stats_authorization: [:api_stats_require_admin, 'GET /api/stats (or set api_stats_require_admin = false)']
+      api_stats_authorization: [:api_stats_require_admin,
+                                'GET /api/stats (or set api_stats_require_admin = false; an api_auth that sets the ' \
+                                'deprecated @admin = true still passes until 0.16)']
     }.freeze
 
     module_function

@@ -1985,17 +1985,25 @@ none.** (code and API clients that create without a name, or with a blank one), 
   assets:precompile` (the Dockerfile's build step) or any production runner aborted once the gem was installed: the
   boot ping rescued Active Record's errors only, and the sqlite3 adapter refuses a configuration without a file with an
   `ArgumentError` (field test round 8, E#7). `PermissionForge::DatabaseReach` is the one definition of "this process
-  cannot use its database" (`CONNECT_ERRORS`: Active Record's errors, an adapter's `ArgumentError` for its
-  configuration, the `LoadError` of a missing driver gem — rescued only around Rails' own connection code, a ping or
-  `table_exists?`); the boot ping and auto-applied masking's read of the Resource table ask it, so the boot skips its
-  database checks with one line naming the cause (`The database could not be reached at boot (ArgumentError: No
-  database file specified. ...)`) and a request or job of such a process no longer logs a SECURITY "masking could not
-  be synced" warning. A process that runs nothing but asset tasks (`assets:precompile`, `assets:clean`,
-  `assets:clobber`: `BootChecks.asset_build?`) runs the configuration warnings only and never connects.
+  cannot use its database" (Active Record's errors and an adapter's `ArgumentError` for its configuration, rescued
+  only around Rails' own connection code, a ping or `table_exists?`; `UNAVAILABLE_ERRORS` for the audit table check,
+  where any other error still raises out of `Audit.record`). The boot ping, auto-applied masking, the audit table
+  checks and the audit's `audit_trail` check ask it, so the boot skips its database checks with one line naming the
+  cause (`The database could not be reached at boot (ArgumentError: No database file specified. ...)`), and a request
+  or job of a process that has not synced reads neither the Resource rows nor the masking token until the Resource
+  table can be read: a production runner of such an app — Solid Cache, its production cache store, has no database
+  either — logs no SECURITY warning ("masking could not be synced", "The cache store did not give or keep the masking
+  token"). A model whose table check raises is named in its unmaskable warning with the error. A process that runs
+  nothing but asset tasks (`assets:precompile`, `assets:clean`, `assets:clobber`: `BootChecks.asset_build?`) runs the
+  configuration warnings only and never connects. (An adapter whose driver gem is missing still fails as Active Record
+  loads, as it does without the gem.)
   <!-- pin: test/permission_forge/install/production_boot_without_database_test.rb#assets:precompile boots in production with no database file configured, and never connects -->
   <!-- pin: test/permission_forge/install/production_boot_without_database_test.rb#a production runner with no database file configured boots, says the checks were skipped, and runs -->
-  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#DatabaseReach.problem counts an adapter that refuses its configuration or cannot load as no database -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#DatabaseReach.problem counts an adapter that refuses its configuration as no database -->
   <!-- pin: test/permission_forge/engine_boot_paths_test.rb#MaskedModels.apply answers false, without raising, when the database is not configured -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#a process that has not synced and cannot use its database does not read the masking token -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#a model whose table check raises is named with the error in the unmaskable warning -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#the audit table check counts an unconfigured database as unchecked and lets any other error raise -->
   <!-- pin: test/permission_forge/engine_boot_paths_test.rb#asset_build? is true only when every task Rake was asked for is an asset task -->
 - **A production boot no longer calls a `:memory_store` "the Rails development default".** The masking warning of a
   production boot with `config.cache_store = :memory_store` said so (field test round 8, E#66); the clause is now
@@ -2007,7 +2015,8 @@ none.** (code and API clients that create without a name, or with a blank one), 
   D#7; round 7 #12). The server's boot now logs one note naming each missing lambda and what the API refuses without
   it (`api_authorization_unset`, audience `:server`), `rake permission_forge:audit` lists them as the info finding
   `api_authorization_unset`, both read from `PermissionForge::ApiAuthorizations`, and the generated initializer shows
-  `api_stats_authorization` beside the other two.
+  `api_stats_authorization` beside the other two. The stats item says that an `api_auth` setting the deprecated
+  `@admin = true` still passes until 0.16 (the note cannot see it).
   <!-- pin: test/permission_forge/security/api_require_authorization_default_test.rb#the boot names each authorization lambda the API needs and does not have, and what it refuses -->
   <!-- pin: test/permission_forge/services/security_audit_test.rb#an API with api_auth whose authorization lambdas are unset gets an info note naming each and what it guards -->
   <!-- pin: test/permission_forge/security/api_require_authorization_default_test.rb#the install initializer shows all three authorization lambdas -->

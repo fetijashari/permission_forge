@@ -122,7 +122,8 @@ module PermissionForge
         assert_equal :info, finding.severity
         assert_equal ['api_action_authorization: every create, update, delete and copy',
                       'api_assignment_authorization: every assignment and group membership change',
-                      'api_stats_authorization: GET /api/stats (or set api_stats_require_admin = false)'], finding.items
+                      'api_stats_authorization: GET /api/stats (or set api_stats_require_admin = false; an api_auth ' \
+                      'that sets the deprecated @admin = true still passes until 0.16)'], finding.items
 
         partly = item_for(audit(api_action_authorization: ->(*) { true }, api_stats_require_admin: false), :api_authorization_unset)
         assert_equal ['api_assignment_authorization: every assignment and group membership change'], partly.items

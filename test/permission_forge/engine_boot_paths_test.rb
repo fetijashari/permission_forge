@@ -62,12 +62,11 @@ module PermissionForge
 
     # Field test round 8 (E#7): the sqlite3 adapter refuses a configuration
     # without a database file with an ArgumentError (a `rails new
-    # --skip-kamal` production database.yml), an adapter whose driver gem is
-    # missing raises a LoadError, a database.yml without the environment an
-    # AdapterNotSpecified. Each means "no database here", none aborts a boot.
-    test 'DatabaseReach.problem counts an adapter that refuses its configuration or cannot load as no database' do
+    # --skip-kamal` production database.yml), a database configuration
+    # without an adapter is an AdapterNotSpecified. Each means "no database
+    # here", none aborts a boot.
+    test 'DatabaseReach.problem counts an adapter that refuses its configuration as no database' do
       refusals = [ArgumentError.new('No database file specified. Missing argument: database'),
-                  LoadError.new("Error loading the 'postgresql' Active Record adapter"),
                   ActiveRecord::AdapterNotSpecified.new('database configuration does not specify adapter'),
                   ActiveRecord::NoDatabaseError.new('database does not exist')]
       refusals.each do |refusal|
@@ -107,6 +106,61 @@ module PermissionForge
       with_singleton_method(PermissionForge::Resource, :table_exists?, unconfigured) do
         assert_equal false, PermissionForge::MaskedModels.apply
       end
+    end
+
+    # Review of round 8: a fresh `rails new` app's production cache store is
+    # Solid Cache, whose database is not configured either; reading the
+    # masking token raised the same ArgumentError, logged as a SECURITY
+    # store failure at every executor run of a production runner.
+    test 'a process that has not synced and cannot use its database does not read the masking token' do
+      PermissionForge::MaskingSync.reset!
+      unconfigured = -> { raise ArgumentError, 'No database file specified. Missing argument: database' }
+
+      log = with_singleton_method(PermissionForge::Resource, :table_exists?, unconfigured) do
+        with_singleton_method(PermissionForge.cache, :read_fresh, ->(*) { flunk 'read the masking token' }) do
+          capture_rails_log { PermissionForge::MaskingSync.check! }
+        end
+      end
+
+      assert_not_includes log, '[PermissionForge]'
+      assert_not PermissionForge::MaskingSync.synced?, 'tried again at the next request or job'
+    end
+
+    test 'a model whose table check raises is named with the error in the unmaskable warning' do
+      klass = Class.new(ActiveRecord::Base) { self.table_name = 'customers' }
+      Object.const_set(:PfUnreadableTableProbe, klass)
+      PermissionForge::MaskedModels.reset_warnings!
+      unconfigured = -> { raise ArgumentError, 'No database file specified. Missing argument: database' }
+
+      log = with_singleton_method(klass, :table_exists?, unconfigured) do
+        capture_rails_log { assert_equal false, PermissionForge::MaskedModels.apply_concern('PfUnreadableTableProbe') }
+      end
+
+      assert_match(/PfUnreadableTableProbe has a Resource row but its table cannot be read \(ArgumentError: No database file specified/, log)
+    ensure
+      Object.send(:remove_const, :PfUnreadableTableProbe) if Object.const_defined?(:PfUnreadableTableProbe, false)
+    end
+
+    # Audit.table_available? under audit_events :auto: a database that cannot
+    # be used is "unchecked" (nothing recorded, one SECURITY warning); any
+    # other error of the check still raises out of Audit.record.
+    test 'the audit table check counts an unconfigured database as unchecked and lets any other error raise' do
+      PermissionForge.configuration.audit_events = :auto
+      PermissionForge::Audit.reset!
+      unconfigured = -> { raise ArgumentError, 'No database file specified. Missing argument: database' }
+
+      log = with_singleton_method(PermissionForge::AuditEvent, :table_exists?, unconfigured) do
+        capture_rails_log { assert_equal false, PermissionForge::Audit.enabled? }
+      end
+      assert_match(/cannot check for the audit table '.*' \(ArgumentError\)/, log)
+
+      PermissionForge::Audit.reset!
+      refused = -> { raise ActiveRecord::StatementInvalid, 'permission denied for schema public' }
+      with_singleton_method(PermissionForge::AuditEvent, :table_exists?, refused) do
+        assert_raises(ActiveRecord::StatementInvalid) { PermissionForge::Audit.enabled? }
+      end
+    ensure
+      PermissionForge::Audit.reset!
     end
 
     # --- asset_build? ---------------------------------------------------------

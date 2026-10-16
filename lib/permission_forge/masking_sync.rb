@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'securerandom'
+require_relative 'database_reach'
 
 module PermissionForge
   # Carries auto-applied masking (MaskedModels) to every process. The
@@ -92,9 +93,19 @@ module PermissionForge
       # a process that has not synced applies (from the database). In
       # development with a store that cannot carry the token, the Resource
       # names instead (database_recheck?). Never raises.
+      #
+      # A process that has not synced (its boot could not use the database)
+      # asks the database first (database_unavailable?: one table check per
+      # run until it syncs, none after): while it cannot
+      # read the Resource table, nothing can be masked from it, and the store
+      # is not read — its own database may be the one that is not there
+      # (Solid Cache in a `rails new` app whose production database is not
+      # configured raised the same ArgumentError, logged as a SECURITY store
+      # failure on every runner).
       def check!
         return unless MaskedModels.enabled?
         return recheck_database if database_recheck?
+        return if database_unavailable?
 
         token = token_in_store? ? answered_token : nil
         sync(token) if changed?(token)
@@ -116,7 +127,7 @@ module PermissionForge
         return unless MaskedModels.enabled?
         return apply!(name) unless token_in_store?
 
-        masked_here?(name) && yield ? apply!(name) : announce!(name)
+        MaskedModels.masked?(name) && yield ? apply!(name) : announce!(name)
       end
 
       # The boot step: applies to every selected model and syncs with the
@@ -179,6 +190,10 @@ module PermissionForge
       end
 
       private
+
+      # A process that has not synced, whose Resource table cannot be read
+      # (DatabaseReach: unreachable, not configured, not migrated).
+      def database_unavailable? = !synced? && !DatabaseReach.table_exists?(PermissionForge::Resource)
 
       # Whether the token is read and written: a row-driven setting and a
       # store that keeps entries, outside a database recheck.
@@ -315,12 +330,6 @@ module PermissionForge
       # synced.
       def changed?(token)
         token.nil? ? !synced? : token != @token
-      end
-
-      # Whether this process has the concern on the model (false for a name
-      # that resolves to no model here: not known to be masked).
-      def masked_here?(name)
-        MaskedModels.masked?(name)
       end
 
       def sync(token, always: false)

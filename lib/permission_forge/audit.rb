@@ -280,20 +280,30 @@ module PermissionForge
         end
       end
 
+      # A database that cannot be used (DatabaseReach::UNAVAILABLE_ERRORS:
+      # unreachable, not created, not configured) is "unchecked": nothing is
+      # recorded until it answers. Any other error of the check raises out of
+      # Audit.record, as it always did.
       def check_table(name)
-        if PermissionForge::AuditEvent.table_exists?
-          @table_checks[name] = true
-        else
-          @table_checks[name] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          warn_missing_table(name) unless @warned_tables[name]
-          @warned_tables[name] = true
-          false
+        cause = nil
+        exists = PermissionForge::DatabaseReach.table_exists?(PermissionForge::AuditEvent,
+                                                              errors: PermissionForge::DatabaseReach::UNAVAILABLE_ERRORS) { |e| cause = e }
+        if cause
+          warn_unchecked_table(name, cause)
+          return false
         end
-      rescue ActiveRecord::NoDatabaseError, ActiveRecord::ConnectionNotEstablished => e
-        PermissionForge::Warnings.emit(:audit_table_unchecked, "cannot check for the audit table '#{name}' (#{e.class}): " \
+        return @table_checks[name] = true if exists
+
+        @table_checks[name] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        warn_missing_table(name) unless @warned_tables[name]
+        @warned_tables[name] = true
+        false
+      end
+
+      def warn_unchecked_table(name, cause)
+        PermissionForge::Warnings.emit(:audit_table_unchecked, "cannot check for the audit table '#{name}' (#{cause.class}): " \
                                                                'no audit events are recorded until the database answers.',
                                        severity: :security)
-        false
       end
 
       def warn_missing_table(name)
