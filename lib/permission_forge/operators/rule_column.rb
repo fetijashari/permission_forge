@@ -41,6 +41,8 @@ module PermissionForge
       # loaded or asked, a model file's SyntaxError or LoadError included.
       # The applier's own walk does not rescue them (RulePath).
       UNTELLABLE = [StandardError, ScriptError].freeze
+      # A character no name has (see .name?).
+      CONTROL_CHARACTER = /[[:cntrl:]]/
 
       # @return [ActiveRecord::ConnectionAdapters::Column, nil]
       attr_reader :column
@@ -53,10 +55,12 @@ module PermissionForge
         # A field name is one name, or several joined by dots. An empty one
         # among them — a leading, trailing or doubled dot, or nothing at all —
         # makes it no name: quoted segment by segment it would be another
-        # name than the one that was written.
+        # name than the one that was written. So does a control character (a
+        # newline, a NUL byte) in one: no column is called that, and quoted
+        # into a statement it reaches the database as written.
         def name?(field_name)
           segments = field_name.to_s.split('.', -1)
-          segments.any? && segments.none?(&:empty?)
+          segments.any? && segments.none? { |segment| segment.empty? || segment.match?(CONTROL_CHARACTER) }
         end
 
         # @param field_name [String] the rule's field_name

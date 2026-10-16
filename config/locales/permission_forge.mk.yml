@@ -2285,6 +2285,7 @@ mk:
           црти, точки)
         invalid_join_type: не е валиден тип на спојување
         invalid_operator: не е валиден оператор
+        nul_byte: не смее да содржи NUL бајт
         numeric_or_date_required: мора да биде нумеричка или датумска вредност за
           оператори за споредба
         unjoinable_association: го именува %{association}, асоцијација на %{model}

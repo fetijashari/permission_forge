@@ -2231,6 +2231,7 @@ en:
           dots)
         invalid_join_type: is not a valid join type
         invalid_operator: is not a valid operator
+        nul_byte: must not contain a NUL byte
         numeric_or_date_required: must be a numeric or date value for comparison operators
         unjoinable_association: names %{association}, an association of %{model} that
           a rule cannot join

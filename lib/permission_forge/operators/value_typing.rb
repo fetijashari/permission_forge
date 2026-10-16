@@ -25,7 +25,10 @@ module PermissionForge
     # column nothing is known about leaves the value to the database. A rule
     # with no column to compare with ({.no_column?}) is UNUSABLE: one whose
     # field_name is not a name, whatever the operator, and one that names a
-    # column its table does not have, under a built-in operator.
+    # column its table does not have, under a built-in operator. So is a
+    # value with a NUL byte, under any operator ({.unquotable?}): no SQL
+    # literal carries one — the database reads the statement cut short, and
+    # every holder's query failed instead of being denied.
     module ValueTyping
       UNUSABLE = ValueCasters::UNUSABLE
       CURRENT_USER = 'current_user'
@@ -51,10 +54,19 @@ module PermissionForge
       # @return [Object] what the operator's strategy binds: one value, an Array
       #   for `in` / `not_in` / `between`, or {UNUSABLE}
       def call(operator, value, target)
-        return UNUSABLE if no_column?(operator, target)
+        return UNUSABLE if no_column?(operator, target) || unquotable?(value)
 
         shape = SHAPES[operator]
         shape ? send(shape, value, target) : value
+      end
+
+      # Whether the value cannot be written into a statement as a literal: a
+      # String with a NUL byte (a row written past the model; ParamShapes
+      # drops NUL bytes from request parameters).
+      #
+      # @param value [Object] the rule's value
+      def unquotable?(value)
+        value.is_a?(String) && value.include?("\0")
       end
 
       # Whether the rule has no column to compare with: its field_name is not a

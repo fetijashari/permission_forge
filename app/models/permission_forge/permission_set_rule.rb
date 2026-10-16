@@ -81,6 +81,7 @@ module PermissionForge
     validate :validate_field_name_segments, if: :field_name_changed?
     validate :validate_field_accessor_path, if: :path_check_due?
     validate :validate_field_name_column, if: :column_check_due?
+    validate :validate_field_value_text, if: -> { new_record? || will_save_change_to_field_value? }
     validate :validate_field_value_for_operator
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
@@ -199,6 +200,17 @@ module PermissionForge
 
       errors.add(:field_name, I18n.t('permission_forge.validations.permission_set_rule.invalid_field_name',
                                      default: 'must be a valid column name (letters, numbers, underscores, dots)'))
+    end
+
+    # A value with a NUL byte cannot reach SQL as a literal (the statement is
+    # read cut short): refused for a new or changed value; a stored one
+    # matches nothing (Operators::ValueTyping.unquotable?) and the row stays
+    # editable in its other attributes.
+    def validate_field_value_text
+      return unless PermissionForge::Operators::ValueTyping.unquotable?(field_value)
+
+      errors.add(:field_value, I18n.t('permission_forge.validations.permission_set_rule.nul_byte',
+                                      default: 'must not contain a NUL byte'))
     end
 
     def validate_field_value_for_operator

@@ -105,7 +105,7 @@ module PermissionForge
 
           assert_empty relation.to_a, "#{operator} #{value.inspect}"
         end
-        ["na\nme", "na\0me", "customers.na\tme", "na me"].each do |field_name|
+        ["na\nme", "na\0me", "customers.na\tme"].each do |field_name|
           %w[equal echo].each do |operator|
             relation = scoped(rule(field_name: field_name, operator: operator, field_value: 'mine'),
                               registry: PermissionForge::Operators::Registry.strategies.merge(echo))
@@ -113,6 +113,8 @@ module PermissionForge
             assert_empty relation.to_a, "#{field_name.inspect} #{operator}"
           end
         end
+        # A name with a space is a name (no such column: none under a built-in operator; a custom operator's strategy decides).
+        assert_empty scoped(rule(field_name: 'na me', field_value: 'mine')).to_a
         assert_equal [@mine], scoped(rule(operator: 'echo', field_value: 'mine'),
                                      registry: PermissionForge::Operators::Registry.strategies.merge(echo)).to_a
       end

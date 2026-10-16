@@ -2286,6 +2286,7 @@ sq:
           nënviza, pika)
         invalid_join_type: nuk është lloj i vlefshëm bashkimi
         invalid_operator: nuk është operator i vlefshëm
+        nul_byte: nuk duhet të përmbajë bajt NUL
         numeric_or_date_required: duhet të jetë vlerë numerike ose datë për operatorët
           e krahasimit
         unjoinable_association: përmend %{association}, një lidhje e %{model} që një
