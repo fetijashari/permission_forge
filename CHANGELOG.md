@@ -980,6 +980,10 @@ and the RLS re-sync.
 
 ### Fixed
 
+- **The rule builder's live sentence keeps up with typing**: a newer input aborts the request before it, so a late
+  answer no longer overwrites the newer sentence, and a redirect (a lapsed session) or a whole page is never put into
+  the panel.
+  <!-- pin: test/permission_forge/html/admin_script_hygiene_test.rb#the rule preview aborts a stale request and injects fragments only -->
 - **The dependency validation names the prerequisite by its label** ("requires Read to be enabled", in the request's
   language) instead of the column (`read_access`); sq and mk no longer say "Permission Set", "commit and deploy" or
   "fail-open" in English, and the Effective access action pills word their state, not only a glyph.
