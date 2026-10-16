@@ -153,6 +153,7 @@ module PermissionForge
         table = table.to_s
         cache = schema_cache(model)
         return true if cache.data_source_exists?(table)
+
         claim = [slot(model), table]
         return false unless table_recheck_due?(claim)
 
