@@ -55,7 +55,7 @@ module PermissionForge
          '<main> landmarks'].each do |expected|
           assert_includes problems, expected
         end
-        raw = '<!doctype html><html lang=en><title>{"one" => "Review %{count} change"}</title><body><main><h1>x</h1></main></body></html>'
+        raw = '<!doctype html><html lang=en><title>{"one" => "Review %{count} change"}</title><body><main><h1>x</h1></main></body></html>' # rubocop:disable Style/FormatStringToken
         assert_includes A11yLint.new(raw).problems.join("\n"), '<title> is a raw value'
       end
     end

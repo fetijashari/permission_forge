@@ -100,7 +100,7 @@ module PermissionForge
 
         bad_css = ".pf-table--sets { min-width: 560px; }\n.pf-scroll-x { overflow-x: auto; }\n.pf-pane { overflow-y: scroll; }\n" \
                   "@supports (x: y) {\n  .pf-box { position: relative; overflow: auto; }\n}\n" \
-                  ".pf-toasts { position: fixed; left: 50%; }"
+                  '.pf-toasts { position: fixed; left: 50%; }'
         bad = LayoutLint.new(css: bad_css)
         assert_equal ['pf-table--sets'], bad.wide_classes
         assert_equal ['.pf-scroll-x scrolls but is no containing block: add position: relative',
@@ -108,7 +108,7 @@ module PermissionForge
                       '.pf-scroll-x paints no scroll cue (the edge gradients)',
                       '.pf-toasts is centred on the viewport: move it by the sidebar (var(--pf-sidebar-width)) at desktop widths'],
                      bad.css_problems
-        offset = "@media (min-width: 1024px) { .pf-root:has(.pf-sidebar) .pf-toasts { left: calc(50% + var(--pf-sidebar-width) / 2); } }"
+        offset = '@media (min-width: 1024px) { .pf-root:has(.pf-sidebar) .pf-toasts { left: calc(50% + var(--pf-sidebar-width) / 2); } }'
         assert_equal ['no .pf-scroll-x rule'], LayoutLint.new(css: ".pf-toasts { position: fixed; left: 50%; }\n#{offset}").css_problems
 
         html = '<div class="pf-card"><div class="pf-table pf-table--sets"></div></div>' \

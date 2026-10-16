@@ -111,7 +111,7 @@ module PermissionForge
       # name => [[:grant | :mute, level, options]] for the Customer email field.
       # A muting level nil adds the Resource row only; :no_edit is the row
       # with Edit alone (API / console).
-      STI = 'PfStiBugTicket'
+      STI = 'PfStiBugTicket'.freeze
       WHY_STATES = {
         'hidden' => [[:grant, 'hidden']],
         'masked' => [[:grant, 'masked', { strategy: 'email' }]],
@@ -185,7 +185,7 @@ module PermissionForge
       # The engine's resource entry for the sets, in the order a request
       # merges them; for a subclass, its field composed along the chain as
       # the attribute guard composes it (ResourceChain.compose_field).
-      def why_engine(user, sets, name)
+      def why_engine(user, sets, name) # rubocop:disable Metrics/AbcSize -- the hash, then the chain's composition
         ordered = PermissionForge::PermissionSet.where(id: sets.map(&:id)).in_hash_order.to_a
         resources = PermissionForge::Services::PermissionHashBuilder.call(user: user, permission_sets: ordered)[:resources]
         return resources[name] if name == 'Customer'
@@ -278,7 +278,7 @@ module PermissionForge
           @field.mutes.reject { |mute| changed?(mute.level) }.map { |mute| "mute #{mute.level} changed nothing" }
         end
 
-        def changed?(mute_level)
+        def changed?(mute_level) # rubocop:disable Metrics/CyclomaticComplexity -- one rule per mute level
           case mute_level
           when 'hide' then @before[:read_access] && @level == 'hidden'
           when 'mask' then LEVEL.effective_level(@before) != 'masked' && @level == 'masked'

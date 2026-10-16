@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'yaml'
-require 'set'
 
 # The pseudo-locale `xx`: the gem's en file with every string wrapped in
 # ⟦ ⟧ and every interpolation marked ⟨%{name}⟩, installed in the I18n

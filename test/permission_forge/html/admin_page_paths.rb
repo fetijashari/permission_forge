@@ -51,7 +51,7 @@ module PermissionForge
       # ["POST /permission_sets/1/review", body] for every POST answered with
       # a page, then ["audit_off GET /audit", body] for every STATE_SCREENS
       # entry, each answered with its status (asserted), in `locale`.
-      def extra_screens(locale: nil)
+      def extra_screens(locale: nil) # rubocop:disable Metrics/AbcSize -- the posted pages, then the state screens
         localized = locale ? { locale: locale } : {}
         posted = posted_pages.map do |page|
           post pf(page.path), params: page.params.merge(localized)
@@ -84,7 +84,7 @@ module PermissionForge
 
       private
 
-      def state_screen(setting, verb, path, status, params)
+      def state_screen(setting, verb, path, status, params) # rubocop:disable Metrics/AbcSize -- set, request, restore
         path = path.sub(':ana', @ana.id.to_s).sub(':set', @set.id.to_s)
         config = PermissionForge.configuration
         previous = [config.audit_events, config.audit_log_authorization]
@@ -104,7 +104,7 @@ module PermissionForge
       # ending soon, one expired, one due for review, a set whose condition
       # nobody can judge, a field masked with an unknown strategy, a rule on
       # a secret column.
-      def seed_home_cards
+      def seed_home_cards # rubocop:disable Metrics/AbcSize -- one fixture per Home card, nothing to share
         ending = create_permission_set(name: 'Temporary access')
         create_permission_set_user(user: @bo, permission_set: ending, expires_at: 3.days.from_now)
         expired = create_permission_set(name: 'Old project')

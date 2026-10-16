@@ -64,7 +64,7 @@ module PermissionForge
       test 'every template under app/views is rendered by a walked screen' do
         missing = all_templates - NOT_WALKED.keys - rendered_templates { walk_every_screen }
 
-        assert_empty missing, "templates no walked screen renders (add the screen or its fixture to AdminPaths / " \
+        assert_empty missing, 'templates no walked screen renders (add the screen or its fixture to AdminPaths / ' \
                               "AdminPagePaths, or say why in NOT_WALKED): #{missing.join(', ')}"
         assert_empty NOT_WALKED.keys - all_templates, 'NOT_WALKED names a template that is gone: remove it'
       end
@@ -128,7 +128,7 @@ module PermissionForge
       # Every screen of the whole-UI walks: the pages, a drawer as the script
       # loads it, the error states, the flows' toasts, the posted pages and
       # the screens a setting draws.
-      def walk_every_screen
+      def walk_every_screen # rubocop:disable Metrics/AbcSize -- one line per kind of screen
         paths.each { |path| get pf(path) }
         get pf("/people/#{@ana.id}/remove_all"), headers: { 'X-PF-Fragment' => '1' }
         error_states.select(&:renders?).each { |state| send(state.verb, pf(state.path), params: state.params) }

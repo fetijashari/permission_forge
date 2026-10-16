@@ -30,7 +30,7 @@ module PermissionForge
       # Stored names are shown verbatim in these, and a form field holds what
       # was typed: never a translation.
       SKIPPED = 'script, style, code, kbd, pre, textarea, .pf-mono, .pf-mono-key, .pf-audit-code, [data-pf-host-data]'.freeze
-      TITLE_SEPARATOR = ' · '
+      TITLE_SEPARATOR = ' · '.freeze
       TEXT_ATTRIBUTES = %w[aria-label aria-description aria-roledescription placeholder title alt].freeze
       # English the dummy application itself holds: its name (the "Back to"
       # link), the brand, and the time zone's name.
@@ -130,6 +130,15 @@ module PermissionForge
         assert_empty leaks_in(render_inline("<p><%= t('permission_forge.ui.audit.who_when', who: 'Access denied by test rule', when: 1) %></p>"))
       end
 
+      # The columns that name a record or a person: what the admin shows as
+      # a title, a link, a pill (never free text).
+      IDENTITY = {
+        'PermissionForge::PermissionSet' => %w[name], 'PermissionForge::PermissionSetGroup' => %w[name],
+        'PermissionForge::Resource' => %w[name], 'PermissionForge::ResourceField' => %w[name],
+        'PermissionForge::ResourceAction' => %w[name], 'PermissionForge::PermissionSetRule' => %w[name field_name],
+        'PermissionForge::AuditEvent' => %w[actor_label record_label], 'User' => %w[name email]
+      }.freeze
+
       API = '/permission_forge/api'.freeze
       HEADERS = { 'Accept-Language' => LOCALE, 'CONTENT_TYPE' => 'application/json' }.freeze
 
@@ -142,7 +151,7 @@ module PermissionForge
       # The prose of a screen that no permission_forge.* key produced and
       # that is not host data: its text nodes outside the skipped elements,
       # the attributes assistive technology reads, and the submit buttons.
-      def leaks_in(html)
+      def leaks_in(html) # rubocop:disable Metrics/AbcSize -- the three kinds of text, each read once
         doc = Nokogiri::HTML(html)
         doc.css(SKIPPED).each(&:remove)
         title = doc.at_css('title')&.remove&.text.to_s.split(TITLE_SEPARATOR)
@@ -160,8 +169,10 @@ module PermissionForge
       # every action key the host's controllers map, whole: host data as a
       # value.
       def host_values
-        keys = PermissionForge::Admin::ControllerCatalog.new.entries.map { |entry| entry.key.to_s }
-        @host_values ||= (stored_strings + model_words + keys).map(&:strip).to_set
+        @host_values ||= begin
+          keys = PermissionForge::Admin::ControllerCatalog.new.entries.map { |entry| entry.key.to_s }
+          (stored_strings + model_words + keys).to_set(&:strip)
+        end
       end
 
       def render_inline(template)
@@ -184,15 +195,6 @@ module PermissionForge
       def data_vocabulary
         @data_vocabulary ||= vocabulary | PseudoLocale.vocabulary(stored_strings + model_words + export_words)
       end
-
-      # The columns that name a record or a person: what the admin shows as
-      # a title, a link, a pill (never free text).
-      IDENTITY = {
-        'PermissionForge::PermissionSet' => %w[name], 'PermissionForge::PermissionSetGroup' => %w[name],
-        'PermissionForge::Resource' => %w[name], 'PermissionForge::ResourceField' => %w[name],
-        'PermissionForge::ResourceAction' => %w[name], 'PermissionForge::PermissionSetRule' => %w[name field_name],
-        'PermissionForge::AuditEvent' => %w[actor_label record_label], 'User' => %w[name email]
-      }.freeze
 
       def identity_strings
         IDENTITY.flat_map { |model, columns| model.constantize.unscoped.pluck(*columns).flatten.compact }

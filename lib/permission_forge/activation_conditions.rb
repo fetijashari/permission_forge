@@ -164,6 +164,15 @@ module PermissionForge
       ip_list_broken? || hours_window.broken?
     end
 
+    # A granting set whose condition nobody can judge: it never applies, with
+    # a request context or without one (ConditionalSets, Admin::EffectiveAccess).
+    # For an includer that answers `muting?` (PermissionSet, ConditionalSets::Member).
+    #
+    # @return [Boolean]
+    def never_grants?
+      !muting? && conditions_broken?
+    end
+
     # What the validations refuse about the row's conditions, for a stored
     # row too: `[:ip_entry, entry]` per entry that is no address, `[:ip_empty,
     # text]` for a list of separators, and the window's problem with the
