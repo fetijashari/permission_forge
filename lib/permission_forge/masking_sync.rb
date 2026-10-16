@@ -59,6 +59,15 @@ module PermissionForge
     # two reads of the Resource names (one query each).
     DATABASE_RECHECK = 2
 
+    # The cause named by the token warning when the store raised nothing: a
+    # read of the token, and a read right after writing one, came back empty.
+    SILENT_STORE = ' (it did not answer, or a read right after a write came back empty: the store is down, full, ' \
+                   'or evicts the key at once)'
+
+    # The boot step's warning when a model could not be masked (boot!).
+    INCOMPLETE_AT_BOOT = 'Auto-applied masking is not complete at boot (see the warnings above, or the Resource ' \
+                         'table cannot be read): it is tried again at each request or job.'
+
     # One sync (or apply) at a time; one probe of a failing store at a time.
     SYNC_LOCK = Mutex.new
     PROBE_LOCK = Mutex.new
@@ -117,10 +126,7 @@ module PermissionForge
       # @return [Boolean] whether every selected model is masked
       def boot!
         done = sync(token_in_store? ? current_token : nil, always: true)
-        unless done
-          Rails.logger&.warn('[PermissionForge] Auto-applied masking is not complete at boot (see the warnings ' \
-                             'above, or the Resource table cannot be read): it is tried again at each request or job.')
-        end
+        Warnings.emit(:masking_sync_incomplete_at_boot, INCOMPLETE_AT_BOOT) unless done
         done
       end
 
@@ -207,8 +213,9 @@ module PermissionForge
         apply!(name)
         return if publish_token
 
-        Rails.logger&.warn('[PermissionForge] The cache store did not take the masking token: other processes ' \
-                           "mask #{name} once the store answers again and this process has written it.")
+        Warnings.emit("masking_sync.token_not_taken.#{name}",
+                      "The cache store did not take the masking token: other processes mask #{name} once the " \
+                      'store answers again and this process has written it.')
       end
 
       # The token to check against — nil while the store is failing. A
@@ -278,20 +285,23 @@ module PermissionForge
         @failing_until = nil
       end
 
-      # Logged once per outage: the first failure after the store answered.
+      # Warned once per outage: the first failure after the store answered.
+      # The warning names the cause (the error, or what a silent store did)
+      # and the remedy.
       def store_failed!(error = nil)
         first = @failing_until.nil?
         @failing_until = now + RETRY_PAUSE
         @failing_store = PermissionForge.cache
         return unless first
 
-        why = error ? " (#{error.class}: #{error.message})" : ''
-        Rails.logger&.warn("[PermissionForge] The cache store did not give or keep the masking token#{why}: auto-applied " \
-                           "masking is not synced with other processes for the next #{RETRY_PAUSE} seconds — a model " \
-                           'a Resource row names in another process is masked here once the store answers. A store ' \
-                           'that is up but loses the token at once cannot sync masking: use a shared store that keeps ' \
-                           'entries, or include PermissionForge::Concerns::MaskedAttributes in the models ' \
-                           '(docs/masked-attributes.md).')
+        Warnings.emit(:masking_sync_store_failed,
+                      'The cache store did not give or keep the masking token' \
+                      "#{error ? " (#{error.class}: #{error.message})" : SILENT_STORE}: auto-applied " \
+                      "masking is not synced with other processes for the next #{RETRY_PAUSE} seconds — a model " \
+                      'a Resource row names in another process is masked here once the store answers. A store ' \
+                      'that is up but loses the token at once cannot sync masking: use a shared store that keeps ' \
+                      'entries, or include PermissionForge::Concerns::MaskedAttributes in the models ' \
+                      '(docs/masked-attributes.md).')
       end
 
       def now

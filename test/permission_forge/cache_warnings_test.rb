@@ -102,13 +102,14 @@ module PermissionForge
     end
 
     # The boot logs before `bin/rails server` attaches its console logger,
-    # and `bin/rails runner` never does: the warning was in log/development.log only.
-    # The masking warning stays in the log: development re-reads the names itself.
-    test 'development writes the stale-permissions warning to standard error as well, once' do
+    # and `bin/rails runner` never does: the warnings were in
+    # log/development.log only (Warnings.emit decides the channel).
+    test 'development writes both warnings to standard error as well, once each' do
       log = boot_log(env: 'development', backend: :memory)
 
       assert_equal 1, @stderr.scan(DEVELOPMENT_WARNING).size, @stderr
-      assert_equal 0, @stderr.scan(MASKING_WARNING).size, @stderr
+      assert_equal 1, @stderr.scan(MASKING_WARNING).size, @stderr
+      assert_match DEVELOPMENT_WARNING, log
       assert_match MASKING_WARNING, log
     end
 
@@ -129,14 +130,26 @@ module PermissionForge
       end
     end
 
-    test 'nothing on standard error while a generator runs, nor in test or production' do
-      with_singleton_method(BootChecks, :generator_running?, -> { true }) do
-        assert_match DEVELOPMENT_WARNING, boot_log(env: 'development', backend: :memory)
+    test 'nothing at all while a generator runs, and nothing on standard error in the test environment' do
+      with_singleton_method(PermissionForge::Warnings, :generator_running?, -> { true }) do
+        assert_empty boot_log(env: 'development', backend: :memory)
         assert_empty @stderr
       end
-      %w[test production].each do |env|
-        boot_log(env: env, backend: :memory)
-        assert_empty @stderr, env
+      boot_log(env: 'test', backend: :memory)
+      assert_empty @stderr
+    end
+
+    # A production console, runner, rake task or job worker (the test runner
+    # is no server either): its log is not read, so the terminal gets a copy.
+    test 'production writes to standard error in a process that is not a server' do
+      log = boot_log(env: 'production', backend: :memory)
+
+      assert_match(/in-process permission cache in production/, log)
+      assert_equal 1, @stderr.scan('in-process permission cache in production').size, @stderr
+
+      with_singleton_method(PermissionForge::Warnings, :server_process?, -> { true }) do
+        assert_match(/in-process permission cache in production/, boot_log(env: 'production', backend: :memory))
+        assert_empty @stderr, 'a server: the log is the record'
       end
     end
 
@@ -188,11 +201,13 @@ module PermissionForge
 
     # What the configuration boot warnings log under `env`, with
     # `backend` as cache_backend and, when given, `rails_cache` as Rails.cache.
-    # What it writes to standard error is left in @stderr.
+    # What it writes to standard error is left in @stderr. Each boot is a
+    # fresh process (the terminal gets a key once per process).
     def boot_log(env:, backend:, rails_cache: nil)
       with_rails_env(env, rails_cache) do
         PermissionForge.configuration.cache_backend = backend
         PermissionForge.configuration.reset_cache_store!
+        PermissionForge::Warnings.reset!
         log = nil
         _, @stderr = capture_io do
           log = capture_rails_log { BootChecks.send(:warn_configuration, PermissionForge.configuration) }

@@ -3,7 +3,10 @@
 module PermissionForge
   # Boot warnings about a cache store that does not reach other processes.
   # Called by BootChecks once per boot; only the configuration and the
-  # store's class are read.
+  # store's class are read. Each warning goes through Warnings.emit, which
+  # decides the channel (in development the terminal as well as the log:
+  # the boot logs before `bin/rails server` attaches its console logger, and
+  # `bin/rails runner`, the console and `db:seed` never do).
   #
   # A store of its own in every process (Cache::Base#process_local?:
   # cache_backend = :memory, or Rails.cache / a store instance that is an
@@ -19,12 +22,6 @@ module PermissionForge
   # development MaskingSync re-reads the Resource names from the database
   # instead (MaskingSync.database_recheck?); elsewhere a model first named in
   # another process stays unmasked here until a restart.
-  #
-  # In development the stale-permissions warning is also written to
-  # standard error — the boot logs before `bin/rails server` attaches its
-  # console logger, and `bin/rails runner` never does — unless the logger
-  # already writes there or a generator runs. The development masking
-  # warning stays in the log: development re-reads the names itself.
   #
   # @api private
   module CacheWarnings
@@ -50,18 +47,19 @@ module PermissionForge
     def warn_in_production(config)
       cache = PermissionForge.cache
       if cache.process_local?
-        Rails.logger&.warn '[PermissionForge] WARNING: Using an in-process permission cache in production ' \
-                           '(cache_backend = :memory, or Rails.cache is a :memory_store). ' \
-                           'Permissions will be inconsistent across Puma workers. ' \
-                           'Configure config.cache_backend = :rails_cache with Redis, Memcached, or SolidCache.'
+        Warnings.emit(:cache_process_local,
+                      'WARNING: Using an in-process permission cache in production (cache_backend = :memory, or ' \
+                      'Rails.cache is a :memory_store). Permissions will be inconsistent across Puma workers. ' \
+                      'Configure config.cache_backend = :rails_cache with Redis, Memcached, or SolidCache.')
       end
       return unless unannounced_masking?(cache)
 
-      Rails.logger&.warn "[PermissionForge] WARNING: #{masking_setting} takes its models from the Resource rows, " \
-                         "but the cache store is #{store_description(config, cache)}: it cannot tell the other " \
-                         'processes that a Resource row names a new model. A model first named by a row committed ' \
-                         'in another process (another worker, a console, a rake task) stays unmasked in this ' \
-                         "process until it restarts. #{MASKING_REMEDIES}"
+      Warnings.emit(:cache_unannounced_masking,
+                    "WARNING: #{masking_setting} takes its models from the Resource rows, but the cache store is " \
+                    "#{store_description(config, cache)}: it cannot tell the other processes that a Resource row " \
+                    'names a new model. A model first named by a row committed in another process (another ' \
+                    'worker, a console, a rake task) stays unmasked in this process until it restarts. ' \
+                    "#{MASKING_REMEDIES}")
     end
 
     # Rails 8.0+ generates `config.cache_store = :memory_store` for
@@ -70,16 +68,15 @@ module PermissionForge
     # Rails.cache.
     def warn_in_development(config)
       cache = PermissionForge.cache
-      development_warning(stale_permissions_warning(config)) if cache.process_local?
-      # Development handles it (the database re-read): the log only, not the terminal.
-      Rails.logger&.warn(development_masking_warning(config, cache)) if unannounced_masking?(cache)
+      Warnings.emit(:cache_stale_permissions, stale_permissions_warning(config)) if cache.process_local?
+      Warnings.emit(:cache_development_masking, development_masking_warning(config, cache)) if unannounced_masking?(cache)
     end
 
     # Printed by every development process that boots (a server, a console,
     # `bin/rails runner`, `db:seed`), so it speaks of processes, not of
     # "this server".
     def stale_permissions_warning(config)
-      "[PermissionForge] Development: the permission cache is #{store_description(config, PermissionForge.cache)}, " \
+      "Development: the permission cache is #{store_description(config, PermissionForge.cache)}, " \
         'one per process. A permission change made in one process (a console, `bin/rails runner`, ' \
         "a rake task or db:seed) invalidates only that process's cache: a running server keeps the " \
         "permissions it has cached until cache_ttl (#{config.cache_ttl.inspect} s) or a restart. " \
@@ -90,25 +87,12 @@ module PermissionForge
     end
 
     def development_masking_warning(config, cache)
-      "[PermissionForge] Development: #{masking_setting} takes its models from the Resource rows, and the cache " \
+      "Development: #{masking_setting} takes its models from the Resource rows, and the cache " \
         "store is #{store_description(config, cache)}: it cannot tell a running server that a Resource row " \
         'committed from a console, `bin/rails runner` or a rake task names a new model. In development ' \
         'the server re-reads the Resource names from the database instead (one query at most every ' \
         "#{MaskingSync::DATABASE_RECHECK} s); in production a process would mask such a model only after a " \
         "restart. #{MASKING_REMEDIES}"
-    end
-
-    # Logged, and in development written to standard error as well.
-    def development_warning(message)
-      Rails.logger&.warn(message)
-      Kernel.warn(message) unless logger_on_terminal? || BootChecks.generator_running?
-    end
-
-    # Whether Rails.logger already writes to standard output or error (a
-    # container setup, RAILS_LOG_TO_STDOUT, a logger the app configured).
-    def logger_on_terminal?
-      logger = Rails.logger
-      !logger.nil? && ActiveSupport::Logger.logger_outputs_to?(logger, $stdout, $stderr)
     end
 
     # A row-driven masking setting with a store that cannot carry

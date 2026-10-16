@@ -5,12 +5,13 @@ module PermissionForge
     # The audit boot warnings, written by the engine once the database is
     # reachable. The missing-table warning is logged by Audit (once per
     # process, by Audit.verify_table!) with the text of .missing_table; this
-    # adds auditing switched off and one shared login for every change.
+    # adds auditing switched off and one shared login for every change, each
+    # through PermissionForge::Warnings.emit.
     #
-    # Not while a generator runs (`bin/rails generate permission_forge:install`
-    # boots the app before it writes the migration that creates the table):
-    # the table is checked again, and the warning logged, the first time an
-    # event is recorded.
+    # The table is not checked while a generator runs (`bin/rails generate
+    # permission_forge:install` boots the app before it writes the migration
+    # that creates the table): it is checked again, and the warning logged,
+    # the first time an event is recorded. The emitter writes nothing then.
     #
     # @api private
     module BootWarnings
@@ -19,15 +20,18 @@ module PermissionForge
         PermissionForge::Audit.verify_table! unless generating
 
         if configuration.audit_events == false
-          Rails.logger&.warn '[PermissionForge] SECURITY warning: audit_events is false, so permission changes ' \
-                             'are not recorded. Set config.audit_events = :auto unless another system records them.'
+          PermissionForge::Warnings.emit(:audit_events_off,
+                                         'audit_events is false, so permission changes are not recorded. Set ' \
+                                         'config.audit_events = :auto unless another system records them.',
+                                         severity: :security)
         end
 
         return unless configuration.http_basic_auth_enabled && configuration.audit_actor_resolver.nil?
 
-        Rails.logger&.warn '[PermissionForge] The admin UI uses HTTP Basic auth and audit_actor_resolver is not ' \
-                           'set: every change is attributed to the shared login. Set ' \
-                           'config.audit_actor_resolver to return the signed-in admin.'
+        PermissionForge::Warnings.emit(:audit_actor_shared_login,
+                                       'The admin UI uses HTTP Basic auth and audit_actor_resolver is not set: ' \
+                                       'every change is attributed to the shared login. Set ' \
+                                       'config.audit_actor_resolver to return the signed-in admin.')
       end
 
       # The missing-table warning (Audit logs it once per process). Its
@@ -50,12 +54,12 @@ module PermissionForge
       end
 
       # `bin/rails generate` or `bin/rails destroy` is booting the app
-      # (BootChecks.generator_running?: its command class is loaded, not
+      # (Warnings.generator_running?: its command class is loaded, not
       # merely Rails::Generators, which a gem may load at boot).
       #
       # @return [Boolean]
       def self.generator_running?
-        PermissionForge::BootChecks.generator_running?
+        PermissionForge::Warnings.generator_running?
       end
 
       # @return [Boolean] whether a permission_forge migration in the app's

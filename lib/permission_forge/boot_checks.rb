@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'warnings'
+
 module PermissionForge
   # What the engine checks while the host app boots: run (from
   # config.after_initialize) and ensure_tenancy_gem! (from an initializer).
@@ -12,13 +14,15 @@ module PermissionForge
   # runs. Anything else a step raises (a ConfigurationError) still stops the
   # boot.
   #
-  # Nothing is checked or logged while a generator boots the app
-  # (generator_running?): `bin/rails generate permission_forge:install`
-  # boots before it writes the initializer, so its warnings described a
-  # configuration the app was about to stop having (the defaults, e.g.
-  # cache_backend :memory) — the first lines a new user read in
-  # log/development.log. The next server, console or task boot checks the
-  # configuration the app has.
+  # Every warning goes through Warnings.emit, which decides the channel (the
+  # log; the terminal where the log is not read) and writes nothing while a
+  # generator boots the app (Warnings.generator_running?): `bin/rails
+  # generate permission_forge:install` boots before it writes the
+  # initializer, so its warnings described a configuration the app was about
+  # to stop having (the defaults, e.g. cache_backend :memory) — the first
+  # lines a new user read in log/development.log. Nothing is checked then
+  # either (run returns before the database steps). The next server, console
+  # or task boot checks the configuration the app has.
   #
   # @api private
   module BootChecks
@@ -42,10 +46,9 @@ module PermissionForge
       masked_attributes: ->(_config) { MaskingSync.boot! }
     }.freeze
 
-    # The commands `bin/rails generate` and `bin/rails destroy` run: Rails
-    # loads the command's class before it boots the app (canary
-    # :generator_commands).
-    GENERATOR_COMMANDS = %w[Rails::Command::GenerateCommand Rails::Command::DestroyCommand].freeze
+    # The commands `bin/rails generate` and `bin/rails destroy` run (the one
+    # definition is the emitter's: Warnings::GENERATOR_COMMANDS).
+    GENERATOR_COMMANDS = Warnings::GENERATOR_COMMANDS
 
     class << self
       # @param config [Configuration]
@@ -60,13 +63,12 @@ module PermissionForge
       end
 
       # Whether this boot is that of a generator (`bin/rails generate` or
-      # `bin/rails destroy`): their command class is loaded; a server, a
-      # console, a runner or a rake task loads its own. Rails::Generators
-      # alone does not say it: a gem may require rails/generators as it loads.
+      # `bin/rails destroy`): Warnings.generator_running?, which also keeps
+      # every warning quiet then.
       #
       # @return [Boolean]
       def generator_running?
-        GENERATOR_COMMANDS.any? { |name| Object.const_defined?(name, false) }
+        Warnings.generator_running?
       end
 
       # HasTenantScoping silently skips the scope when the gem is absent,
@@ -96,13 +98,13 @@ module PermissionForge
         return unless conditional_sets.exists?
         return unless resolved_context(config).empty?
 
-        Rails.logger.warn '[PermissionForge] SECURITY warning: ' \
-                          "#{conditional_sets.count} permission set(s) use activation conditions " \
-                          '(session flag, allowed_ips, or login hours) but request_context_resolver ' \
-                          'returns empty context. These sets will evaluate as unconditional ' \
-                          '(ALWAYS ACTIVE) — IP/hours/consent restrictions are NOT enforced. ' \
-                          'Configure config.request_context_resolver, or set ' \
-                          'config.conditional_sets_strict_mode = true to fail closed.'
+        Warnings.emit(:conditional_sets_without_context,
+                      "#{conditional_sets.count} permission set(s) use activation conditions " \
+                      '(session flag, allowed_ips, or login hours) but request_context_resolver ' \
+                      'returns empty context. These sets will evaluate as unconditional ' \
+                      '(ALWAYS ACTIVE) — IP/hours/consent restrictions are NOT enforced. ' \
+                      'Configure config.request_context_resolver, or set ' \
+                      'config.conditional_sets_strict_mode = true to fail closed.', severity: :security)
       rescue ActiveRecord::StatementInvalid
         # Tables don't exist yet (pre-migration)
       end
@@ -112,13 +114,13 @@ module PermissionForge
         return if config.api_require_authorization
         return if config.api_action_authorization && config.api_assignment_authorization
 
-        Rails.logger&.warn '[PermissionForge] SECURITY warning: API is enabled, ' \
-                           'config.api_require_authorization is false and ' \
-                           'api_action_authorization / api_assignment_authorization is not set. ' \
-                           'api_auth only proves identity — any authenticated caller can create ' \
-                           'permission sets and assign them (privilege escalation). Configure both ' \
-                           'authorization lambdas, or remove api_require_authorization = false ' \
-                           '(the default, true, denies mutations until they are set).'
+        Warnings.emit(:api_authorization_gap,
+                      'API is enabled, config.api_require_authorization is false and ' \
+                      'api_action_authorization / api_assignment_authorization is not set. ' \
+                      'api_auth only proves identity — any authenticated caller can create ' \
+                      'permission sets and assign them (privilege escalation). Configure both ' \
+                      'authorization lambdas, or remove api_require_authorization = false ' \
+                      '(the default, true, denies mutations until they are set).', severity: :security)
       end
 
       # One query for the distinct unmasked names (no record is built), and
@@ -132,9 +134,9 @@ module PermissionForge
         return unless name
 
         resource = unmasked.where(name: name).first&.resource
-        Rails.logger.warn "[PermissionForge] GDPR warning: field '#{name}' on resource " \
-                          "'#{resource&.name}' matches GDPR pattern but is not masked. " \
-                          'Consider enabling gdpr_defaults or masking this field manually.'
+        Warnings.emit(:unmasked_gdpr_fields,
+                      "GDPR warning: field '#{name}' on resource '#{resource&.name}' matches GDPR pattern " \
+                      'but is not masked. Consider enabling gdpr_defaults or masking this field manually.')
       rescue ActiveRecord::StatementInvalid
         # Table doesn't exist yet (pre-migration)
       end
@@ -154,16 +156,18 @@ module PermissionForge
       def database_step(name)
         yield
       rescue *DATABASE_STEP_ERRORS => e
-        Rails.logger&.warn "[PermissionForge] Boot check #{name} skipped: the database could not be read (#{e.class})."
+        Warnings.emit(:"boot_check_skipped.#{name}",
+                      "Boot check #{name} skipped: the database could not be read (#{e.class}).")
       end
 
       # The boot step did not run: the first request or job that reaches the
       # database applies auto-applied masking (MaskingSync).
       def database_unreachable
         MaskingSync.reset!
-        Rails.logger&.warn '[PermissionForge] The database could not be reached at boot; the boot checks that ' \
-                           'read it (security warnings) were skipped. Auto-applied masking is applied at the first ' \
-                           'request or job that reaches the database.'
+        Warnings.emit(:database_unreachable,
+                      'The database could not be reached at boot; the boot checks that read it (security ' \
+                      'warnings) were skipped. Auto-applied masking is applied at the first request or job ' \
+                      'that reaches the database.')
       end
 
       # The boot warnings that only read the configuration.
@@ -171,17 +175,24 @@ module PermissionForge
         CacheWarnings.call(config)
         warn_basic_auth_without_credentials(config)
         warn_api_authorization_gap(config)
-        config.tenantless_admin_warning&.then { |message| Rails.logger&.warn(message) }
+        config.tenantless_admin_warning&.then { |message| warn_tenantless_admin(message) }
         QueryScopingWarnings.warn_unscoped_detection_raise_in_production(config)
+      end
+
+      # AdminUiSettings#tenantless_admin_warning composes the whole line; the
+      # emitter puts the prefix on.
+      def warn_tenantless_admin(message)
+        Warnings.emit(:tenantless_admin, message.delete_prefix(Warnings::PREFIX + Warnings::SEVERITIES[:security]),
+                      severity: :security)
       end
 
       def warn_basic_auth_without_credentials(config)
         return unless config.http_basic_auth_enabled
         return if config.http_basic_auth_user.present? && config.http_basic_auth_password.present?
 
-        Rails.logger&.warn '[PermissionForge] HTTP Basic Auth is enabled but credentials are not configured. ' \
-                           'The admin UI will return 401 for all requests. ' \
-                           'Set config.http_basic_auth_user and config.http_basic_auth_password.'
+        Warnings.emit(:basic_auth_without_credentials,
+                      'HTTP Basic Auth is enabled but credentials are not configured. The admin UI will return ' \
+                      '401 for all requests. Set config.http_basic_auth_user and config.http_basic_auth_password.')
       end
 
       def gdpr_match?(field_name, patterns)

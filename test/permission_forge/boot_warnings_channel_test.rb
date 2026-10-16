@@ -29,9 +29,12 @@ module PermissionForge
 
     GLOBS = %w[lib/**/*.rb lib/**/*.rake lib/**/*.tt app/**/*.rb app/**/*.erb].freeze
     # A logger's warn, Kernel.warn, a bare `warn` (not `.warn`, `:warn`,
-    # `warn:` or `warn =`), $stderr, STDERR — in code with strings blanked and
-    # comments stripped (StaticGuard).
-    NEEDLE = /(?:logger&?|Kernel)\.warn\b|(?<![.\w:])warn\b(?!\s*[:=])|\$stderr\b|\bSTDERR\b/
+    # `warn:`, `warn =`, `warn ?` — a local —, `warn!` or `warn?`), $stderr,
+    # STDERR — in code with strings blanked and comments stripped
+    # (StaticGuard); a word in a `%w[]` / `%i[]` list (strategy names) is no
+    # call (PERCENT_LITERAL).
+    NEEDLE = /(?:logger&?|Kernel)\.warn\b|(?<![.\w:])warn\b(?![\w!?]|\s*[:=?])|\$stderr\b|\bSTDERR\b/
+    PERCENT_LITERAL = /%[wiWI][\[({<][^\])}>]*[\])}>]/
     CANONICAL = %w[lib/permission_forge/warnings.rb].freeze
 
     RAKE_ANSWER = "a rake task's answer to its invoker: standard error is the task's own channel (RakeAudit)"
@@ -105,9 +108,10 @@ module PermissionForge
 
     test 'every warning site in lib/ and app/ is the emitter or allow-listed with a reason' do
       hits = StaticGuard.scan(globs: GLOBS, needle: NEEDLE, canonical: CANONICAL, allowlist: ALLOWLIST)
+                        .select { |hit| warning?(hit.line, erb: hit.file.end_with?('.erb')) }
 
       assert_empty hits.map(&:to_s),
-                   "write boot/configuration warnings through PermissionForge::Warnings.emit(key, message, severity:); " \
+                   'write boot/configuration warnings through PermissionForge::Warnings.emit(key, message, severity:); ' \
                    'a request-time log goes in ALLOWLIST with its reason'
     end
 
@@ -121,10 +125,12 @@ module PermissionForge
                 'warn "x"', '  warn message', '$stderr.puts(x)', 'STDERR.puts x', 'io = $stderr']
       left = ['PermissionForge::Deprecation.warn("x")', 'DEPRECATOR.warn(msg)', 'warn_io.puts(x)', 'warn_unmaskable(klass)',
               'logger.level = :warn', 'warn: lambda { }', 'config.log_level = :warn', '# Rails.logger.warn("in a comment")',
-              'Rails.logger&.error("an error")', 'puts "logger.warn inside a string"']
+              'Rails.logger&.error("an error")', 'puts "logger.warn inside a string"', 'def warn? = risk == :warn',
+              'def warn!(config)', 'options: %i[block pass_through warn mask_all]', '%w[pass_through warn].include?(x)',
+              "<%= warn ? 'x' : 'y' %>"]
 
-      caught.each { |line| assert_match NEEDLE, StaticGuard.code_of(line), line }
-      left.each { |line| assert_no_match NEEDLE, StaticGuard.code_of(line), line }
+      caught.each { |line| assert warning?(line), "not caught: #{line}" }
+      left.each { |line| assert_not warning?(line), "caught: #{line}" }
     end
 
     # ---- the channel policy -----------------------------------------------------
@@ -132,18 +138,28 @@ module PermissionForge
     test 'the emitter writes where the policy table says' do
       POLICY.each do |(env, server, generator, on_terminal), expected|
         logger = ActiveSupport::Logger.new(on_terminal ? $stdout : StringIO.new)
-        channels = PermissionForge::Warnings.channels(env: env, server: server, generator: generator, logger: logger)
+        context = PermissionForge::Warnings::Context.new(env: env, server: server, generator: generator, logger: logger)
 
-        assert_equal expected, channels,
+        assert_equal expected, PermissionForge::Warnings.channels(context),
                      "env=#{env} server=#{server} generator=#{generator} logger on terminal=#{on_terminal}"
       end
+    end
+
+    test 'the default context is this process' do
+      context = PermissionForge::Warnings.context
+
+      assert_equal Rails.env, context.env
+      assert_equal false, context.server
+      assert_equal false, context.generator
+      assert_same Rails.logger, context.logger
+      assert_equal true, PermissionForge::Warnings.context(generator: true).generator, 'an override'
+      assert_equal %i[log], PermissionForge::Warnings.channels, 'the test environment: the log only'
     end
 
     test 'a SECURITY warning is logged and written to the terminal with its prefix' do
       io = StringIO.new
       log = capture_rails_log do
-        PermissionForge::Warnings.emit(:test_fail_open, 'this setup fails open.', severity: :security,
-                                                                                 io: io, env: DEVELOPMENT, generator: false)
+        emitter(io, env: DEVELOPMENT).emit(:test_fail_open, 'this setup fails open.', severity: :security)
       end
 
       assert_includes log, '[PermissionForge] SECURITY warning: this setup fails open.'
@@ -152,9 +168,7 @@ module PermissionForge
 
     test 'a configuration warning carries the gem prefix only' do
       io = StringIO.new
-      log = capture_rails_log do
-        PermissionForge::Warnings.emit(:test_config, 'WARNING: a setting.', io: io, env: PRODUCTION, server: false, generator: false)
-      end
+      log = capture_rails_log { emitter(io, env: PRODUCTION, server: false).emit(:test_config, 'WARNING: a setting.') }
 
       assert_includes log, '[PermissionForge] WARNING: a setting.'
       assert_equal "[PermissionForge] WARNING: a setting.\n", io.string
@@ -163,8 +177,8 @@ module PermissionForge
     test 'the terminal gets a key once per process; the log gets every emission the site makes' do
       io = StringIO.new
       log = capture_rails_log do
-        3.times { PermissionForge::Warnings.emit(:test_repeat, 'again', io: io, env: DEVELOPMENT, generator: false) }
-        PermissionForge::Warnings.emit(:test_other, 'another key', io: io, env: DEVELOPMENT, generator: false)
+        3.times { emitter(io, env: DEVELOPMENT).emit(:test_repeat, 'again') }
+        emitter(io, env: DEVELOPMENT).emit(:test_other, 'another key')
       end
 
       assert_equal 1, io.string.scan('again').size
@@ -172,14 +186,14 @@ module PermissionForge
       assert_equal 3, log.scan('again').size
 
       PermissionForge::Warnings.reset!
-      PermissionForge::Warnings.emit(:test_repeat, 'again', io: io, env: DEVELOPMENT, generator: false)
+      capture_rails_log { emitter(io, env: DEVELOPMENT).emit(:test_repeat, 'again') }
       assert_equal 2, io.string.scan('again').size, 'reset! forgets the keys written'
     end
 
     test 'nothing is written while a generator boots the app' do
       io = StringIO.new
       log = capture_rails_log do
-        PermissionForge::Warnings.emit(:test_generator, 'the defaults', severity: :security, io: io, env: DEVELOPMENT, generator: true)
+        emitter(io, env: DEVELOPMENT, generator: true).emit(:test_generator, 'the defaults', severity: :security)
       end
 
       assert_empty io.string
@@ -190,17 +204,21 @@ module PermissionForge
       io = StringIO.new
       io.close_write
       log = capture_rails_log do
-        assert_nothing_raised do
-          PermissionForge::Warnings.emit(:test_closed, 'closed terminal', io: io, env: DEVELOPMENT, generator: false)
-        end
+        assert_nothing_raised { emitter(io, env: DEVELOPMENT).emit(:test_closed, 'closed terminal') }
       end
 
       assert_includes log, 'closed terminal'
     end
 
     test 'the severity is one of the table' do
-      assert_raises(ArgumentError) { PermissionForge::Warnings.emit(:test_bad, 'x', severity: :loud, io: StringIO.new) }
+      assert_raises(ArgumentError) { emitter(StringIO.new, env: DEVELOPMENT).emit(:test_bad, 'x', severity: :loud) }
       assert_equal %i[security config], PermissionForge::Warnings::SEVERITIES.keys
+    end
+
+    test 'Warnings.emit is an Emitter for this process' do
+      log = capture_rails_log { PermissionForge::Warnings.emit(:test_process, 'through the module', severity: :security) }
+
+      assert_includes log, '[PermissionForge] SECURITY warning: through the module'
     end
 
     test 'a logger that writes to standard output or error is on the terminal' do
@@ -243,7 +261,7 @@ module PermissionForge
 
       assert status.success?, "boot aborted (exit #{status.exitstatus}):\n#{out}\n#{err}"
       warnings = err.lines.grep(/\A\[PermissionForge\]/)
-      assert_match(/Development: the permission cache is an in-memory store \(Rails\.cache is a :memory_store/, err)
+      assert_match(/Development: the permission cache is in memory \(cache_backend = :memory\), one per process/, err)
       assert_match(/auto-applied masking \(auto_apply_masked_attributes = :auto\) takes its models from the Resource rows/, err)
       assert_match(/Auto-applied masking is not complete at boot/, err, 'no Resource table in an empty database')
       assert_equal warnings.uniq, warnings, "a warning written twice:\n#{err}"
@@ -260,6 +278,18 @@ module PermissionForge
 
     private
 
+    # An emitter on `io` under this process's context with `overrides` (the
+    # logger is Rails.logger: capture_rails_log sets it).
+    def emitter(io, **overrides)
+      PermissionForge::Warnings::Emitter.new(io: io, context: PermissionForge::Warnings.context(**overrides))
+    end
+
+    # Whether the line (its comment stripped, strings blanked) writes a
+    # warning past the emitter.
+    def warning?(line, erb: false)
+      StaticGuard.code_of(line, erb: erb).gsub(PERCENT_LITERAL, '').match?(NEEDLE)
+    end
+
     # Boots test/dummy in a child process as `bin/rails runner` would in
     # development: no server command loaded, an in-memory database with no
     # tables (nothing is written to disk).
@@ -275,25 +305,26 @@ module PermissionForge
       Open3.capture3(env, RbConfig.ruby, '-e', script)
     end
 
-    # Defines the constant `path` (a class) for the block, under a module it
-    # creates when missing, and removes what it added.
+    # Defines the constant `path` (a class) for the block, under the modules
+    # it creates when missing, and removes what it added.
     def with_constant(path)
       skip "#{path} is loaded in this process" if Object.const_defined?(path, false)
-      names = path.split('::')
-      added = []
-      names[0..-2].inject(Object) do |scope, name|
-        unless scope.const_defined?(name, false)
-          scope.const_set(name, Module.new)
-          added << [scope, name]
-        end
-        scope.const_get(name, false)
-      end
-      parent = names[0..-2].inject(Object) { |scope, name| scope.const_get(name, false) }
-      parent.const_set(names.last, Class.new)
-      added << [parent, names.last]
+      added = define_constant(path)
       yield
     ensure
-      added.reverse_each { |scope, name| scope.send(:remove_const, name) if scope.const_defined?(name, false) }
+      added&.reverse_each { |scope, name| scope.send(:remove_const, name) }
+    end
+
+    # @return [Array<Array(Module, String)>] what was defined, outermost first
+    def define_constant(path)
+      *namespaces, name = path.split('::')
+      added = []
+      parent = namespaces.inject(Object) do |scope, namespace|
+        added << [scope, namespace] unless scope.const_defined?(namespace, false)
+        scope.const_defined?(namespace, false) ? scope.const_get(namespace, false) : scope.const_set(namespace, Module.new)
+      end
+      parent.const_set(name, Class.new)
+      added << [parent, name]
     end
   end
 end

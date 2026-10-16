@@ -172,6 +172,10 @@ module PermissionForge
 
         assert_equal [[:read, KEY], [:write, KEY]], store.operations, 'one read and one write for five runs'
         assert_equal 1, log.scan('did not give or keep the masking token').size, log
+        # Field test (R2 #92): the line named no cause. A store that raised nothing answered nothing.
+        cause = 'it did not answer, or a read right after a write came back empty: the store is down, full, or evicts the key at once'
+        assert_match(/masking token \(#{Regexp.escape(cause)}\): auto-applied masking/, log)
+        assert_match(/use a shared store that keeps entries, or include PermissionForge::Concerns::MaskedAttributes/, log, 'the remedy')
         assert_predicate PermissionForge::MaskingSync, :store_failing?
         use_store(ActiveSupport::Cache::MemoryStore.new)
         assert_not_predicate PermissionForge::MaskingSync, :store_failing?, 'a store that replaced it has not failed'

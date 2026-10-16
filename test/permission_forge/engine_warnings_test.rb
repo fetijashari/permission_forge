@@ -1,77 +1,10 @@
 require 'test_helper'
 
 module PermissionForge
+  # The conditional-sets boot warning (BootChecks.warn_conditional_sets_without_context).
+  # The cache warnings are covered by cache_warnings_test.rb, the channel
+  # every boot warning takes by boot_warnings_channel_test.rb.
   class EngineWarningsTest < ActiveSupport::TestCase
-    test 'production env with memory cache logs warning' do
-      log_output = StringIO.new
-      original_logger = Rails.logger
-      Rails.logger = ActiveSupport::Logger.new(log_output)
-
-      original_env = Rails.env
-      Rails.instance_variable_set(:@_env, ActiveSupport::EnvironmentInquirer.new('production'))
-      PermissionForge.configuration.cache_backend = :memory
-
-      # Simulate the after_initialize warning
-      if Rails.env.production? && PermissionForge.configuration.cache_backend == :memory
-        Rails.logger.warn '[PermissionForge] WARNING: Using in-process MemoryCache in production.'
-      end
-
-      assert_match(/MemoryCache in production/, log_output.string)
-    ensure
-      Rails.instance_variable_set(:@_env, ActiveSupport::EnvironmentInquirer.new(original_env.to_s))
-      Rails.logger = original_logger
-      PermissionForge.configuration.cache_backend = :memory
-    end
-
-    test 'production env with rails_cache does not log warning' do
-      log_output = StringIO.new
-      original_logger = Rails.logger
-      Rails.logger = ActiveSupport::Logger.new(log_output)
-
-      original_env = Rails.env
-      Rails.instance_variable_set(:@_env, ActiveSupport::EnvironmentInquirer.new('production'))
-      PermissionForge.configuration.cache_backend = :rails_cache
-
-      if Rails.env.production? && PermissionForge.configuration.cache_backend == :memory
-        Rails.logger.warn '[PermissionForge] WARNING: Using in-process MemoryCache in production.'
-      end
-
-      assert_no_match(/MemoryCache/, log_output.string)
-    ensure
-      Rails.instance_variable_set(:@_env, ActiveSupport::EnvironmentInquirer.new(original_env.to_s))
-      Rails.logger = original_logger
-      PermissionForge.configuration.cache_backend = :memory
-    end
-
-    test 'development env with memory cache does not log warning' do
-      log_output = StringIO.new
-      original_logger = Rails.logger
-      Rails.logger = ActiveSupport::Logger.new(log_output)
-
-      # Rails.env is already 'test', similar to development — not production
-      if Rails.env.production? && PermissionForge.configuration.cache_backend == :memory
-        Rails.logger.warn '[PermissionForge] WARNING: Using in-process MemoryCache in production.'
-      end
-
-      assert_no_match(/MemoryCache/, log_output.string)
-    ensure
-      Rails.logger = original_logger
-    end
-
-    test 'test env with memory cache does not log warning' do
-      log_output = StringIO.new
-      original_logger = Rails.logger
-      Rails.logger = ActiveSupport::Logger.new(log_output)
-
-      if Rails.env.production? && PermissionForge.configuration.cache_backend == :memory
-        Rails.logger.warn '[PermissionForge] WARNING: Using in-process MemoryCache in production.'
-      end
-
-      assert_no_match(/MemoryCache/, log_output.string)
-    ensure
-      Rails.logger = original_logger
-    end
-
     test 'warns when conditional sets exist but request_context_resolver returns empty context' do
       log_output = StringIO.new
       original_logger = Rails.logger
@@ -83,7 +16,7 @@ module PermissionForge
       # Simulate the engine warning
       PermissionForge::BootChecks.warn_conditional_sets_without_context(PermissionForge.configuration)
 
-      assert_match(/activation conditions/, log_output.string)
+      assert_match(/\[PermissionForge\] SECURITY warning: 1 permission set\(s\) use activation conditions/, log_output.string)
       assert_match(/ALWAYS ACTIVE/, log_output.string)
     ensure
       Rails.logger = original_logger
