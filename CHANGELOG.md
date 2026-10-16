@@ -1244,14 +1244,22 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   (`PermissionForge::GeneratedText.label?`) and fall back to the host's translation, then — only while `I18n.locale` is
   English — Rails' own English for the name (`human_attribute_name`: "Created at", what an English host saw before),
   then the name in `<code>`, shown once (the grid no longer reads "api_token api_token"); a label an admin wrote still
-  wins. The field drawer, the action form, a set's and a group's name and the rule builder pre-fill no generated text
-  (`Admin::Prefill`), and a Permission Set, group or rule stored under an install-default English name ("Untitled
-  Rule") is named in the page's language wherever the admin shows it (`Admin::RecordName`, `pf_record_name`; the
-  locale-leak walk stores those defaults on the walked records). **Opt out:** write a label or a name of your own, or
+  wins. The field drawer, the action form, a set's and a group's name and the rule builder show generated text as a
+  blank field with a translated placeholder (`Admin::Prefill.text`), and saving that blank back is no change: the
+  stored text stays and no change or audit event is recorded (`Admin::Prefill.posted`, asked by every one of those
+  saves; a set's and a group's name field is not `required` while it holds generated text, so a page under an
+  install-default name saves any other change; typed text renames, and a blank over a label an admin wrote is stored
+  as the name, as before). A blank sent for a description that holds nothing is no change either. A Permission Set,
+  group or rule stored under an install-default English name ("Untitled Rule") is named in the page's language
+  wherever the admin shows it (`Admin::RecordName`, `pf_record_name`; the locale-leak walk stores those defaults on the
+  walked records). **Opt out:** write a label or a name of your own, or
   translate the column (`activerecord.attributes.<model>.<column>`).
   <!-- pin: test/permission_forge/admin/generated_text_display_test.rb#a generated field label is no label: Rails English on an English page, the name verbatim elsewhere -->
   <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#a generated label and no row read the same on a muting set, in every language (B#26) -->
   <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#the field drawer pre-fills no generated label, and keeps an admin label -->
+  <!-- pin: test/permission_forge/html/generated_text_unchanged_submit_test.rb#an unchanged field drawer keeps a generated label: no change, no event -->
+  <!-- pin: test/permission_forge/html/generated_text_unchanged_submit_test.rb#a set under an install-default name: an unchanged submit changes nothing, a change saves -->
+  <!-- pin: test/permission_forge/html/generated_text_unchanged_submit_test.rb#a rule under an install-default name and message: an unchanged builder save changes nothing -->
   <!-- pin: test/permission_forge/admin/generated_text_display_test.rb#a set, group or rule stored under an install default name is named in the page language -->
   <!-- pin: test/permission_forge/html/locale_leak_test.rb#every screen shows only translated words and host data -->
 - **The rule builder's preview says what the save would say.** It runs the save path in memory — the builder's own

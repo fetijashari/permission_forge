@@ -103,8 +103,11 @@ module PermissionForge
       pf_boolean_attributes(attrs, :is_active)
     end
 
+    # A blank name over a generated one, or a blank description over none,
+    # is no change (Admin::Prefill.posted).
     def strip_name!(attrs)
-      attrs[:name] = attrs[:name].to_s.strip if attrs.key?(:name)
+      attrs[:name] = PermissionForge::Admin::Prefill.posted(@group, :name, attrs[:name].to_s.strip) if attrs.key?(:name)
+      attrs[:description] = PermissionForge::Admin::Prefill.posted(@group, :description, attrs[:description]) if attrs.key?(:description)
     end
 
     # A name was submitted but is empty.

@@ -33,8 +33,14 @@ module PermissionForge
       @people_count = pf_people_count(@permission_set)
     end
 
+    # A blank label over a generated one, or a blank over nothing, is no
+    # change (Admin::Prefill.posted).
     def update
-      @action_record.assign_attributes(action_params.except(:name))
+      attrs = action_params.except(:name)
+      %i[label description].each do |key|
+        attrs[key] = PermissionForge::Admin::Prefill.posted(@action_record, key, attrs[key]) if attrs.key?(key)
+      end
+      @action_record.assign_attributes(attrs)
       @action_record.save!
       redirect_to pf_back_or(resource_path), notice: t('permission_forge.flash.actions.updated', action: @action_record.display_name)
     end

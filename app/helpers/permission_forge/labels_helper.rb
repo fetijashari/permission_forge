@@ -75,6 +75,16 @@ module PermissionForge
       record ? PermissionForge::Admin::Prefill.text(record, attribute) : ''
     end
 
+    # Whether a required text field may be sent blank: the stored value is
+    # generated text the form shows as blank (#pf_prefill), and a blank
+    # posted over it is no change (Admin::Prefill.posted). Such a field
+    # drops `required`, so a page saves with and without JavaScript alike.
+    def pf_prefill_optional?(record, attribute)
+      return false unless record&.persisted?
+
+      record.public_send(attribute).to_s.present? && pf_prefill(record, attribute).empty?
+    end
+
     # A Permission Set named on a row about one of its Resources: "<set> ·
     # <Model>" when the set holds more than one Resource of `chain` (a
     # single-table-inheritance base and its subclass: Admin::ChainEntries),

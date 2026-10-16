@@ -9,8 +9,10 @@ module PermissionForge
       class FieldEdit
         ATTRS = %w[label description is_active].freeze
         MASK_LEVELS = %w[masked mask].freeze
+        # A blank label over a generated one is no change (Prefill.posted);
+        # over a label an admin wrote it stores the name.
         CASTS = {
-          'label' => ->(value, field) { value.to_s.strip.presence || field.name },
+          'label' => ->(value, field) { Prefill.posted(field, :label, value).to_s.strip.presence || field.name },
           'is_active' => ->(value, _field) { Values.truthy?(value) }
         }.freeze
         TEXT_CAST = ->(value, _field) { value.to_s.strip.presence }

@@ -13,14 +13,26 @@ module PermissionForge
     # admin's own words in every language (round 7, A#127). What an admin
     # wrote is shown as written.
     #
+    # The save side is {.posted}, the one definition every admin form's save
+    # asks (the field drawer, the action form, the set page, the rule
+    # builder, the group page): a blank posted over stored generated text is
+    # the form's own blank pre-fill sent back — no change; the stored value
+    # stays and no change or audit event is recorded. Anything else posted
+    # is the admin's: typed text renames, and a blank over text an admin
+    # wrote is handled by each form as before (a field label is stored as
+    # the name; a set's, rule's or group's name is required).
+    #
     # @example
     #   Prefill.text(PermissionSetRule.new, :failure_message)   # => ""
     #   Prefill.text(saved_rule, :failure_message)              # => "Only your own orders."
     #   Prefill.text(field_labelled_owner, :label)              # => "" (the row of owner_id, labelled "Owner" by the gem)
+    #   Prefill.posted(field_labelled_owner, :label, '')        # => "Owner" (unchanged)
+    #   Prefill.posted(field_labelled_owner, :label, 'Seller')  # => "Seller"
     #
     # @api private
     module Prefill
       # Per attribute: whether a stored value is generated, for the record.
+      # The text attributes .posted keeps under a blank.
       GENERATED = {
         'label' => ->(record, value) { GeneratedText.label?(value, record.name) },
         'name' => ->(record, value) { GeneratedText.name?(value, record) },
@@ -37,6 +49,27 @@ module PermissionForge
         return '' if value.present? && GENERATED[attribute]&.call(record, value)
 
         value
+      end
+
+      # The value a form's save takes for `attribute`: `value` as posted —
+      # except a blank one over stored generated text (see {GENERATED}),
+      # which is the blank the form pre-filled ({.text}), and a blank one
+      # over nothing stored (an empty text field sends "" for a NULL): the
+      # stored value, so the save sees no change. A new record has nothing
+      # stored.
+      #
+      # @param record [ActiveRecord::Base, nil] the record being saved (nil: a new one)
+      # @param attribute [Symbol, String]
+      # @param value [Object] the posted value
+      # @return [Object] the stored value, or `value`
+      def self.posted(record, attribute, value)
+        attribute = attribute.to_s
+        return value unless (value.nil? || (value.is_a?(String) && value.strip.empty?)) && record&.persisted?
+
+        stored = record.attribute_in_database(attribute)
+        return stored if stored.blank? && !stored.equal?(false)
+
+        GENERATED[attribute]&.call(record, stored.to_s) ? stored : value
       end
     end
   end

@@ -6,6 +6,7 @@ module PermissionForge
       # Set header: name, description, active, group.
       class SetAttrs < Base
         SET_ATTRS = %w[name description is_active permission_set_group_id].freeze
+        TEXT_ATTRS = %w[name description].freeze
         # A group id that is neither blank (no group) nor digits.
         NOT_A_GROUP = Object.new.freeze
         TEXT_CAST = ->(value) { value.to_s.strip.presence if value.is_a?(String) || value.is_a?(Numeric) }
@@ -36,7 +37,10 @@ module PermissionForge
           EditableLock.locked_group_for_move(from: permission_set.permission_set_group_id, to: group_id).present?
         end
 
+        # A blank name over a generated one, or a blank description over
+        # none, is no change (Prefill.posted).
         def cast(attr, value)
+          value = Prefill.posted(permission_set, attr, value) if TEXT_ATTRS.include?(attr)
           CASTS.fetch(attr, TEXT_CAST).call(value)
         end
       end

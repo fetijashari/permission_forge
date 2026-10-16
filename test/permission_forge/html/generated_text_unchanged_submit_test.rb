@@ -52,7 +52,7 @@ module PermissionForge
       # GETs `page`, then submits the form whose action is `action`, as
       # rendered, with `overrides` — to `to` when given (the set page's
       # "review" form, sent straight to "apply").
-      def submit_as_rendered(page, action, overrides = {}, to: nil)
+      def submit_as_rendered(page, action, to: nil, **overrides)
         get pf(page)
         assert_response :success
         doc = Nokogiri::HTML(response.body)
@@ -66,7 +66,10 @@ module PermissionForge
 
       def assert_no_change(record, attribute, &)
         before = record.reload.public_send(attribute)
-        assert_no_difference(-> { AuditEvent.unscoped.count }, 'an unchanged submit writes no audit event', &)
+        before_events = AuditEvent.unscoped.pluck(:id)
+        yield
+        new_events = AuditEvent.unscoped.where.not(id: before_events).map { |event| [event.event, event.data] }
+        assert_empty new_events, 'an unchanged submit writes no audit event'
         assert_equal before, record.reload.public_send(attribute)
       end
 
@@ -119,7 +122,7 @@ module PermissionForge
 
         submit_as_rendered(set_page, "#{set_page}/review")
         assert_redirected_to pf(set_page), 'the review has nothing to list'
-        assert_no_change(@set, :name) { submit_as_rendered(set_page, "#{set_page}/review", { '_method' => 'patch' }, to: apply) }
+        assert_no_change(@set, :name) { submit_as_rendered(set_page, "#{set_page}/review", '_method' => 'patch', to: apply) }
         assert_nil flash[:alert]
         assert_equal 'Untitled Permission Set', @set.reload.name
 

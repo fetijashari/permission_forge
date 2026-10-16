@@ -23,7 +23,7 @@ module PermissionForge
     end
 
     def update
-      @form = PermissionForge::Admin::RuleForm.new(resource: @resource, params: rule_params)
+      @form = PermissionForge::Admin::RuleForm.new(resource: @resource, params: rule_params, rule: @rule)
       save_rule(:edit, 'updated')
     end
 
@@ -39,8 +39,8 @@ module PermissionForge
     # draws): the fragment pf_admin.js fetches as the value inputs change;
     # without JS a page of its own. Changes nothing.
     def preview
-      @form = PermissionForge::Admin::RuleForm.new(resource: @resource, params: rule_params)
       stored = @resource.permission_set_rules.find_by(id: params[:rule_id]) if params[:rule_id].present?
+      @form = PermissionForge::Admin::RuleForm.new(resource: @resource, params: rule_params, rule: stored)
       @preview = PermissionForge::Admin::RulePreview.new(form: @form, resource: @resource, stored: stored)
     end
 
