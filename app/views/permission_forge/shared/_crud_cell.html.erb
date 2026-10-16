@@ -8,11 +8,11 @@
   <%= tag.input(type: 'checkbox', name: name, value: '1', checked: checked, disabled: locked,
                 'aria-label': aria, data: { pf_flag: flag, pf_requires: (muting ? nil : requires), pf_locked: (locked || nil) }, **form_attr) %>
   <% if muting %>
-    <span class="pf-cell__on"><%= pf_state_parts(:crud, :muted) %></span>
-    <span class="pf-cell__off"><%= pf_state_parts(:crud, :unchanged) %></span>
+    <span class="pf-cell__on"><%= pf_state_parts(pf_state(:crud, :muted)) %></span>
+    <span class="pf-cell__off"><%= pf_state_parts(pf_state(:crud, :unchanged)) %></span>
   <% else %>
-    <span class="pf-cell__on"><%= pf_state_parts(:crud, :allowed) %></span>
-    <span class="pf-cell__off"><%= pf_state_parts(:crud, :no) %></span>
-    <span class="pf-cell__needs"><%= pf_state_parts(:crud, :needs_read) %></span>
+    <span class="pf-cell__on"><%= pf_state_parts(pf_state(:crud, :allowed)) %></span>
+    <span class="pf-cell__off"><%= pf_state_parts(pf_state(:crud, :no)) %></span>
+    <span class="pf-cell__needs"><%= pf_state_parts(pf_state(:crud, :needs_read)) %></span>
   <% end %>
 </label>

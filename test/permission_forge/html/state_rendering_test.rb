@@ -42,7 +42,7 @@ module PermissionForge
         create_resource_field(resource: resource, name: 'phone', mask_strategy: 'last4', **FieldLevel.flags_for(level, muting: muting))
       end
 
-      def set_of_kind(muting)
+      def kind_of_set(muting)
         muting ? create_permission_set(name: 'No phone numbers', is_muting: true) : @set
       end
 
@@ -51,7 +51,7 @@ module PermissionForge
       [false, true].each do |muting|
         FieldLevel.levels_for(muting: muting).each do |level|
           test "field level #{level}#{' (muting)' if muting}: the Fields tab, the drawer and Across all sets word it alike" do
-            set = set_of_kind(muting)
+            set = kind_of_set(muting)
             field = configure(set, level, muting: muting)
 
             get pf("/permission_sets/#{set.id}/resources/Customer")
@@ -67,7 +67,7 @@ module PermissionForge
       end
 
       test 'a column with no setting: Not configured on a granting set, Unchanged on a muting one, alike everywhere' do
-        muting = set_of_kind(true)
+        muting = kind_of_set(true)
         create_resource(permission_set: muting, name: 'Customer')
 
         get pf("/permission_sets/#{@set.id}/resources/Customer/fields/domain")
@@ -92,7 +92,7 @@ module PermissionForge
         return configure(@set, state, muting: false) unless state == 'hidden_by_muting'
 
         configure(@set, 'read', muting: false)
-        muting = set_of_kind(true)
+        muting = kind_of_set(true)
         configure(muting, 'hide', muting: true)
         create_permission_set_user(user: @ana, permission_set: muting)
       end
@@ -127,7 +127,7 @@ module PermissionForge
       # --- an effective CRUD state -----------------------------------------------------
 
       test 'the Effective access legend words the states as its cells do' do
-        muting = set_of_kind(true)
+        muting = kind_of_set(true)
         create_resource(permission_set: muting, name: 'Customer', read_access: false, edit_access: true)
         create_permission_set_user(user: @ana, permission_set: muting)
 
@@ -150,7 +150,7 @@ module PermissionForge
       ACTIONS.each do |state, (muting, permitted)|
         test "action #{state}: Right now and Across all sets word it alike" do
           PermissionForge.configuration.controller_action_discovery = true # the drawer says what the row means right now
-          set = set_of_kind(muting)
+          set = kind_of_set(muting)
           resource = set == @set ? @resource : create_resource(permission_set: set, name: 'Customer')
           action = create_resource_action(resource: resource, name: 'export', is_permitted: permitted)
 

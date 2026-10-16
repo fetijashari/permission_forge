@@ -154,7 +154,8 @@ module PermissionForge
         assert_select "a.pf-filter[href*='filter=leave']", text: /#{t('ui.states.field_level.leave')}\s*#{rows.size}/
         assert_select "a.pf-filter[href*='filter=unconfigured']", count: 0
         assert_select "input[type=radio][value=leave][checked][name^='pf[new_fields]']", rows.size
-        assert_not_includes body, t('resources.fields_tab.not_configured', state: t('ui.states.field_level.none'), behaviour: t('resources.fields_tab.mutes_nothing'))
+        assert_not_includes body, t('resources.fields_tab.not_configured', state: t('ui.states.field_level.none'),
+                                                                           behaviour: t('resources.fields_tab.mutes_nothing'))
       end
 
       test 'saving a muting column left on Unchanged creates no field row' do

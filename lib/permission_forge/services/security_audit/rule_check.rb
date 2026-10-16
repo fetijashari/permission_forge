@@ -145,8 +145,7 @@ module PermissionForge
         # (AttentionItems#secret_rules). Stored before the model refused them;
         # they still apply. The item leaves the value out: it is a guess at the secret.
         def secret_columns
-          findings = attention.secret_rules
-          return if findings.empty?
+          findings = attention.secret_rules.presence or return
 
           finding(:medium, :secret_rule_columns, 'Rules comparing a column that holds a secret',
                   'These rules compare a password digest, a token, an encrypted value or a secret ' \

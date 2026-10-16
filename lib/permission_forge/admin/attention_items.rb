@@ -104,9 +104,12 @@ module PermissionForge
         @sensitive = sensitive
       end
 
+      # Every list Home draws a card for (the navigation counts them all).
+      CARDS = %i[audit_findings broken_rules secret_rules unknown_mask_strategies broken_conditions privacy_findings
+                 unenforced_rules ending_soon expired stale tidy].freeze
+
       def total
-        [audit_findings.size, broken_rules.size, secret_rules.size, unknown_mask_strategies.size, broken_conditions.size,
-         privacy_findings.size, unenforced_rules.size, ending_soon.size, expired.size, stale.size, tidy.size].sum
+        CARDS.sum { |card| public_send(card).size }
       end
 
       def all_good?

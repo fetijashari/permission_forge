@@ -6,7 +6,7 @@
     <div class="pf-legend" aria-label="<%= t('.legend') %>">
       <%# The legend words each state as the cells do (Admin::StateLabel). %>
       <% [%i[effective granted], %i[effective blocked], %i[effective none], %i[field_level masked]].each do |kind, state| %>
-        <span><%= pf_state_parts(kind, state, glyph_tag: :b, glyph_class: nil, separator: ' ') %></span>
+        <span><%= pf_state_parts(pf_state(kind, state), glyph_tag: :b, separator: ' ') %></span>
       <% end %>
     </div>
   </div>
@@ -94,7 +94,7 @@
                       <%= link_to permission_forge.person_path(@person, tab: 'effective', why: key, open: (@open + [res.name]).uniq),
                                   class: "pf-state pf-state--#{outcome.state} pf-action-pill", data: { pf_why: key },
                                   'aria-current': (@why == key ? 'true' : nil) do %>
-                        <span aria-hidden="true"><%= pf_state_glyph(:effective, outcome.state) %></span> <%= pf_action_label_text(nil, name) %>
+                        <span aria-hidden="true"><%= pf_state(:effective, outcome.state).glyph %></span> <%= pf_action_label_text(nil, name) %>
                       <% end %>
                     <% end %>
                   </div>

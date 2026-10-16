@@ -45,7 +45,7 @@ module PermissionForge
     def pf_lock_badge(record = nil, title: pf_ui('locked.title'))
       return if !record.nil? && !pf_locked?(record)
 
-      pf_badge([pf_lock_icon, pf_state_word(:lock, :locked)], title: title)
+      pf_badge([pf_lock_icon, pf_state(:lock, :locked).word], title: title)
     end
 
     # Whether a record is locked: itself, its Resource, its Permission Set or
@@ -145,7 +145,7 @@ module PermissionForge
 
     # The word of a field level (Admin::StateLabel, kind :field_level).
     def pf_level_label(level)
-      pf_state_word(:field_level, level)
+      pf_state(:field_level, level).word
     end
 
     # The caption of a Fields tab filter: a level's word, Sensitive, or "All".
@@ -153,7 +153,7 @@ module PermissionForge
       case filter.to_s
       when 'all' then t('permission_forge.resources.fields_tab.filters.all')
       when 'sensitive' then pf_ui('badges.sensitive')
-      when 'unconfigured' then pf_state_word(:field_level, :none)
+      when 'unconfigured' then pf_state(:field_level, :none).word
       else pf_level_label(filter)
       end
     end

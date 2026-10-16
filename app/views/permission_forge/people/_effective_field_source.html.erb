@@ -1,7 +1,7 @@
 <% if field.blocked_by.any? %>
   <%= t('.muted_by', set: pf_to_sentence(field.blocked_by.map(&:name))) %>
 <% elsif field.unconfigured %>
-  <%= t('.unconfigured', state: pf_state_word(:field_level, :none), behaviour: t("permission_forge.ui.unconfigured.#{PermissionForge.configuration.unconfigured_field_strategy}", default: t('permission_forge.ui.unconfigured.block'))) %>
+  <%= t('.unconfigured', state: pf_state(:field_level, :none).word, behaviour: t("permission_forge.ui.unconfigured.#{PermissionForge.configuration.unconfigured_field_strategy}", default: t('permission_forge.ui.unconfigured.block'))) %>
 <% elsif field.granted_by.any? %>
   <%= t('.from', set: field.granted_by.first.name) %><%= t('.and_more', count: field.granted_by.size - 1) if field.granted_by.size > 1 %>
 <% elsif field.implicit %>

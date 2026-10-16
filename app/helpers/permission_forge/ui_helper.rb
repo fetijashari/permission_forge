@@ -85,37 +85,26 @@ module PermissionForge
 
     # --- states (Admin::StateLabel: one registry of glyphs and words) -----------
 
-    # The word of a state: pf_state_word(:field_level, :none) → "Not configured".
-    def pf_state_word(kind, state)
-      PermissionForge::Admin::StateLabel.word(kind, state)
+    # A state (Admin::StateLabel::Label): `.word`, `.glyph`, and `.to_s` for
+    # both — pf_state(:field_level, :none).word → "Not configured",
+    # pf_state(:effective, :blocked).to_s → "⊘ Blocked".
+    def pf_state(kind, state)
+      PermissionForge::Admin::StateLabel.for(kind, state)
     end
 
-    # Glyph and word: pf_state_label(:effective, :blocked) → "⊘ Blocked".
-    def pf_state_label(kind, state)
-      PermissionForge::Admin::StateLabel.for(kind, state).to_s
-    end
-
-    def pf_state_glyph(kind, state)
-      PermissionForge::Admin::StateLabel.glyph(kind, state)
-    end
-
-    # A state as a badge (pf_badge options: variant:, href:, title:, square:, extra:).
-    def pf_state_badge(kind, state, **)
-      pf_badge(pf_state_label(kind, state), **)
-    end
-
-    # The glyph (hidden from assistive technology) and the word of a state,
-    # for a cell or a legend that styles the glyph itself.
-    def pf_state_parts(kind, state, glyph_class: 'pf-cell__glyph', glyph_tag: :span, separator: '')
-      label = PermissionForge::Admin::StateLabel.for(kind, state)
-      safe_join([content_tag(glyph_tag, label.glyph, class: glyph_class, 'aria-hidden': true), label.word], separator)
+    # The glyph (hidden from assistive technology) and the word of a state
+    # (pf_state), for a cell (`<span class="pf-cell__glyph">`) or a legend
+    # (`glyph_tag: :b`, one space between) that styles the glyph itself.
+    def pf_state_parts(label, glyph_tag: :span, separator: '')
+      glyph = content_tag(glyph_tag, label.glyph, class: ('pf-cell__glyph' if glyph_tag == :span), 'aria-hidden': true)
+      safe_join([glyph, label.word], separator)
     end
 
     # Read-only state cell (effective access grid, across-sets lists).
     def pf_state_cell(state, aria:, href: nil, why: nil, current: false)
       state = state.to_sym
-      label = pf_state_word(:effective, state)
-      content = safe_join([content_tag(:span, pf_state_glyph(:effective, state), class: 'pf-cell__glyph', 'aria-hidden': true),
+      label = pf_state(:effective, state).word
+      content = safe_join([content_tag(:span, pf_state(:effective, state).glyph, class: 'pf-cell__glyph', 'aria-hidden': true),
                            content_tag(:span, label)], ' ')
       opts = { class: "pf-state pf-state--#{state}", 'aria-label': "#{aria}: #{label}" }
       opts[:'aria-current'] = 'true' if current
