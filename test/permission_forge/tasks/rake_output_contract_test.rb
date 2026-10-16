@@ -59,40 +59,66 @@ module PermissionForge
         PermissionForge.configuration.reset_cache_store!
       end
 
-      def fixture_for(task)
-        case task
-        when 'permission_forge:cleanup_expired_assignments'
-          PermissionForge::PermissionSetUser.where(user_id: @user.id).find_each { |psu| psu.update_columns(expires_at: 1.day.ago) }
+      # What each changing task needs in place (run as the test).
+      FIXTURES = {
+        'permission_forge:cleanup_expired_assignments' => lambda do
+          expire_assignments_of(@user)
           create_permission_set_user(user: @user, permission_set: create_permission_set(name: "Rake #{SecureRandom.hex(2)}"))
-        when 'permission_forge:erasure'
-          ENV['USER_ID'] = @user.id.to_s
-        when 'permission_forge:audit_events:purge'
+        end,
+        'permission_forge:erasure' => -> { ENV['USER_ID'] = @user.id.to_s },
+        'permission_forge:audit_events:purge' => lambda do
           PermissionForge.configuration.audit_retention_period = 30.days
           PermissionForge::AuditEvent.unscoped.where(event: 'assignment.granted').update_all(occurred_at: 40.days.ago)
         end
+      }.freeze
+
+      def expire_assignments_of(user)
+        PermissionForge::PermissionSetUser.where(user_id: user.id).find_each { |psu| psu.update_columns(expires_at: 1.day.ago) }
       end
 
+      # Runs the task with ACTOR and its fixture; answers its stdout and the
+      # summary event it recorded.
       def run_changing(task)
         ENV['ACTOR'] = 'ops: TCK-12'
         ENV.update(CHANGING.fetch(task)[:env])
-        fixture_for(task)
+        FIXTURES[task]&.then { |fixture| instance_exec(&fixture) }
         before = PermissionForge::AuditEvent.unscoped.maximum(:id) || 0
         out, err, status = run_task(task)
         assert_nil status, "#{task} exited #{status}: #{err}"
-        event = PermissionForge::AuditEvent.unscoped.where(event: CHANGING.fetch(task)[:event]).where('id > ?', before).order(:id).last
-        assert event, "#{task} recorded no #{CHANGING.fetch(task)[:event]}: #{out}"
-        [out, event]
+        [out, summary_event_after(task, before, out)]
+      end
+
+      def summary_event_after(task, before, out)
+        name = CHANGING.fetch(task)[:event]
+        event = PermissionForge::AuditEvent.unscoped.where(event: name).where('id > ?', before).order(:id).last
+        assert event, "#{task} recorded no #{name}: #{out}"
+        event
       end
 
       def process_local_lead
         PermissionForge::RakeOutput::PROCESS_LOCAL_NOTE.split(/[—:]/).first.strip
       end
 
+      # The event data keys (ENVELOPE aside) whose label is not in the output.
+      def self.unprinted(data_keys, out)
+        (data_keys - ENVELOPE.keys).reject { |key| out.include?(PermissionForge::RakeOutput.label(key)) }
+      end
+
+      test 'negative fixture: an output that leaves a recorded key out is caught, "User N" too' do
+        out = "Removed 1 expired assignment(s):\n  Expired assignments removed: 1\n  User IDs: 1\n"
+
+        assert_equal %w[invalidated set_names], self.class.unprinted(%w[operation removed invalidated set_names], out)
+        assert_match PEOPLE_AS_IDS, out
+        assert_match PEOPLE_AS_IDS, 'User 2 — Sales (120 days since last review or grant)'
+        assert_no_match PEOPLE_AS_IDS, 'Rae Rake (id 2) — Sales'
+      end
+
       test 'CHANGING names every task that goes through RakeAudit.changing' do
         calls = StaticGuard.all_hits(globs: %w[lib/tasks/**/*.rake], needle: /RakeAudit\.changing\(/)
 
         assert_equal CHANGING.size, calls.size, calls.map(&:to_s).inspect
-        assert_equal CHANGING.keys.sort, RakeTasks.tasks.map(&:name).select { |name| RakeTasks.body_of(RakeTasks.application[name]).match?(/RakeAudit\.changing\(/) }.sort
+        changing = RakeTasks.tasks.select { |task| RakeTasks.body_of(task).match?(/RakeAudit\.changing\(/) }
+        assert_equal CHANGING.keys.sort, changing.map(&:name).sort
       end
 
       test 'ENVELOPE names only keys some summary event records' do
@@ -107,7 +133,7 @@ module PermissionForge
         test "#{task} prints every key its summary event records, on the memory store with the process-local note" do
           out, event = run_changing(task)
 
-          missing = (event.data.keys - ENVELOPE.keys).reject { |key| out.include?(PermissionForge::RakeOutput.label(key)) }
+          missing = self.class.unprinted(event.data.keys, out)
           assert_empty missing, "#{task} does not print #{missing.join(', ')} (data: #{event.data.inspect}):\n#{out}"
           assert_no_match PEOPLE_AS_IDS, out
           next unless event.data.key?('process_local')
@@ -141,7 +167,7 @@ module PermissionForge
       end
 
       test 'the reporting tasks name people as the admin does' do
-        PermissionForge::PermissionSetUser.where(user_id: @user.id).find_each { |psu| psu.update_columns(expires_at: 1.day.ago) }
+        expire_assignments_of(@user)
         out, = run_task('permission_forge:expired_assignments')
         assert_includes out, 'Rae Rake'
         assert_no_match PEOPLE_AS_IDS, out
@@ -156,7 +182,7 @@ module PermissionForge
       test 'a person the people list does not know is printed as an id, never as "User N"' do
         config = PermissionForge.configuration
         config.user_list_resolver = -> { config.user_model.where.not(id: @user.id).order(:id) }
-        PermissionForge::PermissionSetUser.where(user_id: @user.id).find_each { |psu| psu.update_columns(expires_at: 1.day.ago) }
+        expire_assignments_of(@user)
 
         out, = run_task('permission_forge:expired_assignments')
 

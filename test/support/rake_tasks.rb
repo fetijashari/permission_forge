@@ -47,10 +47,14 @@ module RakeTasks
   def body_of(task)
     file, line = task.actions.first.source_location
     lines = File.readlines(file)
-    first = lines[line - 1]
-    indent = first[/\A */].size
-    last = (line...lines.size).find { |index| index > line - 1 && lines[index].match?(/\A {#{indent}}end\b/) } || lines.size - 1
-    lines[(line - 1)..last].join
+    lines[(line - 1)..closing_line(lines, line - 1)].join
+  end
+
+  # The index of the `end` at the indentation of the line at `start`, or the
+  # last line.
+  def closing_line(lines, start)
+    indent = lines[start][/\A */].size
+    ((start + 1)...lines.size).find { |index| lines[index].match?(/\A {#{indent}}end\b/) } || (lines.size - 1)
   end
 
   # Setup and teardown for a test that runs the tasks.

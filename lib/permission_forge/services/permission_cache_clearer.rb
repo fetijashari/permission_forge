@@ -57,7 +57,6 @@ module PermissionForge
     class PermissionCacheClearer
       include Concerns::AuditedOperation
 
-
       EVENT = 'cache.cleared'
       SLICE = Cache::HolderInvalidation::SLICE
 
@@ -174,10 +173,17 @@ module PermissionForge
       # With the outcome of its rows (Cache::Outcome#event_data:
       # `process_local` says the store lives in this process only, so the
       # clear did not reach the web and job processes).
-      def record(tenant_id, **data)
-        outcome = @report.outcome(unconfirmed: data.fetch(:unconfirmed))
-        data = data.transform_keys(&:to_s).merge('operation' => 'cache_clear', **outcome.event_data)
-        PermissionForge::Audit.record(EVENT, tenant_id: tenant_id, data: data)
+      def record(tenant_id, **counts)
+        PermissionForge::Audit.record(EVENT, tenant_id: tenant_id, data: event_data(**counts))
+      end
+
+      def event_data(unconfirmed:, **counts)
+        { 'operation' => 'cache_clear', **counts.transform_keys(&:to_s), **outcome_data(unconfirmed) }
+      end
+
+      # The outcome's keys, `unconfirmed` among them.
+      def outcome_data(unconfirmed)
+        @report.outcome(unconfirmed: unconfirmed).event_data
       end
 
       # The event without a tenant — recorded with none ambient, so it is one.

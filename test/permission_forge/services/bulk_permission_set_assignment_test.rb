@@ -146,7 +146,8 @@ module PermissionForge
         end
 
         assert_equal ["user_#{@user2.id}_invalidation"], stamps
-        assert_equal({ assigned: 1, revoked: 0, invalidated: 1, cache: { confirmed: true, process_local: true, unconfirmed: 0, in_request: false } }, result)
+        assert_equal({ assigned: 1, revoked: 0, invalidated: 1,
+                       cache: { confirmed: true, process_local: true, unconfirmed: 0, in_request: false } }, result)
       end
 
       # The audit event and the validations of each new assignment read its
@@ -179,7 +180,8 @@ module PermissionForge
 
         result = BulkPermissionSetAssignment.call(permission_set: @permission_set, user_ids: [@user1.id, @user2.id], action: :revoke)
 
-        assert_equal({ assigned: 0, revoked: 1, invalidated: 1, cache: { confirmed: true, process_local: true, unconfirmed: 0, in_request: false } }, result)
+        assert_equal({ assigned: 0, revoked: 1, invalidated: 1,
+                       cache: { confirmed: true, process_local: true, unconfirmed: 0, in_request: false } }, result)
         assert PermissionForge::PermissionSetUser.exists?(user_id: kept, permission_set_id: @permission_set.id)
       ensure
         PermissionForge::PermissionSetUser.send(:remove_method, :destroy)

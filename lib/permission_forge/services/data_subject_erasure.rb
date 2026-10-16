@@ -95,7 +95,6 @@ module PermissionForge
       include Concerns::AuditedOperation
       include Concerns::AcrossTenants
 
-
       # The name labels erasure clears, by the count they are reported under.
       LABELS = { actor_labels: :actor_label, record_labels: :record_label }.freeze
 
@@ -136,14 +135,19 @@ module PermissionForge
         sets = permission_set_assignments.includes(:permission_set).filter_map(&:permission_set)
         groups = group_assignments.includes(:permission_set_group).filter_map(&:permission_set_group)
 
-        counts = { assignments_removed: remove_permission_set_assignments,
-                   group_assignments_removed: remove_group_assignments }
+        counts = { assignments_removed: remove_all(permission_set_assignments),
+                   group_assignments_removed: remove_all(group_assignments) }
         counts.merge!(remaining_elsewhere)
         scrubbed = scrub_labels
         record_summary(sets, groups, counts, scrubbed)
-        counts.merge(permission_sets: sets.map(&:name).uniq, groups: groups.map(&:name).uniq,
-                     actor_labels_cleared: scrubbed[:actor_labels], record_labels_cleared: scrubbed[:record_labels],
-                     events_scrubbed: scrubbed.values.sum)
+        counts.merge(result_details(sets, groups, scrubbed))
+      end
+
+      # The names removed and the labels cleared, as the result reports them.
+      def result_details(sets, groups, scrubbed)
+        { permission_sets: sets.map(&:name).uniq, groups: groups.map(&:name).uniq,
+          actor_labels_cleared: scrubbed[:actor_labels], record_labels_cleared: scrubbed[:record_labels],
+          events_scrubbed: scrubbed.values.sum }
       end
 
       # What the person still has in other tenants (nothing is removed there).
@@ -233,15 +237,10 @@ module PermissionForge
         PermissionForge::PermissionSetGroupUser.where(user: @user)
       end
 
-      def remove_permission_set_assignments
-        records = permission_set_assignments
-        count = records.count
-        records.destroy_all
-        count
-      end
-
-      def remove_group_assignments
-        records = group_assignments
+      # Destroys the rows through their callbacks (one audit event each).
+      #
+      # @return [Integer] how many there were
+      def remove_all(records)
         count = records.count
         records.destroy_all
         count

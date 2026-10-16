@@ -90,17 +90,18 @@ module PermissionForge
       def clean(candidate_ids)
         removed = candidate_ids.filter_map { |id| destroy_if_still_expired(id) }
         @removed_count = removed.size
-        user_ids = removed.map(&:user_id).uniq
-
-        report = invalidate_users(user_ids)
-        confirmed = report.confirmed(user_ids)
-        @invalidated_count = confirmed.size
-        outcome = report.outcome(user_ids: user_ids)
         sets = sets_of(removed)
-        record_summary(removed, sets, confirmed, outcome) if @removed_count.positive?
+        report = invalidate_users(user_ids_of(removed))
+        record_summary(removed, sets, report) if @removed_count.positive?
+        result(removed, sets, report)
+      end
 
+      # The run's counts, people, sets and cache outcome (see the class comment).
+      def result(removed, sets, report)
+        user_ids = user_ids_of(removed)
+        @invalidated_count = report.confirmed(user_ids).size
         { removed: @removed_count, invalidated: @invalidated_count, affected_user_ids: user_ids,
-          permission_sets: sets.values.map(&:name).uniq, cache: outcome.to_h }
+          permission_sets: sets.values.map(&:name).uniq, cache: report.outcome(user_ids: user_ids).to_h }
       end
 
       # The row as it is now, locked until it is gone; nil when it is no
@@ -118,11 +119,17 @@ module PermissionForge
       end
 
       # One event, or one per tenant plus the totals (record_per_tenant),
-      # each with the counts of its own rows and the run's cache outcome.
-      def record_summary(records, sets, confirmed_user_ids, outcome)
-        record_per_tenant('cleanup.expired_assignments', records) do |rows|
-          SummaryData.new(rows, sets, confirmed_user_ids, outcome).to_h
-        end
+      # each with the counts of its own rows and the run's cache outcome
+      # (the report of every affected user's invalidation).
+      def record_summary(records, sets, report)
+        user_ids = user_ids_of(records)
+        confirmed = report.confirmed(user_ids)
+        outcome = report.outcome(user_ids: user_ids)
+        record_per_tenant('cleanup.expired_assignments', records) { |rows| SummaryData.new(rows, sets, confirmed, outcome).to_h }
+      end
+
+      def user_ids_of(records)
+        records.map(&:user_id).uniq
       end
 
       # The data of one cleanup.expired_assignments event, for the removed

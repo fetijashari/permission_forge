@@ -134,7 +134,7 @@ module PermissionForge
       lines
     end
 
-    # rubocop:disable Metrics/CyclomaticComplexity, Metrics/MethodLength -- one table of value shapes
+    # One table of value shapes.
     def format_value(key, value)
       case key
       when 'callback_invoked' then CALLBACK.fetch(value)
@@ -145,7 +145,6 @@ module PermissionForge
       else plain(value)
       end
     end
-    # rubocop:enable Metrics/CyclomaticComplexity, Metrics/MethodLength
 
     def people_list(ids)
       return 'none' if ids.empty?
