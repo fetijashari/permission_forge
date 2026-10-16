@@ -59,9 +59,6 @@ module PermissionForge
       ['lib/permission_forge/audit.rb', /Rails\.logger&\.warn\("\[PermissionForge\] cannot check for the audit table/,
        'Audit owns the table check (once per process, Audit.verify_table!); lib/permission_forge/audit.rb is ' \
        'outside this change — route through Warnings.emit when it is next touched'],
-      ['lib/permission_forge/audit.rb', /Rails\.logger\.warn\(BootWarnings\.missing_table\(name\)\)/,
-       'Audit owns the table check (once per process, Audit.verify_table!); lib/permission_forge/audit.rb is ' \
-       'outside this change — route through Warnings.emit when it is next touched'],
       ['lib/permission_forge/cache/withheld_notice.rb', /Rails\.logger\.warn\(/,
        'the "rebuilt inside a transaction" notice: request-time, once per process by itself'],
       ['lib/permission_forge/cache/rails_cache.rb', /Rails\.logger&\.warn\(/,

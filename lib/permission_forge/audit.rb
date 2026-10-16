@@ -295,7 +295,8 @@ module PermissionForge
       end
 
       def warn_missing_table(name)
-        Rails.logger.warn(BootWarnings.missing_table(name)) if defined?(Rails) && Rails.logger
+        PermissionForge::Warnings.emit(:audit_table_missing, BootWarnings.missing_table(name).delete_prefix(PermissionForge::Warnings::PREFIX),
+                                       severity: :security)
       end
     end
   end

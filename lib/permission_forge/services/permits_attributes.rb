@@ -54,7 +54,7 @@ module PermissionForge
       DESTROY_KEY = '_destroy'.freeze
 
       # Filters incoming params by the user's field-level edit access (does not mutate them).
-      # @param resource [String] the model name
+      # @param resource [ActiveRecord::Base, Class] the record or model class whose Resource rows decide
       # @param permitted_params [Hash]
       # @param report [Boolean] answer a {Result} (filtered params and dropped paths)
       # @return [Hash, Result] the filtered hash; a {Result} with `report: true`
