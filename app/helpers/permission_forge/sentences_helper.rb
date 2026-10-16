@@ -19,21 +19,31 @@ module PermissionForge
       [pf_condition_ips(permission_set), pf_condition_hours(permission_set), pf_condition_flag(permission_set)].compact
     end
 
+    # The IP entries as the engine reads them (ActivationConditions).
     def pf_condition_ips(permission_set)
-      ips = pf_ip_list(permission_set.allowed_ips)
+      ips = PermissionForge::ActivationConditions.of(permission_set).allowed_ip_list
       return if ips.empty?
 
       connector = pf_ui('conditions.or')
       pf_ui('conditions.from_ips', ips: pf_to_sentence(ips, two_words_connector: connector, last_word_connector: connector))
     end
 
+    # The hour window as the engine reads it: none, a window, an overnight
+    # one, or a broken one (one hour of the two, the same hour twice, an
+    # hour outside 0–23) that nobody can judge — said so, never shown as an
+    # overnight window.
     def pf_condition_hours(permission_set)
-      from = permission_set.allowed_hours_start
-      to = permission_set.allowed_hours_end
-      return unless from.present? && to.present?
+      window = PermissionForge::ActivationConditions.of(permission_set).hours_window
+      return unless window.set?
 
-      key = to.to_i <= from.to_i ? 'hours_overnight' : 'hours'
-      pf_ui("conditions.#{key}", from: pf_hour(from), to: pf_hour(to))
+      hours = { from: pf_hour_or_blank(window.from), to: pf_hour_or_blank(window.to) }
+      return pf_ui('conditions.hours_broken', **hours) if window.broken?
+
+      pf_ui("conditions.#{window.wraps? ? 'hours_overnight' : 'hours'}", **hours)
+    end
+
+    def pf_hour_or_blank(hour)
+      hour.nil? ? pf_ui('conditions.no_hour') : pf_hour(hour)
     end
 
     def pf_condition_flag(permission_set)
@@ -48,8 +58,9 @@ module PermissionForge
       pf_ui('conditions.only_works', parts: parts.join(', '))
     end
 
+    # The entries of an IP list as written (ActivationConditions.entries).
     def pf_ip_list(value)
-      value.to_s.split(/[,\n]/).map(&:strip).reject(&:empty?)
+      PermissionForge::ActivationConditions.entries(value)
     end
 
     def pf_flag_label(flag)

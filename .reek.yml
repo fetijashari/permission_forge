@@ -54,6 +54,8 @@ detectors:
   FeatureEnvy:
     exclude:
       - PermissionForge::Api::BaseController
+      # Reads the request section's condition values by shape, as BaseController's param readers do
+      - PermissionForge::Api::PermissionSetsController#condition_params
       - PermissionForge::ApplicationHelper
       - PermissionForge::AuditHelper
       - PermissionForge::AuditAttributionHelper
@@ -95,6 +97,7 @@ detectors:
       - PermissionForge::Services::SecurityAuditChecks::PersonalDataCheck
       - PermissionForge::Services::SecurityAuditChecks::PrivilegeCheck
       - PermissionForge::Services::SecurityAuditChecks::RuleCheck
+      - PermissionForge::Services::SecurityAuditChecks::ConditionsCheck
       - PermissionForge::Services::SecurityAuditChecks::TextReport
       # Audit event log: value objects, read models and formatters that take
       # one record (event, assignment, decision, payload) and read its parts,

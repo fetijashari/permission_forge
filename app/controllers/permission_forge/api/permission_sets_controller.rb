@@ -3,6 +3,20 @@
 module PermissionForge
   module Api
     class PermissionSetsController < BaseController
+      # The shapes an activation condition is taken in (JSON): `allowed_ips`
+      # a String (commas, newlines or spaces between the entries) or an Array
+      # of Strings, an hour an integer (or a String of digits), a session
+      # flag a String; null clears. Anything else is a 422 keyed by the
+      # attribute — strong parameters would drop an Array under a scalar key,
+      # or an object, without a word, and a dropped condition is a set that
+      # applies from anywhere (field test round 6, d-api).
+      CONDITION_SHAPES = {
+        'allowed_ips' => [:ip_list_shape, ->(value) { value.is_a?(String) || (value.is_a?(Array) && value.all?(String)) }],
+        'requires_session_flag' => [:flag_shape, ->(value) { value.is_a?(String) }],
+        'allowed_hours_start' => [:hour_shape, ->(value) { value.is_a?(Integer) || (value.is_a?(String) && value.match?(/\A\s*-?\d+\s*\z/)) }],
+        'allowed_hours_end' => [:hour_shape, ->(value) { value.is_a?(Integer) || (value.is_a?(String) && value.match?(/\A\s*-?\d+\s*\z/)) }]
+      }.freeze
+
       before_action :set_permission_set, only: %i[show update destroy clone]
 
       def index
@@ -80,12 +94,29 @@ module PermissionForge
       # permission_set_group_id takes the group's id or, under
       # api_record_identifier = :uuid, its uuid (BaseController#with_reference_id).
       def permission_set_params
-        attrs = pf_require_hash(:permission_set).permit(
-          :name, :description, :is_active, :is_editable, :is_muting,
-          :requires_session_flag, :allowed_ips, :allowed_hours_start, :allowed_hours_end,
-          :permission_set_group_id
-        )
+        section = pf_require_hash(:permission_set)
+        attrs = section.permit(:name, :description, :is_active, :is_editable, :is_muting, :permission_set_group_id,
+                               :requires_session_flag, :allowed_hours_start, :allowed_hours_end, :allowed_ips, allowed_ips: [])
+        attrs = attrs.merge(condition_params(section))
         with_reference_id(attrs, :permission_set_group_id, PermissionForge::PermissionSetGroup)
+      end
+
+      # The condition attributes the request names, in a shape CONDITION_SHAPES
+      # takes; the IP list normalised by the one parser (ActivationConditions).
+      #
+      # @raise [ParamShapes::InvalidParam] for any other shape (a 422 keyed by the attribute)
+      def condition_params(section)
+        CONDITION_SHAPES.each_with_object({}) do |(key, (message, shape)), conditions|
+          next unless section.key?(key)
+
+          value = section[key]
+          value = nil if value == ''
+          unless value.nil? || shape.call(value)
+            raise PermissionForge::ParamShapes::InvalidParam.new(key, I18n.t("permission_forge.api.errors.#{message}"))
+          end
+
+          conditions[key] = key == 'allowed_ips' ? PermissionForge::ActivationConditions.entries(value).join(',').presence : value
+        end
       end
     end
   end

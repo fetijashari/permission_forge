@@ -9,8 +9,8 @@ module PermissionForge
     #
     # Each check is a class answering `#call` with an array of Finding,
     # listed by `SecurityAudit.checks` (config, privilege, assignment, rule,
-    # integrity, personal data, controller actions, the audit trail and the
-    # user model);
+    # integrity, activation conditions, personal data, controller actions,
+    # the audit trail and the user model);
     # add one by passing `checks:` to `call` or by overriding `.checks`
     # (OCP). Nothing is ever changed.
     #
@@ -60,7 +60,7 @@ module PermissionForge
         [
           SecurityAuditChecks::ConfigCheck, SecurityAuditChecks::PrivilegeCheck,
           SecurityAuditChecks::AssignmentCheck, SecurityAuditChecks::RuleCheck,
-          SecurityAuditChecks::IntegrityCheck, SecurityAuditChecks::PersonalDataCheck,
+          SecurityAuditChecks::IntegrityCheck, SecurityAuditChecks::ConditionsCheck, SecurityAuditChecks::PersonalDataCheck,
           SecurityAuditChecks::ActionCheck, SecurityAuditChecks::AuditTrailCheck,
           SecurityAuditChecks::UserModelCheck
         ]

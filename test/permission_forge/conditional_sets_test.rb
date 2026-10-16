@@ -232,6 +232,44 @@ module PermissionForge
       assert_equal :strict, conditional.serve(job).signature
     end
 
+    # A condition the row holds but nobody can judge — an IP entry that is
+    # not one, the same hour twice, one hour of the two — is unjudgeable in
+    # every mode: a muting set applies (a lockdown that never locked is the
+    # defect), a granting set never passes. The context does not matter.
+    test 'a muting set with a broken condition applies in every mode; a granting one never passes' do
+      broken_ip = stored(name: 'Broken IP lockdown', is_muting: true, allowed_ips: '10.0.0.0/8, office')
+      one_hour = stored(name: 'One hour lockdown', is_muting: true, allowed_hours_start: 22, allowed_hours_end: nil)
+      same_hour = stored(name: 'Same hour lockdown', is_muting: true, allowed_hours_start: 9, allowed_hours_end: 9)
+      broken_grant = stored(name: 'Broken grant', allowed_ips: 'office')
+      conditional = ConditionalSets.of([@plain, broken_ip, one_hour, same_hour, broken_grant])
+      muting_ids = [broken_ip.id, one_hour.id, same_hour.id].sort
+
+      [false, true].each do |strict|
+        PermissionForge.configuration.conditional_sets_strict_mode = strict
+        office = { ip: '10.1.2.3', session_flags: [], time: Time.current.change(hour: 12) }
+        elsewhere = office.merge(ip: '203.0.113.9')
+
+        assert_equal muting_ids, conditional.variant(office).ids, "strict=#{strict}, office"
+        assert_equal muting_ids, conditional.variant(elsewhere).ids, "strict=#{strict}, elsewhere"
+        assert_equal muting_ids, conditional.variant(office.merge(time: Time.current.change(hour: 23))).ids
+      end
+    end
+
+    test 'a muting set whose IP list was written with newlines applies where an entry matches' do
+      lockdown = stored(name: 'Newline lockdown', is_muting: true, allowed_ips: "10.0.0.0/8\n192.168.0.0/16")
+      conditional = ConditionalSets.of([@plain, lockdown])
+
+      assert_equal [lockdown.id], conditional.variant(ip: '192.168.4.4', session_flags: []).ids
+      assert_nil conditional.variant(ip: '203.0.113.9', session_flags: [])
+    end
+
+    # A row as the table holds it, whatever the validations refuse today.
+    def stored(**attrs)
+      set = create_permission_set(name: attrs.delete(:name))
+      set.update_columns(attrs)
+      set.reload
+    end
+
     # --- serve / signature ------------------------------------------------------------
 
     test 'serve remembers the variant and the signature of the context that selected it' do

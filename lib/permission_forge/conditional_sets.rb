@@ -104,6 +104,8 @@ module PermissionForge
     #
     # @api private
     Member = Data.define(:id, :muting, :requires_session_flag, :allowed_ips, :allowed_hours_start, :allowed_hours_end) do
+      include PermissionForge::ActivationConditions
+
       def self.of(permission_set)
         new(id: permission_set.id, muting: permission_set.is_muting == true,
             requires_session_flag: permission_set.requires_session_flag, allowed_ips: permission_set.allowed_ips,
@@ -121,13 +123,17 @@ module PermissionForge
 
       def muting? = muting
 
-      # Whether the set counts in `context`: its conditions pass — or, in
-      # strict mode, it is a muting set whose condition cannot be judged
-      # there (no IP for an IP allowlist, no flags at all for a session flag).
+      # Whether the set counts in `context`: its conditions pass — or it is
+      # a muting set whose condition cannot be judged: one nobody can judge
+      # (ActivationConditions#conditions_broken?: an IP entry that is not an
+      # address, one hour of the two, the same hour twice) in every mode, or
+      # one the context cannot answer (no IP for an IP allowlist, no flags
+      # at all for a session flag) in strict mode. A lockdown that never
+      # locked is the defect; a granting set never passes on such a condition.
       def applies?(context, strict)
         evaluator = Services::PermissionSetConditionEvaluator
         evaluator.call(permission_set: self, context: context) ||
-          (strict && muting && evaluator.unjudgeable?(permission_set: self, context: context))
+          (muting && (conditions_broken? || (strict && evaluator.unjudgeable?(permission_set: self, context: context))))
       end
     end
 
