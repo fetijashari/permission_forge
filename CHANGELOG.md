@@ -1178,12 +1178,16 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   person's permission hash, in the cache store (Redis, Solid Cache, a file or memory store). With `encrypts :email` (or
   `:name`) on the user model, the default builder stored the ciphertext JSON there before 0.15; reading it decrypted
   would put the plaintext in the cache store. `permissions_hash[:profile][:email]` and `[:name]` are now `nil` for an
-  encrypted attribute (an encrypted `email` gives way to a plain `email_address`); the admin's labels, which are never
-  cached, still read it decrypted (`Admin::PersonLabel`, `decrypt: false` for the profile). The generated initializer
-  no longer sets `profile_builder` (the line is a commented example), so a new install uses this default; an initializer
-  generated before keeps its own lambda, which calls the public readers (they decrypt): remove the line to get the
-  default. **Opt out:** set a `config.profile_builder` of your own that returns what the cache store may hold.
+  encrypted attribute (an encrypted `email` gives way to a plain `email_address`), and so is a name or email the model
+  composes in a reader while it encrypts any attribute a name or email is read from (`name`, `full_name`,
+  `display_name`, `first_name`/`last_name`, `firstname`/`lastname`, `email`, `email_address`: such a reader would hand
+  over their plaintext; an encrypted attribute the label never reads is not looked at); the admin's labels, which are
+  never cached, still read them decrypted (`Admin::PersonLabel`, `decrypt: false` for the profile). The generated
+  initializer no longer sets `profile_builder`: the line is a commented example, which calls the public readers (they
+  decrypt), so a new install uses this default; an initializer generated before keeps its own lambda, which does the
+  same: remove the line to get the default. **Opt out:** set a `config.profile_builder` of your own that returns what the cache store may hold.
   <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#the default profile_builder leaves encrypted attributes out; the admin label reads them decrypted -->
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#under decrypt: false no reader is asked for a name or email while the model encrypts one the label reads -->
   <!-- pin: test/permission_forge/release_readiness/claims_regression_test.rb#CLAIMS-32 the generated initializer works without a Current class and keeps uuid in the profile -->
 - **A LIKE operator on a column that is not text is refused on `operator`, naming the column's type.** `seats
   contains '1'` on an integer column (PostgreSQL), or any LIKE operator on a `json` column, was refused as "is not a
