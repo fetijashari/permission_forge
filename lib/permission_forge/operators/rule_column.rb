@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'active_support/core_ext/module/delegation'
+
 module PermissionForge
   module Operators
     # The model column a rule's field_name names, as far as it can be told:
@@ -30,7 +32,9 @@ module PermissionForge
     # no such column is {#missing?}: the database would reject the query, so
     # a built-in operator matches nothing for it (ValueTyping.no_column?). A
     # field_name that is not a name ({.name?}) is {#malformed?}: such a rule
-    # matches nothing.
+    # matches nothing. A column of an attribute declared with `encrypts`
+    # holds ciphertext ({#encrypted?}): no built-in operator that takes a
+    # value can compare it (ValueTyping).
     class RuleColumn
       # Adapters whose database compares a quoted name as it is written. On
       # every other one — MySQL, SQLite — `Flag` is the column `flag`.
@@ -271,6 +275,28 @@ module PermissionForge
       # column: the database would reject a query that compares it.
       def missing?
         !model.nil? && column.nil?
+      end
+
+      # Whether the column holds ciphertext: an attribute of {#model} — the
+      # class the rule is applied to (the applier's model class) or one along
+      # its path — declared with `encrypts`. Asked with the column's own name
+      # (a field name written in another case resolves to it).
+      def encrypted?
+        return false if model.nil? || column.nil?
+
+        PermissionForge::EncryptedAttributes.encrypted?(model, column.name)
+      end
+
+      class << self
+        # @!method encrypted?(model, name)
+        #   Whether `name` is a column of `model` that holds ciphertext (an
+        #   attribute declared with `encrypts`; PermissionForge::EncryptedAttributes,
+        #   the one definition): a rule can only ask whether it is empty. What
+        #   the admin's rule builder asks before it offers a column.
+        #   @param model [Class, nil] the model whose table the column is in
+        #   @param name [String, Symbol] the column's name, as the model has it
+        #   @return [Boolean]
+        delegate :encrypted?, to: PermissionForge::EncryptedAttributes
       end
 
       # The caster for the column's type, on the database it is in.

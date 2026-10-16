@@ -20,6 +20,10 @@ module PermissionForge
                      'of another table, use a join rule (a join type and the relationship path)',
       invalid_operator: 'is not a valid operator',
       invalid_join_type: 'is not a valid join type',
+      encrypted_column: 'names %<name>s, an encrypted attribute of %<model>s: the database holds its ciphertext, so a ' \
+                        'rule can only check whether it is empty (is_null, is_not_null)',
+      pattern_on_non_text: 'matches text only, and %<model>s.%<name>s is a column of type %<type>s: use a condition ' \
+                           'that compares values',
       unusable_value: 'is not a value %<model>s.%<name>s can hold'
     }.freeze
 
@@ -47,6 +51,16 @@ module PermissionForge
     # - :foreign_table — a filter rule's field_name qualified with a real
     #   table of another model ({RuleColumn#foreign?}): a filter rule compares
     #   its model's own table; `name` is the qualifier;
+    # - :encrypted_column — a built-in operator that takes a value, on a
+    #   column that holds ciphertext ({RuleColumn#encrypted?}: an attribute
+    #   declared with `encrypts`); `name` is the column. Refused for a new
+    #   rule and when its column, path, join type or model changes or its
+    #   operator moves off the null checks (on `field_name`);
+    # - :pattern_on_non_text — a LIKE operator (contains, starts_with, ...) on
+    #   a column no pattern can be matched against ({RuleColumn#pattern?}: a
+    #   json column, and on PostgreSQL every column that is not text);
+    #   `name` is the column, `column_type` its SQL type. Refused like a
+    #   value (on `operator`);
     # - :unusable_value — a value the column cannot hold ({ValueTyping::UNUSABLE});
     #   `name` is the column, `value` the value as stored. Refused for a new
     #   or changed rule (on `field_value`); a stored one is listed and denied.
@@ -66,20 +80,25 @@ module PermissionForge
     #   problem&.kind  # => :missing_column
     #   problem&.name  # => "stauts"
     #   problem&.key   # => :missing_column
-    class RuleProblem < Data.define(:kind, :name, :model, :cause, :value)
+    class RuleProblem < Data.define(:kind, :name, :model, :cause, :value, :column_type)
       # Every kind, in the order the applier decides them. A new kind needs a
       # fixture in test/support/rule_problem_fixtures.rb, an entry in
       # RULE_PROBLEM_MESSAGES (or MESSAGE_KEYS), one in REMEDIES, and the
       # message and the `ui.rules.problems` sentence in en, sq and mk.
+      #
+      # The value kinds come last and in ValueTyping.problem's order: an
+      # encrypted column or a LIKE on a column that is not text makes every
+      # value UNUSABLE, so they are told apart before :unusable_value.
       KINDS = %i[unknown_join_type unknown_association unjoinable_association unknown_operator missing_column
-                 unknown_table foreign_table unusable_value].freeze
+                 unknown_table foreign_table encrypted_column pattern_on_non_text unusable_value].freeze
       # What the admin changes to correct the rule, by kind — the rule
       # builder's control (`permission_set_rules.builder.problem_fixes.<remedy>`):
       # the join type (Advanced), the relationship, the condition, the field,
       # or the value.
       REMEDIES = { unknown_join_type: :join, unknown_association: :path, unjoinable_association: :path,
                    unknown_operator: :operator, missing_column: :field, unknown_table: :field,
-                   foreign_table: :path, unusable_value: :value }.freeze
+                   foreign_table: :path, encrypted_column: :field, pattern_on_non_text: :operator,
+                   unusable_value: :value }.freeze
       # The kinds that are the rule's association path (not its column or value).
       PATH_KINDS = %i[unknown_association unjoinable_association].freeze
       # The kinds whose `name` is a name that is not there, shown as stored.
@@ -93,9 +112,14 @@ module PermissionForge
       # only when it is for every one of them.
       ANY_USER_IDS = [0, '00000000-0000-0000-0000-000000000000'].freeze
 
-      # `cause` and `value` are optional: a column problem has no cause, only a value problem a value.
-      def initialize(kind:, name:, model:, cause: nil, value: nil)
-        super
+      # `cause`, `value` and `column_type` are optional: a column problem has
+      # no cause, only a value problem a value, only a LIKE on a column that
+      # is not text a column type.
+      OPTIONAL = { cause: nil, value: nil, column_type: nil }.freeze
+      private_constant :OPTIONAL
+
+      def initialize(kind:, name:, model:, **optional)
+        super(kind:, name:, model:, **OPTIONAL, **optional)
       end
 
       # @param rule [PermissionForge::PermissionSetRule]
@@ -175,35 +199,45 @@ module PermissionForge
         end
       end
 
-      # A value the column cannot hold, typed as the applier types it
-      # (ValueTyping; `current_user` as each of ANY_USER_IDS). Only for a column that
-      # was found: the column's own problem comes first. A blank value is
-      # none (the presence validation's business; a rule being built has
-      # none yet).
+      # Why the rule's value is UNUSABLE for its column, as the applier types
+      # it (ValueTyping.problem; `current_user` as each of ANY_USER_IDS): an
+      # encrypted column, a LIKE operator on a column that is not text, or a
+      # value the column cannot hold. Only for a column that was found: the
+      # column's own problem comes first. The first two do not depend on the
+      # value; a blank value is no value problem (the presence validation's
+      # business; a rule being built has none yet).
       #
       # @param rule [PermissionForge::PermissionSetRule]
       # @param column [RuleColumn, nil] the rule's column (RuleColumn.for_rule)
       # @return [RuleProblem, nil]
       def self.of_value(rule, column = RuleColumn.for_rule(rule))
-        return unless column_found?(column) && rule.field_value.present? && unusable_value?(rule, column)
+        return unless column_found?(column)
 
-        new(kind: :unusable_value, name: rule.field_name.to_s.split('.').last, model: column.model || RuleColumn.rule_model(rule),
-            value: rule.field_value)
+        kind = value_kind(rule, column) or return
+        name = rule.field_name.to_s.split('.').last
+        model = column.model || RuleColumn.rule_model(rule)
+        return new(kind: kind, name: name, model: model, value: rule.field_value) if kind == :unusable_value
+
+        new(kind: kind, name: name, model: model, column_type: column.column&.sql_type)
       end
 
       def self.column_found?(column)
         !column.nil? && !column.malformed? && !column.missing? && !column.unresolvable?
       end
 
-      def self.unusable_value?(rule, column)
+      # The kind every reading of the value gives (ValueTyping.problem), or nil.
+      def self.value_kind(rule, column)
         operator = rule.operator.to_s
         value = rule.field_value
+        return ValueTyping.operator_problem(operator, column) if value.blank?
+
         values = ValueTyping.current_user?(operator, value) ? ANY_USER_IDS : [value]
-        values.all? { |typed| ValueTyping.call(operator, typed, column).equal?(ValueTyping::UNUSABLE) }
+        kinds = values.map { |typed| ValueTyping.problem(operator, typed, column) }
+        kinds.first if kinds.all?
       rescue *RuleColumn::UNTELLABLE
-        false
+        nil
       end
-      private_class_method :column_found?, :unusable_value?, :column_kind
+      private_class_method :column_found?, :value_kind, :column_kind
 
       # The rule's path and field name as stored (a filter rule's path is not joined).
       #
@@ -267,7 +301,7 @@ module PermissionForge
       # @return [String]
       def validation_message
         I18n.t("permission_forge.validations.permission_set_rule.#{message_key}",
-               association: name, name: name, model: model&.name, value: value,
+               association: name, name: name, model: model&.name, value: value, type: column_type,
                default: RULE_PROBLEM_MESSAGES.fetch(message_key))
       end
     end

@@ -28,7 +28,11 @@ module PermissionForge
     # column its table does not have, under a built-in operator. So is a
     # value with a NUL byte, under any operator ({.unquotable?}): no SQL
     # literal carries one — the database reads the statement cut short, and
-    # every holder's query failed instead of being denied.
+    # every holder's query failed instead of being denied. So is any value
+    # under a built-in operator that takes one, on a column that holds
+    # ciphertext ({.encrypted?}): the statement compares the stored
+    # ciphertext with the rule's text (Active Record's own query rewriting
+    # never runs on a raw comparison). Why a value is UNUSABLE is {.problem}.
     module ValueTyping
       UNUSABLE = ValueCasters::UNUSABLE
       CURRENT_USER = 'current_user'
@@ -54,7 +58,7 @@ module PermissionForge
       # @return [Object] what the operator's strategy binds: one value, an Array
       #   for `in` / `not_in` / `between`, or {UNUSABLE}
       def call(operator, value, target)
-        return UNUSABLE if no_column?(operator, target) || unquotable?(value)
+        return UNUSABLE if no_column?(operator, target) || unquotable?(value) || encrypted?(operator, target)
 
         shape = SHAPES[operator]
         shape ? send(shape, value, target) : value
@@ -79,6 +83,46 @@ module PermissionForge
       # @param target [RuleColumn] the column the rule names
       def no_column?(operator, target)
         target.malformed? || (target.missing? && Constants::OPERATORS.include?(operator))
+      end
+
+      # Whether a built-in operator that takes a value ({SHAPES}) compares a
+      # column that holds ciphertext (RuleColumn#encrypted?). The null checks
+      # take no value and work: the ciphertext is NULL exactly when the value
+      # is. A custom operator's strategy decides for itself (a `where(attr:
+      # value)` of its own goes through the attribute's type).
+      #
+      # @param operator [String] the rule's operator
+      # @param target [RuleColumn] the column the rule names
+      def encrypted?(operator, target)
+        SHAPES.key?(operator) && target.encrypted?
+      end
+
+      # Why the value is {UNUSABLE} for the column it is compared with, nil
+      # when it is not: the operator and the column alone decide the first
+      # two — :encrypted_column ({.encrypted?}), :pattern_on_non_text (a LIKE
+      # operator on a column no pattern can be matched against,
+      # RuleColumn#pattern?) —, else :unusable_value (a value the column
+      # cannot hold). For a column that was found (RuleProblem judges a
+      # missing one first).
+      #
+      # @param operator [String] the rule's operator
+      # @param value [Object] the rule's value, as {.call} takes it
+      # @param target [RuleColumn] the column it is compared with
+      # @return [Symbol, nil]
+      def problem(operator, value, target)
+        operator_problem(operator, target) || (:unusable_value if call(operator, value, target).equal?(UNUSABLE))
+      end
+
+      # The reason the operator cannot be used on the column whatever the
+      # value (see {.problem}), or nil.
+      #
+      # @param operator [String] the rule's operator
+      # @param target [RuleColumn] the column it is compared with
+      # @return [Symbol, nil] :encrypted_column or :pattern_on_non_text
+      def operator_problem(operator, target)
+        return :encrypted_column if encrypted?(operator, target)
+
+        :pattern_on_non_text if SHAPES[operator] == :pattern && !target.column.nil? && !target.pattern?
       end
 
       # `current_user` stands for the user's id wherever one value is compared.

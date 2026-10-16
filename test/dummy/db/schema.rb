@@ -55,7 +55,7 @@ ActiveRecord::Schema.define do
   # PermissionForge tables (no prefix for test simplicity)
   create_table :permission_set_groups, force: true do |t|
     t.string  :uuid, null: false
-    t.string  :name, null: false, default: 'Untitled Permission Set Group'
+    t.string  :name, null: false
     t.string  :description
     t.boolean :is_active, null: false, default: true
     t.boolean :is_editable, null: false, default: true
@@ -68,7 +68,7 @@ ActiveRecord::Schema.define do
   create_table :permission_sets, force: true do |t|
     t.string  :uuid, null: false
     t.bigint  :permission_set_group_id
-    t.string  :name, null: false, default: 'Untitled Permission Set'
+    t.string  :name, null: false
     t.string  :description
     t.boolean :is_active, null: false, default: true
     t.boolean :is_editable, null: false, default: true
@@ -144,8 +144,8 @@ ActiveRecord::Schema.define do
     t.string  :uuid, null: false
     t.bigint  :permission_set_id, null: false
     t.bigint  :resource_id, null: false
-    t.string  :name, null: false, default: 'Untitled Rule'
-    t.string  :failure_message, default: 'You do not have permission to perform this action.'
+    t.string  :name, null: false
+    t.string  :failure_message
     t.string  :join_type
     t.string  :field_name, null: false
     t.string  :field_value, null: false

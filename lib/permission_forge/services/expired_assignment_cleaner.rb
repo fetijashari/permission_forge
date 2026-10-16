@@ -37,7 +37,8 @@ module PermissionForge
     # `assignment.revoked` names its own user). `actor:` (a user, an
     # Audit::Actor or a label String) and `reason:` say who ran it and why;
     # without a reason (none given, none in the context) the events carry
-    # DEFAULT_REASON. A dry run writes nothing.
+    # DEFAULT_REASON, a code (Audit::ReasonCodes) the admin renders in its
+    # language. A dry run writes nothing.
     #
     # Tenants: with a tenant ambient, that tenant's assignments. With none
     # (the rake task) every tenant's — also under acts_as_tenant's
@@ -50,7 +51,7 @@ module PermissionForge
       include Concerns::AuditedOperation
       include Concerns::AcrossTenants
 
-      DEFAULT_REASON = 'expired'.freeze
+      DEFAULT_REASON = PermissionForge::Audit::ReasonCodes::EXPIRED
 
       # The most user ids the summary event stores: the event's data must
       # stay well inside a MySQL TEXT column (64 KB) whatever the run's size.

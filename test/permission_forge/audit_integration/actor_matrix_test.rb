@@ -72,7 +72,7 @@ module PermissionForge
 
         PermissionForge.configuration.current_user_resolver = -> {}
         rename_through_api('By an anonymous client')
-        assert_actor ['api', nil, 'API client', 'api']
+        assert_actor ['api', nil, PermissionForge::Audit::ActorCodes::API_CLIENT, 'api']
       end
 
       test 'a rake task run with ACTOR=' do

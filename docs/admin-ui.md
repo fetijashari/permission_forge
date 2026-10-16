@@ -166,7 +166,7 @@ config.middleware.use ActionDispatch::Session::CookieStore
 config.middleware.use ActionDispatch::Flash
 ```
 
-Option A (HTTP Basic auth) then works as in any app, and so does Option B with a base controller of your own that inherits from `ActionController::Base` (not from your `ActionController::API` application controller: the admin renders views). Your own controllers stay API controllers; nothing else changes for them. The test suite drives this host (`test/support/docs_app.rb api_only`): the API answers, the admin names the middlewares, and behind them an admin page and a POST answer as in a full application.
+Option A (HTTP Basic auth) then works as in any app, and so does Option B with a base controller of your own that inherits from `ActionController::Base` (not from your `ActionController::API` application controller: the admin renders views). Your own controllers stay API controllers; nothing else changes for them. An API-only app also leaves out `Rack::MethodOverride`, which turns the admin's edit and delete forms (a POST with a hidden `_method`) into PATCH and DELETE: the engine brings its own (`PermissionForge::AdminMethodOverride`, in the engine's middleware stack, so it runs for the admin's paths only and never for the JSON API's), so you add nothing for it. The test suite drives this host (`test/support/docs_app.rb api_only`): the API answers, the admin names the middlewares, and behind them an admin page, a POST, a field drawer saved (PATCH) and a rule deleted (DELETE) answer as in a full application.
 
 ---
 
@@ -336,7 +336,7 @@ PermissionForge.configure do |config|
 end
 ```
 
-People are searched by `name`, `email`, `email_address` (Rails 8's authentication generator), `full_name`, `display_name`, `first_name`, `last_name`, `firstname`, `lastname`, `username` and `login`, whichever of those columns exist; a query of digits also matches the id.
+People are searched by `name`, `email`, `email_address` (Rails 8's authentication generator), `full_name`, `display_name`, `first_name`, `last_name`, `firstname`, `lastname`, `username` and `login`, whichever of those columns exist; a query of digits also matches the id. A column your User model encrypts (`encrypts`) is searched only when it is deterministic, for the whole query (see [How people are labelled and searched](configuration.md#how-people-are-labelled-and-searched)).
 
 The people list is also the boundary of who can be reached by id: a person `user_list_resolver` leaves out cannot be opened, assigned, added to a group or erased from these screens (404). A set's Assignments tab still lists every holder of the set. With multi-tenancy on and a users table that is not tenant-scoped, scope the resolver to the current tenant's users.
 

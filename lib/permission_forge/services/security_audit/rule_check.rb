@@ -17,14 +17,16 @@ module PermissionForge
           missing_rule_columns: %i[missing_column unknown_association unjoinable_association unknown_table],
           unknown_rule_operators: %i[unknown_operator unknown_join_type],
           unusable_rule_values: %i[unusable_value],
-          foreign_table_filter_rules: %i[foreign_table]
+          foreign_table_filter_rules: %i[foreign_table],
+          encrypted_rule_columns: %i[encrypted_column],
+          non_text_pattern_rules: %i[pattern_on_non_text]
         }.freeze
 
         def call
           return [no_rules] unless active_rules.exists?
 
-          [unenforced, missing_columns, unknown_operators, unusable_values, foreign_table_filters, secret_columns,
-           foreign_table_names, bypassed, text_operator_on_ids].compact
+          [unenforced, missing_columns, unknown_operators, unusable_values, foreign_table_filters, encrypted_columns,
+           non_text_patterns, secret_columns, foreign_table_names, bypassed, text_operator_on_ids].compact
         end
 
         private
@@ -82,8 +84,9 @@ module PermissionForge
           attention.broken_rules.select { |item| FINDING_KINDS.fetch(code).include?(item.problem.kind) }
         end
 
-        def held?(findings)
-          findings.any? { |item| item.people_count.positive? }
+        # The finding's severity: the first while people hold one of the rules, else the second.
+        def weight(findings, held, unheld)
+          findings.any? { |item| item.people_count.positive? } ? held : unheld
         end
 
         # Rules saved before PermissionSetRule checked the column, the table
@@ -93,7 +96,7 @@ module PermissionForge
           findings = broken(:missing_rule_columns)
           return if findings.empty?
 
-          finding(held?(findings) ? :high : :medium, :missing_rule_columns,
+          finding(weight(findings, :high, :medium), :missing_rule_columns,
                   'Rules naming a column, table or association that does not exist',
                   'The field name of these rules is not a column of their table (or not a name: a trailing or doubled ' \
                   'dot), names a table this database does not have, or their association path names an association ' \
@@ -113,7 +116,7 @@ module PermissionForge
           findings = broken(:unknown_rule_operators)
           return if findings.empty?
 
-          finding(held?(findings) ? :high : :medium, :unknown_rule_operators,
+          finding(weight(findings, :high, :medium), :unknown_rule_operators,
                   'Rules with an operator or join type this version does not know',
                   'The operator or join type of these rules is none this version of PermissionForge has — written ' \
                   'by a newer version (a rolling deploy), by another application on the shared tables, or past the ' \
@@ -132,7 +135,7 @@ module PermissionForge
           findings = broken(:unusable_rule_values)
           return if findings.empty?
 
-          finding(held?(findings) ? :medium : :low, :unusable_rule_values, 'Rules that match nothing',
+          finding(weight(findings, :medium, :low), :unusable_rule_values, 'Rules that match nothing',
                   'The value of these rules is not one their column can hold: text on a number column, a word that ' \
                   'is no boolean, an unknown enum label, a date that is not ISO 8601 (on MySQL and SQLite), a list ' \
                   'or range with the wrong number of values. Such a rule matches nothing: everyone it applies to is ' \
@@ -147,12 +150,43 @@ module PermissionForge
         def foreign_table_filters
           findings = broken(:foreign_table_filter_rules).presence or return
 
-          finding(held?(findings) ? :high : :medium, :foreign_table_filter_rules,
+          finding(weight(findings, :high, :medium), :foreign_table_filter_rules,
                   'Filter rules naming a table of another model',
                   'The field name of these filter rules is qualified with the table of another model. A filter rule ' \
                   'compares its own model\'s table, so such a rule matches nothing: everyone it applies to is denied ' \
                   'every record of the resource. For a column of another table, use a join rule (a join type and the ' \
                   'relationship path in field_accessor_path).', items: findings.map { |item| rule_item(item.rule) })
+        end
+
+        # Rules comparing a value with an encrypted attribute (RuleProblem
+        # :encrypted_column): the column holds ciphertext, so such a rule
+        # matches nothing. Saved before the host encrypted the attribute, or
+        # written past the model.
+        def encrypted_columns
+          findings = broken(:encrypted_rule_columns).presence or return
+
+          finding(weight(findings, :high, :medium), :encrypted_rule_columns,
+                  'Rules comparing an encrypted attribute',
+                  'These rules compare a value with an attribute the model declares with `encrypts` (Active Record ' \
+                  'encryption): the column holds its ciphertext, so the comparison never matches and everyone the rule ' \
+                  'applies to is denied every record of the resource. Only is_null / is_not_null can be asked of such a ' \
+                  'column. Compare another column, or remove the rule (see "Encrypted attributes" in ' \
+                  'docs/row-level-rules.md).', items: findings.map { |item| rule_item(item.rule) })
+        end
+
+        # LIKE rules on a column no pattern can be matched against (RuleProblem
+        # :pattern_on_non_text): a json column, or on PostgreSQL any column
+        # that is not text. Reported as unusable_rule_values before 0.15.
+        def non_text_patterns
+          findings = broken(:non_text_pattern_rules).presence or return
+
+          finding(weight(findings, :medium, :low), :non_text_pattern_rules,
+                  'Pattern rules on a column that is not text',
+                  'These rules use contains, not_contains, starts_with or ends_with on a column that holds no text ' \
+                  '(a number, a date, a boolean, a uuid or a json document on PostgreSQL; a json column everywhere): such ' \
+                  'a rule matches nothing, so everyone it applies to is denied every record of the resource. Use a ' \
+                  'condition that compares values (equal, in, between), or remove the rule.',
+                  items: findings.map { |item| rule_item(item.rule) })
         end
 
         # Rules in effect comparing a column that holds a secret
@@ -163,8 +197,9 @@ module PermissionForge
           findings = attention.secret_rules.presence or return
 
           finding(:medium, :secret_rule_columns, 'Rules comparing a column that holds a secret',
-                  'These rules compare a password digest, a token, an encrypted value or a secret ' \
-                  '(config.rule_secret_column_patterns). They still apply, but who can read which record tells the ' \
+                  'These rules compare a password digest, a token, an `encrypted_*` column or a secret ' \
+                  '(config.rule_secret_column_patterns; an attribute declared with `encrypts` is ' \
+                  'encrypted_rule_columns). They still apply, but who can read which record tells the ' \
                   'secret apart, and the rule value is stored and shown in the admin and the API. Compare another ' \
                   'column, or remove the rule; a new rule on such a column is refused.',
                   items: findings.map { |item| secret_rule_item(item.rule) })

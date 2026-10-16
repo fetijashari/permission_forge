@@ -26,7 +26,8 @@ module PermissionForge
       # - the recommended mask strategy of a sensitive column, whether or not
       #   the row is masked now, so masking it later uses the right one;
       #   'full' otherwise;
-      # - the label (the humanized name), active, editable.
+      # - the label (the name itself: never English made up from it — the
+      #   admin shows the host's translation, or the name), active, editable.
       #
       # A blank name (a host whose extra_fields_method lists one) is no row,
       # nor is a level that is none (FieldLevel.row?: Unchanged on a Muting
@@ -66,7 +67,7 @@ module PermissionForge
           match = @sensitive.match(name)
           level = PermissionForge::FieldLevel.capped(effective_level(level, match), resource_edit: @resource.edit_access, muting: @muting)
           flags = PermissionForge::FieldLevel.flags_for(level, muting: @muting)
-          { name: name, label: name.humanize, is_active: true, is_editable: true, mask_strategy: match&.strategy || 'full' }
+          { name: name, label: name, is_active: true, is_editable: true, mask_strategy: match&.strategy || 'full' }
             .merge(flags)
             .merge(timestamps.overrides(name, read: flags[:read_access]))
         end

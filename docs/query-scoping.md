@@ -236,7 +236,9 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   - **Version 7 (0.15):** every rule the application layer matches nothing for compiles to
     `FALSE` (an operator, join type or table this version does not know, a relationship
     path no join is built through, a value the column cannot hold — now also for `uuid`,
-    `inet`, `cidr`, native enum, `json` and array columns); an assignment counts until its
+    `inet`, `cidr`, native enum, `json` and array columns —, and a value compared with an
+    attribute declared with `encrypts`, whose column holds ciphertext; its `is_null` /
+    `is_not_null` compile as before); an assignment counts until its
     `expires_at`, that instant included (`>= now()`, as the application layer); and the
     `view_all` bypass reads "no activation condition" as the application layer does — a
     set with only an end hour no longer bypasses the rules (policies from before version 7

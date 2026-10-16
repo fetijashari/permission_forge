@@ -92,7 +92,7 @@ module PermissionForge
 
       test 'a new record shows a blank for a column default; a saved record shows what it holds' do
         rule = PermissionForge::PermissionSetRule.new
-        assert_equal 'You do not have permission to perform this action.', rule.failure_message, 'the column default (install migration)'
+        assert_nil rule.failure_message, 'the model declares none (an earlier install migration gave the column an English default)'
         assert_equal '', Prefill.text(rule, :failure_message)
         assert_equal '', Prefill.text(rule, :name)
 

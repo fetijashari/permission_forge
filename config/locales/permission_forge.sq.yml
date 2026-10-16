@@ -173,6 +173,9 @@ sq:
         what: Çfarë
         who: Kush, ku dhe pse
     audit_log:
+      actor_codes:
+        api_client: Klient API
+        boot: Nisja e aplikacionit
       actor_named:
         api: "%{name} (API)"
         basic_auth: "%{name} (dritarja e fjalëkalimit)"
@@ -215,6 +218,8 @@ sq:
       page_of: Faqja %{page} nga %{pages}
       pages_label: Faqet
       person_id: 'Personi #%{id}'
+      reason_codes:
+        expired: Data e mbarimit kishte kaluar
       reason_inline: 'Arsyeja: %{reason}'
       refused:
         body: Leximi i regjistrit të auditimit kufizohet nga cilësimi audit_log_authorization,
@@ -1865,7 +1870,7 @@ sq:
           name: Variabli i sesionit në bazën e të dhënave
         rule_secret_column_patterns:
           desc: Rregullat e regjistrimeve nuk mund të krahasojnë kolona që përputhen
-            me këto modele (përmbledhje fjalëkalimesh, tokene, vlera të enkriptuara).
+            me këto modele (përmbledhje fjalëkalimesh, tokene, kolona encrypted_*).
             Një listë bosh i lejon.
           name: Modele kolonash sekrete
         snapshot_transactions:
@@ -2353,9 +2358,14 @@ sq:
         problems:
           empty_association: Shtegu i lidhjeve ka një hap bosh (dy pika njëra pas
             tjetrës, ose një pikë në fillim)
+          encrypted_column: "%{name} e %{model} është e enkriptuar: baza e të dhënave
+            mban tekstin e saj të shifruar, ndaj një rregull mund të kontrollojë vetëm
+            nëse është bosh"
           foreign_table_html: "%{name} është tabelë e një modeli tjetër: një rregull
             filtri krahason vetëm kolonat e %{model}"
           missing_column_html: "%{name} nuk është kolonë e %{model}"
+          pattern_on_non_text: "%{name} e %{model} nuk është tekst: një kusht modeli
+            (përmban, fillon me, mbaron me) nuk mund ta përputhë"
           unjoinable_association: "%{name} është lidhje e %{model} që një rregull
             nuk mund ta ndjekë"
           unjoinable_class_not_loadable: "%{name} është lidhje e %{model}, modeli
@@ -2466,6 +2476,9 @@ sq:
           me presje për operatorin between
         empty_association: ka një emër bosh lidhjeje (dy pika njëra pas tjetrës, ose
           një pikë në fillim)
+        encrypted_column: 'emërton %{name}, një atribut të enkriptuar të %{model}:
+          baza e të dhënave mban tekstin e tij të shifruar, ndaj një rregull mund
+          të kontrollojë vetëm nëse është bosh (is_null, is_not_null)'
         field_value_required: kërkohet për këtë operator
         foreign_table: 'emërton %{name}, një tabelë që nuk është e %{model}: një rregull
           filtri krahason tabelën e vet. Për një kolonë të një tabele tjetër, përdorni
@@ -2478,8 +2491,10 @@ sq:
         nul_byte: nuk duhet të përmbajë bajt NUL
         numeric_or_date_required: duhet të jetë vlerë numerike ose datë për operatorët
           e krahasimit
+        pattern_on_non_text: 'përputh vetëm tekst, dhe %{model}.%{name} është kolonë
+          e llojit %{type}: përdorni një kusht që krahason vlera'
         secret_column: 'përmend një kolonë që mban një sekret (përmbledhje fjalëkalimi,
-          token, vlerë e enkriptuar): një rregull regjistrimesh nuk krahason kurrë
+          token, kolonë encrypted_*): një rregull regjistrimesh nuk krahason kurrë
           një të tillë'
         unjoinable_association: përmend %{association}, një lidhje e %{model} që një
           rregull nuk mund ta bashkojë

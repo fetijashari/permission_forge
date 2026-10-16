@@ -27,7 +27,7 @@ module PermissionForge
     # The install migration's column default for label: a row created
     # without one (the API, the console) would show it everywhere the admin
     # names the field.
-    UNTITLED_LABEL = 'Untitled Field'.freeze
+    UNTITLED_LABEL = PermissionForge::GeneratedText::UNTITLED_FIELD
 
     before_validation :default_label, on: :create
 
@@ -147,12 +147,13 @@ module PermissionForge
     private
 
     # A new row without a label (blank, or the column default) is labelled
-    # as generated rows are: the humanized name. Only on create: a label an
-    # admin set later is never replaced.
+    # as generated rows are: with its name — never English made up from it
+    # (the admin shows the host's translation, or the name: GeneratedText).
+    # Only on create: a label an admin set later is never replaced.
     def default_label
       return if name.blank? || (label.present? && label != UNTITLED_LABEL)
 
-      self.label = name.to_s.humanize
+      self.label = name.to_s
     end
 
     def mask_access?

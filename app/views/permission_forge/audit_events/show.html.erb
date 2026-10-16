@@ -38,7 +38,7 @@
       <dt><%= t('.source') %></dt>
       <dd><%= pf_audit_source_label(event.source) %> <span class="pf-mono-key"><%= event.source %></span></dd>
       <dt><%= t('.reason') %></dt>
-      <dd><%= event.reason.presence || t('.no_reason') %></dd>
+      <dd><%= pf_audit_reason(event) || t('.no_reason') %></dd>
       <dt><%= t('.request_id') %></dt>
       <dd class="pf-audit-code"><%= event.request_id.presence || t('permission_forge.audit_log.no_value') %></dd>
       <dt><%= t('.ip') %></dt>

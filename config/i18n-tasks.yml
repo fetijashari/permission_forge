@@ -48,6 +48,9 @@ ignore_unused:
   - 'permission_forge.resource_actions.states.*'
   - 'permission_forge.audit_log.sentences.*'
   - 'permission_forge.audit_log.actor_named.*'
+  # Codes the gem stores on an event itself (Audit::ActorCodes, Audit::ReasonCodes), read by key.
+  - 'permission_forge.audit_log.actor_codes.*'
+  - 'permission_forge.audit_log.reason_codes.*'
   - 'permission_forge.audit_log.boolean.*'
   - 'permission_forge.audit_log.categories.*'
   - 'permission_forge.audit_log.sources.*'

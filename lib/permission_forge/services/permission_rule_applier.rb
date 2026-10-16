@@ -65,14 +65,21 @@ module PermissionForge
       # nothing denied.
       #
       # What a rule says when it denies: its `failure_message` as an admin
-      # wrote it, or — for a rule left without one — the gem's own sentence in
+      # wrote it, or — for a rule left without one, or holding the install
+      # migration's English default (PermissionForge::GeneratedText: a rule
+      # created before 0.15 without a message) — the gem's own sentence in
       # the current locale (permission_forge.denials.rule_default). The one
-      # definition: NotAuthorizedError#failure_messages reads it too.
+      # definition: NotAuthorizedError#failure_messages reads it too. The
+      # permission hash keeps the stored text (it is cached per user, not per
+      # locale): the reading happens here, at denial time.
       #
       # @param rule [Hash] a rule hash of the permission hash
       # @return [String]
       def self.failure_message_for(rule)
-        rule[:failure_message].to_s.strip.presence || I18n.t('permission_forge.denials.rule_default')
+        message = rule[:failure_message].to_s.strip
+        return message unless message.empty? || PermissionForge::GeneratedText.failure_message?(message)
+
+        I18n.t('permission_forge.denials.rule_default')
       end
 
       # @return [Array(ActiveRecord::Relation, Array<String>, Array<Hash>)]

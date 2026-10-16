@@ -3,6 +3,7 @@ require_relative 'cache_warnings'
 require_relative 'boot_checks'
 require_relative 'masking_sync'
 require_relative 'masked_models'
+require_relative 'admin_method_override'
 
 module PermissionForge
   # Wires the gem into the host application: initializers, the executor and
@@ -16,6 +17,13 @@ module PermissionForge
     config.generators do |g|
       g.test_framework :minitest
     end
+
+    # The admin's edit and delete forms POST with a hidden `_method`: the
+    # engine's own stack (it runs for the engine's routes only) turns them
+    # into PATCH / DELETE, so an API-only host, which has no
+    # Rack::MethodOverride, needs nothing for it. The JSON API's paths are
+    # left alone (AdminMethodOverride).
+    config.middleware.use PermissionForge::AdminMethodOverride
 
     # A denial nobody rescues answers 403, not 500: the row-rule refusal of
     # find_by / find_by! and the action guard's refusal (Rails' exceptions

@@ -297,7 +297,7 @@ module PermissionForge
           post pf("#{@base}/review"), params: params
 
           assert_response :success
-          assert_match I18n.t('permission_forge.ui.changes.action_new_on', resource: 'Customer', action: 'Archive'), response.body
+          assert_match I18n.t('permission_forge.ui.changes.action_new_on', resource: 'Customer', action: 'archive'), response.body
           assert_match I18n.t('permission_forge.ui.changes.action_managed_first'), response.body
           assert_select '.pf-change-list li', count: 1
           assert_select "input[type=hidden][name='pf[new_actions][#{@resource.id}][archive][is_permitted]'][value='1']"
@@ -319,7 +319,7 @@ module PermissionForge
         discovering do
           post pf("#{@base}/review"), params: new_action_params('archive' => { is_permitted: '0' }, 'merge' => { is_permitted: '1' })
 
-          assert_match I18n.t('permission_forge.ui.changes.action_new_off', resource: 'Customer', action: 'Archive'), response.body
+          assert_match I18n.t('permission_forge.ui.changes.action_new_off', resource: 'Customer', action: 'archive'), response.body
           assert_match I18n.t('permission_forge.ui.changes.action_managed_already', sets: 'Managers'), response.body
           assert_match I18n.t('permission_forge.ui.changes.action_managed_nobody'), response.body
         end
@@ -341,7 +341,7 @@ module PermissionForge
         params = { pf: { new_actions: { resource.id => { 'export' => { is_permitted: '1' } } } } }
         discovering do
           post pf("/permission_sets/#{muting.id}/resources/Customer/review"), params: params
-          assert_match I18n.t('permission_forge.ui.changes.action_new_muted', resource: 'Customer', action: 'Export'), response.body
+          assert_match I18n.t('permission_forge.ui.changes.action_new_muted', resource: 'Customer', action: 'export'), response.body
           assert_match I18n.t('permission_forge.ui.changes.action_managed_already', sets: 'Sales rep'), response.body
 
           patch pf("/permission_sets/#{muting.id}/resources/Customer/apply"), params: params

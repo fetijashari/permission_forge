@@ -167,6 +167,9 @@ en:
         what: What
         who: Who, where and why
     audit_log:
+      actor_codes:
+        api_client: API client
+        boot: Application start
       actor_named:
         api: "%{name} (API)"
         basic_auth: "%{name} (password prompt)"
@@ -209,6 +212,8 @@ en:
       page_of: Page %{page} of %{pages}
       pages_label: Pages
       person_id: 'Person #%{id}'
+      reason_codes:
+        expired: Its end date had passed
       reason_inline: 'Reason: %{reason}'
       refused:
         body: Reading the audit log is limited by the audit_log_authorization setting,
@@ -1820,7 +1825,7 @@ en:
           name: Database session variable
         rule_secret_column_patterns:
           desc: Record rules may not compare columns matching these patterns (password
-            digests, tokens, encrypted values). An empty list allows them.
+            digests, tokens, encrypted_* columns). An empty list allows them.
           name: Secret column patterns
         snapshot_transactions:
           desc: 'Whether a database transaction keeps seeing the data as it was when
@@ -2297,9 +2302,13 @@ en:
         problems:
           empty_association: The relationship path has an empty step (two dots in
             a row, or a dot at the start)
+          encrypted_column: "%{name} of %{model} is encrypted: the database holds
+            its ciphertext, so a rule can only check whether it is empty"
           foreign_table_html: "%{name} is a table of another model: a filter rule
             compares %{model}'s own columns"
           missing_column_html: "%{name} is not a column of %{model}"
+          pattern_on_non_text: "%{name} of %{model} is not text: a pattern condition
+            (contains, starts with, ends with) cannot match it"
           unjoinable_association: "%{name} is a relationship of %{model} that a rule
             cannot follow"
           unjoinable_class_not_loadable: "%{name} is a relationship of %{model} whose
@@ -2407,6 +2416,9 @@ en:
           for between operator
         empty_association: has an empty association name (two dots in a row, or a
           dot at the start)
+        encrypted_column: 'names %{name}, an encrypted attribute of %{model}: the
+          database holds its ciphertext, so a rule can only check whether it is empty
+          (is_null, is_not_null)'
         field_value_required: is required for this operator
         foreign_table: 'names %{name}, a table that is not %{model}''s: a filter rule
           compares its own table. For a column of another table, use a join rule (a
@@ -2418,8 +2430,10 @@ en:
         invalid_operator: is not a valid operator
         nul_byte: must not contain a NUL byte
         numeric_or_date_required: must be a numeric or date value for comparison operators
+        pattern_on_non_text: 'matches text only, and %{model}.%{name} is a column
+          of type %{type}: use a condition that compares values'
         secret_column: 'names a column that holds a secret (a password digest, a token,
-          an encrypted value): a record rule never compares one'
+          an encrypted_* column): a record rule never compares one'
         unjoinable_association: names %{association}, an association of %{model} that
           a rule cannot join
         unjoinable_class_not_loadable: names %{association}, an association of %{model}

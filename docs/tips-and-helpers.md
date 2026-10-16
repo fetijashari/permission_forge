@@ -147,7 +147,7 @@ module PermissionHelpers
         uuid: SecureRandom.uuid,
         resource: resource,
         name: col,
-        label: col.humanize,
+        label: col,
         read_access: true,
         edit_access: true
       )

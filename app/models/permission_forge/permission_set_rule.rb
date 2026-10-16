@@ -45,6 +45,14 @@ module PermissionForge
     # the admin's rule builder alike (the one default; the column's own
     # default, true on installs before 0.15, is not read for a new row).
     attribute :include_nulls, :boolean, default: false
+    # A name and a blocked message are what an admin writes: none unless
+    # given. The columns of installs made before 0.15 have English defaults
+    # ('Untitled Rule', 'You do not have permission to perform this
+    # action.'), which a rule created through the API or in code stored as
+    # if written — the name is a validation error now, and a rule without a
+    # message denies with the locale's sentence (GeneratedText).
+    attribute :name, default: nil
+    attribute :failure_message, default: nil
 
     # Whether a join_type means "filter on the model's own table": nothing,
     # blank or 'filter'. The one definition — the applier, the default scope
@@ -91,6 +99,7 @@ module PermissionForge
     validate :validate_field_name_segments, if: :field_name_check_due?
     validate :validate_field_accessor_path, if: :path_check_due?
     validate :validate_field_name_column, if: :column_check_due?
+    validate :validate_encrypted_column, if: :encrypted_check_due?
     validate :validate_secret_column
     validate :validate_field_value_text, if: -> { !copied_unchanged?(:field_value) && (new_record? || will_save_change_to_field_value?) }
     validate :validate_field_value_for_operator, unless: -> { copied_unchanged?(:operator, :field_value) }
@@ -174,6 +183,22 @@ module PermissionForge
       new_record? || column_parts != column_parts_was
     end
 
+    # An encrypted column is checked with the column (a new rule, a change
+    # of its name, path, join type or model) and when the operator moves off
+    # the null checks: a rule stored before the host encrypted the attribute
+    # stays editable in its other attributes, its value and its operator
+    # among the ones that take a value (it matches nothing either way). A
+    # copy keeps its original's.
+    def encrypted_check_due?
+      column_check_due? || operator_left_null_checks?
+    end
+
+    def operator_left_null_checks?
+      return false if copied_unchanged?(:operator) || !will_save_change_to_operator?
+
+      PermissionForge::Operators::Validations.valueless?(operator_in_database) && !valueless_operator?
+    end
+
     # A join rule's path is checked on a new rule and when the path, the join
     # type or the model changes; a row that already carries a path that
     # cannot be followed stays editable in its other attributes (it matches
@@ -212,6 +237,17 @@ module PermissionForge
 
       problem = column_problem
       errors.add(:field_name, problem.validation_message) if problem
+    end
+
+    # A column that holds ciphertext (an attribute declared with `encrypts`:
+    # Operators::RuleProblem :encrypted_column) cannot be compared with a
+    # value: the database holds the ciphertext. Only is_null / is_not_null
+    # can be asked of it.
+    def validate_encrypted_column
+      return if field_name.blank? || errors[:field_name].any?
+
+      problem = PermissionForge::Operators::RuleProblem.of_value(self, verified_column || nil)
+      errors.add(:field_name, problem.validation_message) if problem&.kind == :encrypted_column
     end
 
     # A column that holds a secret (PermissionForge::SecretColumns:
@@ -274,14 +310,21 @@ module PermissionForge
 
     # A value the column cannot hold (Operators::RuleProblem.of_value: `'5_id'`
     # on an integer column, `'banana'` on a uuid one) would make the rule
-    # match nothing for everyone it applies to. Judged only when the rule
-    # has no other problem and its column can be told (the columns compared
-    # with the database first, as for the column check).
+    # match nothing for everyone it applies to — and so would a LIKE operator
+    # on a column no pattern can be matched against, which is the operator's
+    # fault, not the value's. Judged only when the rule has no other problem
+    # and its column can be told (the columns compared with the database
+    # first, as for the column check). An encrypted column has its own check
+    # and occasions (validate_encrypted_column).
+    VALUE_PROBLEM_ATTRIBUTES = { unusable_value: :field_value, pattern_on_non_text: :operator }.freeze
+    private_constant :VALUE_PROBLEM_ATTRIBUTES
+
     def validate_field_value_column
       return if errors.any? || field_value.blank?
 
       problem = PermissionForge::Operators::RuleProblem.of_value(self, verified_column || nil)
-      errors.add(:field_value, problem.validation_message) if problem
+      attribute = problem && VALUE_PROBLEM_ATTRIBUTES[problem.kind]
+      errors.add(attribute, problem.validation_message) if attribute
     end
 
     def validate_field_value_for_operator

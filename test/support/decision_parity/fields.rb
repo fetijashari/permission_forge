@@ -53,7 +53,7 @@ module PermissionForge
 
         assert_equal presets, bulk
         assert_equal presets, generated
-        assert_includes presets, ['email', true, false, false, 'email', 'Email']
+        assert_includes presets, ['email', true, false, false, 'email', 'email']
         assert(presets.none? { |row| row[2] }, 'no row is editable on a Resource without Edit')
       end
 
@@ -76,8 +76,8 @@ module PermissionForge
           generated = resource.resource_fields.reload.map(&ROW).sort
 
           assert_equal presets, bulk
-          assert_includes presets, ['domain', true, false, true, 'full', 'Domain']
-          assert_includes generated, ['domain', false, false, false, 'full', 'Domain']
+          assert_includes presets, ['domain', true, false, true, 'full', 'domain']
+          assert_includes generated, ['domain', false, false, false, 'full', 'domain']
         end
       end
 

@@ -448,7 +448,7 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
   }'
 # Response: 201 Created
 # "label" is what the admin shows; a missing or blank label defaults to the
-# humanized name ("email_address" → "Email address")
+# field's name ("email_address"): the admin shows your translation of it, or the name
 # mask_strategy options: "full", "email", "last4", "first1_last4",
 #                        plus any keys from config.custom_mask_strategies
 # Duplicate field names within a resource return 422

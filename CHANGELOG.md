@@ -57,8 +57,8 @@ and the RLS re-sync.
   fully until the row or the configuration is fixed.
   <!-- pin: test/permission_forge/services/security_audit_integrity_check_test.rb#a field in effect with a mask strategy this app does not know is reported, high while people hold the set -->
 - **`rake permission_forge:audit` reports `secret_rule_columns`** (Medium): record rules in effect that compare a
-  password digest, a token, an encrypted value or a secret (`config.rule_secret_column_patterns`). The item leaves the
-  rule value out.
+  password digest, a token, an `encrypted_*` column or a secret (`config.rule_secret_column_patterns`, by name; an
+  attribute declared with `encrypts` is `encrypted_rule_columns`, under Changed). The item leaves the rule value out.
   <!-- pin: test/permission_forge/admin/attention_parity_test.rb#secret_rule_columns: the audit's finding is on a Home card (secret_rules) -->
 - **`rake permission_forge:audit` has a `conditions` check**: `incomplete_conditions` (Medium — stored activation
   conditions nobody can judge: an IP entry that is not an address, a list with no entry, the same start and end hour,
@@ -1079,6 +1079,77 @@ and the RLS re-sync.
   meant.
   <!-- pin: test/permission_forge/release_readiness/integer_param_guard_test.rb#the audit log reads its page with the one reader: a number past the last page is the last page -->
 
+- **A rule comparing a value with an attribute declared with `encrypts` is refused, and a stored one is named.**
+  Active Record encryption keeps the column's name and stores the ciphertext in it; a rule compares the column in raw
+  SQL, so `phone equal '+1 555 0100'` compared the plaintext with the ciphertext — deterministic encryption included
+  (Active Record encrypts a value only in `where(attribute: value)`) — and silently matched nothing (field test round 7,
+  E#73). Every built-in operator that takes a value now matches nothing on such a column in the application layer and in
+  the RLS policy (version 7 compiles it to `FALSE`), and `PermissionSetRule` refuses a new rule — or a change of its
+  column, path, join type or resource, or of its operator off the null checks — on `field_name` ("names phone, an
+  encrypted attribute of Customer: the database holds its ciphertext, so a rule can only check whether it is empty";
+  en, sq, mk; the JSON API answers 422). `is_null` / `is_not_null` keep working: the ciphertext is NULL exactly when the
+  value is. A rule saved before the host encrypted the attribute stays editable in its other attributes (a copy keeps
+  it as it is), the audit lists it as `encrypted_rule_columns` (High while people hold the set) and Home under "Rules
+  that match nothing" (`Operators::RuleProblem` kind `:encrypted_column`; one reader of the declarations,
+  `PermissionForge::EncryptedAttributes`, a canary watches `encrypted_attributes`). Under
+  `support_unencrypted_data` such a rule used to match the rows still stored in plaintext; it no longer does.
+  **Opt out:** compare a deterministically encrypted attribute through a custom operator whose strategy calls
+  `query.where(attribute => value)` (a custom operator gets the value as written).
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_column_test.rb#a new rule comparing a value with an encrypted attribute is refused on field_name, with a message in every locale -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_column_test.rb#a stored one matches nothing, is named, and stays editable in its other attributes -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_column_test.rb#it is checked again when its column changes or its operator moves off the null checks -->
+  <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#encrypted_column: a row written past the model is named, denies, is listed, compiles to FALSE -->
+  <!-- pin: test/rls/rls_rule_parity_test.rb#a rule on an encrypted attribute: the null checks agree, every other built-in operator matches nothing -->
+- **A LIKE operator on a column that is not text is refused on `operator`, naming the column's type.** `seats
+  contains '1'` on an integer column (PostgreSQL), or any LIKE operator on a `json` column, was refused as "is not a
+  value Customer.seats can hold" on `field_value`, although the value was fine (field test round 7, D#22). It is now
+  "matches text only, and Customer.seats is a column of type integer: use a condition that compares values" on
+  `operator` (en, sq, mk; the JSON API's 422 is keyed `operator`), checked on the same occasions as a value; a stored one
+  still matches nothing, and the audit lists it as `non_text_pattern_rules` (Medium while people hold the set) instead of
+  `unusable_rule_values` (`Operators::ValueTyping.problem`, `RuleProblem` kind `:pattern_on_non_text`). **No opt-out:**
+  such a rule never matched anything; a client that reads the 422 reads `operator`, and an alert on the finding's name
+  uses the new one.
+  <!-- pin: test/permission_forge/models/permission_set_rule_pattern_operator_test.rb#a LIKE operator on a column no pattern matches is refused on operator, naming the column type -->
+  <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#POST create answers 422 on operator, naming the column type, for a LIKE operator on a column it cannot match -->
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#a LIKE operator on an integer, date or boolean column is refused on operator, naming the column type -->
+  <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#pattern_on_non_text: a row written past the model is named, denies, is listed, compiles to FALSE -->
+- **Field and action rows the gem creates are labelled with their name, never with English made up from it.** The
+  field generator, the admin's presets, Sync and bulk add, a row created without a label, and an action row added from
+  a controller action stored `name.humanize` ("Billing email", "Created at"), which the Albanian and Macedonian admin
+  then showed as if an admin had written it (field test round 7, A#127); a field label an admin blanks is stored as the
+  name too (it went back to the humanized English). Rows already stored keep their label;
+  `PermissionForge::GeneratedText` recognises a label equal to the name, to the humanized name or to "Untitled Field" as
+  generated. `release_readiness/inflection_guard_test.rb` scans all of `lib/permission_forge` now. **Opt out:** write a
+  label of your own (admin or API), or translate the column (`activerecord.attributes.<model>.<column>`).
+  <!-- pin: test/permission_forge/services/resource_field_generator_test.rb#labels a generated row with its column name, never the humanized English -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#an action row made from a controller action key is labelled with the key -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#a field label an admin blanks is stored as the name -->
+  <!-- pin: test/permission_forge/release_readiness/inflection_guard_test.rb#nothing in app/ or lib/permission_forge inflects English -->
+- **A Permission Set, a group or a rule created without a name is refused, and a rule created without a blocked
+  message stores none.** The install migration's English column defaults ("Untitled Permission Set", "Untitled
+  Permission Set Group", "Untitled Rule", "You do not have permission to perform this action.") were stored by an API
+  create or a create in code that sent none, and then shown in every language, returned by
+  `NotAuthorizedError#failure_messages` and recorded as the audit's `record_label` (field test round 7, D#47). The models
+  declare no default (`attribute :name, default: nil`, `attribute :failure_message, default: nil`), so the JSON API
+  answers 422 on `name`; the install migration of a new install gives those columns no default (an upgraded install
+  keeps its column defaults: the model's wins; see the migration guide). A rule whose stored message is the install
+  default denies with the locale's sentence (`permission_forge.denials.rule_default`), read at denial time — the cached
+  permission hash keeps the stored text. **Opt out:** send a name, and write a `failure_message` of your own.
+  <!-- pin: test/permission_forge/generated_text_test.rb#a Permission Set, a group or a rule created without a name is refused, in every locale -->
+  <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#POST create without a name answers 422 on name for a Permission Set, a group and a rule -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#a rule created without a blocked message stores none, and denies with the sentence of the locale -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#a stored install default denies with the sentence of the current locale -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#the install migration gives no name of a set, group or rule and no blocked message an English default -->
+- **The audit log's own words are codes, shown in the page's language.** The reason the expired-assignment cleanup
+  records when given none (`expired`, `Audit::ReasonCodes`) read "Arsyeja: expired" on an Albanian page (field test
+  round 7, E#70); the event page, the log's rows and a person's audit tab render it from the locale
+  (`pf_audit_reason`). An API change nobody names is stored with the actor label `api_client` (was "API client") and
+  the settings observer's `boot` is a code too (`Audit::ActorCodes`); `Admin::ActorLabel` names both in the page's
+  language (also an "API client" stored before). The CSV export and the API return the stored values. **Opt out:** set
+  `config.audit_actor_resolver`, so an API change names its client.
+  <!-- pin: test/permission_forge/audit/generated_codes_test.rb#the cleaner records the reason code, and the event page, the log and the person tab render it translated -->
+  <!-- pin: test/permission_forge/audit/generated_codes_test.rb#an API client nobody names and the boot are stored as codes and named in the locale -->
+
 ### Deprecated
 
 - **An `api_auth` that sets `@admin = true` on the controller to open `GET /api/stats`.** Set
@@ -1428,13 +1499,13 @@ and the RLS re-sync.
 - **`GdprFieldAuditor`'s `view_all_on_pii_resource` finding listed switched-off field rows** among the resource's
   personal-data fields.
   <!-- pin: test/permission_forge/services/gdpr_field_auditor_view_all_test.rb#a switched-off field row is not among the personal-data fields of a bypassing resource -->
-- **A field row created without a label is labelled with its humanized name.** A `ResourceField` created through the
+- **A field row created without a label is labelled with its name.** A `ResourceField` created through the
   API or a console without a label took the install migration's column default, "Untitled Field", and the admin
   (Home's privacy audit, the Fields tab) showed that instead of the field; generated rows already had a label from
-  their name. A new row whose label is blank or "Untitled Field" now gets the name's label (`billing_email` →
-  "Billing email") on create; a label set later is kept, and existing rows are not changed (rename them in the admin).
-  Resource actions have no label default (a blank one reads as the action key).
-  <!-- pin: test/permission_forge/models/resource_field_test.rb#a new row without a label is labelled with its humanized name -->
+  their name. A new row whose label is blank or "Untitled Field" now gets its name as its label (`billing_email`) on
+  create; a label set later is kept, and existing rows are not changed (rename them in the admin). Resource actions
+  have no label default (a blank one reads as the action key).
+  <!-- pin: test/permission_forge/models/resource_field_test.rb#a new row without a label is labelled with its name -->
   <!-- pin: test/permission_forge/models/resource_field_test.rb#the label default applies on create only -->
 - **The console shows the gem's own configuration names.** With `filter_parameters_integration` the GDPR pattern
   `\Aname\z` (meant for people's names) reached the gem's models through `ActiveRecord::Base.filter_attributes`, so
@@ -1676,6 +1747,24 @@ and the RLS re-sync.
   now get the JSON 404 envelope, the bodies the 400 envelope an unreadable JSON body gets.
   <!-- pin: test/permission_forge/api/unmatched_routes_test.rb#OPTIONS and TRACE under the API answer the JSON 404 envelope -->
   <!-- pin: test/permission_forge/api/envelope_schema_test.rb#~answers the schema in its success and in every error class -->
+
+- **Every admin form works in an API-only application.** `rails new --api` also leaves out `Rack::MethodOverride`, so
+  with the three middlewares docs/admin-ui.md names, every edit and delete form (a POST with a hidden `_method`) answered
+  404 "No route matches [POST] …" (field test round 7, D#67). The engine brings its own,
+  `PermissionForge::AdminMethodOverride`, in the engine's middleware stack: it runs for the admin's paths only (a
+  full-stack host's own is a no-op before it) and never for the JSON API's, where `_method` and
+  `X-HTTP-Method-Override` change nothing.
+  <!-- pin: test/permission_forge/engine_method_override_test.rb#an admin form posted with _method=delete reaches the destroy route -->
+  <!-- pin: test/permission_forge/engine_method_override_test.rb#the JSON API is left alone: _method and the override header do not change its verb -->
+  <!-- pin: test/permission_forge/docs/doc_samples_test.rb#an API-only host: the JSON API works, the admin names the middlewares it needs -->
+- **The admin reads a person's encrypted name or email decrypted.** With `encrypts :email` (or `:name`) on the user
+  model, people labels (and the default `profile_builder`'s profile) showed the ciphertext JSON, the people search's
+  LIKE matched it (`iv` found everyone) and bulk assignment compared it with the pasted text (nobody). Labels read such a
+  column through its attribute type; the search and bulk matching leave it out, and match a deterministically encrypted
+  one against the whole value exactly.
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#a label reads the name and email decrypted, never the ciphertext -->
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#the search never matches the ciphertext -->
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#bulk matching finds a deterministically encrypted email exactly, and nobody by an encrypted name -->
 
 ### Documentation
 

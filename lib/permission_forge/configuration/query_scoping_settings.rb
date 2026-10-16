@@ -18,12 +18,15 @@ module PermissionForge
     module QueryScopingSettings
       AUTO_QUERY_SCOPING_VALUES = %i[off filter_only].freeze
       UNSCOPED_QUERY_DETECTION_VALUES = %i[off log raise].freeze
-      # Columns a record rule never compares (PermissionForge::SecretColumns):
-      # password digests, tokens, encrypted values, secrets.
-      # Digests, tokens, encrypted values, secrets, then the credentials a
+      # Columns a record rule never compares (PermissionForge::SecretColumns),
+      # by name: password digests, tokens, `encrypted_*` columns (a gem's own
+      # encryption, attr_encrypted), secrets, then the credentials a
       # user table commonly has — passwords and their salts, API / private /
       # access keys, one-time-password seeds — anchored to name segments so
       # `owner_id`, `sort_key`, `secretary` or `crypto_wallet` are never caught.
+      # An attribute declared with Active Record's `encrypts` keeps its column
+      # name: it is found by its declaration, not by a pattern
+      # (Operators::RuleProblem :encrypted_column).
       DEFAULT_RULE_SECRET_COLUMN_PATTERNS = [
         /\Apassword_digest\z/, /_digest\z/, /token/, /\Aencrypted_/, /_secret/, /passw/, /\Asecret(?:_|\z)/,
         /(?:\A|_)(?:api|private|secret|access)_key\z/, /(?:\A|_)crypted(?:_|\z)/, /(?:\A|_)salt\z/, /(?:\A|_)otp(?:_|\z)/

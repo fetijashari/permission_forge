@@ -31,6 +31,12 @@ module PermissionForge
         assert_response :success
         assert_select '.pf-audit-event__reason', text: /#{Regexp.escape(translated)}/
         assert_select '.pf-audit-event__reason', text: /\bexpired\b/, count: 0
+
+        Context.with(reason: ReasonCodes::EXPIRED) { create_permission_set_user(user: @bo, permission_set: create_permission_set) }
+        get pf("/people/#{@bo.id}"), params: { tab: 'audit', locale: 'sq' }
+        assert_response :success
+        assert_includes response.body, I18n.t('permission_forge.audit_log.reason_inline', reason: translated, locale: :sq)
+        assert_not_includes response.body, I18n.t('permission_forge.audit_log.reason_inline', reason: 'expired', locale: :sq)
       end
 
       test 'a reason somebody typed is shown as typed' do

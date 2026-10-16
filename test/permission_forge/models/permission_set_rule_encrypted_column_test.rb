@@ -49,7 +49,7 @@ module PermissionForge
       rule.reload
     end
 
-    def message
+    def encrypted_message
       I18n.t('permission_forge.validations.permission_set_rule.encrypted_column', name: 'body', model: 'PfEncryptedNote')
     end
 
@@ -59,11 +59,11 @@ module PermissionForge
         rule = new_rule(operator: operator, field_value: value)
 
         assert_not rule.valid?, operator
-        assert_includes rule.errors[:field_name], message, operator
+        assert_includes rule.errors[:field_name], encrypted_message, operator
       end
       %w[en sq mk].each do |locale|
         text = I18n.t('permission_forge.validations.permission_set_rule.encrypted_column', locale: locale, name: 'body',
-                                                                                          model: 'PfEncryptedNote', default: nil)
+                                                                                           model: 'PfEncryptedNote', default: nil)
 
         assert text.present?, locale
         assert_includes text, 'body', locale
@@ -108,12 +108,12 @@ module PermissionForge
 
       assert_nil Operators::RuleProblem.for(rule), 'a null check is not a problem'
       assert_not rule.update(operator: 'equal', field_value: 'mine'), 'off the null checks'
-      assert_includes rule.errors[:field_name], message
+      assert_includes rule.errors[:field_name], encrypted_message
 
       rule = create_permission_set_rule(permission_set: @set, resource: @resource, field_name: 'title', field_value: 'x')
 
       assert_not rule.update(field_name: 'body'), 'onto the encrypted column'
-      assert_includes rule.errors[:field_name], message
+      assert_includes rule.errors[:field_name], encrypted_message
     end
 
     test 'a copy of a Permission Set keeps a stored one as it is' do

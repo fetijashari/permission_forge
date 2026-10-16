@@ -32,6 +32,10 @@ module PermissionForge
     # Destroys the membership rows, never a person.
     has_many :users, through: :permission_set_group_users, dependent: :destroy, extend: Concerns::AuditedCollection
 
+    # What an admin names it: no default, whatever the column of an install
+    # made before 0.15 says ('Untitled Permission Set Group'), so a group
+    # created without a name is refused (GeneratedText).
+    attribute :name, default: nil
     # Checked for a new row and on a rename only: a row whose name was
     # blank before 0.14 stays editable in its other attributes.
     validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },

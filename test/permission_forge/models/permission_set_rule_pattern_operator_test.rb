@@ -26,9 +26,9 @@ module PermissionForge
                               resource: @resource }.merge(attrs))
     end
 
-    def message(type)
+    def pattern_message(type)
       I18n.t('permission_forge.validations.permission_set_rule.pattern_on_non_text', model: 'PfRulePathRecord', name: 'details',
-                                                                                   type: type)
+                                                                                     type: type)
     end
 
     test 'a LIKE operator on a column no pattern matches is refused on operator, naming the column type' do
@@ -38,10 +38,10 @@ module PermissionForge
         rule = new_rule(operator: operator)
 
         assert_not rule.valid?, operator
-        assert_includes rule.errors[:operator], message(type), operator
+        assert_includes rule.errors[:operator], pattern_message(type), operator
         assert_empty rule.errors[:field_value], "#{operator}: the value is not what is wrong"
       end
-      assert_includes message(type), type
+      assert_includes pattern_message(type), type
     end
 
     test 'the reason is its own: ValueTyping.problem tells it from a value the column cannot hold' do
@@ -58,7 +58,7 @@ module PermissionForge
     test 'the message exists in every locale and names the type' do
       %w[en sq mk].each do |locale|
         text = I18n.t('permission_forge.validations.permission_set_rule.pattern_on_non_text', locale: locale, model: 'M',
-                                                                                             name: 'n', type: 'json', default: nil)
+                                                                                              name: 'n', type: 'json', default: nil)
 
         assert text.present?, locale
         assert_includes text, 'json', locale

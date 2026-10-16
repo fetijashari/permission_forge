@@ -85,12 +85,15 @@ module PermissionForge
         Operators::ValueCasters::TEXT => :uid_text_sql
       }.freeze
 
-      # A rule's value as the app layer compares it with the column.
+      # A rule's value as the app layer compares it with the column. A column
+      # that holds ciphertext (ValueTyping.encrypted?) takes no value, the
+      # user's id included.
       #
       # @param target [Operators::RuleColumn] the column the rule names
       # @return [Object] a typed literal, an Array of them, a SessionUser, or UNUSABLE
       def typed_value(operator, value, target)
-        return UNUSABLE if Operators::ValueTyping.no_column?(operator, target) || unmatchable?(operator, target)
+        return UNUSABLE if Operators::ValueTyping.no_column?(operator, target) || unmatchable?(operator, target) ||
+                           Operators::ValueTyping.encrypted?(operator, target)
         return session_user(operator, target) if Operators::ValueTyping.current_user?(operator, value)
 
         relative(Operators::ValueTyping.call(operator, value, target), temporal_sql_type(target.column))

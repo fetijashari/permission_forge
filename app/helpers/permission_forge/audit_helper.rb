@@ -88,6 +88,18 @@ module PermissionForge
       PermissionForge::Admin::ActorLabel.for(event)
     end
 
+    # Why, as recorded on an event (or an assignment): a reason the gem
+    # wrote itself is a code (Audit::ReasonCodes: `expired`) rendered in the
+    # page's language; any other reason as it was typed. nil when there is
+    # none. The CSV export and the API keep the stored value.
+    def pf_audit_reason(record)
+      reason = record.try(:reason).to_s.strip
+      return if reason.empty?
+      return reason unless PermissionForge::Audit::ReasonCodes.code?(reason)
+
+      t("permission_forge.audit_log.reason_codes.#{reason}")
+    end
+
     # An event that named no actor (code outside a request with no
     # PermissionForge.with_audit_actor, or an actor resolver that failed):
     # pf_audit_actor_name reads it as the actor type "Unknown".

@@ -29,7 +29,8 @@ module PermissionForge
       include RuleProblemFixtures
 
       CHECKS = Dir[File.expand_path('../../../lib/permission_forge/services/security_audit/*_check.rb', __dir__)].freeze
-      FINDING_CALL = /\bfinding\(\s*([^,]+?),\s*:(\w+)\s*,/
+      # The severity argument may be a call of its own (`weight(findings, :high, :medium)`): one level of parentheses.
+      FINDING_CALL = /\bfinding\(\s*((?:[^,()]|\([^()]*\))+?),\s*:(\w+)\s*,/
       AT_LEAST_MEDIUM = /:(?:critical|high|medium)\b/
 
       HOME = {

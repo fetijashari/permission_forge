@@ -78,7 +78,7 @@ module PermissionForge
       env = Rack::MockRequest.env_for(path, method: verb.to_s.upcase, params: params)
       env.merge!(Rails.application.env_config, headers, 'SCRIPT_NAME' => '/permission_forge')
       app = ActionDispatch::Cookies.new(ActionDispatch::Session::CookieStore.new(ActionDispatch::Flash.new(PermissionForge::Engine),
-                                                                                key: '_pf_test_session'))
+                                                                                 key: '_pf_test_session'))
       status, _headers, body = app.call(env)
       body.close if body.respond_to?(:close)
       env.merge('pf.status' => status)

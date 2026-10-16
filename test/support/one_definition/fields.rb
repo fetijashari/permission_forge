@@ -28,8 +28,10 @@ module OneDefinition
       globs: GEM_CODE, needle: /TimestampFields\.new/, canonical: [ROW_BUILDER], allowlist: [],
       fixture: 'timestamps = PermissionForge::TimestampFields.new(model, muting: false)' },
     { name: 'a generated field row (ResourceFieldGenerator::RowBuilder): the label',
-      globs: GEM_CODE, needle: /label: \w+\.humanize/, canonical: [ROW_BUILDER],
-      allowlist: [['lib/permission_forge/admin/change_set_parts/new_actions.rb', /resource_actions\.build\(name: key, label: key\.humanize/,
+      # The label made from the row's name (the name itself since round 7:
+      # never English made up from it, which the inflection guard refuses).
+      globs: GEM_CODE, needle: /\blabel: (?:name|column|key|col)\b/, canonical: [ROW_BUILDER],
+      allowlist: [['lib/permission_forge/admin/change_set_parts/new_actions.rb', /resource_actions\.build\(name: key, label: key,/,
                    'a ResourceAction row (the Actions tab), not a field row']],
       fixture: 'attrs = { name: column, label: column.humanize }' },
     { name: 'a generated field row (ResourceFieldGenerator::RowBuilder): the level flags',

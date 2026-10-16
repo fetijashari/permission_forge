@@ -9,7 +9,10 @@ module PermissionForge
     # the email (EMAIL_ATTRIBUTES: `email`, or Rails 8's `email_address`). Attribute
     # reads go raw-column-first (read_attribute_before_type_cast) so
     # MaskedAttributes on the User model never garbles admin lists; virtual
-    # attributes and blank columns fall back to the public reader.
+    # attributes and blank columns fall back to the public reader. A column
+    # the model encrypts (`encrypts :email`) is read decrypted through its
+    # attribute type (PermissionForge::EncryptedAttributes), never as the
+    # ciphertext it stores.
     class PersonLabel
       NAME_METHODS = %i[name full_name display_name].freeze
       # The one definition of "the user's email attribute", in order: `email`,
@@ -39,8 +42,8 @@ module PermissionForge
       def raw_value(attr)
         attr_name = attr.to_s
         if readable_column?(attr_name)
-          value = @user.read_attribute_before_type_cast(attr_name)
-          return value if value.to_s.strip.present?
+          value = column_value(attr_name)
+          return value if value.to_s.strip.present? || encrypted?(attr_name)
         end
         @user.try(attr)
       end
@@ -130,6 +133,19 @@ module PermissionForge
 
       def fallback
         I18n.t('permission_forge.shared.user_fallback', id: @user.id)
+      end
+
+      # The stored value; decrypted for an encrypted column (nil when this
+      # application cannot decrypt it: the reader would raise).
+      def column_value(attr_name)
+        value = @user.read_attribute_before_type_cast(attr_name)
+        return value if value.nil? || !encrypted?(attr_name)
+
+        PermissionForge::EncryptedAttributes.decrypt(@user.class, attr_name, value)
+      end
+
+      def encrypted?(attr_name)
+        PermissionForge::EncryptedAttributes.encrypted?(@user.class, attr_name)
       end
 
       # True when attr_name is a loaded column on an AR-like user (guards

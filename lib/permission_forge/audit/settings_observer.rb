@@ -32,7 +32,7 @@ module PermissionForge
           settings = fingerprint(configuration)
           return if last_observed == settings
 
-          payload = { data: { 'settings' => settings }, actor: { type: 'system', label: 'boot' }, source: 'service' }
+          payload = { data: { 'settings' => settings }, actor: { type: 'system', label: ActorCodes::BOOT }, source: 'service' }
           return PermissionForge::Audit.record(EVENT, **payload) unless configuration.audit_events == false
 
           # Auditing is off: Audit.record would store nothing, yet "was auditing

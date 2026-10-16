@@ -90,10 +90,15 @@ module DocsApp
       browser = Rack::Test::Session.new(with_admin_middlewares)
       fields = form_fields(browser.get(page, {}, BASIC).body, action)
       fields = yield(fields) if block_given?
-      response = browser.post(action, fields, BASIC)
-      { status: response.status, method: fields['_method'] }
+      { status: browser.post(action, fields, BASIC).status, method: fields['_method'] }
     rescue StandardError => e
-      { status: nil, error: (e.cause || e).class.name, message: (e.cause || e).message.lines.first.to_s.strip }
+      raised(e)
+    end
+
+    # An exception (show_exceptions :none), reported by class and first line.
+    def raised(error)
+      error = error.cause || error
+      { status: nil, error: error.class.name, message: error.message.lines.first.to_s.strip }
     end
 
     NEW_SET = '/permissions/permission_sets/new'

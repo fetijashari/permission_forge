@@ -46,8 +46,12 @@ module PermissionForge
       template = File.read(File.expand_path('../../lib/generators/permission_forge/install/templates/migration.rb.tt', __dir__))
       stated = template.scan(/default:\s*'([^']*)'/).flatten
 
-      assert_empty stated - GeneratedText.install_defaults - %w[equal full Untitled\ Resource],
-                   'a text default the template states is a generated default'
+      # A value of an enumerated column (operator, mask strategy) is a choice;
+      # a Resource's and a field row's names are names (a Resource's must be
+      # a model: 'Untitled Resource' is refused; 'untitled_field' is shown as stored).
+      not_text = ['equal', 'full', 'Untitled Resource', 'untitled_field']
+
+      assert_empty stated - GeneratedText.install_defaults - not_text, 'a text default the template states is a generated default'
       assert_includes GeneratedText.install_defaults, INSTALL_MESSAGE, 'kept for the installs made before 0.15'
     end
 

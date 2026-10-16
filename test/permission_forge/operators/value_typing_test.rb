@@ -11,12 +11,13 @@ module PermissionForge
       include RuleValueTestSupport
 
       UNUSABLE = ValueTyping::UNUSABLE
-      ArrayColumn = Struct.new(:type) do
+      ArrayColumn = Struct.new(:type, :name) do
         def array? = true
       end
       # A column as PostgreSQL describes it, for the tests of what is typed
-      # differently there: they run on every database.
-      PostgresColumn = Struct.new(:type, :sql_type)
+      # differently there: they run on every database. No name: none of them
+      # is a column of PfRuleRecord.
+      PostgresColumn = Struct.new(:type, :sql_type, :name)
       REAL = PostgresColumn.new(:float, 'real')
 
       # The PostgreSQL casters run here on any database; whether a type can be

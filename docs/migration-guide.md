@@ -18,8 +18,10 @@ It lists the rows 0.15 reads differently. Fix them before production sees the ne
 |---------|--------------------------------|
 | `missing_rule_columns` | A rule naming a column, table or association path that is not there matches nothing (its holders are denied every record), and is refused when created or changed. |
 | `unknown_rule_operators` | A rule with an operator or join type this version does not know matches nothing. |
-| `unusable_rule_values` | A rule whose value its column cannot hold matches nothing, and a new or changed one is refused. On PostgreSQL this now includes `uuid` / `inet` / `cidr` / native enum values PostgreSQL could not read (they raised before), date or time text PostgreSQL cannot read, a LIKE operator on a non-text column, and every rule on a `json` / `jsonb` / array column under an operator other than `is_null` / `is_not_null`. |
-| `secret_rule_columns` | A rule comparing a password digest, a token, an encrypted value or a secret keeps applying, but a new one, or a change of its column, is refused. |
+| `unusable_rule_values` | A rule whose value its column cannot hold matches nothing, and a new or changed one is refused. On PostgreSQL this now includes `uuid` / `inet` / `cidr` / native enum values PostgreSQL could not read (they raised before), date or time text PostgreSQL cannot read, and every rule on a `json` / `jsonb` / array column under an operator other than `is_null` / `is_not_null`. |
+| `non_text_pattern_rules` | A LIKE operator (`contains`, `starts_with`, ...) on a column no pattern can be matched against (on PostgreSQL every column that is not text; a `json` column everywhere) matches nothing, and a new or changed one is refused on `operator`. |
+| `encrypted_rule_columns` | A rule comparing a value with an attribute declared with `encrypts` (its column holds ciphertext) matches nothing — also the rows `support_unencrypted_data` still holds in plaintext, which it used to match — and a new one, or a change of its column, is refused. |
+| `secret_rule_columns` | A rule comparing a password digest, a token, an `encrypted_*` column or a secret keeps applying, but a new one, or a change of its column, is refused. |
 | `incomplete_conditions` | An activation condition the validation refuses (a bad IP entry, one hour of the two, the same hour twice) is unjudgeable: a Muting Permission Set applies to every request, a granting set never passes. |
 | `variant_rows_conflict` | An explicit field row for a variant name (`owner_uuid` next to `owner_id`) now decides that name, whichever row is older. |
 | `dependency_violations` | A row that skips a required permission (edit without read, Modify All without View All), written past the validation, no longer grants the dependent permission. |
@@ -44,6 +46,11 @@ Each with its opt-out, or why there is none. The [CHANGELOG](../CHANGELOG.md) ha
 13. **API: `allowed_ips` with no entry** (`[]`, `[""]`) is a 422; send `null` to clear the condition.
 14. **New option `config.no_read_access_strategy`**: the default `:rules_only` changes nothing; under `config.preset = :strict` it is `:deny`, and a signed-in user whose Permission Sets do not grant Read on a model finds none of its records (`find_by` raises `NotAuthorizedError`, `permission_scoped` and auto-scoping are empty). The generated RLS policies follow it too — re-sync them after switching it ([below](#after-the-deploy-rls-postgresql)). **Opt out:** `config.no_read_access_strategy = :rules_only`. See [Rules only, not the CRUD flags](row-level-rules.md#rules-only-not-the-crud-flags).
 15. **More boot warnings are `SECURITY warning:`** (a model loaded with another `tenant_model`, masking that could not be synced, a per-process cache or unannounced masking in production, row-level security on an adapter that is not PostgreSQL), and the production cache and masking warnings lost their `WARNING:` prefix. **No opt-out:** update a log alert that matched the old text; each warning names the setting that removes its condition.
+16. **A rule on an attribute declared with `encrypts` can only ask whether it is empty.** Its column holds ciphertext, so every built-in operator that takes a value matches nothing — the plaintext rows `support_unencrypted_data` keeps included, which such a rule used to match — and a new rule, or a change of its column or of its operator off `is_null` / `is_not_null`, is refused on `field_name` (422 in the API); `encrypted_rule_columns` lists stored ones. **Opt out:** compare a deterministically encrypted attribute through a custom operator whose strategy uses `query.where(attribute => value)`. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
+17. **A LIKE operator on a column that is not text is refused on `operator`**, naming the column's type (it was refused on `field_value` as "is not a value … can hold"); the audit lists stored ones as `non_text_pattern_rules` instead of `unusable_rule_values`. **No opt-out:** such a rule still matches nothing; a client that maps the 422 reads `operator`, and an alert on the audit finding's name uses the new one.
+18. **Field and action rows the gem creates are labelled with their name** (`billing_email`, `export_csv`), never with English made up from it ("Billing email"); a field label an admin blanks is stored as the name. Rows already stored keep their label. **Opt out:** write a label of your own (admin or API), or translate the column in your locale files (`activerecord.attributes.<model>.<column>`).
+19. **A Permission Set, a group or a rule created without a name is refused, and a rule created without a blocked message stores none** — through the API (422 on `name`) and in code alike; they used to store the install migration's English column defaults ("Untitled Permission Set", "Untitled Rule", "You do not have permission to perform this action."). A rule whose stored message is that English default denies with the locale's sentence (`permission_forge.denials.rule_default`). **Opt out:** send a name, and a `failure_message` of your own. See [The name and blocked message columns](#the-name-and-blocked-message-columns).
+20. **The audit log's own words are codes.** The reason the expired-assignment cleanup records (`expired`) is shown in the page's language, and an API change nobody names is stored with the actor label `api_client` (was "API client") and shown as "API client" in the page's language; the CSV export and the API return the stored values. **Opt out:** set `config.audit_actor_resolver`, so API changes name their client.
 
 ### If you override the gem's locale keys
 
@@ -87,6 +94,22 @@ bin/rails permission_forge:rls:sync
 See [what version 7 changes](query-scoping.md#level-3--database-postgres-row-level-security).
 
 **Strict users (`no_read_access_strategy = :deny`, the `:strict` preset):** the policies now follow that option. Under `:deny` a session user without read access to a table's Resource chain sees no row of it in PostgreSQL either; the policies of 0.14 applied the rules alone, so they show such a user every row the rules allow until you sync. The option is part of the policy digest: whenever you switch it (or the preset), `rls:status` reports every protected table as `STALE` until you run `bin/rails permission_forge:rls:sync` again. Sync with eager loading (`config.rake_eager_load = true`), so the policy knows every STI subclass. See [Read access in a policy](query-scoping.md#read-access-in-a-policy).
+
+### The name and blocked message columns
+
+A 0.15 install creates the `name` columns of the Permission Set, group and rule tables and the rule's `failure_message` column without a default; a 0.14 install keeps the English defaults ('Untitled Permission Set', 'Untitled Permission Set Group', 'Untitled Rule', 'You do not have permission to perform this action.'). Nothing needs to change: the models declare no default (`attribute :name, default: nil`, `attribute :failure_message, default: nil`), so a row created through the model — code, API, admin — gets none, and the gem reads a stored install default as nothing an admin wrote (`PermissionForge::GeneratedText`). Only a row inserted with SQL, past the model, takes the column default. To align the columns anyway, a migration of your own (use your table prefix):
+
+```ruby fragment
+class DropPermissionForgeEnglishDefaults < ActiveRecord::Migration[7.1]
+  def change
+    change_column_default :permission_forge_permission_sets, :name, from: 'Untitled Permission Set', to: nil
+    change_column_default :permission_forge_permission_set_groups, :name, from: 'Untitled Permission Set Group', to: nil
+    change_column_default :permission_forge_permission_set_rules, :name, from: 'Untitled Rule', to: nil
+    change_column_default :permission_forge_permission_set_rules, :failure_message,
+                          from: 'You do not have permission to perform this action.', to: nil
+  end
+end
+```
 
 ### The `include_nulls` column
 

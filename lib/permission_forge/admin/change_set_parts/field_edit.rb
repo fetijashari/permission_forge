@@ -10,7 +10,7 @@ module PermissionForge
         ATTRS = %w[label description is_active].freeze
         MASK_LEVELS = %w[masked mask].freeze
         CASTS = {
-          'label' => ->(value, field) { value.to_s.strip.presence || field.name.humanize },
+          'label' => ->(value, field) { value.to_s.strip.presence || field.name },
           'is_active' => ->(value, _field) { Values.truthy?(value) }
         }.freeze
         TEXT_CAST = ->(value, _field) { value.to_s.strip.presence }
