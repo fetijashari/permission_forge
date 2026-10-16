@@ -15,12 +15,13 @@ module PermissionForge
     # - `process_local`: the store lives in each process
     #   (Cache::Base#process_local?: `cache_backend = :memory`, or Rails.cache a
     #   `:memory_store`), so only the process that ran the operation saw it;
-    # - `in_request`: the operation ran inside a request a server process
-    #   served (the admin or the API: Audit::Source 'admin_ui' / 'api'), so
+    # - `in_request`: the operation ran in a server process (the admin or
+    #   the API: Audit::Source 'admin_ui' / 'api', or any code of a web
+    #   server process, a host controller among it: Report.in_request?), so
     #   on a process-local store that server process did see it and the
     #   *other* web workers and the job processes kept theirs; false for a
-    #   rake task, a runner, a console, a job or a plain service call, where
-    #   the web and job processes all kept theirs;
+    #   rake task, a runner, a console or a job process, where every other
+    #   process kept theirs;
     # - `unconfirmed`: how many users the store did not confirm (nil when not
     #   known yet).
     #

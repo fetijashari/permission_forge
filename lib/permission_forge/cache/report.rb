@@ -55,17 +55,23 @@ module PermissionForge
         @process_local
       end
 
-      # Whether the operation runs inside a request a server process serves:
-      # the audit context says it came from the admin or the API. A rake
-      # task, a runner, a console, a job or a service called with no such
-      # context is a process of its own (a host controller that calls a
-      # service without an audit request context counts as one too: the
-      # answer never claims more than the servers saw).
+      # Whether the operation runs in a server process (Report.in_request?).
       #
       # @return [Boolean]
       def in_request?
-        @in_request = REQUEST_SOURCES.include?(PermissionForge::Audit::Source.current) if @in_request.nil?
+        @in_request = Report.in_request? if @in_request.nil?
         @in_request
+      end
+
+      # The one definition of "the operation ran in a server process": the
+      # audit context says it came from the admin or the API, or this process
+      # is a web server (Warnings.server_process?: a host controller, or a
+      # job run inline by Puma, whatever its audit source). A rake task, a
+      # runner, a console or a job process is a process of its own.
+      #
+      # @return [Boolean]
+      def self.in_request?
+        REQUEST_SOURCES.include?(PermissionForge::Audit::Source.current) || PermissionForge::Warnings.server_process?
       end
 
       # The audit sources of a request a server process serves.
