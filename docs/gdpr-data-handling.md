@@ -228,6 +228,11 @@ PermissionForge::Services::ConsentWithdrawalHandler.call(
 # As a rake task: USER_ID=42 bin/rails permission_forge:erasure (a dry run: DRY_RUN=true is the
 # default; DRY_RUN=false executes; ACTOR= and REASON= name who ran it on the events)
 PermissionForge::Services::DataSubjectErasure.call(user: user, dry_run: true)
+# A real run answers { assignments_removed:, group_assignments_removed:, permission_sets:, groups:,
+#   actor_labels_cleared:, record_labels_cleared:, events_scrubbed:, cache_cleared:, callback_invoked:,
+#   cache: { confirmed:, process_local:, in_request:, unconfirmed: }, ... }: cache_cleared is what the
+# store confirmed, cache the one outcome every cache-touching operation reports (configuration.md,
+# "What reports the cache scope")
 
 # What the audit log holds about a person
 PermissionForge::AuditEvent.for_subject(user.id).count

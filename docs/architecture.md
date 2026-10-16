@@ -444,6 +444,8 @@ What it costs, in calls to the store:
 
 ## Multi-Set Merge Logic
 
+Two points of the granting phase, since 0.15: a field's `read_access` is OR-ed over the rows, and its `edit_access` is OR-ed over the rows that grant **read and edit** — a row with edit alone grants nothing. A resource's `edit_access` and `delete_access` count only with `read_access`, and `modify_all` only with `view_all` (`PermissionHashBuilder.granted_flags`); `PermitsAttributes` keeps a key only where the field is readable and editable.
+
 When a user belongs to multiple permission sets, permissions are merged:
 
 ```mermaid

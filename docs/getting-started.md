@@ -20,13 +20,13 @@ gem 'permission_forge'
 
 Run:
 
-```bash fragment
+```bash run
 bundle install
 ```
 
 ## Step 2: Run the Install Generator
 
-```bash fragment
+```bash run
 rails generate permission_forge:install
 ```
 
@@ -36,7 +36,7 @@ This creates two files and prints the next steps (the ones in this guide):
 
 Now run the migration:
 
-```bash fragment
+```bash run
 rails db:migrate
 ```
 
@@ -127,7 +127,7 @@ A **Permission Set** is like a "role on steroids." While a traditional role just
 
 Open the Rails console:
 
-```bash fragment
+```bash run
 rails console
 ```
 
@@ -215,21 +215,83 @@ entry[:fields]
 
 A controller made by `bin/rails generate scaffold` needs a few changes before the permissions show in it. Masked fields appear masked right away, which makes the first run look protected while it is not:
 
-- **Row-level rules.** `PermissionScopedFindable` applies the user's rules to the class-level `find_by` / `find_by!` and to `permission_scoped` only. The scaffold's `Customer.all` (index) and `Customer.find` (`set_customer`) ignore them: every user lists every row and opens any record by its URL. Use the scoped calls:
+- **Row-level rules and the write path.** `PermissionScopedFindable` applies the user's rules to the class-level `find_by` / `find_by!` and to `permission_scoped` only. The scaffold's `Customer.all` (index) and `Customer.find` (`set_customer`) ignore them: every user lists every row and opens any record by its URL. And the scaffold's `customer_params` saves every column the form posts, whatever the user's field rows say. The controller as generated, with the three lines changed (the guard in `ApplicationController` checks the resource's CRUD flags for each REST action; the rules narrow the rows; `PermitsAttributes` drops the fields the user may not edit):
 
-  ```ruby fragment
-  def index
-    @customers = Customer.permission_scoped # was Customer.all
-  end
+  ```ruby file=app/controllers/customers_controller.rb
+  class CustomersController < ApplicationController
+    before_action :set_customer, only: %i[ show edit update destroy ]
 
-  private
+    # GET /customers or /customers.json
+    def index
+      @customers = Customer.permission_scoped # was Customer.all: the user's row-level rules apply
+    end
 
-  def set_customer
-    @customer = Customer.find_by!(id: params[:id]) # was Customer.find: a denied record raises NotAuthorizedError (403)
+    # GET /customers/1 or /customers/1.json
+    def show
+    end
+
+    # GET /customers/new
+    def new
+      @customer = Customer.new
+    end
+
+    # GET /customers/1/edit
+    def edit
+    end
+
+    # POST /customers or /customers.json
+    def create
+      @customer = Customer.new(customer_params)
+
+      respond_to do |format|
+        if @customer.save
+          format.html { redirect_to @customer, notice: "Customer was successfully created." }
+          format.json { render :show, status: :created, location: @customer }
+        else
+          format.html { render :new, status: :unprocessable_content }
+          format.json { render json: @customer.errors, status: :unprocessable_content }
+        end
+      end
+    end
+
+    # PATCH/PUT /customers/1 or /customers/1.json
+    def update
+      respond_to do |format|
+        if @customer.update(customer_params)
+          format.html { redirect_to @customer, notice: "Customer was successfully updated.", status: :see_other }
+          format.json { render :show, status: :ok, location: @customer }
+        else
+          format.html { render :edit, status: :unprocessable_content }
+          format.json { render json: @customer.errors, status: :unprocessable_content }
+        end
+      end
+    end
+
+    # DELETE /customers/1 or /customers/1.json
+    def destroy
+      @customer.destroy!
+
+      respond_to do |format|
+        format.html { redirect_to customers_path, notice: "Customer was successfully destroyed.", status: :see_other }
+        format.json { head :no_content }
+      end
+    end
+
+    private
+      # Use callbacks to share common setup or constraints between actions.
+      def set_customer
+        @customer = Customer.find_by!(id: params.expect(:id)) # was Customer.find: a denied record raises NotAuthorizedError (403)
+      end
+
+      # Only allow a list of trusted parameters through — and, of those, only the fields this user may edit.
+      def customer_params
+        permitted = params.expect(customer: [ :name, :email, :phone, :status, :notes, :owner_id ])
+        PermissionForge::Services::PermitsAttributes.call(resource: Customer, permitted_params: permitted)
+      end
   end
   ```
 
-  Or turn on [query scoping](./query-scoping.md) (`auto_query_scoping = :filter_only`) so that `all` and `find` are scoped too.
+  Or turn on [query scoping](./query-scoping.md) (`auto_query_scoping = :filter_only`) so that `all` and `find` are scoped too. `PermitsAttributes` returns a plain Hash with the keys the user's field rows let through (a key without a row is dropped under the default `unconfigured_field_strategy = :block`); see [Field Filtering](./field-filtering.md) for telling the user what was not saved.
 - **JSON views.** The scaffold's jbuilder partial calls `json.extract!`, which calls each getter: a field the user may not read comes out as `"notes": null`, so a client cannot tell hidden from empty. `as_json` leaves out a field whose row is **Hidden** (read off; `omit_hidden_in_attributes_hash`, the default), so build the partial from it. `only:` is the column list the scaffold's `json.extract!` line had (here a `Customer` scaffold with `name`, `email`, `phone`, `status`, `notes` and `owner:references`), so the JSON keeps its shape:
 
   ```ruby file=app/views/customers/_customer.json.jbuilder
@@ -253,14 +315,17 @@ A controller made by `bin/rails generate scaffold` needs a few changes before th
   end
   ```
 
-  ```erb fragment
-  <%# app/views/customers/_customer.html.erb: one block per column %>
-  <% if customer_field_readable?(:notes) %>
-    <div>
-      <strong>Notes:</strong>
-      <%= customer.notes %>  <%# masked by MaskedAttributes when the field is masked %>
-    </div>
-  <% end %>
+  ```erb file=app/views/customers/_customer.html.erb
+  <%# app/views/customers/_customer.html.erb: one block per column, shown only when the user may read the field %>
+  <div id="<%= dom_id customer %>">
+    <% %i[name email phone status notes owner_id].each do |field| %>
+      <% next unless customer_field_readable?(field) %>
+      <div>
+        <strong><%= Customer.human_attribute_name(field) %>:</strong>
+        <%= customer.public_send(field) %> <%# masked by MaskedAttributes when the field is masked %>
+      </div>
+    <% end %>
+  </div>
   ```
 
   `field_permissions(resource, field_name)` returns the field's entry (`read_access`, `edit_access`, `mask_access`, `mask_strategy`) or `nil` when the user's sets give the field no row. With nobody signed in the helper answers `false` and the partial shows no field, while the getters follow `masked_attributes_nil_user_strategy`.
@@ -297,7 +362,7 @@ If your app was set up with `bin/rails generate authentication`, the generated `
   ```
 
   See [Handling Denials](./row-level-rules.md#rescuing-them-yourself) for a handler that never loops and shows the 403 page in your layout, so that a signed-in person who holds no Permission Set reads why (and can sign out) instead of landing back on the sign-in form. The same section has the one line for `SessionsController#new` that sends a signed-in visitor on: after a Turbo sign-in the address bar still shows `/session/new`, and without it Reload brings back the sign-in form although the session is valid.
-- **Public actions.** `allow_unauthenticated_access` skips `require_authentication`, which is what resumes the session, so on those actions `Current.user` is `nil` even for a signed-in visitor. The symptom on a guarded public action: a signed-in user who opens it is refused as signed out, and with the [Handling Denials](./row-level-rules.md#handling-denials) handler lands back on the sign-in form with its "sign in first" alert (`errors.sign_in_first`), although they are signed in. If the guard is skipped there, row-level rules and masking follow the nil-user strategies (the default `:bypass` restricts nothing). The fix: add `prepend_before_action :resume_session, only: ...` for the same actions (see [Callback order](./controller-actions.md#callback-order)).
+- **Public actions.** `allow_unauthenticated_access` skips `require_authentication`, which is what resumes the session, so on those actions `Current.user` is `nil` even for a signed-in visitor. On a guarded public action a signed-in user is refused as signed out: with the [Handling Denials](./row-level-rules.md#rescuing-them-yourself) handler they get the 403 page ("You are not allowed to see this page") although they are signed in and may hold the permissions — and a handler that sent every signed-out denial to the sign-in page (the version documented through 0.14.1) looped between the page and the sign-in page, whose `SessionsController#new` sends a signed-in visitor back. If the guard is skipped there, row-level rules and masking follow the nil-user strategies (the default `:bypass` restricts nothing). Required on every guarded action you open this way: `prepend_before_action :resume_session, only: ...` for the same actions (see [Callback order](./controller-actions.md#callback-order)); the visitor then gets the page, with their permissions.
 - **Your own admin controller.** An admin controller that inherits from your `ApplicationController` (`base_controller_class`, Option B) also inherits the generated `request_authentication`, which redirects to `new_session_path`. That path does not resolve inside the engine, so a signed-out visit to `/permissions` is a 500. Override it to use `main_app.new_session_path`: see [Admin UI](./admin-ui.md#rails-8-authentication-generator).
 
 ## What's Next?

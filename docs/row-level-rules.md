@@ -46,6 +46,18 @@ Customer.permission_scoped.find(id)             # scoped find by PK
 
 `permission_scoped` honors `view_all`/`modify_all` (returns the unconstrained relation) and `nil_user_strategy` (`:bypass` → all, `:deny` → none, `:raise` → raises).
 
+**Rules only, not the resource's CRUD flags.** `find_by`, `find_by!` and `permission_scoped` apply the row-level rules of the user's sets. They do not ask whether the user may read the resource at all: a user whose set has a rule on `Customer` but `read_access: false` still gets the rows the rule selects (the field rows then hide every column). The CRUD flags are answers to `can_read?`, `can_edit?`, ... and are enforced where you ask them, or by the controller guard: with [`ControllerActionGuard`](controller-actions.md) a REST action is checked against the matching flag before it runs (`index` and `show` need `read_access`, `create` `create_access`, ...), so a controller that includes the guard and queries through `permission_scoped` enforces both. Without the guard, ask first:
+
+```ruby fragment
+class CustomersController < ApplicationController
+  before_action { head :forbidden unless Current.user&.can_read?(:Customer) } # the resource flag; the rules follow
+
+  def index
+    @customers = Customer.permission_scoped
+  end
+end
+```
+
 ## Step 1: Include the Concern
 
 Add `PermissionScopedFindable` to any model you want to protect:
@@ -206,9 +218,9 @@ Things worth knowing:
 - **A MySQL `tinyint(1)` column is a boolean** to ActiveRecord, and so to a rule: only the boolean words above match, also when the column holds other numbers. `equal '2'` matches nothing; use a wider integer type for a column that is not a flag.
 - **LIKE operators on an enum column search what is stored**, not the labels: `status contains 'arch'` looks for `arch` in the stored value (and raises on PostgreSQL when that is a number).
 - **String comparisons follow the column's collation on MySQL and SQLite.** With MySQL's default collations (`utf8mb4_0900_ai_ci`, `utf8mb4_general_ci`) `equal`, `in` and `between` on a string column ignore case and accents: `status equal 'active'` also matches `Active` and `áctive`. PostgreSQL compares exactly unless the column has a case-insensitive collation or type. Give the column a binary or `_cs` collation if a rule has to tell them apart. Which string is "less than" another (`less_than`, `between`, ...) is the collation's decision on every database.
-- **Dotted field names** (`customers.owner_id`, or `users.active` on a rule with a `field_accessor_path`) are typed too, when the table is the rule's own model's or one along its association path — with a schema or database in front as well (`public.customers.owner_id`).
+- **Dotted field names** (`customers.owner_id`, or `users.active` on a rule with a `field_accessor_path`) are typed too, when the table is the rule's own model's or one along its association path — with a schema or database in front as well (`public.customers.owner_id`). A qualifier that is no table of this database matches nothing on a rule without a relationship path — see [Using the wrong field name](#using-the-wrong-field-name).
 - **A field name is looked up the way the database resolves it**: without regard to case on MySQL and SQLite (`Owner_ID` is `owner_id` there; PostgreSQL rejects it), and among the table's columns, so a column in the model's `ignored_columns` is typed too.
-- **A field name with an empty part** — a trailing, leading or doubled dot (`owner_id.`, `customers..owner_id`) — is not a name. It cannot be saved on a new rule or by renaming one; a rule that already carries such a name matches nothing (and is listed by the audit).
+- **A field name with an empty part** — a trailing, leading or doubled dot (`owner_id.`, `customers..owner_id`) — is not a name. It cannot be saved on a new rule or by renaming one; a rule that already carries such a name matches nothing (and is listed by the audit). Neither is a name with a control character in it (a newline, a NUL byte): such a rule matches nothing under every operator, a custom one included.
 - **Column types without an entry above** — arrays, `uuid`, `json`, `inet`, PostgreSQL enum types — and field names that are not a known column get the value exactly as written, and the database decides.
 - **Custom operators.** A strategy registered under a name of your own (through an injected `operator_registry:`) receives the value untouched, with `current_user` replaced by the id. The built-in `in`, `not_in` and `between` strategies receive an Array of typed values.
 - **A strategy of your own registered under a built-in operator name** receives the typed value — Integer or BigDecimal, `true`/`false`, Date or Time, String, and an Array for `in`, `not_in` and `between` — and is not called at all when the value is one the column cannot hold: the rule matches nothing.
@@ -310,11 +322,12 @@ config.action_dispatch.rescue_responses['PermissionForge::Concerns::PermissionSc
 
 ### Rescuing them yourself
 
-An HTML app (`ActionController::Base`), here with Rails 8's authentication generator:
+An HTML app (`ActionController::Base`), here with Rails 8's authentication generator and the guard in `ApplicationController` (what the [getting-started guide](getting-started.md#using-rails-8s-authentication-generator) sets up):
 
 ```ruby file=app/controllers/application_controller.rb
 class ApplicationController < ActionController::Base
   include Authentication # the generator's concern: authenticated?, resume_session, require_authentication
+  include PermissionForge::Concerns::ControllerActionGuard # after Authentication: the session is resumed before the guard runs
 
   rescue_from PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError do |error|
     respond_to do |format|
@@ -332,7 +345,11 @@ class ApplicationController < ActionController::Base
     # error.reason => :crud_denied, :action_denied, ... (:nil_user_denied when nobody is signed in)
     respond_to do |format|
       format.html do
-        if error.reason == :nil_user_denied && request.path != new_session_path # your sign-in page
+        # The guard saw nobody signed in. authenticated? resumes the session first: on an action opened with
+        # allow_unauthenticated_access nothing else has, and a signed-in visitor would otherwise be sent to sign in,
+        # from where SessionsController#new (below) sends them back: a loop. Only a visitor who is signed out is
+        # sent to the sign-in page, and never from the sign-in page itself.
+        if error.reason == :nil_user_denied && !authenticated? && request.path != new_session_path
           redirect_to new_session_path, alert: t('errors.sign_in_first')
         else
           # The 403 page in place: never a redirect to the page that was just refused (the browser would loop).
@@ -359,7 +376,14 @@ end
 <% end %>
 ```
 
-`authenticated?`, `new_session_path` and `session_path` are the generator's; with Devise use `user_signed_in?`, `new_user_session_path` and `destroy_user_session_path`. `format.html` also answers a Turbo request and a browser's `*/*`; `format.any` answers every other format with an empty 403 (Rails 7.1 and later).
+```yaml file=config/locales/en.yml
+# config/locales/en.yml: the handler's own message (add the key to the file you have)
+en:
+  errors:
+    sign_in_first: "Please sign in first."
+```
+
+`authenticated?`, `new_session_path` and `session_path` are the generator's; with Devise use `user_signed_in?` (which also resumes the session), `new_user_session_path` and `destroy_user_session_path`. `format.html` also answers a Turbo request and a browser's `*/*`; `format.any` answers every other format with an empty 403 (Rails 7.1 and later).
 
 The template has no link to the start page on purpose: for someone who holds no Permission Set the root is refused too, so from any refused page that link leads to this page again. If your app has a page every signed-in person may open (an account page outside the guard), link to that one; otherwise your layout's navigation, the browser's Back button and Sign out are the ways on.
 
@@ -393,19 +417,24 @@ class SessionsController < ApplicationController
 end
 ```
 
-`authenticated?` resumes the session, and `after_authentication_url` is the page that sent them to sign in, if signing in has not used it yet, else the root. A refused page answers the 403 page in place, now at its own address, so Reload shows the 403 page again instead of the form. It cannot loop with the handler above: a resumed session sets `Current.user`, which the generated `current_user_resolver` returns, so the guard never sees that visitor as signed out and never sends them back to sign in. A signed-out visitor still gets the form.
+`authenticated?` resumes the session, and `after_authentication_url` is the page that sent them to sign in, if signing in has not used it yet, else the root. A refused page answers the 403 page in place, now at its own address, so Reload shows the 403 page again instead of the form. A signed-out visitor still gets the form.
 
-Do not answer a denial with `redirect_back fallback_location: root_path`. When the refused page is the root itself (a guarded `index` mounted at `root`, visited by someone who is not signed in, or who may not read it), the fallback sends the browser back to the page that was just refused: it loops until the browser gives up (`ERR_TOO_MANY_REDIRECTS`), and every hop writes an `action.denied` event. The handler above redirects only a signed-out visitor, to sign in, and never from the sign-in page itself; everyone else gets the 403 page in place, at the address they opened (after a Turbo sign-in, the sign-in page's: see above), so no denial loops. On an action opened with Rails 8's `allow_unauthenticated_access`, a signed-in visitor also reads as signed out unless the session is resumed: see [Callback order](controller-actions.md#callback-order).
+**This line and the handler belong together.** The handler sends a visitor to the sign-in page only once `authenticated?` found no session. A signed-in visitor the guard took for signed out — on an action opened with `allow_unauthenticated_access`, where nothing resumes the session before the guard runs — gets the 403 page instead. With a handler that sends every `:nil_user_denied` to sign in (the version documented through 0.14.1), that visitor loops: `/` → `/session/new` → `/` …, one `action.denied` event per hop, until the browser gives up (`ERR_TOO_MANY_REDIRECTS`). The 403 page is the honest answer there, not the right one: the visitor is signed in and may hold the permissions. On every guarded action opened with `allow_unauthenticated_access`, resume the session ahead of the guard (`prepend_before_action :resume_session, only: ...`, see [Callback order](controller-actions.md#callback-order)); the visitor then gets the page, with their permissions.
 
-**Keep the sign-in pages out of the guard.** With the guard in `ApplicationController`, Rails 8's `SessionsController` is guarded too (the guard maps it to the generator's `Session` model), and under `action_guard_nil_user_strategy = :deny` every signed-out request to it is refused. Nobody can sign in: the sign-in page shows the 403 page ("Sign in to see it", with a link to the same page) instead of the form. Sign out ends the session, then lands on that page; with a handler that answers an empty 403, Sign out seems to do nothing: Turbo keeps the old page, "Signed in as …" still in the header. Exclude the controllers in the initializer (`passwords` too, so that a `Password` model added later does not lock out password resets):
+Do not answer a denial with `redirect_back fallback_location: root_path`. When the refused page is the root itself (a guarded `index` mounted at `root`, visited by someone who is not signed in, or who may not read it), the fallback sends the browser back to the page that was just refused: it loops until the browser gives up, and every hop writes an `action.denied` event. The handler above redirects only a signed-out visitor, to sign in, and never from the sign-in page itself; everyone else gets the 403 page in place, at the address they opened (after a Turbo sign-in, the sign-in page's: see above), so no denial loops.
 
-```ruby fragment
-config.controller_discovery_exclude += %w[sessions passwords] # the sign-in pages stay reachable signed out
+**Keep the sign-in pages out of the guard.** With the guard in `ApplicationController`, Rails 8's `SessionsController` is guarded too (the guard maps it to the generator's `Session` model), and under `action_guard_nil_user_strategy = :deny` every signed-out request to it is refused. Nobody can sign in: the sign-in page shows the 403 page ("Sign in to see it", with a link to the same page) instead of the form. Sign out ends the session, then lands on that page; with a handler that answers an empty 403, Sign out seems to do nothing: Turbo keeps the old page, "Signed in as …" still in the header. Exclude the controllers (`passwords` too, so that a `Password` model added later does not lock out password resets) — in `config/initializers/permission_forge.rb`, or in an initializer of its own:
+
+```ruby file=config/initializers/permission_forge_sign_in.rb
+# The sign-in pages stay reachable signed out: the guard never maps SessionsController or PasswordsController.
+PermissionForge.configure do |config|
+  config.controller_discovery_exclude += %w[sessions passwords]
+end
 ```
 
 The same holds for any controller a signed-out visitor must reach whose name matches a model.
 
-Write the message yourself. `error.action` is the key that was checked (`index`, `export`), so "You may not index customers" is what interpolating it gives; `errors.sign_in_first` above is your own translation key ("Please sign in first."), and `error.resource` names the model if you want it in the text.
+Write the message yourself. `error.action` is the key that was checked (`index`, `export`), so "You may not index customers" is what interpolating it gives; `errors.sign_in_first` above is your own translation key, and `error.resource` names the model if you want it in the text.
 
 A JSON API (`ActionController::API`):
 
@@ -535,9 +564,11 @@ Rules are cached in each user's permission hash. Saving a rule through ActiveRec
 `field_name` must be a column of the model's table, or of the table at the end of `field_accessor_path` for a join rule. A name qualified with a table (`suppliers.owner_id`) must be a column of that table. Every name in a join rule's `field_accessor_path` must be an association ActiveRecord can join, of the model before it on the path.
 
 - **Saving refuses it.** When the Resource's model can be loaded, a rule whose field name is not a column (`onwer_id` on `Customer`) does not save: `field_name` gets the error "is not a column of Customer", and the JSON API answers 422 with `{"field_name": ["is not a column of Customer"]}`. A join rule whose path names no association (`ownr` for `owner`) does not save either: `field_accessor_path` gets "names ownr, which is not an association of Customer" (the segment and the model it was looked up in), and one naming an association no join can be built through gets a message that says why — "names subject, a polymorphic association of Comment: a rule cannot join it", "… whose scope (or one along its :through) takes the record: a rule cannot join it", "… whose :through, :source or inverse_of names an association that is not there", "… whose class cannot be loaded" — the same cases for which ActiveRecord raises when it builds the join (a scope that takes the record counts also on the `:through` association or the source of a `:through`). A path with an empty step (`parent..owner`) gets "has an empty association name". The checks run for a new rule; the column check also when its field name, path, join type or resource changes, the path check when its path, join type or resource changes. A filter rule's path is never checked (it is never joined). They are skipped when nothing can be told at that moment: the model cannot be loaded (or its table does not exist yet), or the name is qualified with a table that is none of the rule's (an alias your query joins itself). Copying a Permission Set copies an existing rule as it is.
-- **A rule that names a missing column, or a path that cannot be followed, matches nothing.** A rule saved before these checks (or written past the model, a column or association since renamed or removed) lets no record through to the users it applies to — a missing column under every built-in operator, a broken path under every operator (the join is never built). Neither reaches the database or ActiveRecord, which would raise and turn every `find_by` / `permission_scoped` of its holders into a 500 (`ActiveRecord::StatementInvalid`, or `ActiveRecord::ConfigurationError: Can't join 'Customer' to association named 'ownr'`). An RLS policy compiles a missing column to `FALSE` as well (join rules are not compiled into policies at all: they are reported as skipped). `bin/rails permission_forge:audit` lists such rules in effect (`missing_rule_columns`, High when people hold the set), and the admin shows them: Home lists them under "Rules that match nothing", and the Rules tab, the rule's edit page and a person's effective access say "Matches nothing" and why, instead of the rule's sentence. Columns are read from Rails' schema cache: saving a rule reads the table again before refusing a name, but a process that read the schema before a migration added the column (a running server, an old process during a rolling deploy) denies through a rule on it until it restarts — deploy the migration before the rule. Associations are read from the model as loaded: deploy the model change before a rule that follows the new association.
-- **What is still left to the database:** a name qualified with a table that is none of the rule's (the query may join it under that name), a rule under a custom operator naming a missing column (its strategy decides what the name means), and a table along the path that does not exist. If that table or column is not there, the query raises.
+- **A rule that names a missing column, or a path that cannot be followed, matches nothing.** A rule saved before these checks (or written past the model, a column or association since renamed or removed) lets no record through to the users it applies to — a missing column under every built-in operator, a broken path under every operator (the join is never built). Neither reaches the database or ActiveRecord, which would raise and turn every `find_by` / `permission_scoped` of its holders into a 500 (`ActiveRecord::StatementInvalid`, or `ActiveRecord::ConfigurationError: Can't join 'Customer' to association named 'ownr'`). An RLS policy compiles a missing column to `FALSE` as well (a join rule whose path cannot be followed, and a rule with an operator or join type this version does not know, compile to `FALSE` too; a join rule that works is not compiled into a policy: it is reported as skipped). `bin/rails permission_forge:audit` lists such rules in effect (`missing_rule_columns`, High when people hold the set), and the admin shows them: Home lists them under "Rules that match nothing", and the Rules tab, the rule's edit page and a person's effective access say "Matches nothing" and why, instead of the rule's sentence. Columns are read from Rails' schema cache: saving a rule reads the table again before refusing a name, but a process that read the schema before a migration added the column (a running server, an old process during a rolling deploy) denies through a rule on it until it restarts — deploy the migration before the rule. Associations are read from the model as loaded: deploy the model change before a rule that follows the new association.
+- **A table that is none of the rule's.** A field name qualified with a table that is not the model's nor one along the rule's relationship path is one of two things. A table this database **has** (`suppliers.name` on a rule for `Customer`) is left to the database: the query has to join that table itself (a `default_scope`, a `joins` the host chains before `permission_scoped`), the value is compared as text, and a column the table does not have raises in every query of the holders — `rake permission_forge:audit` lists such rules as `foreign_table_names` (Info); name the relationship in `field_accessor_path` instead, so the column is checked and the value typed. A table this database **does not have** (`nosuch.name`, the typo `customer.name`) on a rule that follows no relationship matches nothing: it cannot be saved on a new rule or by renaming one ("names nosuch, which is no table of this database"), a rule that already carries it denies every record to its holders (it used to raise `ActiveRecord::StatementInvalid` for every one of them), the audit lists it under `missing_rule_columns`, and Home under "Rules that match nothing". On a rule **with** a relationship path such a name may be the alias ActiveRecord gives a table joined twice (`parents_customers.active` on a path that leads back to the same table), so it is left to the database as before.
+- **Still left to the database:** a rule under a custom operator naming a missing column (its strategy decides what the name means), and a table along the path that does not exist.
+- **An operator or join type this version does not know matches nothing.** A rule row with an operator such as `regex` or a join type such as `inner` — written by a newer version of PermissionForge during a rolling deploy, by another application on the shared tables, or past the model — denies every record to its holders (it used to raise `ArgumentError` / `ConfigurationError` from `permission_scoped`, `find_by` and, under `auto_query_scoping`, from every query). `rake permission_forge:audit` lists them as `unknown_rule_operators` (High while people hold the set); Home lists them under "Rules that match nothing"; the rule's edit page says so and keeps the stored condition. **Rolling deploys:** old processes deny through such a rule until they restart — finish the deploy, or save the rule after it. The rule can still be switched off or renamed: what a rule names is checked only when it changes.
 
 ### A value the column cannot hold
 
-A rule whose value is not a value of the column (`'5_id'` on an integer column, `'maybe'` on a boolean one) is valid to save and then matches nothing: every record is denied for the users it applies to. If a rule suddenly lets nobody through, check its value against the column's type in [How Values Are Compared](#how-values-are-compared).
+A rule whose value is not a value of the column (`'5_id'` on an integer column, `'maybe'` on a boolean one) is valid to save and then matches nothing: every record is denied for the users it applies to. If a rule suddenly lets nobody through, check its value against the column's type in [How Values Are Compared](#how-values-are-compared). Such a rule is listed on the admin's Home under "Rules that match nothing" as well as by the audit (`unusable_rule_values`). A value containing a NUL byte is one no column can hold, under a custom operator too: it cannot be saved on a new rule or by changing the value ("must not contain a NUL byte"), and a stored one matches nothing (it used to raise `ActiveRecord::StatementInvalid` for every holder: the statement was read cut short).

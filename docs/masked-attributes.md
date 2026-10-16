@@ -89,13 +89,15 @@ The concern is idempotent — manual `include` plus auto-apply on the same class
 | `customer.id` (primary key) | **no** — never masked (used for routing, associations, tenant scoping) |
 | `customer.slice(:email)`, `values_at`, `dup`, `becomes`, `reload` | yes |
 | `customer.inspect`, `pp customer` / `pretty_print`, `attribute_for_inspect` | yes — see [inspect](#inspect-and-pretty_print) |
-| `customer.email_before_type_cast`, `customer.read_attribute_before_type_cast(:email)`, `attributes_before_type_cast` | **no** — the raw path, for code that needs the stored value |
+| `customer.email_before_type_cast`, `customer.email_for_database`, `customer.read_attribute_before_type_cast(:email)`, `attributes_before_type_cast` | **no** — the raw path, for code that needs the stored value |
 | `customer.email_in_database`, `attribute_in_database(:email)`, `_read_attribute(:email)`, `attributes_for_database` | **no** — raw |
-| Dirty tracking: `email_was`, `email_change`, `changes`, `changes_to_save` | **no** — the raw change set |
+| Dirty tracking: `email_was`, `email_change`, `email_will_change!`, `email_change_to_be_saved`, `email_previously_was`, `email_previous_change`, `email_before_last_save`, `saved_change_to_email`, `changes`, `changes_to_save` | **no** — the raw change set (the predicates `email_changed?`, `email_previously_changed?`, `saved_change_to_email?`, `will_save_change_to_email?` answer true/false and reveal no value) |
 | `Marshal.dump(customer)` (and caches that marshal records) | **no** — the stored values |
 | `Customer.pluck(:email)` | **no** — bypasses the model layer entirely |
 | Raw SQL via `connection.execute` | **no** |
 | A column selected under another name (`select("email AS contact")`), read as `customer.contact` or through `as_json` | **no** — a raw-SQL path, see below |
+
+Every attribute-method pattern Rails gives a model is checked against this table by the test suite (`test/permission_forge/concerns/masked_reader_surface_test.rb`), on every Rails version the gem supports: a reader that returns the stored value is listed here, and nothing listed here is intercepted. A pattern a new Rails release adds fails that test until it is masked or listed.
 
 ### How direct getters work
 
@@ -210,6 +212,8 @@ customer.read_attribute(:email)
 # => "contact@acme.com"  when read_access: true, mask_access: false
 # => nil  when read_access: false
 ```
+
+**A strategy this app does not know masks fully.** A field row whose `mask_strategy` is none of the built-in ones and none of `config.custom_mask_strategies` — a row written past the model, a blank, or a custom strategy you removed from the configuration after rows named it — masks the value fully (`********`) wherever it is read (the model's getters, `as_json`, `FiltersResponseAttributes`, the admin), never raises, and is reported once per process per name: a warning in the log and the `mask_strategy_unknown.permission_forge` notification (payload `strategy`, `fallback`). `rake permission_forge:audit` lists such rows (`unknown_mask_strategies`, High while people hold the set); the field drawer flags them ("Unknown mask strategy — masked fully until fixed") and keeps the stored name until you pick another. `PermissionForge::Services::MaskValue.call!` is the strict form (raises) for previews and validations; `MaskValue.known?(name)` says whether a name is a strategy.
 
 ## Write-back protection
 

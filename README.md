@@ -76,7 +76,7 @@ gem 'permission_forge'
 
 Then run:
 
-```bash fragment
+```bash run
 bundle install
 bin/rails generate permission_forge:install
 bin/rails db:migrate

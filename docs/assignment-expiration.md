@@ -70,7 +70,10 @@ Use `ExpiredAssignmentCleaner` to remove stale records and invalidate affected u
 ```ruby run
 # Remove expired assignments and invalidate affected users' caches
 result = PermissionForge::Services::ExpiredAssignmentCleaner.call
-# => { removed: 5, invalidated: 3 }  # :invalidated = users whose cache was invalidated
+# => { removed: 5, invalidated: 3, affected_user_ids: [1, 2, 3], permission_sets: ["Temp"],
+#      cache: { confirmed: true, process_local: false, in_request: false, unconfirmed: 0 } }
+# :invalidated = users whose cache invalidation the store confirmed; :cache the one outcome every
+# cache-touching operation reports (see configuration.md, "What reports the cache scope")
 
 # Dry run (inspect without removing)
 result = PermissionForge::Services::ExpiredAssignmentCleaner.call(dry_run: true)

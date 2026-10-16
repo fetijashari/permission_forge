@@ -200,6 +200,8 @@ So when you create a field permission for `company_id`, the user automatically g
 
 Muting permission sets follow the same mappings (v0.10.0+): a muting set that revokes `company_id` also revokes `company_uuid`, and revoking `price_cents` also revokes `price`.
 
+An explicit row for a variant name (`owner_uuid`) decides that name within its Resource, whichever row is older; the variant derived from `owner_id` only fills a name no row of the resource has. Across Permission Sets the entries still merge as granting rows do (a set with only an `owner_id` row grants `owner_uuid` through it). Muting rows mute their variants as before. `rake permission_forge:audit` lists the pairs under `variant_rows_conflict`.
+
 A variant gets an entry in the permission hash only when the model has that name (0.15+): a column or `attribute`, an `alias_attribute`, a public reader or writer (`delegate :uuid, to: :company, prefix: true` defines `company_uuid`), or a declared virtual field (`extra_fields_for_permissions`). A `Customer` with `owner_id` and no `owner_uuid` gets no `owner_uuid` entry, and the admin's Effective access does not list one. A Resource whose model this app cannot load (no such class, or its schema cannot be read) keeps every variant.
 
 `FiltersResponseAttributes` still treats a key that is a variant the model does not have — a `company_uuid` your serializer computes — as the field it is a variant of: hidden, masked or shown as `company_id` is. `user.field_permissions(:Customer, :company_uuid)` and `permissions_hash_for(:Customer)[:fields][:company_uuid]` answer `nil` for such a name; give the model a `company_uuid` reader (or declare it) if your code reads the entry.
