@@ -2,7 +2,7 @@
 
 ## Upgrading to 0.15
 
-1. **No generator to run from 0.14:** 0.15 adds no table and no column, and `bin/rails generate permission_forge:upgrade` is for installs older than 0.13 (its migrations — the resource-field unique index, the admin-UI columns, the audit log — are all in a 0.13 or 0.14 install). Coming from 0.13: [From 0.13](#from-013).
+1. **No generator to run from 0.14:** 0.15 adds no table and no column, and `bin/rails generate permission_forge:upgrade` is for installs older than 0.13 (its migrations — the resource-field unique index, the admin-UI columns, the audit log — are all in a 0.13 or 0.14 install). Coming from 0.13: [From 0.13](#from-013) (a revocation made on 0.15 does not reach 0.13's cache: two paths).
 2. **Before the deploy, run `bin/rails permission_forge:audit`** and fix what it lists ([below](#before-the-deploy-run-the-audit)).
 3. **After the deploy, re-sync RLS** if you use PostgreSQL row-level security: `bin/rails permission_forge:rls:sync` ([below](#after-the-deploy-rls-postgresql)).
 
@@ -10,11 +10,15 @@ Then read the [behaviour changes](#behaviour-changes): each says how to opt out,
 
 ### From 0.13
 
-One path, straight to 0.15 (0.14 adds no migration, so there is no stop to make on the way):
+0.13 and 0.15 cache permissions under different keys, so during a rolling deploy a permission change made on one version does not reach what the other has cached — in both directions:
 
-1. Go through [Upgrading from 0.13 to 0.14](#upgrading-from-013-to-014) — its stricter defaults apply to you too — then the checklist above.
-2. Deploy 0.15. During a rolling deploy a permission change made by a 0.13 process does not reach the entries 0.15 caches: 0.13 removes its own bare keys (`user_<id>`, `tenant_<t>_user_<id>`), 0.15 keeps its entries under `pf:v2:` (`Cache::UserKeys`) and, since 0.15, no longer removes 0.13's keys either.
-3. Once **the last 0.13 process is gone**, run `bin/rails permission_forge:cache:clear` (running it earlier does not help: an invalidation a 0.13 process makes afterwards misses the new entries again). 0.13's own entries are never read again and expire with `cache_ttl`.
+- **0.13 → 0.15:** a change made by a 0.13 process removes 0.13's own bare keys (`user_<id>`, `tenant_<t>_user_<id>`); it does not reach the entries 0.15 caches under `pf:v2:` (`Cache::UserKeys`), so a 0.15 process can serve the old permissions until `cache_ttl`.
+- **0.15 → 0.13:** a change made by a 0.15 process removes the `pf:v2:` entries only — `Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES` is empty since 0.15 — so 0.13's bare keys stay, and a 0.13 process keeps serving a revoked grant until `cache_ttl`.
+
+Take one of two paths. Either way, go through [Upgrading from 0.13 to 0.14](#upgrading-from-013-to-014) first — its stricter defaults apply to you too — then the checklist above.
+
+1. **Through 0.14** (no window for a revocation made on the new version): deploy 0.14, including its [cache clear](#after-the-deploy-clear-the-permission-cache-once) once the last 0.13 process is gone, then deploy 0.15. 0.14 still removes 0.13's bare keys on every invalidation, so a revocation made on 0.14 reaches the 0.13 processes still running; 0.14 and 0.15 share the `pf:v2:` entries.
+2. **Straight to 0.15:** deploy 0.15 and accept up to `cache_ttl` of stale grants while both versions run (lower `cache_ttl` before the deploy, or keep the rollout short, to shorten it). Once **the last 0.13 process is gone**, run `bin/rails permission_forge:cache:clear`: it ends the 0.13 → 0.15 gap (running it earlier does not help: an invalidation a 0.13 process makes afterwards misses the new entries again); the 0.15 → 0.13 gap ends with the 0.13 processes. 0.13's own entries are never read again and expire with `cache_ttl`.
 
 ```bash fragment
 ACTOR="ops: deploy" REASON="deploy 0.15" bin/rails permission_forge:cache:clear

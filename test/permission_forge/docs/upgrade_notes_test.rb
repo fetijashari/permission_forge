@@ -69,9 +69,9 @@ module PermissionForge
         from = section(read(GUIDE), '### From 0.13').squish
 
         assert_match(/made by a 0\.13 process.*does not reach.*`pf:v2:`/, from, '0.13 → 0.15')
-        assert_match(/made by a 0\.15 process.*`PREVIOUS_ENTRY_NAMESPACES`.*0\.13 process.*revoked.*`cache_ttl`/, from, '0.15 → 0.13')
+        assert_match(/made by a 0\.15 process.*PREVIOUS_ENTRY_NAMESPACES.*0\.13 process.*revoked.*`cache_ttl`/, from, '0.15 → 0.13')
         assert_match(/\*\*Through 0\.14\*\*.*still removes 0\.13's bare keys/, from, 'the path with no reverse window')
-        assert_match(/\*\*Straight to 0\.15\*\*.*`cache_ttl` of stale grants.*permission_forge:cache:clear.*last 0\.13 process is gone/,
+        assert_match(/\*\*Straight to 0\.15:?\*\*.*`cache_ttl` of stale grants.*last 0\.13 process is gone.*permission_forge:cache:clear/,
                      from, 'the direct path and what it accepts')
         assert_includes read('README.md')[/^From 0\.13:.*$/], 'revocation', 'the README pointer names the gap'
       end

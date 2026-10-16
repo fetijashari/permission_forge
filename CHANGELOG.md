@@ -13,7 +13,8 @@ Upgrading from 0.14 is the three steps of the
 no generator to run (`permission_forge:upgrade` is for installs older than 0.13), `bin/rails permission_forge:audit`
 before the deploy — it lists the stored rows this release reads differently (rules that match nothing, broken
 activation conditions, variant rows, unknown mask strategies) — and an RLS re-sync after it. From 0.13, see
-[From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013). Most Changed
+[From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013): a revocation
+made on 0.15 does not reach what 0.13 processes have cached. Most Changed
 entries need nothing from you. These may need a change in your app or its clients: **An unrescued denial answers 403
 Forbidden instead of 500.** (add `public/403.html`, or rescue the errors), **RLS: `RlsPolicyGenerator::GENERATOR_VERSION`
 is 7** (run `permission_forge:rls:sync` after the deploy), **`include_nulls` is off unless asked for — in code, through
@@ -1313,11 +1314,13 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
 - **The removal of 0.13's cache keys.** Through 0.14 every invalidation also removed the bare keys 0.13 wrote
   (`user_<id>`, `tenant_<t>_user_<id>`), so that a rolling deploy from 0.13 reached both versions' entries;
   `Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES` is now empty and an invalidation removes this version's (`v2:`) entries
-  only. An application still on 0.13 follows the one path of
-  [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013) (it ends with
-  `bin/rails permission_forge:cache:clear` once its 0.13 processes are gone).
+  only: a revocation made by a 0.15 process no longer reaches what a 0.13 process has cached, which keeps serving it
+  until `cache_ttl`. An application still on 0.13 follows
+  [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013), which states
+  both directions and its two paths (through 0.14, with no such window, or straight to 0.15, accepting it).
   <!-- pin: test/permission_forge/cache/user_keys_test.rb#an invalidation names the stamp and the v2 keys, and no bare key of 0.13 -->
   <!-- pin: test/permission_forge/cache/user_keys_test.rb#the entries live under one namespace, the previous ones are gone -->
+  <!-- pin: test/permission_forge/docs/upgrade_notes_test.rb#From 0.13 states the cache gap in both directions and the two paths -->
 
 ### Fixed
 
