@@ -15,7 +15,7 @@ module PermissionForge
     # asserted), then drives the denial flows the docs describe as requests
     # (the Turbo sign-in of a person with no set, the public index with and
     # without resume_session, the sign-in page under the guard, Option B,
-    # ...). A second child is a `rails new --api` host. SQLite only, like the
+    # the generated initializer's Option A with its audit_actor_resolver, ...). A second child is a `rails new --api` host. SQLite only, like the
     # fresh install test; the app's shape needs Rails 8.
     class DocSamplesTest < ActiveSupport::TestCase
       SCRIPT = File.expand_path('../../support/docs_app.rb', __dir__)
@@ -99,9 +99,23 @@ module PermissionForge
 
       # Option B, README step 4 after an admin-made set, seeds under :strict.
       def assert_setup_flows(scenarios)
-        assert_equal({ 'signed_out' => [302, '/session/new'], 'bob' => 403, 'alice' => 200 }, scenarios.fetch('option_b_admin'))
+        assert_equal({ 'signed_out' => [302, '/session/new'], 'bob' => [302, '/'], 'alice' => 200 }, scenarios.fetch('option_b_admin'))
         assert_name_taken(scenarios.fetch('name_taken'))
         assert_equal({ 'bare' => 2, 'wrapped' => 1, 'nil_user_strategy' => 'deny' }, scenarios.fetch('seeds_under_strict'))
+        assert_option_a_audit_actor(scenarios.fetch('option_a_audit_actor'))
+      end
+
+      # The generated initializer's Option A with its commented
+      # audit_actor_resolver uncommented: the person signed in to the app is
+      # the actor of the admin view; without the resolver, or signed out, the
+      # Basic auth login is.
+      def assert_option_a_audit_actor(option_a)
+        signed_in = option_a.fetch('signed_in')
+        assert_equal [200, 'user', option_a['alice']], signed_in.values_at('status', 'actor_type', 'actor_id'), signed_in.inspect
+        %w[without_resolver signed_out].each do |key|
+          outcome = option_a.fetch(key)
+          assert_equal [200, 'basic_auth', nil], outcome.values_at('status', 'actor_type', 'actor_id'), "#{key}: #{outcome.inspect}"
+        end
       end
 
       # Signed in with no set: sent to the root, refused in the layout with a

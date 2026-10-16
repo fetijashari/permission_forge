@@ -119,18 +119,5 @@ module PermissionForge
     initializer 'permission_forge.model_bindings', after: :load_config_initializers do |app|
       app.config.after_initialize { PermissionForge::ModelBindings.warn! }
     end
-
-    # Deprecated: the masking machinery left the Engine (0.14). Removed in
-    # PermissionForge::Deprecation::HORIZON.
-    #
-    # @return [Boolean] what MaskedModels.apply returns
-    def self.apply_masked_attributes_to_managed_models(only: nil)
-      PermissionForge::Deprecation.warn(
-        'PermissionForge::Engine.apply_masked_attributes_to_managed_models is deprecated; ' \
-        'use PermissionForge::MaskedModels.apply(only:)',
-        callstack: caller_locations(1) # the host's call, not this method
-      )
-      PermissionForge::MaskedModels.apply(only: only)
-    end
   end
 end

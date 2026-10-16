@@ -376,10 +376,10 @@ The hook is called for each configured field during `FiltersResponseAttributes.c
 
 1. **Cache invalidation is automatic for ActiveRecord changes** — saving a `ResourceField` (or any permission record) invalidates the affected users' cached hashes, and the hash rebuilds automatically on the next read (read-through, v0.10.0+). Call `user.invalidate_permissions` or `user.regenerate_permissions` manually only after changes that bypass AR callbacks (`update_all`, `insert_all`, raw SQL) — and note that such changes write no audit event either.
 
-2. **Use `grant_all: true` for admin sets** — saves time when you want full access. Since 0.15.0 it applies no mask, also with `gdpr_defaults: true` (before, GDPR-sensitive fields were still masked). Run `rake permission_forge:audit_masks` afterwards and mask the personal-data fields the set should not read in the clear; or generate without `grant_all` (sensitive fields start masked, the rest without access) and open what is needed.
+2. **Use `grant_all: true` for admin sets** — saves time when you want full access. Since 0.15.0 it applies no mask, also with `gdpr_defaults: true` (before, GDPR-sensitive fields were still masked). Run `rake permission_forge:audit_masks` afterwards and mask the personal-data fields the set should not read in the clear; or generate without `grant_all` (every field Hidden, the personal-data ones with their recommended strategy on the row) and open what is needed — a sensitive field opened Read-only in the admin starts Masked.
 
 3. **Check the ignored_fields config** — fields like `id`, `uuid` and `password` are excluded by default (Rails' timestamps get a row, at most read-only, instead). Customize the list if needed.
 
 4. **Field names are case-sensitive** — `Name` and `name` are different fields to the engine. Always use the exact database column name. (On a case-insensitive collation, MySQL's default, the two cannot both be saved on one resource: the second is a validation error.)
 
-5. **Run the GDPR audit regularly** — `bundle exec rake permission_forge:audit_masks` detects both unmasked fields and unmapped model columns matching PII patterns.
+5. **Run the GDPR audit regularly** — `bundle exec rake permission_forge:audit_masks` detects both unmasked fields and unmapped model columns matching PII patterns. Each run records a `report.generated` event; `ACTOR=` and `REASON=` name who ran it and why.
