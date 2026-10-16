@@ -85,9 +85,11 @@ module PermissionForge
     scope :in_hash_order, -> { order(:created_at, :id) }
     # Mirrors #conditional?: a text of blanks is no condition (TRIM), one
     # hour of the two is one (it cannot be judged, and must be selected per
-    # request to fail closed).
+    # request to fail closed). The SQL holds only the adapter's quoted
+    # column names and fixed literals; `where.not` wraps it in NOT (…),
+    # never by interpolation (Brakeman reads that as SQL injection).
     scope :conditional, -> { where(conditions_present_sql) }
-    scope :unconditional, -> { where("NOT #{conditions_present_sql}") }
+    scope :unconditional, -> { where.not(conditions_present_sql) }
 
     # The sets holding an activation condition nobody can judge
     # (ActivationConditions#conditions_broken?), by id: the one reading the
@@ -106,10 +108,11 @@ module PermissionForge
     # @param name [String]
     # @return [ActiveRecord::Relation]
     def self.named(name)
-      # The pool's connection, never `connection` (it raises under
-      # ActiveRecord.permanent_connection_checkout = :disallowed).
-      column = connection_pool.with_connection { |conn| "#{conn.quote_table_name(table_name)}.#{conn.quote_column_name('name')}" }
-      where("LOWER(TRIM(#{column})) = LOWER(TRIM(?))", name.to_s)
+      # Arel nodes, quoted when the query is compiled — no SQL string is
+      # interpolated; a fresh table, since `arel_table` keeps the prefix it
+      # was first built with (the table name is a method: table_name_prefix).
+      folded = ->(node) { Arel::Nodes::NamedFunction.new('LOWER', [Arel::Nodes::NamedFunction.new('TRIM', [node])]) }
+      where(folded.call(Arel::Table.new(table_name)[:name]).eq(folded.call(Arel::Nodes.build_quoted(name.to_s))))
     end
 
     # Whether a set of the current tenant is named `name` (any case).
