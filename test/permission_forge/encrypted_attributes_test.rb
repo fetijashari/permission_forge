@@ -59,5 +59,36 @@ module PermissionForge
       assert_equal 'hello', EncryptedAttributes.decrypt(PfEncryptedNote, 'body', raw)
       assert_nil EncryptedAttributes.decrypt(PfEncryptedNote, 'body', '{"p":"garbage","h":{}}')
     end
+
+    # Review of round 7 (P2-1): under `support_unencrypted_data`, Rails
+    # answers a value it cannot decrypt (another key) with the stored value
+    # itself instead of raising — the ciphertext JSON, which a label then
+    # showed. A result that is still ciphertext is no value.
+    test 'decrypt is nil for ciphertext under another key, whether support_unencrypted_data is on or off' do
+      other = ActiveRecord::Encryption::DerivedSecretKeyProvider.new('another-primary-key')
+      cipher = ActiveRecord::Encryption::Encryptor.new.encrypt('Ana Krasniqi', key_provider: other)
+
+      [false, true].each do |support|
+        with_unencrypted_data(support) do
+          assert_nil EncryptedAttributes.decrypt(PfEncryptedNote, 'body', cipher), "support_unencrypted_data = #{support}"
+        end
+      end
+    end
+
+    test 'decrypt reads a value stored in plaintext under support_unencrypted_data, and nil without it' do
+      with_unencrypted_data(true) { assert_equal 'Plain text', EncryptedAttributes.decrypt(PfEncryptedNote, 'body', 'Plain text') }
+      with_unencrypted_data(false) { assert_nil EncryptedAttributes.decrypt(PfEncryptedNote, 'body', 'Plain text') }
+    end
+
+    private
+
+    def with_unencrypted_data(support)
+      config = ActiveRecord::Encryption.config
+      saved = config.support_unencrypted_data
+      config.support_unencrypted_data = support
+      yield
+    ensure
+      config.support_unencrypted_data = saved
+    end
   end
 end

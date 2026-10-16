@@ -23,6 +23,22 @@ class PfRequiredProbe < ActiveRecord::Base
   before_create { self.uuid ||= SecureRandom.uuid }
 end
 
+# A conditional presence rule (`if:`), declared after the concern and before
+# it: one message for a nil either way.
+class PfRequiredProbeConditional < ActiveRecord::Base
+  include PermissionForge::Concerns::ValidatesRequiredColumns
+
+  self.table_name = 'pf_required_probes'
+  validates :named, presence: { message: 'needs a name' }, if: -> { new_record? || will_save_change_to_named? }
+end
+
+class PfRequiredProbeConditionalFirst < ActiveRecord::Base
+  self.table_name = 'pf_required_probes'
+  validates :named, presence: { message: 'needs a name' }, if: -> { new_record? || will_save_change_to_named? }
+
+  include PermissionForge::Concerns::ValidatesRequiredColumns
+end
+
 class PfRequiredProbeOptionalOwner < ActiveRecord::Base
   include PermissionForge::Concerns::ValidatesRequiredColumns
 
@@ -82,6 +98,18 @@ module PermissionForge
         assert_predicate probe.errors[:pf_required_owner], :present?
       end
 
+      # Review of round 7 (P2-5): a nameless create answered
+      # {"name":["can't be blank","can't be blank"]}: a presence rule with a
+      # condition was not seen, and the column's own message came as well.
+      test 'a column that already has an error gets no second one, whatever the order of the validators' do
+        [PfRequiredProbeConditional, PfRequiredProbeConditionalFirst].each do |klass|
+          probe = klass.new(named: nil, pf_required_owner_id: 0)
+
+          refute_predicate probe, :valid?
+          assert_equal ['needs a name'], probe.errors[:named], klass.name
+        end
+      end
+
       test 'the foreign key of an optional belongs_to is refused by the column' do
         probe = PfRequiredProbeOptionalOwner.new(named: 'a')
 
@@ -115,6 +143,19 @@ module PermissionForge
         end
 
         assert_empty missing
+      end
+
+      test 'a Permission Set, a group and a rule without a name or a value say so once' do
+        set = PermissionSet.new(name: nil)
+        group = PermissionSetGroup.new(name: nil)
+        resource = create_resource(permission_set: create_permission_set(name: 'Sales'), name: 'Customer')
+        rule = PermissionSetRule.new(permission_set: resource.permission_set, resource: resource, name: nil,
+                                     field_name: 'name', operator: 'equal', field_value: nil, include_nulls: false)
+
+        [[set, :name], [group, :name], [rule, :name], [rule, :field_value]].each do |record, attribute|
+          refute_predicate record, :valid?
+          assert_equal 1, record.errors[attribute].size, "#{record.class.name}##{attribute}: #{record.errors[attribute].inspect}"
+        end
       end
 
       private

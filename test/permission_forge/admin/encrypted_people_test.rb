@@ -54,6 +54,19 @@ module PermissionForge
         assert_equal 'ana@acme.test', PersonLabel.raw_value(@ana, :email)
       end
 
+      # Review of round 7 (P1-2): the profile is cached with the permission
+      # hash (Redis, Solid Cache, ...). The default profile_builder leaves an
+      # encrypted attribute out — before 0.15 it stored the ciphertext, and
+      # reading it decrypted would put the plaintext in the cache store. The
+      # admin's labels (never cached) keep reading it decrypted.
+      test 'the default profile_builder leaves encrypted attributes out; the admin label reads them decrypted' do
+        profile = Configuration.new.profile_builder.call(@ana.reload)
+
+        assert_equal({ id: @ana.id, uuid: nil, name: nil, email: nil }, profile)
+        assert_equal 'Ana Krasniqi', PersonLabel.new(@ana, configuration: Config.new).name
+        assert_equal 'ana@acme.test', PersonLabel.new(@ana, configuration: Config.new).email
+      end
+
       test 'the search never matches the ciphertext' do
         %w[iv p at {].each { |query| assert_empty search(query), query }
         assert_empty search('ana'), 'a non-deterministic name cannot be searched in SQL'

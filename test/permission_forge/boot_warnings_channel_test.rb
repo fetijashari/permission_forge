@@ -409,17 +409,23 @@ module PermissionForge
       assert_not_predicate PermissionForge::Warnings, :server_process?
     end
 
-    # Pitchfork's command defines no constant of its own (bin/pitchfork
-    # requires what `require "pitchfork"` does): the program name says it.
-    test 'a process the pitchfork command started is a server' do
-      assert_equal %w[pitchfork], PermissionForge::Warnings::SERVER_PROGRAMS
-      program = $PROGRAM_NAME
-      $PROGRAM_NAME = '/srv/app/bin/pitchfork'
-      assert_predicate PermissionForge::Warnings, :server_process?
-      $PROGRAM_NAME = '/usr/local/bin/pitchfork-not'
-      assert_not_predicate PermissionForge::Warnings, :server_process?
-    ensure
-      $PROGRAM_NAME = program
+    # Pitchfork's and rackup's commands define no constant of their own
+    # (bin/pitchfork requires what `require "pitchfork"` does; `bundle exec
+    # rackup` boots Rack's handler, never Puma::CLI): the program name says
+    # it. Review of round 7 (P2-8): pitchfork rewrites $0 (its process
+    # title), so the original program name (Process.argv0) is read as well
+    # — and $0 still, as `bundle exec` loads a Ruby binstub in its own
+    # process and sets $0 to it, leaving Process.argv0 `bundle`.
+    test 'a process the pitchfork or rackup command started is a server, by its original program name' do
+      assert_equal %w[pitchfork rackup], PermissionForge::Warnings::SERVER_PROGRAMS
+      server = ->(argv0, program_name) { PermissionForge::Warnings.server_process?(argv0: argv0, program_name: program_name) }
+
+      assert server.call('/srv/app/bin/pitchfork', 'pitchfork (gen:0) worker[1]'), 'pitchfork, its $0 rewritten'
+      assert server.call('/usr/local/bin/rackup', '/usr/local/bin/rackup'), 'rackup'
+      assert server.call('/usr/local/bin/bundle', '/srv/app/vendor/bin/rackup'), 'bundle exec rackup, loaded in process'
+      assert_not server.call('/usr/local/bin/pitchfork-not', 'pitchfork-not'), 'another program'
+      assert_not server.call('/usr/local/bin/bundle', 'pitchfork (gen:0) worker[1]'), 'a title is no program name'
+      assert_not_predicate PermissionForge::Warnings, :server_process?, 'the test runner'
     end
 
     test 'generator_running? has one definition, which BootChecks and Audit::BootWarnings delegate to' do

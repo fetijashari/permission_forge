@@ -47,6 +47,20 @@ module PermissionForge
         assert messages.key?('name'), messages.inspect
       end
 
+      # Review of round 7 (P2-5): {"name":["can't be blank","can't be blank"]}
+      # — the presence rule and the NOT NULL column both answered.
+      test 'POST create without a name or a value names each once' do
+        post '/permission_forge/api/permission_sets', params: { permission_set: { description: 'No name' } }
+        assert_equal 1, messages.fetch('name').size, messages.inspect
+
+        post '/permission_forge/api/permission_set_groups', params: { permission_set_group: { description: 'No name' } }
+        assert_equal 1, messages.fetch('name').size, messages.inspect
+
+        post rules_path, params: { permission_set_rule: { field_name: 'name', operator: 'equal' } }
+        assert_equal 1, messages.fetch('name').size, messages.inspect
+        assert_equal 1, messages.fetch('field_value').size, messages.inspect
+      end
+
       test 'POST create of a rule without a blocked message stores none' do
         post rules_path, params: { permission_set_rule: { name: 'Named', field_name: 'name', field_value: 'x', operator: 'equal' } }
 

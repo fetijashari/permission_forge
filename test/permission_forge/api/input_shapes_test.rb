@@ -179,6 +179,18 @@ module PermissionForge
         end
       end
 
+      # Review of round 7 (P2-7): "" among the ids was dropped without a
+      # word (200, and missing from `skipped`). A JSON null among them never
+      # reaches the controller: Rails' deep_munge removes it (docs/admin-api.md).
+      test 'a bulk user_ids holding a blank string beside an id is a 422 keyed by user_ids, and nobody is assigned' do
+        [[@user.id, ''], [@user.id.to_s, ' ']].each do |value|
+          assert_no_difference(-> { PermissionForge::PermissionSetUser.count }) do
+            post "#{API}/permission_sets/#{@set.uuid}/users/bulk", params: { bulk_action: 'assign', user_ids: value }, as: :json
+          end
+          assert_keyed_refusal('user_ids', I18n.t('permission_forge.api.errors.user_ids_not_list'), value)
+        end
+      end
+
       test 'a bulk_action that is not one of the words is a 422 keyed by bulk_action' do
         [['assign'], { 'a' => 'assign' }, true, 1].each do |value|
           post "#{API}/permission_sets/#{@set.uuid}/users/bulk", params: { bulk_action: value, user_ids: [@user.id] }, as: :json

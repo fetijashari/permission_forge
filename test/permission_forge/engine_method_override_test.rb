@@ -29,6 +29,7 @@ module PermissionForge
     end
 
     test 'the engine stack holds the admin method override' do
+      PermissionForge::Engine.app # built on the first request: until then `middleware` is the configuration's proxy
       assert_includes PermissionForge::Engine.middleware.map(&:klass), PermissionForge::AdminMethodOverride
       assert_operator PermissionForge::AdminMethodOverride, :<, Rack::MethodOverride
     end
@@ -63,6 +64,18 @@ module PermissionForge
       assert PermissionSet.exists?(@set.id)
     end
 
+    # Review of round 7 (P2-9): the override keeps the app it wraps under
+    # its own name; Rack::MethodOverride's @app is not documented.
+    test 'the JSON API path reaches the wrapped app through the override\'s own reference' do
+      app = ->(env) { [200, {}, [env['REQUEST_METHOD']]] }
+      override = PermissionForge::AdminMethodOverride.new(app)
+      override.remove_instance_variable(:@app) if override.instance_variable_defined?(:@app)
+
+      env = Rack::MockRequest.env_for('/api/permission_sets/x', method: 'POST', params: { '_method' => 'delete' })
+
+      assert_equal [200, {}, ['POST']], override.call(env)
+    end
+
     test 'a POST without _method stays a POST' do
       env = engine_call(:post, "/permission_sets/#{@set.id}/duplicate")
 
@@ -88,6 +101,38 @@ module PermissionForge
     def routed(env)
       params = env['action_dispatch.request.path_parameters']
       params && [params[:controller], params[:action]]
+    end
+  end
+
+  # Review of round 7 (P2-3): in a full-stack host the application's own
+  # Rack::MethodOverride runs before the router, for every path, as Rails
+  # has it: a POST to the JSON API with `_method` or X-HTTP-Method-Override
+  # becomes that verb there (the engine's own override is the one that
+  # skips the API). api_auth and the API's guards still apply to it.
+  class FullStackMethodOverrideTest < ActionDispatch::IntegrationTest
+    API = '/permission_forge/api'
+
+    test 'in a full-stack host the host\'s Rack::MethodOverride applies to the JSON API too, behind api_auth' do
+      assert_includes Rails.application.middleware.map(&:klass), Rack::MethodOverride, 'the dummy is a full-stack host'
+
+      by_header = create_permission_set(name: 'By header')
+      post "#{API}/permission_sets/#{by_header.uuid}", headers: { 'X-HTTP-Method-Override' => 'DELETE' }, as: :json
+      assert_response :success
+      assert_not PermissionSet.exists?(by_header.id), 'the host turned the POST into a DELETE'
+
+      by_field = create_permission_set(name: 'By field')
+      post "#{API}/permission_sets/#{by_field.uuid}", params: { _method: 'delete' }
+      assert_response :success
+      assert_not PermissionSet.exists?(by_field.id)
+
+      kept = create_permission_set(name: 'Kept')
+      saved = PermissionForge.configuration.api_auth
+      PermissionForge.configuration.api_auth = ->(_controller) { false }
+      post "#{API}/permission_sets/#{kept.uuid}", headers: { 'X-HTTP-Method-Override' => 'DELETE' }, as: :json
+      assert_response :unauthorized
+      assert PermissionSet.exists?(kept.id), 'api_auth still decides'
+    ensure
+      PermissionForge.configuration.api_auth = saved if saved
     end
   end
 end
