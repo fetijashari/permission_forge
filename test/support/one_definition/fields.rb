@@ -22,9 +22,7 @@ module OneDefinition
     { name: '"readable in the clear" (ResourceField#exposes_in_clear? / .exposing_in_clear)',
       globs: GEM_CODE, needle: /mask_access: false\)|read_access && !(?:\w+\.)?mask_access/,
       canonical: %w[app/models/permission_forge/resource_field.rb],
-      allowlist: [['lib/permission_forge/admin/attention_items.rb', /field\.is_active && field\.read_access && !field\.mask_access/,
-                   'WP-8b owns attention_items.rb: it applies the one-line change from tmp/pf-verify/plan/fragments/wp-8a.attention_items.md ' \
-                   '(`field.exposes_in_clear?`); remove this entry with it']],
+      allowlist: [],
       fixture: 'rows = fields.where(mask_access: false)' },
     { name: 'a generated field row (ResourceFieldGenerator::RowBuilder): timestamps',
       globs: GEM_CODE, needle: /TimestampFields\.new/, canonical: [ROW_BUILDER], allowlist: [],

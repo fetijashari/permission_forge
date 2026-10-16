@@ -227,7 +227,7 @@ module PermissionForge
 
       # Readable and unmasked, and not acknowledged as intentional.
       def exposed?(field, acknowledged)
-        return false unless field.is_active && field.read_access && !field.mask_access
+        return false unless field.exposes_in_clear?
 
         !(acknowledged && field.sensitive_acknowledged_at.present?)
       end
