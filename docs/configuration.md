@@ -609,11 +609,14 @@ one policy:
   every process uses and keeps the policy above.
 - **What counts as a web server process:** one started by `bin/rails server` (`Rails::Server`), `puma`
   (`Puma::CLI`), `unicorn` or `unicorn_rails` (`Unicorn::Launcher`), Passenger (`PhusionPassenger::App`, its Rack
-  loader), `falcon serve` or `falcon host` (`Falcon::Command`), or `pitchfork` (by program name: its command defines
-  no constant of its own) — `PermissionForge::Warnings::SERVER_COMMANDS` and `SERVER_PROGRAMS`. Each constant is one
-  the server's command loads before it boots the app, never one `Bundler.require` loads in a runner. Another server
-  (thin, your own Rack launcher) counts as a process whose log is not read: its standard error gets the warnings, and
-  the admin and API warnings go to its log.
+  loader), `falcon serve` or `falcon host` (`Falcon::Command`), or `pitchfork` and `rackup` (by program name: their
+  commands define no constant of their own) — `PermissionForge::Warnings::SERVER_COMMANDS` and `SERVER_PROGRAMS`.
+  Each constant is one the server's command loads before it boots the app, never one `Bundler.require` loads in a
+  runner. A program name is the name the process was started with (`Process.argv0`, which pitchfork's process titles
+  do not change) or `$0` (which `bundle exec rackup` sets to the binstub it loads). These are the limits: a server
+  started some other way (thin, your own Rack launcher script, a renamed binstub) is not recognised
+  and counts as a process whose log is not read — its standard error gets the warnings, and the admin and API warnings
+  go to its log only.
 - **Not twice:** when the logger already writes to standard output or error (a container, `RAILS_LOG_TO_STDOUT`, the
   Rails 7.1+ production default), nothing is written to standard error.
 - **Nothing while `bin/rails generate` or `destroy` runs:** the install generator boots the app before it writes the
@@ -811,6 +814,8 @@ One entry per option, in the order the admin **Settings** page shows them (its "
 **Default:** the gem's own lambda
 
 **Profile details.** The profile details cached with each person's permissions (`permissions_hash[:profile]`). The default and the generated initializer build `{ id:, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email).presence || user.try(:email_address) }` (`email_address` is the column Rails 8's authentication generator creates; the key stays `email`).
+
+The profile lives in the cache store with the permission hash (Redis, Solid Cache, ...). The default leaves out an attribute your User model encrypts (`encrypts :email`): its value is `nil` there — neither the ciphertext nor the plaintext is cached (before 0.15 the ciphertext was), and an encrypted `email` gives way to a plain `email_address`. The admin's own labels still read it decrypted; they are never cached. The generated initializer's lambda is your own code: it calls the public readers, which decrypt, so it caches the plaintext — change it if that must not reach the cache store.
 
 Your User model needs no `uuid` column: `uuid` is then `nil`, and `permission_set_granted_by` / `permission_set_granted_updated_by` in `source_permission_sets` hold the granting user's uuid when the user model has one, else its id.
 

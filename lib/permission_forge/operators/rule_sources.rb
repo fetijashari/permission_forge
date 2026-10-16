@@ -14,9 +14,14 @@ module PermissionForge
     # RuleColumn.find compares a qualifier with them: the applier with its
     # real query (the default scope's and the host's joins included), the
     # model's validation and the audit with the rule's own join ({.of_join}).
+    # Each name comes with the table it stands for ({.tables}): an alias is
+    # resolved to the model it joins, so an encrypted column reached through
+    # one is seen (RuleColumn).
     #
     # @example
     #   RuleSources.of(Customer.joins(:supplier)) # => ["customers", "suppliers"]
+    #   RuleSources.tables(PfRulePathRecord.joins(:parent))
+    #   # => { "pf_rule_path_records" => "pf_rule_path_records", "parents_pf_rule_path_records" => "pf_rule_path_records" }
     #
     # @api private
     module RuleSources
@@ -31,38 +36,54 @@ module PermissionForge
         # @param relation [ActiveRecord::Relation]
         # @return [Array<String>]
         def of(relation)
+          tables(relation).keys
+        end
+
+        # Each name the query gives a table, with the table it stands for (a
+        # table's own name stands for itself; nil when it cannot be told: a
+        # subquery's alias).
+        #
+        # @param relation [ActiveRecord::Relation]
+        # @return [Hash{String => String, nil}]
+        def tables(relation)
           arel = relation.arel
-          [arel.source.left, *arel.join_sources].flat_map { |node| names_of(node) }.uniq
+          [arel.source.left, *arel.join_sources].flat_map { |node| sources_of(node) }.uniq(&:first).to_h
         end
 
         # The names a rule's own join gives (its model's query, the rule's
-        # path joined as the applier joins it).
+        # path joined as the applier joins it), with their tables ({.tables}).
         #
         # @param model [Class] the rule's model
         # @param join_type [String] the rule's join type (an unknown one reads as `joins`)
         # @param association_chain [Array<String>] the rule's path, split
-        # @return [Array<String>]
+        # @return [Hash{String => String, nil}]
         def of_join(model, join_type, association_chain)
           join_method = Services::PermissionRuleApplier::JOIN_METHODS.fetch(join_type.to_s, :joins)
-          of(RulePath.join(model.unscoped, join_method, association_chain))
+          tables(RulePath.join(model.unscoped, join_method, association_chain))
         end
 
         private
 
-        def names_of(node)
+        # [[name, table]] for one node of the FROM or a JOIN.
+        def sources_of(node)
           case node
-          when Arel::Nodes::StringJoin then string_join_names(node.left.to_s)
-          when Arel::Nodes::Join then names_of(node.left)
-          when Arel::Table then [(node.table_alias || node.name).to_s]
-          when Arel::Nodes::TableAlias then [node.name.to_s]
+          when Arel::Nodes::StringJoin then string_join_sources(node.left.to_s)
+          when Arel::Nodes::Join then sources_of(node.left)
+          when Arel::Table then [[(node.table_alias || node.name).to_s, node.name.to_s]]
+          when Arel::Nodes::TableAlias then [[node.name.to_s, aliased_table(node.relation)]]
           else []
           end
         end
 
-        def string_join_names(sql)
+        def aliased_table(relation)
+          relation.name.to_s if relation.is_a?(Arel::Table)
+        end
+
+        def string_join_sources(sql)
           sql.scan(STRING_JOIN).map do |table, alias_name|
-            named = alias_name && !JOIN_KEYWORDS.include?(alias_name.upcase) ? alias_name : table.split('.').last
-            unquote(named.strip)
+            name = unquote(table.split('.').last.strip)
+            named = alias_name && !JOIN_KEYWORDS.include?(alias_name.upcase) ? unquote(alias_name.strip) : name
+            [named, name]
           end
         end
 

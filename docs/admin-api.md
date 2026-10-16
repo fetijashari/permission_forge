@@ -96,6 +96,10 @@ This 404 is deliberately not the JSON envelope the API answers once it is on: an
 
 The API works in an application generated with `rails new --api` (`config.api_only = true`) without changes: its controllers answer JSON only, `api_auth` proves the caller, and the CSRF posture is `null_session`, so no cookie, session or flash middleware is needed. `api_base_controller_class` may then name your `ActionController::API` controller. The admin screens are another matter: they need the three middlewares an API-only app leaves out, and the boot says so — see [Admin UI: API-only applications](admin-ui.md#api-only-applications).
 
+#### Method override (`_method`, `X-HTTP-Method-Override`)
+
+The engine's own method override (`PermissionForge::AdminMethodOverride`, for the admin's forms) skips the API's paths. A full-stack application has Rails' `Rack::MethodOverride` in its own middleware stack, and it runs before the router for every path, the API's included, as it does for your own routes: a POST with a `_method` form field or an `X-HTTP-Method-Override` header becomes that verb there (`POST …/permission_sets/:uuid` with `X-HTTP-Method-Override: DELETE` deletes the set). Nothing about who may do it changes: `api_auth`, the forgery posture below and the authorization lambdas decide the overridden request as they decide the verb itself. An API-only application has no `Rack::MethodOverride`, so there the API sees the verb that was sent. Remove the middleware (`config.middleware.delete Rack::MethodOverride`) if your clients must not override verbs at all — it then stops for your own routes too.
+
 #### Who the audit log names for an API change
 
 Every change made through the API is an [audit event](audit-log.md#who-did-it-actor-resolution). Its actor is the first of: `config.audit_actor_resolver` (called with the controller), the current user (`config.current_user_resolver`), else an anonymous `api` actor labelled **"API client"**. `api_auth` answers only yes or no, so it cannot name anyone by itself.
@@ -231,7 +235,7 @@ Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 ca
 - an `expires_at` that is not one of the [ISO 8601 forms below](#expires_at-formats) (`"tuesday"`, `"2026-13-45"`, `"22/10/2026"`, a number);
 - an attribute of a body section sent in a shape it does not take, keyed by the attribute — every such attribute of the request is named, and nothing is changed (see [Attribute shapes](#attribute-shapes) below). Through 0.15.0-rc a list or an object sent for a scalar was dropped with only an "Unpermitted parameter" log line (`{"is_active": [false]}` answered 200 with the set still active), and the rest was cast: `"nope"` read as `true`, a JSON `true` for a name stored `"t"`;
 - a `grant_all` that is not a boolean (see [Attribute shapes](#attribute-shapes): `"yes"`, `""`, `2`): see [generate_fields](#resources-nested-under-permission-set);
-- a bulk assignment without `user_ids` (missing, `[]`, `""` or only blanks), or with `user_ids` that is not a list of ids (`"1,3"`, `3`, `[1, {"id": 2}]`, `[1, 1.5]`): see [Bulk User Assignment](#bulk-user-assignment);
+- a bulk assignment without `user_ids` (missing, `[]`, `""` or only blanks), or with `user_ids` that is not a list of ids (`"1,3"`, `3`, `[1, {"id": 2}]`, `[1, 1.5]`, `[1, ""]`; a `null` in the list is removed by Rails before the API reads it): see [Bulk User Assignment](#bulk-user-assignment);
 - a copy's `name` that is not text (`true`, `7`, a list, an object) on `…/clone`: `{"name": ["must be a string"]}`, and nothing is copied (through 0.15.0-rc the default copy name was used);
 - a single assignment or group membership whose `user_id` is missing, is not one user id (`"abc"` for an integer key, `[2]`, an object), or names nobody `user_list_resolver` lists: see [Permission Set Users](#permission-set-users-assign-users-to-sets);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
@@ -651,10 +655,12 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
 # 422s it records no audit event.
 # user_ids must be a JSON list of ids (numbers or strings): one string
 # ("1,3"), a number, an object, or a list holding an object, a list, a
-# fraction or a boolean is a 422 {"user_ids": ["must be a list of user ids"]}
-# and changes nothing (through 0.14.1 "1,3" was read as one unknown id: 200,
-# nobody assigned; through 0.15.0-rc an element that was no id was left out
-# without a word).
+# fraction, a boolean or a blank string beside an id ([1, ""]) is a 422
+# {"user_ids": ["must be a list of user ids"]} and changes nothing (through
+# 0.14.1 "1,3" was read as one unknown id: 200, nobody assigned; through
+# 0.15.0-rc an element that was no id, "" among them, was left out without a
+# word). A JSON null in the list never reaches the API: Rails' parameter
+# parsing (deep_munge) removes it, so [1, null] reads as [1].
 
 # Bulk revoke users from a permission set
 POST /permissions/api/permission_sets/:ps_uuid/users/bulk

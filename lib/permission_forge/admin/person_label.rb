@@ -12,7 +12,10 @@ module PermissionForge
     # attributes and blank columns fall back to the public reader. A column
     # the model encrypts (`encrypts :email`) is read decrypted through its
     # attribute type (PermissionForge::EncryptedAttributes), never as the
-    # ciphertext it stores.
+    # ciphertext it stores — for the admin's display, which is never cached.
+    # `decrypt: false` (the default profile_builder, whose profile is cached
+    # with the permission hash in the cache store) reads such a column as
+    # nil instead: neither its ciphertext nor its plaintext.
     class PersonLabel
       NAME_METHODS = %i[name full_name display_name].freeze
       # The one definition of "the user's email attribute", in order: `email`,
@@ -21,9 +24,13 @@ module PermissionForge
       # profile_builder all read it from here.
       EMAIL_ATTRIBUTES = %i[email email_address].freeze
 
-      def initialize(user, configuration: PermissionForge.configuration)
+      # @param user [Object]
+      # @param configuration [PermissionForge::Configuration]
+      # @param decrypt [Boolean] false: an encrypted column reads as nil
+      def initialize(user, configuration: PermissionForge.configuration, decrypt: true)
         @user = user
         @configuration = configuration
+        @decrypt = decrypt
       end
 
       # A user attribute read raw-column-first (read_attribute_before_type_cast,
@@ -136,12 +143,13 @@ module PermissionForge
       end
 
       # The stored value; decrypted for an encrypted column (nil when this
-      # application cannot decrypt it: the reader would raise).
+      # application cannot decrypt it: the reader would raise), nil for one
+      # under `decrypt: false`.
       def column_value(attr_name)
         value = @user.read_attribute_before_type_cast(attr_name)
         return value if value.nil? || !encrypted?(attr_name)
 
-        PermissionForge::EncryptedAttributes.decrypt(@user.class, attr_name, value)
+        PermissionForge::EncryptedAttributes.decrypt(@user.class, attr_name, value) if @decrypt
       end
 
       def encrypted?(attr_name)

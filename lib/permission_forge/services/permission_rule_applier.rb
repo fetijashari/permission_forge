@@ -174,7 +174,7 @@ module PermissionForge
 
         query = PermissionForge::Operators::RulePath.join(query, join_method, association_chain)
         field_name = rule[:field_name]
-        joined = field_name.to_s.include?('.') ? PermissionForge::Operators::RuleSources.of(query) : []
+        joined = field_name.to_s.include?('.') ? PermissionForge::Operators::RuleSources.tables(query) : {}
         target = PermissionForge::Operators::RuleColumn.find(field_name, models, joined: joined)
         build_query(query, quoted_column(models.last.table_name, field_name), rule, target)
       end

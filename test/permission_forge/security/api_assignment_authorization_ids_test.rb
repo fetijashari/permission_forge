@@ -42,9 +42,11 @@ module PermissionForge
         assert_equal [[@user.id]], @seen
       end
 
-      test 'bulk passes Integers, without blanks, junk or repeats' do
+      # A blank id beside the others is a 422 since the review of round 7
+      # (api/input_shapes_test.rb): it never reaches the lambda.
+      test 'bulk passes Integers, without junk or repeats' do
         post "#{ROOT}/permission_sets/#{@set.uuid}/users/bulk",
-             params: { user_ids: [@user.id.to_s, @other.id.to_s, '', @user.id.to_s, 'x'], bulk_action: 'assign' }
+             params: { user_ids: [@user.id.to_s, @other.id.to_s, @user.id.to_s, 'x'], bulk_action: 'assign' }
 
         assert_response :ok
         assert_equal [[@user.id, @other.id]], @seen

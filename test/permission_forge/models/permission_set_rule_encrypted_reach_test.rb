@@ -60,9 +60,12 @@ module PermissionForge
     def assert_reported(rule)
       assert_equal :encrypted_column, Operators::RuleProblem.for(rule)&.kind
       assert_includes Admin::AttentionItems.new.broken_rules.map { |item| item.rule.id }, rule.id, 'Home lists it'
-      findings = Services::SecurityAudit.call.findings.select { |finding| finding.items.any? { |item| item.include?(rule.name) } }
+      assert_equal [:encrypted_rule_columns], audit_codes(rule), 'rake permission_forge:audit names it'
+    end
 
-      assert_equal [:encrypted_rule_columns], findings.map(&:code).uniq, 'rake permission_forge:audit names it'
+    def audit_codes(rule)
+      findings = Services::SecurityAudit.call.findings.select { |finding| finding.items.any? { |item| item.include?(rule.name) } }
+      findings.map(&:code).uniq
     end
 
     # ---- P1-1: an alias ---------------------------------------------------------

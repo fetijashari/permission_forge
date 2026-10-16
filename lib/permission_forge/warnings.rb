@@ -78,9 +78,15 @@ module PermissionForge
     SERVER_COMMANDS = %w[Rails::Server Puma::CLI Unicorn::Launcher PhusionPassenger::App Falcon::Command].freeze
 
     # Servers whose command defines no constant of its own, by program name
-    # ($PROGRAM_NAME's basename): `pitchfork` (bin/pitchfork requires what
-    # `require "pitchfork"` does).
-    SERVER_PROGRAMS = %w[pitchfork].freeze
+    # (the basename of Process.argv0, the name the process was started
+    # with, or of $PROGRAM_NAME): `pitchfork` (bin/pitchfork requires what
+    # `require "pitchfork"` does, and pitchfork rewrites $0 into its process
+    # title: Process.argv0 keeps the name), `rackup` (`bundle exec rackup`
+    # boots Rack's handler, never Puma::CLI; `bundle exec` loads a Ruby
+    # binstub in its own process and sets $0 to it, so Process.argv0 reads
+    # `bundle` there). A server started some other way counts as a process
+    # whose log is not read (see SERVER_COMMANDS).
+    SERVER_PROGRAMS = %w[pitchfork rackup].freeze
 
     # The channels, in writing order.
     CHANNELS = %i[log terminal].freeze
@@ -190,10 +196,12 @@ module PermissionForge
       # SERVER_PROGRAMS): its log is where its warnings are read, outside
       # development, and the :server warnings are about it.
       #
+      # @param started_as [String] the name the process was started with (Process.argv0)
+      # @param program_name [String] $PROGRAM_NAME as it is now
       # @return [Boolean]
-      def server_process?
+      def server_process?(started_as: Process.argv0, program_name: $PROGRAM_NAME)
         SERVER_COMMANDS.any? { |name| Object.const_defined?(name, false) } ||
-          SERVER_PROGRAMS.include?(File.basename($PROGRAM_NAME.to_s))
+          [started_as, program_name].any? { |program| SERVER_PROGRAMS.include?(File.basename(program.to_s)) }
       end
 
       # Whether `logger` already writes to standard output or error (a

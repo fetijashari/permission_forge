@@ -418,7 +418,7 @@ module PermissionForge
     # process and sets $0 to it, leaving Process.argv0 `bundle`.
     test 'a process the pitchfork or rackup command started is a server, by its original program name' do
       assert_equal %w[pitchfork rackup], PermissionForge::Warnings::SERVER_PROGRAMS
-      server = ->(argv0, program_name) { PermissionForge::Warnings.server_process?(argv0: argv0, program_name: program_name) }
+      server = ->(argv0, program_name) { PermissionForge::Warnings.server_process?(started_as: argv0, program_name: program_name) }
 
       assert server.call('/srv/app/bin/pitchfork', 'pitchfork (gen:0) worker[1]'), 'pitchfork, its $0 rewritten'
       assert server.call('/usr/local/bin/rackup', '/usr/local/bin/rackup'), 'rackup'

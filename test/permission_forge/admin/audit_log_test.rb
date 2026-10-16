@@ -193,7 +193,8 @@ module PermissionForge
         assert_equal 'holdings', meta['export']
         assert_equal rows.size.to_s, meta['row_count']
         granted = by_id[grant.id.to_s]
-        assert_equal ['basic_auth', I18n.t('permission_forge.audit_log.actor_named.basic_auth', name: 'ops'), 'Bo Berisha', 'Sales', 'TCK-1', 'false'],
+        ops = I18n.t('permission_forge.audit_log.actor_named.basic_auth', name: 'ops')
+        assert_equal ['basic_auth', ops, 'Bo Berisha', 'Sales', 'TCK-1', 'false'],
                      granted.values_at('granted_by_type', 'granted_by', 'person', 'permission_set', 'reason', 'expired')
         assert_predicate granted['expires_at'], :present?
         assert_predicate granted['reviewed_at'], :blank?

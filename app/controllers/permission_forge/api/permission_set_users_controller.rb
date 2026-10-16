@@ -111,10 +111,12 @@ module PermissionForge
       # user_ids missing, [], "" or only blanks: "must name at least one
       # user". Anything else that is not a list of ids — one string such as
       # "1,3", a number, an object, a list holding an object, a list, a
-      # fraction or a boolean —: "must be a list" — through 0.14.1 "1,3" was
-      # read as one id and answered 200 with nobody assigned, and an element
-      # that was no id was left out without a word. Ids that name nobody are
-      # not refused: they are reported as `skipped`.
+      # fraction, a boolean or a blank string beside an id —: "must be a
+      # list" — through 0.14.1 "1,3" was read as one id and answered 200 with
+      # nobody assigned, and an element that was no id was left out without
+      # a word. Ids that name nobody are not refused: they are reported as
+      # `skipped`. (A JSON null among them never gets here: Rails' deep_munge
+      # removes it from the parameters.)
       def require_user_ids!
         user_ids = params[:user_ids]
         message = if Array.wrap(user_ids).all?(&:blank?) then I18n.t('permission_forge.api.errors.user_ids_missing')
@@ -124,7 +126,7 @@ module PermissionForge
       end
 
       def user_id_list?(user_ids)
-        user_ids.is_a?(Array) && user_ids.all? { |id| id.is_a?(String) || id.is_a?(Integer) }
+        user_ids.is_a?(Array) && user_ids.all? { |id| (id.is_a?(String) && id.present?) || id.is_a?(Integer) }
       end
 
       # The service's counts and its cache outcome (`cache`: `confirmed`,

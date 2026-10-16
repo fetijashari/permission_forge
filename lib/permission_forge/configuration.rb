@@ -608,15 +608,19 @@ module PermissionForge
       ->(user) { user.respond_to?(:active_for_authentication?) ? user.active_for_authentication? : true }
     end
 
+    # The profile is cached with the permission hash (the cache store:
+    # Redis, Solid Cache, ...), so an attribute the user model encrypts is
+    # left out (nil): neither its ciphertext nor its plaintext goes there.
     def default_profile_builder
       lambda { |user|
+        label = Admin::PersonLabel.new(user, decrypt: false)
         {
           id: user.id,
           uuid: user.try(:uuid),
-          # Raw-column-first (Admin::PersonLabel.raw_value): a masked User model never garbles the profile
-          name: Admin::PersonLabel.raw_value(user, :name),
+          # Raw-column-first (Admin::PersonLabel#raw_value): a masked User model never garbles the profile
+          name: label.raw_value(:name),
           # The first present of `email`, Rails 8's `email_address` (Admin::PersonLabel::EMAIL_ATTRIBUTES)
-          email: Admin::PersonLabel.new(user).email
+          email: label.email
         }
       }
     end

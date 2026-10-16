@@ -126,7 +126,8 @@ module PermissionForge
       host_translation_default: Regexp.union('human_attribute_name(name, default: MISSING)',
                                              'model_name.human(count: count, default: FieldLabel::MISSING)'),
       encrypted_attributes: Regexp.union('model.encrypted_attributes', 'model.deterministic_encrypted_attributes',
-                                         'model.type_for_attribute(name.to_s).deserialize(')
+                                         'model.type_for_attribute(name.to_s).deserialize(', 'ActiveRecord::Encryption.encryptor.encrypted?('),
+      validate_after_callback: 'set_callback :validate, :after, :validate_required_columns'
     }.freeze
 
     # What to change, per touch point, when a test fails on something its own
@@ -195,7 +196,8 @@ module PermissionForge
                                 'translation is told from Rails\' English fallback: the `default:` option is answered when no key ' \
                                 'of the lookup chain exists)',
       encrypted_attributes: 'adapt PermissionForge::EncryptedAttributes (which columns hold ciphertext: a rule is refused ' \
-                            'on one, the people search leaves one out, a person label is read decrypted)'
+                            'on one, the people search leaves one out, a person label is read decrypted)',
+      validate_after_callback: 'adapt ValidatesRequiredColumns: its NOT NULL check must run after every validation, failing valid?'
     }.freeze
 
     # Marks a failure message as a canary's.
@@ -1613,6 +1615,42 @@ module PermissionForge
 
       assert_not_equal 'Ana', raw
       assert_equal 'Ana', model.type_for_attribute('name').deserialize(raw)
+    end
+
+    # EncryptedAttributes.decrypt: under support_unencrypted_data Rails
+    # answers a value it cannot decrypt with the stored value; the gem asks
+    # the encryptor whether what it got is still ciphertext.
+    canary_test :encrypted_attributes, 'ActiveRecord::Encryption.encryptor.encrypted? tells ciphertext from plaintext' do
+      other = ActiveRecord::Encryption::DerivedSecretKeyProvider.new('another-primary-key')
+      cipher = ActiveRecord::Encryption::Encryptor.new.encrypt('Ana', key_provider: other)
+
+      assert ActiveRecord::Encryption.encryptor.encrypted?(cipher)
+      assert_not ActiveRecord::Encryption.encryptor.encrypted?('Ana')
+    end
+
+    # ValidatesRequiredColumns registers its check as an :after callback of
+    # the chain `validate` / `validates` add to (`:validate`, no rdoc): it
+    # runs after every validation of the model, also one declared after it,
+    # and an error it adds still fails valid? (an after_validation callback
+    # would not: valid? is decided before it runs).
+    canary_test :validate_after_callback, 'set_callback(:validate, :after): runs after every validator, its errors count' do
+      order = []
+      model = canary_model('PfCanaryValidateAfter') do
+        set_callback :validate, :after, lambda {
+          order << :after
+          errors.add(:email, 'after') if errors.include?(:name)
+        }
+        validate { order << :declared_later }
+        validates :name, presence: true, if: -> { true }
+      end
+      record = model.new(name: nil)
+
+      assert_not record.valid?
+      assert_equal %i[declared_later after], order
+      assert_equal ['after'], record.errors[:email]
+      only_after = canary_model('PfCanaryValidateAfterOnly') { set_callback :validate, :after, -> { errors.add(:email, 'after') } }
+
+      assert_not only_after.new(name: 'x').valid?, 'an error the after callback adds fails valid?'
     end
 
     canary_test :sandbox, 'Rails.application.sandbox?: false outside `rails console --sandbox`' do

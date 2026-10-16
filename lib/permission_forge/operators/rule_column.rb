@@ -23,7 +23,12 @@ module PermissionForge
     # JOINs, with the aliases ActiveRecord assigns — never a name that merely
     # appears in a join condition): a name the join gives that is no model
     # table (`parents_customers` on a self-join) is {UNKNOWN} and left to the
-    # database; a real table that is none of the rule's is {FOREIGN} (a filter
+    # database — unless the column it names holds ciphertext
+    # ({EncryptedAlias}: the alias is resolved to the table it stands for and
+    # the models along the path on that table; one that cannot be resolved
+    # counts as encrypted when any model along the path encrypts a column of
+    # that name), when it is that model's column, {#encrypted?}; a real table
+    # that is none of the rule's is {FOREIGN} (a filter
     # rule compares its model's own table: it matches nothing; a join rule's
     # query has to join that table itself); anything else is {#unresolvable?}
     # ({UNRESOLVABLE}) and the rule matches nothing — the database would
@@ -71,9 +76,10 @@ module PermissionForge
         # @param field_name [String] the rule's field_name
         # @param models [Array<Class>] the rule's model, then the model of each
         #   association on its path (see {.models_along})
-        # @param joined [Array<String>, nil] the names a join rule's query
-        #   gives its tables ({RuleSources.of}); nil for a filter rule, whose
-        #   query joins nothing of its own
+        # @param joined [Hash{String => String, nil}, Array<String>, nil] the
+        #   names a join rule's query gives its tables, with the table each
+        #   stands for ({RuleSources.tables}; a list of names: tables not
+        #   known); nil for a filter rule, whose query joins nothing of its own
         # @return [RuleColumn]
         def find(field_name, models, joined: nil)
           return MALFORMED unless name?(field_name)
@@ -81,7 +87,7 @@ module PermissionForge
 
           *qualifier, name = field_name.to_s.split('.')
           table = qualifier.last
-          model = table_model(table, models)
+          model = table_model(table, models) || EncryptedAlias.new(models, joined).model(table, name)
           model ? on(model, name) : elsewhere(table, models.last, joined)
         end
 
@@ -171,12 +177,30 @@ module PermissionForge
           PermissionForge::ModelLookup.model_for(rule.resource&.name)
         end
 
+        # Whether `written` names `own` the way the database compares names
+        # (exactly where it compares a quoted name as written: EXACT_NAMES).
+        #
+        # @param own [String] the name as the schema or the model has it
+        # @param written [String] the name as the rule writes it
+        # @param exact [Boolean] see #exact_names?
+        def same_name?(own, written, exact)
+          own == written || (!exact && own.casecmp?(written))
+        end
+
+        # Whether the model's database compares a quoted name as written.
+        #
+        # @param model [Class]
+        def exact_names?(model)
+          EXACT_NAMES.include?(adapter_name(model))
+        end
+
         private
 
         # A qualifier that is none of the rule's models: a name the query
-        # gives a table (an alias), a real table, or nothing at all.
+        # gives a table (an alias: `joined` is a Hash of name => table, or a
+        # list of names), a real table, or nothing at all.
         def elsewhere(table, model, joined)
-          return UNKNOWN if joined&.any? { |source| same_name?(source, table, exact_names?(model)) }
+          return UNKNOWN if joined&.any? { |source, _table| same_name?(source, table, exact_names?(model)) }
 
           data_source?(model, table) ? FOREIGN : UNRESOLVABLE
         end
@@ -186,7 +210,7 @@ module PermissionForge
         def rule_join_names(rule, model, chain)
           return unless rule.join_rule?
 
-          rule.field_name.to_s.include?('.') ? RuleSources.of_join(model, rule.join_type, chain) : []
+          rule.field_name.to_s.include?('.') ? RuleSources.of_join(model, rule.join_type, chain) : {}
         end
 
         # Every table along the path is there (asking a missing one for its
@@ -217,14 +241,6 @@ module PermissionForge
 
         def column_named(columns, name, exact)
           columns[name] || columns.each_value.find { |column| same_name?(column.name, name, exact) }
-        end
-
-        def same_name?(own, written, exact)
-          own == written || (!exact && own.casecmp?(written))
-        end
-
-        def exact_names?(model)
-          EXACT_NAMES.include?(adapter_name(model))
         end
 
         # Through the pool, never `model.connection` (it raises under
@@ -278,9 +294,11 @@ module PermissionForge
       end
 
       # Whether the column holds ciphertext: an attribute of {#model} — the
-      # class the rule is applied to (the applier's model class) or one along
-      # its path — declared with `encrypts`. Asked with the column's own name
-      # (a field name written in another case resolves to it).
+      # class the rule is applied to (the applier's model class), one along
+      # its path, or the one an alias of its query joins (EncryptedAlias) —
+      # declared with `encrypts` by it or a class of its hierarchy on its
+      # table (PermissionForge::EncryptedAttributes). Asked with the column's
+      # own name (a field name written in another case resolves to it).
       def encrypted?
         return false if model.nil? || column.nil?
 

@@ -845,7 +845,10 @@ and the RLS re-sync.
   `Warnings.emit` takes `audience: :server` (beside `severity:`): such a warning goes to the log only outside a server
   process; the server prints it as before. Every other warning keeps reaching every process. A server process is now
   also one started by `unicorn` / `unicorn_rails` (`Unicorn::Launcher`), Passenger (`PhusionPassenger::App`), `falcon`
-  (`Falcon::Command`) or `pitchfork` (by program name), as by `bin/rails server` and `puma`: in production these write
+  (`Falcon::Command`), `pitchfork` or `rackup` (by program name: the name the process was started with,
+  `Process.argv0`, which pitchfork's process titles do not change, or `$0`, which `bundle exec rackup` sets), as by
+  `bin/rails server` and `puma`; a server started some other way is not recognised (docs/configuration.md "Where
+  warnings appear"). In production these write
   every warning to the log only, as Puma's processes do (they wrote them to standard error), and a change their host
   controllers make reports `in_request: true` in its cache outcome (`Cache::Report.in_request?`). **No opt-out:** the
   log keeps every warning; a runner that must check the admin's setup reads it there.
@@ -854,6 +857,7 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#every warning has its audience in AUDIENCE, the one its site passes, and a reason when it is server -->
   <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#a server warning is written where the server policy table says -->
   <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#a server process is one bin/rails server or a web server command started -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#a process the pitchfork or rackup command started is a server, by its original program name -->
 - **Nothing is checked or logged while `bin/rails generate` or `destroy` boots the app.** The install generator boots
   the app before it writes the initializer and the migration that creates the audit table, and that boot logged six
   `[PermissionForge]` lines describing the defaults (the in-memory cache, HTTP Basic Auth without credentials, masking
@@ -1032,7 +1036,8 @@ and the RLS re-sync.
   `between`, a list stored joined with commas (`["active", "lead"]` → `"active,lead"`: it was a 422 "can't be blank");
   `permission_set_group_id` goes on taking the group's id or uuid, `null` or `""` clearing it. Outside a section, a
   copy's `name` that is not text (`…/clone`; it became the default name) and a bulk `user_ids` element that is no id (it
-  was left out) are 422s too. The admin reads its flags the same way (the field drawer, a group, an action, the set
+  was left out), `""` beside an id included, are 422s too (a JSON `null` in the list is removed by Rails' parameter
+  parsing before the API reads it). The admin reads its flags the same way (the field drawer, a group, an action, the set
   editor): a crafted `group[is_active]=nope` switched the group on; it now goes back with "is_active must be true or
   false. Nothing was changed." A static guard keeps `.permit` out of the API controllers. **No opt-out:** send each
   attribute in its shape (docs/admin-api.md "Attribute shapes"); a dropped or miscast value was a silent no-op or an
@@ -1042,6 +1047,7 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#a list for field_value under in, not_in or between is joined with commas -->
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#a copy name that is not text is a 422 keyed by name, and nothing is copied -->
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids with an element that is no id is a 422 keyed by user_ids, and nobody is assigned -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids holding a blank string beside an id is a 422 keyed by user_ids, and nobody is assigned -->
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#no .permit in the API controllers outside pf_record_attributes -->
   <!-- pin: test/permission_forge/security/route_fuzz_test.rb#~answers a wrong shape of each section attribute with a 422 keyed by it -->
   <!-- pin: test/permission_forge/html/admin_boolean_params_test.rb#a group flag the admin cannot read is a flash, and the group is unchanged -->
@@ -1135,7 +1141,12 @@ and the RLS re-sync.
   value is. A rule saved before the host encrypted the attribute stays editable in its other attributes (a copy keeps
   it as it is), the audit lists it as `encrypted_rule_columns` (High while people hold the set) and Home under "Rules
   that match nothing" (`Operators::RuleProblem` kind `:encrypted_column`; one reader of the declarations,
-  `PermissionForge::EncryptedAttributes`, a canary watches `encrypted_attributes`). Under
+  `PermissionForge::EncryptedAttributes`, a canary watches `encrypted_attributes`). The column is found wherever the
+  rule reaches it: through an alias its join gives (`twins_notes.body` on a self-join: the alias is resolved to the
+  model it joins, `Operators::RuleSources.tables`; one that cannot be resolved counts as encrypted when any model along
+  the rule's path encrypts a column of that name), and under single-table inheritance (a column is encrypted when the
+  class, its base class or any loaded class of the hierarchy on the same table encrypts it — a subclass's `encrypts`
+  also refuses a rule on its parent, and Rails' own answer for the parent depends on load order). Under
   `support_unencrypted_data` such a rule used to match the rows still stored in plaintext; it no longer does.
   **Opt out:** compare a deterministically encrypted attribute through a custom operator whose strategy calls
   `query.where(attribute => value)` (a custom operator gets the value as written).
@@ -1144,6 +1155,18 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_column_test.rb#it is checked again when its column changes or its operator moves off the null checks -->
   <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#encrypted_column: a row written past the model is named, denies, is listed, compiles to FALSE -->
   <!-- pin: test/rls/rls_rule_parity_test.rb#a rule on an encrypted attribute: the null checks agree, every other built-in operator matches nothing -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a stored one through the alias matches nothing, never the row it should hide, and is reported -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#an alias that cannot be resolved counts as encrypted when a model along the path encrypts the column -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a rule on the base class is refused, and a stored one matches nothing for the base and the subclass -->
+- **The default `profile_builder` leaves out an attribute the user model encrypts.** The profile is cached with each
+  person's permission hash, in the cache store (Redis, Solid Cache, a file or memory store). With `encrypts :email` (or
+  `:name`) on the user model, the default builder stored the ciphertext JSON there before 0.15; reading it decrypted
+  would put the plaintext in the cache store. `permissions_hash[:profile][:email]` and `[:name]` are now `nil` for an
+  encrypted attribute (an encrypted `email` gives way to a plain `email_address`); the admin's labels, which are never
+  cached, still read it decrypted (`Admin::PersonLabel`, `decrypt: false` for the profile). The generated initializer's
+  `profile_builder` is the host's own code and calls the public readers, which decrypt. **Opt out:** set a
+  `config.profile_builder` of your own that returns what the cache store may hold.
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#the default profile_builder leaves encrypted attributes out; the admin label reads them decrypted -->
 - **A LIKE operator on a column that is not text is refused on `operator`, naming the column's type.** `seats
   contains '1'` on an integer column (PostgreSQL), or any LIKE operator on a `json` column, was refused as "is not a
   value Customer.seats can hold" on `field_value`, although the value was fine (field test round 7, D#22). It is now
@@ -1189,10 +1212,12 @@ and the RLS re-sync.
   round 7, E#70); the event page, the log's rows and a person's audit tab render it from the locale
   (`pf_audit_reason`). An API change nobody names is stored with the actor label `api_client` (was "API client") and
   the settings observer's `boot` is a code too (`Audit::ActorCodes`); `Admin::ActorLabel` names both in the page's
-  language (also an "API client" stored before). The CSV export and the API return the stored values. **Opt out:** set
-  `config.audit_actor_resolver`, so an API change names its client.
+  language (also an "API client" stored before), and so does the "who holds what" export's `granted_by` (a document
+  people read; `granted_by_type` and `granted_by_id` stay as stored). The events export and the API return the stored
+  values. **Opt out:** set `config.audit_actor_resolver`, so an API change names its client.
   <!-- pin: test/permission_forge/audit/generated_codes_test.rb#the cleaner records the reason code, and the event page, the log and the person tab render it translated -->
   <!-- pin: test/permission_forge/audit/generated_codes_test.rb#an API client nobody names and the boot are stored as codes and named in the locale -->
+  <!-- pin: test/permission_forge/admin/audit_log_test.rb#who holds what names an actor stored as a code in the language of the export -->
 
 ### Deprecated
 
@@ -1797,19 +1822,34 @@ and the RLS re-sync.
   with the three middlewares docs/admin-ui.md names, every edit and delete form (a POST with a hidden `_method`) answered
   404 "No route matches [POST] …" (field test round 7, D#67). The engine brings its own,
   `PermissionForge::AdminMethodOverride`, in the engine's middleware stack: it runs for the admin's paths only (a
-  full-stack host's own is a no-op before it) and never for the JSON API's, where `_method` and
-  `X-HTTP-Method-Override` change nothing.
+  full-stack host's own is a no-op before it) and skips the JSON API's. A full-stack host's own `Rack::MethodOverride`
+  runs before the router for every path, the API's included, as Rails has it: there a POST with `_method` or
+  `X-HTTP-Method-Override` reaches the API as that verb, and `api_auth`, the forgery posture and the authorization
+  lambdas still decide it (docs/admin-api.md "Method override"). An API-only host has none, so its API sees the verb
+  that was sent.
   <!-- pin: test/permission_forge/engine_method_override_test.rb#an admin form posted with _method=delete reaches the destroy route -->
   <!-- pin: test/permission_forge/engine_method_override_test.rb#the JSON API is left alone: _method and the override header do not change its verb -->
+  <!-- pin: test/permission_forge/engine_method_override_test.rb#in a full-stack host the host's Rack::MethodOverride applies to the JSON API too, behind api_auth -->
   <!-- pin: test/permission_forge/docs/doc_samples_test.rb#an API-only host: the JSON API works, the admin names the middlewares it needs -->
 - **The admin reads a person's encrypted name or email decrypted.** With `encrypts :email` (or `:name`) on the user
-  model, people labels (and the default `profile_builder`'s profile) showed the ciphertext JSON, the people search's
-  LIKE matched it (`iv` found everyone) and bulk assignment compared it with the pasted text (nobody). Labels read such a
-  column through its attribute type; the search and bulk matching leave it out, and match a deterministically encrypted
-  one against the whole value exactly.
+  model, people labels showed the ciphertext JSON, the people search's LIKE matched it (`iv` found everyone) and bulk
+  assignment compared it with the pasted text (nobody). Labels read such a column through its attribute type; the
+  search and bulk matching leave it out, and match a deterministically encrypted one against the whole value exactly.
+  A value this application cannot decrypt (another key) is no label, also under `support_unencrypted_data`, where
+  Rails answers it with the stored ciphertext; a value stored in plaintext there reads as written. The default
+  `profile_builder` leaves such an attribute out (Changed).
+  <!-- pin: test/permission_forge/encrypted_attributes_test.rb#decrypt is nil for ciphertext under another key, whether support_unencrypted_data is on or off -->
+  <!-- pin: test/permission_forge/encrypted_attributes_test.rb#decrypt reads a value stored in plaintext under support_unencrypted_data, and nil without it -->
   <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#a label reads the name and email decrypted, never the ciphertext -->
   <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#the search never matches the ciphertext -->
   <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#bulk matching finds a deterministically encrypted email exactly, and nobody by an encrypted name -->
+- **A missing name or value is said once.** A Permission Set or a group created without a name answered
+  `{"name": ["can't be blank", "can't be blank"]}` (a rule without a value too, on `field_value`): the presence rule
+  holds a condition, and the NOT NULL check (`ValidatesRequiredColumns`) did not see it. The NOT NULL check now runs
+  after every other validation and adds nothing to an attribute that already has an error, whatever the order the
+  validations were declared in (a canary watches the `validate` chain's `:after` callbacks).
+  <!-- pin: test/permission_forge/concerns/validates_required_columns_test.rb#a column that already has an error gets no second one, whatever the order of the validators -->
+  <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#POST create without a name or a value names each once -->
 
 ### Documentation
 

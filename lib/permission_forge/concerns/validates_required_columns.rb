@@ -9,9 +9,12 @@ module PermissionForge
     #
     # Left to whoever fills them: the primary key; on a new record the
     # columns Rails or the gem fill when the row is created (the timestamps,
-    # `uuid` from HasUuid); a column an unconditional presence rule already
-    # checks, its own or that of a required `belongs_to` naming it as the
-    # foreign key (one message, not two).
+    # `uuid` from HasUuid); a column that already has an error once every
+    # other validation ran — a presence rule's, with or without a condition
+    # — or whose required `belongs_to` names it as the foreign key (one
+    # message, not two). The check runs after every other validation of the
+    # model whatever the order they were declared in: an `:after` callback
+    # of the `validate` chain (canary `:validate_after_callback`).
     #
     # @api private
     module ValidatesRequiredColumns
@@ -23,13 +26,9 @@ module PermissionForge
       TIMESTAMPS = %w[created_at created_on updated_at updated_on].freeze
 
       included do
-        validate :validate_required_columns
-      end
-
-      # Whether `validator` refuses nil on every save: a presence rule with
-      # no condition and no allow_nil / allow_blank.
-      def self.unconditional_presence?(validator)
-        validator.kind == :presence && validator.options.slice(:if, :unless, :on, :allow_nil, :allow_blank).empty?
+        # After every `validate` / `validates` of the model, also those
+        # declared below the include or in a subclass.
+        set_callback :validate, :after, :validate_required_columns
       end
 
       # Whether `association` is a required belongs_to: Rails' own presence
@@ -50,24 +49,25 @@ module PermissionForge
         end
       end
 
+      # Said already (an error on the attribute), or filled or checked by someone else.
       def filled_elsewhere?(name)
         klass = self.class
-        return true if name == klass.primary_key
+        return true if errors.include?(name) || name == klass.primary_key
         return true if new_record? && filled_on_create?(name)
 
-        presence_checked?(name)
+        required_foreign_key?(name)
       end
 
       def filled_on_create?(name)
         FILLED_ON_CREATE.include?(name) || (self.class.record_timestamps && TIMESTAMPS.include?(name))
       end
 
-      def presence_checked?(name)
+      # The foreign key of a required belongs_to: its error is keyed by the association.
+      def required_foreign_key?(name)
         klass = self.class
-        klass.validators_on(name).any? { |validator| ValidatesRequiredColumns.unconditional_presence?(validator) } ||
-          klass.reflect_on_all_associations(:belongs_to).any? do |reflection|
-            reflection.foreign_key.to_s == name && ValidatesRequiredColumns.required_association?(klass, reflection.name)
-          end
+        klass.reflect_on_all_associations(:belongs_to).any? do |reflection|
+          reflection.foreign_key.to_s == name && ValidatesRequiredColumns.required_association?(klass, reflection.name)
+        end
       end
     end
   end
