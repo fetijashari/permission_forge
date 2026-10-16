@@ -107,7 +107,8 @@ module PermissionForge
       arel_matches: 'column.matches(',
       arel_named_function: "Arel::Nodes::NamedFunction.new('COALESCE'",
       schema_cache: 'connection.schema_cache.columns_hash(',
-      schema_cache_data_sources: Regexp.union('schema_cache.data_source_exists?(', 'schema_cache.clear_data_source_cache!('),
+      schema_cache_data_sources: Regexp.union('cache.data_source_exists?(', 'cache.clear_data_source_cache!('),
+      schema_cache_columns_identity: Regexp.union('columns.object_id', 'fresh.object_id'),
       association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!',
                                             'reflection.chain.any?', 'link.through_reflection?', 'link.source_reflection'),
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
@@ -165,9 +166,11 @@ module PermissionForge
       arel_between: 'adapt Operators::Registry (between) and the RLS operator SQL',
       arel_matches: 'adapt Operators::Registry (LIKE operators)',
       arel_named_function: 'adapt PermissionSetUser.last_reviewed_column',
-      schema_cache: 'adapt Operators::RuleColumn.on',
-      schema_cache_data_sources: 'adapt Operators::RuleColumn.data_source? / .reread_schema (a field name qualified with a ' \
-                                 'table that is not there matches nothing; the validation reads again before it refuses)',
+      schema_cache: 'adapt SchemaRead.columns (Operators::RuleColumn.on and every reader of a model\'s columns go through it)',
+      schema_cache_data_sources: 'adapt SchemaRead.table? (a field name qualified with a table that is not there matches ' \
+                                 'nothing; the schema is read again once before that answer)',
+      schema_cache_columns_identity: 'adapt SchemaRead.reread_for / .confirmed? (a name confirmed missing is tied to the ' \
+                                     'columns read: tell a read apart by something else, or a missing name re-reads every time)',
       association_join_checks: 'adapt Operators::RulePath#through / #unjoinable_cause / #record_dependent? to what ' \
                                'Associations::JoinDependency#build checks before it joins and the scopes a :through ' \
                                'evaluates along its chain (a path it raises for must stay broken, one it joins followed)',
@@ -1386,19 +1389,36 @@ module PermissionForge
 
         assert cache.data_source_exists?('pf_canary_records'), canary(
           :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers true for a table that is there',
-          'Operators::RuleColumn.data_source? asks it before a qualified field name is left to the database: adapt it'
+          'SchemaRead.table? (Operators::RuleColumn.data_source?) asks it before a qualified field name is left to the database: adapt it'
         )
         assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
           :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers false for a table that is not there',
-          'a rule qualified with a table that is not there must match nothing: adapt Operators::RuleColumn.data_source?'
+          'a rule qualified with a table that is not there must match nothing: adapt SchemaRead.table?'
         )
         cache.clear_data_source_cache!('pf_canary_no_such_table')
 
         assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
           :schema_cache_data_sources, 'schema_cache.clear_data_source_cache!(name) no longer takes one name',
-          'Operators::RuleColumn.reread_schema forgets a cached answer before a rule is refused: adapt it'
+          'SchemaRead.table? forgets a cached "no" before it answers it: adapt it'
         )
       end
+    end
+
+    canary_test :schema_cache_columns_identity,
+                'schema_cache.columns_hash(table) answers the same Hash until the table is read again (reset_column_information)' do
+      read = -> { PfCanaryRecord.connection.schema_cache.columns_hash(PfCanaryRecord.table_name) }
+      first = read.call
+
+      assert_same first, read.call, canary(
+        :schema_cache_columns_identity, 'schema_cache.columns_hash answers a new Hash on every call',
+        'SchemaRead ties a name confirmed missing to the read that confirmed it (its object_id): adapt SchemaRead.confirmed?'
+      )
+      PfCanaryRecord.reset_column_information
+
+      assert_not_same first, read.call, canary(
+        :schema_cache_columns_identity, 'reset_column_information no longer reads the table into a new Hash',
+        'SchemaRead tells a later read of the table from the one that confirmed a name missing by it: adapt SchemaRead.reread!'
+      )
     end
 
     canary_test :association_join_checks,

@@ -18,11 +18,11 @@ module OneDefinition
       canonical: [SCHEMA_READ],
       allowlist: [
         ['lib/permission_forge/concerns/masked_attributes.rb', /columns_hash\.each_key/,
-         'defines a guarded getter for every column the model has when the concern arrives (ignored columns excluded): ' \
-         'a column added later gets Rails\' getter at the next reset_column_information, which the concern follows'],
-        ['lib/permission_forge/concerns/masked_attributes/virtual_readers.rb', /columns_hash\.key\?\(name\)/,
-         'runs while the reader wrappers are defined, under Rails\' attribute-method lock: a re-read there would ' \
-         'undefine the methods being wrapped; a column is never wrapped as a virtual reader either way'],
+         'defines a guarded getter for every column the model has when the concern arrives (ignored columns excluded), ' \
+         'captured at include time as the comment there says: a list read, it decides no refusal'],
+        ['lib/permission_forge/admin/person_label.rb', /klass\.column_names\.include\?\(attr_name\)/,
+         'a label reads a column raw when the user has it, else its public reader: a "no" refuses nothing, and the ' \
+         'user may be any object that answers column_names (a custom user_list_resolver)'],
         ['lib/generators/permission_forge/install/install_generator.rb', /respond_to\?\(:columns_hash\)/,
          'the install generator types the host key columns once, in a fresh process'],
         ['lib/generators/permission_forge/install/install_generator.rb', /model\.columns_hash\[primary_key\]/,

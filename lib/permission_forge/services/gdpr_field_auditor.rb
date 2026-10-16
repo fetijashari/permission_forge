@@ -154,8 +154,15 @@ module PermissionForge
         PermissionForge::ModelLookup.model_for(resource_name)
       end
 
+      # The model's columns, compared with the database once per run
+      # (PermissionForge::SchemaRead): a column a migration added while the
+      # process was up is audited.
       def model_columns_for(resource_name)
-        model_for(resource_name)&.column_names
+        @model_columns ||= {}
+        @model_columns.fetch(resource_name) do
+          model = model_for(resource_name)
+          @model_columns[resource_name] = model && PermissionForge::SchemaRead.column_names(model, verify: true)
+        end
       rescue ActiveRecord::StatementInvalid
         nil
       end

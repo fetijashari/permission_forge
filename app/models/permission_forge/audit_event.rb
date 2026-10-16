@@ -72,7 +72,7 @@ module PermissionForge
     # @return [Symbol, nil]
     def self.tenant_column
       column = PermissionForge.configuration.resolved_tenant_column
-      column if column && column_names.include?(column.to_s)
+      column if column && PermissionForge::SchemaRead.column?(self, column.to_s, ignored: false)
     end
 
     # The events of one tenant, on the relation it is called on; every event

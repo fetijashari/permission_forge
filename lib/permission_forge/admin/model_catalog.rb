@@ -5,6 +5,15 @@ module PermissionForge
     # Read-only reflection over the host app's ActiveRecord models, so the
     # admin UI only ever offers real models, columns and associations (no
     # free-text names that silently do nothing when misspelled).
+    #
+    # Columns are read through PermissionForge::SchemaRead: a model's column
+    # list is compared with the database once per catalog (a column a
+    # migration added while the process was up is offered, a removed one
+    # flagged), and a name that is not a column is asked again once before
+    # it is called virtual. Associations are the ones a rule's path can
+    # follow (Operators::RulePath.unjoinable_cause): the builder never offers
+    # one the applier refuses to join. Labels are Admin::FieldLabel's and
+    # Admin::ModelLabel's.
     class ModelCatalog
       Column = Struct.new(:name, :label, :type, :enum_values, :user_reference, :virtual, keyword_init: true) do
         def user_reference? = user_reference
@@ -16,8 +25,8 @@ module PermissionForge
         # @param target [Class] the reflection's resolved class
         # @param owner [Class] the model declaring the association
         def self.from(reflection, target, owner)
-          name = reflection.name
-          new(name: name.to_s, label: owner.human_attribute_name(name), class_name: target.name,
+          name = reflection.name.to_s
+          new(name: name, label: FieldLabel.for(owner, name).text, class_name: target.name,
               foreign_key: reflection.foreign_key.to_s, macro: reflection.macro)
         end
       end
@@ -37,11 +46,19 @@ module PermissionForge
         end
 
         def name = @klass.name
-        def label = @klass.model_name.human
-        def plural_label = @klass.model_name.human(count: 2)
+        def label = ModelLabel.for(@klass).text
+        def plural_label = ModelLabel.plural(@klass)
 
+        # The model's columns (ignored_columns excluded), compared with the
+        # database once for this catalog (PermissionForge::SchemaRead).
         def column_names
-          @column_names ||= @klass.column_names
+          @column_names ||= PermissionForge::SchemaRead.column_names(@klass, verify: true)
+        end
+
+        # Whether `name` is a column of the model, asked again once after the
+        # schema is read again before "no" (PermissionForge::SchemaRead).
+        def column?(name)
+          PermissionForge::SchemaRead.column?(@klass, name.to_s, ignored: false)
         end
 
         # Columns PermissionForge manages (ignored_fields removed).
@@ -87,9 +104,9 @@ module PermissionForge
 
         def column(name)
           name = name.to_s
-          return virtual_column(name) unless column_names.include?(name)
+          return virtual_column(name) unless column?(name)
 
-          Column.new(name: name, label: @klass.human_attribute_name(name), type: column_type(name),
+          Column.new(name: name, label: FieldLabel.for(@klass, name).text, type: column_type(name),
                      enum_values: enum_values(name), user_reference: user_reference?(name), virtual: false)
         end
 
@@ -107,14 +124,20 @@ module PermissionForge
           @virtual_fields ||= PermissionForge::VirtualFields.new(@klass, @configuration)
         end
 
-        # nil for polymorphic or unresolvable associations.
+        # nil for an association a rule's path cannot follow
+        # (Operators::RulePath.unjoinable_cause: polymorphic, a
+        # record-dependent scope, a broken :through or inverse_of, a class
+        # that cannot be loaded): the applier refuses to join it.
         def build_association(ref)
-          target = safe_klass(ref) unless ref.polymorphic?
-          Association.from(ref, target, @klass) if target
+          return if PermissionForge::Operators::RulePath.unjoinable_cause(ref)
+
+          Association.from(ref, ref.klass, @klass)
+        rescue *PermissionForge::Operators::RuleColumn::UNTELLABLE
+          nil
         end
 
         def virtual_column(name)
-          Column.new(name: name, label: @klass.human_attribute_name(name), type: :string,
+          Column.new(name: name, label: FieldLabel.for(@klass, name).text, type: :string,
                      enum_values: nil, user_reference: false, virtual: true)
         end
 
@@ -185,7 +208,7 @@ module PermissionForge
 
       def usable?(klass)
         klass.is_a?(Class) && klass < ActiveRecord::Base && !klass.abstract_class? &&
-          !klass.name.to_s.start_with?('PermissionForge::') && klass.table_exists?
+          !klass.name.to_s.start_with?('PermissionForge::') && PermissionForge::SchemaRead.table?(klass, klass.table_name)
       rescue StandardError
         false
       end

@@ -82,10 +82,11 @@ module PermissionForge
       SchemaRead.reset!
     end
 
+    # Each reader on a schema of its own: the first re-read would refresh
+    # the cache for every reader after it.
     test 'every reader sees a column a migration added after the schema was read, without a reset' do
-      ADDED.each { |name, type| connection.add_column(TABLE, name, type) }
+      blind = READERS.reject { |_name, reader| columns_added_after_the_read { reader.call(self) } }.keys
 
-      blind = READERS.reject { |_name, reader| reader.call(self) }.keys
       assert_empty blind, 'readers that answered from the schema as it was before the migration'
     end
 
@@ -143,6 +144,17 @@ module PermissionForge
     private
 
     def connection = ActiveRecord::Base.connection
+
+    # The table as it was when the process read it, then the migration.
+    def columns_added_after_the_read
+      connection.drop_table(TABLE, if_exists: true)
+      connection.create_table(TABLE) { |t| t.string :label }
+      MODEL.reset_column_information
+      MODEL.columns_hash
+      SchemaRead.reset!
+      ADDED.each { |name, type| connection.add_column(TABLE, name, type) }
+      yield
+    end
 
     def new_set
       create_permission_set.tap { |set| @sets << set }

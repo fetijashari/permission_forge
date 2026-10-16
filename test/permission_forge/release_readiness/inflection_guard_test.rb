@@ -42,16 +42,9 @@ module PermissionForge
        'the host application\'s constant name (admin_app_name overrides it); the same in every locale']
     ].freeze
 
-    # Admin::ModelCatalog builds its Column / Association / ModelInfo labels
-    # itself; the admin renders them through Admin::FieldLabel and
-    # Admin::ModelLabel instead. WP-13 (schema freshness) owns the file this
-    # wave: make the catalog call the two and remove this entry.
-    HOST_TRANSLATION_ALLOWLIST = [
-      ['lib/permission_forge/admin/model_catalog.rb', /human_attribute_name\(name\)/,
-       'the catalog labels are not rendered: FieldLabel decides the label of a column or association (wp-9 → wp-13 handoff)'],
-      ['lib/permission_forge/admin/model_catalog.rb', /model_name\.human/,
-       'the catalog labels are not rendered: ModelLabel decides the label of a model (wp-9 → wp-13 handoff)']
-    ].freeze
+    # Every label of a stored name goes through Admin::FieldLabel /
+    # Admin::ModelLabel (Admin::ModelCatalog's too, since WP-13): no entry.
+    HOST_TRANSLATION_ALLOWLIST = [].freeze
 
     test 'nothing in app/ or lib/permission_forge/admin inflects English' do
       hits = StaticGuard.scan(globs: GLOBS, needle: INFLECTIONS, allowlist: INFLECTION_ALLOWLIST,

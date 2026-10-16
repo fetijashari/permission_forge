@@ -105,7 +105,7 @@ module PermissionForge
         name = field.name
         virtual = virtual?(name)
         Row.new(name: name, label: human(name, field), field: field, match: @sensitive.match(name),
-                virtual: virtual, missing: @model.present? && !virtual && @model.column_names.exclude?(name),
+                virtual: virtual, missing: @model.present? && !virtual && !@model.column?(name),
                 level: FieldLevel.level_of(field, muting: @muting), declared: declared?(name),
                 implicit_grant: !field.is_active && implicit_grant?(name))
       end

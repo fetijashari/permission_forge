@@ -21,7 +21,8 @@ module PermissionForge
   # @api private
   class TimestampFields
     # Rails' default names (ActiveRecord::Timestamp); only those the model has
-    # as columns count.
+    # as columns count (PermissionForge::SchemaRead: a timestamp a migration
+    # just added is read-only too).
     NAMES = %w[created_at created_on updated_at updated_on].freeze
 
     READ_ONLY = { read_access: true, edit_access: false, mask_access: false }.freeze
@@ -31,7 +32,7 @@ module PermissionForge
     def self.names(model_class)
       return [] unless model_class.respond_to?(:column_names)
 
-      NAMES & model_class.column_names
+      SchemaRead.columns_among(model_class, NAMES)
     rescue ActiveRecord::ActiveRecordError # no table: the rows take the level as chosen
       []
     end

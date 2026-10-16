@@ -220,7 +220,7 @@ module PermissionForge
       return unless configuration.tenant_enabled? && self.class.tenant_scoping_applied?
 
       column = configuration.resolved_tenant_column.to_s
-      column if self.class.column_names.include?(column)
+      column if PermissionForge::SchemaRead.column?(self.class, column, ignored: false)
     end
 
     # InvalidatesManagedActions: a new set has no resources yet and the index

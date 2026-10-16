@@ -69,7 +69,7 @@ module PermissionForge
 
     # The review columns exist (bin/rails generate permission_forge:upgrade).
     def self.review_supported?
-      column_names.include?('reviewed_at')
+      PermissionForge::SchemaRead.column?(self, 'reviewed_at', ignored: false)
     end
 
     # Arel for "when this assignment was last reviewed" (see stale_before).

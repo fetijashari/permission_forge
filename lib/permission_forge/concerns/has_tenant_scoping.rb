@@ -76,7 +76,7 @@ module PermissionForge
           return all unless config.tenant_enabled? && tenant_scoping_applied?
 
           column = config.resolved_tenant_column
-          return unscoped if tenant_id.nil? || !column_names.include?(column.to_s)
+          return unscoped if tenant_id.nil? || !PermissionForge::SchemaRead.column?(self, column.to_s, ignored: false)
 
           unscoped.where(column => [tenant_id, nil])
         end

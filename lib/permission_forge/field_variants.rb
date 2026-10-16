@@ -10,7 +10,12 @@ module PermissionForge
   # - an `alias_attribute`,
   # - a public reader or writer (a `delegate :uuid, to: :owner, prefix: true`
   #   defines `owner_uuid`; `def owner_uuid=(uuid)` takes one), or
-  # - a declared virtual field (PermissionForge::VirtualFields#extra).
+  # - a virtual field, declared or discovered (PermissionForge::VirtualFields#include?)
+  #
+  # — the answer FieldNames gives (FieldNames.declares?, one definition). A
+  # name the table has no column for is asked again after the schema is
+  # read again, once (PermissionForge::SchemaRead): a variant column a
+  # migration just added gets its entry.
   #
   # A name the model does not have would be an entry in the permission hash
   # for nothing (the admin's Effective access listed it as a field and
@@ -73,8 +78,7 @@ module PermissionForge
     def attribute?(name)
       return true unless model
 
-      model.attribute_names.include?(name) || model.attribute_alias?(name) || model.public_method_defined?(name) ||
-        model.public_method_defined?("#{name}=") || virtual_names.include?(name)
+      FieldNames.declares?(model, name) || virtual_fields.include?(name)
     rescue *UNREADABLE
       true
     end
@@ -86,8 +90,8 @@ module PermissionForge
       @model = klass.is_a?(Class) && klass < ActiveRecord::Base ? klass : nil
     end
 
-    def virtual_names
-      @virtual_names ||= VirtualFields.new(model, @configuration).extra
+    def virtual_fields
+      @virtual_fields ||= VirtualFields.new(model, @configuration)
     end
   end
 end

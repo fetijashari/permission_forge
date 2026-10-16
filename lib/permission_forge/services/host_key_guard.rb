@@ -84,7 +84,7 @@ module PermissionForge
         def mismatch(model, column, host_name)
           host = host_name.to_s.safe_constantize
           key_type = primary_key_type(host)
-          column_type = model.columns_hash[column]&.type
+          column_type = PermissionForge::SchemaRead.column(model, column)&.type
           return unless column_type == :integer && key_type && key_type != :integer
 
           Mismatch.new(model.table_name, column, column_type, host.name, key_type)
@@ -92,10 +92,10 @@ module PermissionForge
 
         # nil for a missing model or a composite primary key (not checked).
         def primary_key_type(host)
-          return unless host.respond_to?(:columns_hash)
+          return unless host.is_a?(Class) && host < ActiveRecord::Base
 
           key = host.primary_key
-          host.columns_hash[key]&.type if key.is_a?(String)
+          PermissionForge::SchemaRead.column(host, key)&.type if key.is_a?(String)
         end
 
         def message(found)

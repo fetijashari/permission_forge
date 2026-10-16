@@ -229,13 +229,16 @@ module PermissionForge
         policy[/AND \(psu\.expires_at IS NULL OR psu\.expires_at > now\(\)\) \) OR \((.*)\){6}\z/m, 1]
       end
 
+      # The user_id column as SchemaRead (the one reader of a model's columns) answers it.
       def with_user_id_column(type, sql_type)
-        model = PermissionForge::PermissionSetUser
-        columns = model.columns_hash.merge('user_id' => Struct.new(:type, :sql_type).new(type, sql_type))
-        model.define_singleton_method(:columns_hash) { columns }
+        read = PermissionForge::SchemaRead.method(:column)
+        user_id = Struct.new(:type, :sql_type).new(type, sql_type)
+        replace_singleton_method(PermissionForge::SchemaRead, :column) do |model, name, &pick|
+          model == PermissionForge::PermissionSetUser && name.to_s == 'user_id' ? user_id : read.call(model, name, &pick)
+        end
         yield
       ensure
-        model.singleton_class.remove_method(:columns_hash)
+        replace_singleton_method(PermissionForge::SchemaRead, :column, read)
       end
     end
   end

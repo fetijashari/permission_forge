@@ -178,15 +178,12 @@ module PermissionForge
       errors.add(:field_name, problem.validation_message) if problem
     end
 
-    # The rule's column problem (Operators::RuleProblem.of_column), after
-    # reading the schema again for what it names: the schema cache may
-    # predate a column a migration just added, or a table (a running server,
-    # an old process in a rolling deploy).
+    # The rule's column problem (Operators::RuleProblem.of_column). The
+    # column lookup reads the schema again before it calls a name missing
+    # (PermissionForge::SchemaRead): the schema cache may predate a column a
+    # migration just added, or a table (a running server, an old process in
+    # a rolling deploy).
     def column_problem
-      problem = PermissionForge::Operators::RuleProblem.of_column(self)
-      return unless problem
-
-      PermissionForge::Operators::RuleColumn.reread_schema(problem)
       PermissionForge::Operators::RuleProblem.of_column(self)
     end
 
