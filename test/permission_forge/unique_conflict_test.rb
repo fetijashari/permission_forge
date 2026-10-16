@@ -63,7 +63,8 @@ module PermissionForge
     end
 
     test 'an error naming no known index, or nothing at all, names no conflict' do
-      ["UNIQUE constraint failed: audit_events.uuid", "PG::UniqueViolation: duplicate key value violates unique constraint \"index_users_on_email\"",
+      ['UNIQUE constraint failed: audit_events.uuid',
+       'PG::UniqueViolation: duplicate key value violates unique constraint "index_users_on_email"',
        '', 'Mysql2::Error: Duplicate entry'].each do |message|
         error = ActiveRecord::RecordNotUnique.new(message)
         assert_nil UniqueConflict.messages(error), message.inspect

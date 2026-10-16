@@ -65,10 +65,10 @@ module PermissionForge
       # parameter. Every API index route gets PAGING.
       PAGING = { 'per_page' => :default_per_page, 'page' => :first_page }.freeze
       EXPECT = {
-        'permission_forge/api/permission_set_users#create' => { 'user_id' => :keyed_422, 'expires_at' => :keyed_422_or_no_end },
-        'permission_forge/api/permission_set_group_users#create' => { 'user_id' => :keyed_422 },
-        'permission_forge/api/resources#generate_fields' => { 'grant_all' => :keyed_422 },
-        'permission_forge/api/permission_set_users#bulk' => { 'bulk_action' => :keyed_422 }
+        'permission_forge/api/permission_set_users#create' => { 'user_id' => :keyed_refusal, 'expires_at' => :keyed_refusal_or_no_end },
+        'permission_forge/api/permission_set_group_users#create' => { 'user_id' => :keyed_refusal },
+        'permission_forge/api/resources#generate_fields' => { 'grant_all' => :keyed_refusal },
+        'permission_forge/api/permission_set_users#bulk' => { 'bulk_action' => :keyed_refusal }
       }.freeze
       # Shapes that are a positive whole number: a page they name is a page.
       NUMERIC_SHAPES = %w[huge overbig].freeze
@@ -91,6 +91,15 @@ module PermissionForge
         return PAGING if action == 'index' && controller.start_with?('permission_forge/api')
 
         EXPECT.fetch("#{controller}##{action}", {})
+      end
+
+      # The competing row of the uniqueness race: the record's own
+      # attributes, another uuid, past the callbacks (it stands for a row
+      # another process committed).
+      def self.commit_twin(record)
+        klass = record.class
+        attributes = record.attributes.except(klass.primary_key).compact.merge('uuid' => SecureRandom.uuid)
+        klass.unscoped.insert_all!([attributes])
       end
 
       setup do
@@ -253,14 +262,6 @@ module PermissionForge
         replace_method(validator, :validate_each, original)
       end
 
-      # The competing row: the record's own attributes, another uuid, past
-      # the callbacks (it stands for a row another process committed).
-      def self.commit_twin(record)
-        klass = record.class
-        attributes = record.attributes.except(klass.primary_key).compact.merge('uuid' => SecureRandom.uuid)
-        klass.unscoped.insert_all!([attributes])
-      end
-
       # The 422 the validation gives for `twin` (a duplicate of a stored row).
       def assert_api_duplicate(twin)
         twin.validate
@@ -284,28 +285,37 @@ module PermissionForge
         end
       end
 
-      # nil when the answer is what `kind` expects, else what it was.
+      # nil when the answer is what `kind` expects, else what it was
+      # (#default_per_page_failure, #first_page_failure, #keyed_refusal_failure,
+      # #keyed_refusal_or_no_end_failure).
       def expected_failure(kind, param, shape)
-        json = JSON.parse(response.body)
-        status = response.status
-        case kind
-        when :default_per_page
-          config = PermissionForge.configuration
-          per_page = json.dig('meta', 'pagination', 'per_page')
-          expected = NUMERIC_SHAPES.include?(shape) ? config.api_max_per_page : config.api_default_per_page
-          "#{status}, per_page #{per_page.inspect}" unless status == 200 && per_page == expected
-        when :first_page
-          page = json.dig('meta', 'pagination', 'page')
-          "#{status}, page #{page.inspect}" unless status == 200 && (page == 1 || NUMERIC_SHAPES.include?(shape))
-        when :keyed_422_or_no_end
-          shape == 'blank' ? ("#{status}: #{json}" unless status == 201) : keyed_422_failure(param, status, json)
-        when :keyed_422
-          keyed_422_failure(param, status, json)
-        end
+        send("#{kind}_failure", param, shape, response.status, JSON.parse(response.body))
       end
 
-      def keyed_422_failure(param, status, json)
+      # The default page size; a number past the maximum is the maximum.
+      def default_per_page_failure(_param, shape, status, json)
+        config = PermissionForge.configuration
+        per_page = json.dig('meta', 'pagination', 'per_page')
+        expected = NUMERIC_SHAPES.include?(shape) ? config.api_max_per_page : config.api_default_per_page
+        "#{status}, per_page #{per_page.inspect}" unless status == 200 && per_page == expected
+      end
+
+      # The first page; a number names a page.
+      def first_page_failure(_param, shape, status, json)
+        page = json.dig('meta', 'pagination', 'page')
+        "#{status}, page #{page.inspect}" unless status == 200 && (page == 1 || NUMERIC_SHAPES.include?(shape))
+      end
+
+      # A 422 keyed by the parameter.
+      def keyed_refusal_failure(param, _shape, status, json)
         "#{status}: #{json.to_s[0, 160]}" unless status == 422 && json.dig('error', 'messages', param).is_a?(Array)
+      end
+
+      # A blank end date is no end date (created); anything else unreadable a 422.
+      def keyed_refusal_or_no_end_failure(param, shape, status, json)
+        return keyed_refusal_failure(param, shape, status, json) unless shape == 'blank'
+
+        "#{status}: #{json.to_s[0, 160]}" unless status == 201
       end
 
       def nested(value)

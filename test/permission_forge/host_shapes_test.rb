@@ -77,7 +77,7 @@ module PermissionForge
         assert @user.can_read?(@model.name)
         assert @user.can_edit?(@model.name)
         assert_not @user.can_delete?(@model.name)
-        assert_equal [@set.uuid], @user.permissions_hash_for(@model.name)[:source_permission_sets].map { |set| set[:uuid] }
+        assert_equal [@set.uuid], @user.permissions_hash_for(@model.name)[:source_permission_sets].pluck(:uuid)
       },
 
       'the admin offers the model, shows its Resource page and opens its field drawers' => lambda { |shape|
@@ -89,7 +89,7 @@ module PermissionForge
         assert_response :ok
         fields = shape.values_at(:masked, :hidden, :editable)
         fields.each { |field| assert_select '.pf-fields__label', text: field.humanize }
-        fields.each do |field|
+        fields.each do |field| # rubocop:disable Style/CombinableLoops -- each drawer GET replaces the page the labels are read from
           get "/permission_forge/permission_sets/#{@set.id}/resources/#{@model.name}/fields/#{field}"
           assert_response :ok
         end
@@ -133,26 +133,29 @@ module PermissionForge
     def prepare(name, shape)
       @model = name.constantize
       @user = create_user(name: 'Owner')
-      other_user = create_user(name: 'Other')
+      create_permission_set_for(name, shape)
+      PermissionForge::MaskedModels.apply(only: name)
+      assert Concerns::MaskedAttributes.applied?(@model), "#{name} did not get MaskedAttributes"
+      @own = @model.create!(shape[:own].merge('owner_id' => @user.id))
+      @other = @model.create!(shape[:other].merge('owner_id' => create_user(name: 'Other').id))
+      Current.user = @user
+    end
+
+    def create_permission_set_for(name, shape)
       @set = create_permission_set(name: "#{name} readers")
       @resource = create_resource(permission_set: @set, name: name, read_access: true, create_access: true, edit_access: true)
       create_fields(shape)
       create_permission_set_rule(permission_set: @set, resource: @resource, field_name: 'owner_id', field_value: 'current_user',
                                  operator: 'equal', include_nulls: false)
       create_permission_set_user(user: @user, permission_set: @set)
-      PermissionForge::MaskedModels.apply(only: name)
-      assert Concerns::MaskedAttributes.applied?(@model), "#{name} did not get MaskedAttributes"
-      @own = @model.create!(shape[:own].merge('owner_id' => @user.id))
-      @other = @model.create!(shape[:other].merge('owner_id' => other_user.id))
-      Current.user = @user
     end
 
     def create_fields(shape)
-      create_resource_field(resource: @resource, name: shape[:masked], label: shape[:masked].humanize, read_access: true,
-                                                 mask_access: true, mask_strategy: shape[:strategy])
+      create_resource_field(resource: @resource, name: shape[:masked], label: shape[:masked].humanize,
+                            read_access: true, mask_access: true, mask_strategy: shape[:strategy])
       create_resource_field(resource: @resource, name: shape[:hidden], label: shape[:hidden].humanize, read_access: false)
-      create_resource_field(resource: @resource, name: shape[:editable], label: shape[:editable].humanize, read_access: true,
-                                                 edit_access: true)
+      create_resource_field(resource: @resource, name: shape[:editable], label: shape[:editable].humanize,
+                            read_access: true, edit_access: true)
       create_resource_field(resource: @resource, name: 'owner_id', label: 'Owner', read_access: true)
     end
 

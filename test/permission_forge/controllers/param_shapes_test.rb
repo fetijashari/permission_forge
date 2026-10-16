@@ -10,12 +10,14 @@ module PermissionForge
   class ParamShapesTest < ActiveSupport::TestCase
     DEFAULT = 25
 
+    # A trailing NUL byte is white space to String#strip: "7\0" is 7, an
+    # Integer, so nothing of the byte goes further.
     READ = {
-      '7' => 7, 7 => 7, ' 7 ' => 7, '007' => 7, ('9' * 40) => ('9' * 40).to_i, 1 => 1
+      '7' => 7, 7 => 7, ' 7 ' => 7, '007' => 7, ('9' * 40) => ('9' * 40).to_i, 1 => 1, "7\u0000" => 7
     }.freeze
 
     DEFAULTED = [
-      '0', 0, '-1', -5, 'abc', '2abc', '1.5', 1.5, '', ' ', nil, true, [7], ['7'], { 'a' => '1' }, "7\u0000", '٧', '+7'
+      '0', 0, '-1', -5, 'abc', '2abc', '1.5', 1.5, '', ' ', nil, true, [7], ['7'], { 'a' => '1' }, "7\u00008", '٧', '+7'
     ].freeze
 
     test 'a whole number inside the range is read, as digits or as a number' do
@@ -40,6 +42,7 @@ module PermissionForge
     test 'pf_integer_param reads params[key] the same way' do
       controller = Class.new do
         include PermissionForge::ParamShapes
+
         attr_reader :params
 
         def initialize(params) = @params = params

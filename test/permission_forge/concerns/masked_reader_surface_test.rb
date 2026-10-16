@@ -88,14 +88,15 @@ module PermissionForge
       # mentions a stored or an assigned value in any of the three states.
       def surface
         patterns.to_h do |pattern|
-          results = %i[loaded pending saved].map { |state| call(pattern, record_in(state)) }
-          error = results.find { |result| result.is_a?(StandardError) }
-          verdict = if error then "#{error.class}: #{error.message[0, 80]}"
-                    elsif results.any? { |result| SECRETS.any? { |secret| result.inspect.include?(secret) } } then :raw
-                    else :clean
-                    end
-          [pattern, verdict]
+          [pattern, verdict(%i[loaded pending saved].map { |state| call(pattern, record_in(state)) })]
         end
+      end
+
+      def verdict(results)
+        error = results.find { |result| result.is_a?(StandardError) }
+        return "#{error.class}: #{error.message[0, 80]}" if error
+
+        results.any? { |result| SECRETS.any? { |secret| result.inspect.include?(secret) } } ? :raw : :clean
       end
 
       # A fresh row per call: some patterns change the record (restore_x!,
