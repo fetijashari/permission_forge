@@ -33,7 +33,13 @@ module PermissionForge
 
         assert_response :success
         assert_select '[data-pf-rule-preview] .pf-sentence .pf-token--value', text: t('ui.rules.current_user')
-        assert_select "[data-pf-rule-preview][data-pf-current-user='#{t('ui.rules.current_user')}'][data-pf-empty='…']"
+        assert_select "[data-pf-rule-preview='#{pf("#{rules_base}/preview")}']"
+        assert_not_includes body, '….'
+
+        # What pf_admin.js fetches when the box is ticked: the server's sentence.
+        get pf("#{rules_base}/preview"), params: { rule: { path: ['supplier'], field_name: 'owner_id', operator: 'equal', current_user: '1' } },
+                                         headers: { 'X-PF-Fragment' => '1' }
+        assert_select '.pf-sentence .pf-token--value', text: t('ui.rules.current_user')
         assert_not_includes body, '….'
       end
 
@@ -45,18 +51,22 @@ module PermissionForge
         assert_not_includes body, '….'
       end
 
-      test 'a list operator is previewed on refresh only (no live value token)' do
+      test 'a list operator is previewed live too, by the server (WP-12: one string from one helper)' do
         post pf("#{rules_base}/refresh"), params: { rule: { name: 'Mine', field_name: 'name', operator: 'in', values_text: 'a,b' } }
 
-        assert_select '[data-pf-rule-preview]', count: 0
-        assert_select '.pf-sentence .pf-token--value', text: 'a, b'
+        assert_select '[data-pf-rule-preview] .pf-sentence .pf-token--value', text: 'a, b'
       end
 
-      test 'pf_admin.js keeps the preview value in step with the current-user box and the value input' do
+      # The preview is fetched from the server as any value input changes;
+      # the script never rebuilds the sentence itself.
+      test 'pf_admin.js fetches the preview sentence as the value inputs change' do
         script = ASSETS.join('pf_admin.js').read
 
-        assert_includes script, '[data-pf-rule-preview]'
-        assert_includes script, 'input[name="rule[current_user]"], [name="rule[value]"]'
+        assert_includes script, "getAttribute('data-pf-rule-preview')"
+        ['value', 'values_text', 'values][', 'value_from', 'value_to', 'current_user', 'include_nulls'].each do |input|
+          assert_includes script, %(name="rule[#{input}]"), input
+        end
+        assert_no_match(/pf-token--value/, script, 'no sentence built in JS')
       end
 
       # --- b-admin-ui #23: toasts and the sticky savebar -----------------------------------

@@ -34,6 +34,14 @@ module PermissionForge
       render(@rule ? :edit : :new)
     end
 
+    # The sentence the rule being built will show once saved (SentencesHelper,
+    # the same helper the Rules tab draws it with): the fragment pf_admin.js
+    # fetches as the value inputs change; without JS a page of its own.
+    # Changes nothing.
+    def preview
+      @form = PermissionForge::Admin::RuleForm.new(resource: @resource, params: rule_params)
+    end
+
     def toggle
       @rule.update!(is_active: !@rule.is_active)
       key = @rule.is_active ? 'turned_on' : 'turned_off'

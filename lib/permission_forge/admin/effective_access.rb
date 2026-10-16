@@ -31,10 +31,15 @@ module PermissionForge
       # `implicit` — no set configures the field for this outcome: it is a
       # declared virtual field on the implicit read + edit grant
       # (extra_fields_default_access = :grant).
-      # `grants` / `mutes` — the FieldSources behind granted_by / blocked_by, same order.
+      # `grants` / `mutes` — the FieldSources behind granted_by / blocked_by, same order:
+      # the sets credited with what they did to the entry that decides.
+      # `decided_by` — for a single-table-inheritance subclass, the base
+      # Resource whose entry decides the field (ResourceChain: the strictest
+      # entry along the chain); nil when the resource's own entry does.
+      # `unreadable` — that entry does not grant Read, so it hides every field.
       FieldOutcome = Struct.new(:name, :level, :mask_strategy, :granted_by, :blocked_by, :blocked_level,
                                 :capped, :unconfigured, :virtual, :variant_of, :implicit, :grants, :mutes,
-                                keyword_init: true) do
+                                :decided_by, :unreadable, keyword_init: true) do
         def visible? = level != 'hidden'
         # Hidden because a Muting Permission Set takes it away, not because no set grants it.
         def hidden_by_muting? = level == 'hidden' && blocked_by.any?
@@ -113,11 +118,15 @@ module PermissionForge
       end
 
       # The outcome for one resource name: its sources, the rules along its
-      # chain (ResourceChain.names_for), then the fields and actions.
+      # chain (ResourceChain.names_for), then the fields — composed with the
+      # entries of its bases the person has (ResourceChain.fields) — and
+      # actions.
       def outcome_for_name(name, granting, muting)
+        chain = PermissionForge::ResourceChain.names_for(name).map(&:to_s)
         sources = sources_for(name, granting, muting)
-        sources.rules = rules_along(PermissionForge::ResourceChain.names_for(name).map(&:to_s), granting, muting)
-        build_resource(sources)
+        sources.rules = rules_along(chain, granting, muting)
+        bases = chain.drop(1).map { |base| sources_for(base, granting, muting) }.select { |base| base.grants.any? }
+        build_resource(sources, bases)
       end
 
       # A granting set's row for the resource; a muting set's rows for the
@@ -140,9 +149,11 @@ module PermissionForge
         end
       end
 
-      def build_resource(sources)
-        sources.outcome(fields: EffectiveFields.new(sources, configuration: @configuration, catalog: @catalog).call,
-                        actions: action_outcomes(sources))
+      # `bases`: the ResourceSources of the base entries the person has
+      # (a granting row names them — the engine's entries), nearest first.
+      def build_resource(sources, bases)
+        fields = EffectiveFields.new(sources, configuration: @configuration, catalog: @catalog, bases: bases).call
+        sources.outcome(fields: fields, actions: action_outcomes(sources))
       end
 
       # A resource flag: granted by the granting rows that grant it as the

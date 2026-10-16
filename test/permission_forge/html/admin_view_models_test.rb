@@ -95,6 +95,169 @@ module PermissionForge
         @resource.update!(view_all: true)
         assert builder.ignored_warning?
       end
+
+      # --- the WHY panel (people/_effective_why) --------------------------------
+      #
+      # EX: the explanation comes from the predicate that decided. For every
+      # state a field of a person's effective access can be in, the panel's
+      # level words are the entry's: the badge is the level the engine
+      # enforces ("⊘ Hidden by muting" only when a Muting Permission Set took
+      # away what a granting set gave), the deciding reason — the strongest
+      # mute that changed the entry, else the most open grant — words the
+      # entry's level (and, masked, its strategy), no grant is more open than
+      # the one that decides, and every mute listed changed the entry.
+
+      # name => [[:grant | :mute, level, options]] for the Customer email field.
+      # A muting level nil adds the Resource row only; :no_edit is the row
+      # with Edit alone (API / console).
+      WHY_STATES = {
+        'hidden' => [[:grant, 'hidden']],
+        'masked' => [[:grant, 'masked', { strategy: 'email' }]],
+        'read' => [[:grant, 'read']],
+        'edit' => [[:grant, 'edit']],
+        'edit capped by the resource' => [[:grant, 'edit', { resource: { edit_access: false } }]],
+        'read beats masked' => [[:grant, 'masked', { strategy: 'email' }], [:grant, 'read']],
+        'masked in two strategies' => [[:grant, 'masked', { strategy: 'last4' }], [:grant, 'masked', { strategy: 'email' }]],
+        'hidden and masked' => [[:grant, 'hidden'], [:grant, 'masked', { strategy: 'email' }]],
+        'muted: hide' => [[:grant, 'read'], [:mute, 'hide']],
+        'muted: mask' => [[:grant, 'read'], [:mute, 'mask']],
+        'muted: mask on a masked field' => [[:grant, 'masked', { strategy: 'email' }], [:mute, 'mask']],
+        'muted: no edit' => [[:grant, 'edit'], %i[mute no_edit]],
+        'muted: no edit on a read-only field' => [[:grant, 'read'], %i[mute no_edit]],
+        'muted: the resource read' => [[:grant, 'edit'], [:mute, nil, { resource: { read_access: true } }]],
+        'muted: the resource edit' => [[:grant, 'edit'], [:mute, nil, { resource: { edit_access: true } }]],
+        'muted: mask on a field nobody shows' => [[:grant, 'hidden'], [:mute, 'mask']],
+        'muted: hide on a field nobody shows' => [[:grant, 'hidden'], [:mute, 'hide']],
+        'muted: mask, then hide' => [[:grant, 'edit'], [:mute, 'mask'], [:mute, 'hide']],
+        'muted: no edit, then mask' => [[:grant, 'edit'], %i[mute no_edit], [:mute, 'mask']],
+        'not configured' => [[:grant, nil]]
+      }.freeze
+
+      test 'every WHY level word equals the level the hash entry gives, for every state' do
+        failures = WHY_STATES.flat_map do |state, rows|
+          user = create_user
+          sets = rows.each_with_index.map { |row, index| why_set(state, index, *row) }
+          sets.each { |set| create_permission_set_user(user: user, permission_set: set) }
+          why_failures(state, user, sets)
+        end
+
+        assert_empty failures, failures.join("\n")
+      end
+
+      private
+
+      def why_set(state, index, kind, level, options = {})
+        set = create_permission_set(name: "#{state} #{index}", is_muting: kind == :mute, created_at: (10 - index).minutes.ago)
+        resource = create_resource(permission_set: set, name: 'Customer', read_access: kind == :grant, edit_access: kind == :grant,
+                                   **options.fetch(:resource, {}))
+        flags = why_flags(kind, level)
+        create_resource_field(resource: resource, name: 'email', mask_strategy: options.fetch(:strategy, 'full'), **flags) if flags
+        set
+      end
+
+      def why_flags(kind, level)
+        return if level.nil?
+        return { read_access: false, edit_access: true, mask_access: false } if level == :no_edit
+
+        PermissionForge::FieldLevel.flags_for(level, muting: kind == :mute)
+      end
+
+      # The engine's resource entry for the sets, in the order a request merges them.
+      def why_engine(user, sets)
+        ordered = PermissionForge::PermissionSet.where(id: sets.map(&:id)).in_hash_order.to_a
+        PermissionForge::Services::PermissionHashBuilder.call(user: user, permission_sets: ordered)[:resources]['Customer']
+      end
+
+      def why_field(user)
+        PermissionForge::Admin::EffectiveAccess.call(user: user).find { |res| res.name == 'Customer' }
+                                               .fields.find { |outcome| outcome.name == 'email' }
+      end
+
+      def why_failures(state, user, sets)
+        engine = why_engine(user, sets)
+        field = why_field(user)
+        return (field.unconfigured ? [] : ["#{state}: configured, the engine has no entry"]) unless engine[:fields]['email']
+
+        before = why_engine(user, sets.reject(&:is_muting))[:fields]['email']
+        WhyCheck.new(field, engine, before).problems.map { |problem| "#{state}: #{problem}" }
+      end
+
+      # One field's WHY panel against the engine's entry for it (`before`:
+      # the entry the granting sets alone give).
+      class WhyCheck
+        # What a mute that decides makes of the entry.
+        MUTE_LEVELS = { 'hide' => 'hidden', 'mask' => 'masked', 'no_edit' => 'read' }.freeze
+        LEVEL = PermissionForge::FieldLevel
+
+        def initialize(field, engine, before)
+          @field = field
+          @entry = engine[:fields]['email']
+          @before = before || {}
+          @level = LEVEL.effective_level(@entry)
+          @capped = @level == 'edit' && !engine[:permissions][:edit_access]
+        end
+
+        def problems
+          badge_problems + deciding_problems + order_problems + mute_problems
+        end
+
+        private
+
+        def badge_problems
+          muted = @level == 'hidden' && LEVEL.effective_level(@before) != 'hidden'
+          expected = if muted
+                       I18n.t('permission_forge.people.effective_tab.hidden_by_muting')
+                     else
+                       I18n.t("permission_forge.ui.levels.#{@capped ? 'read' : @level}")
+                     end
+          problems = []
+          problems << "badge #{badge}, the entry gives #{expected}" unless badge == expected
+          problems << "capped #{@field.capped}, expected #{@capped}" unless @field.capped == @capped
+          problems
+        end
+
+        # The badge's words, as the panel draws them.
+        def badge
+          Nokogiri::HTML.fragment(PermissionForge::ApplicationController.helpers.pf_effective_field_badge(@field)).text
+                        .sub(/\A\S+ /, '').sub(/ \(.*\z/, '')
+        end
+
+        def deciding_problems
+          mute = @field.mutes.first
+          return ["the deciding mute says #{mute.level}, the entry is #{@level}"] if mute && MUTE_LEVELS[mute.level] != @level
+          return [] if mute
+          return @field.grants.any? ? ["hidden by no mute, yet #{@field.grants.map(&:level)} grant"] : [] if @level == 'hidden'
+
+          grant_problems(@field.grants.first)
+        end
+
+        def grant_problems(first)
+          return ["the deciding grant says #{first&.level.inspect}, the entry is #{@level}"] unless first&.level == @level
+          return [] unless @level == 'masked' && first.mask_strategy != @entry[:mask_strategy]
+
+          ["masked #{first.mask_strategy}, the entry #{@entry[:mask_strategy]}"]
+        end
+
+        def order_problems
+          top = LEVEL.rank(@field.grants.first&.level)
+          above = @field.grants.select { |grant| LEVEL.rank(grant.level) > top }
+          problems = above.map { |grant| "grant #{grant.level} above the deciding one" }
+          problems << 'blocked_by is not the mutes' unless @field.blocked_by == @field.mutes.map(&:permission_set)
+          problems
+        end
+
+        def mute_problems
+          @field.mutes.reject { |mute| changed?(mute.level) }.map { |mute| "mute #{mute.level} changed nothing" }
+        end
+
+        def changed?(mute_level)
+          case mute_level
+          when 'hide' then @before[:read_access] && @level == 'hidden'
+          when 'mask' then @level == 'masked'
+          when 'no_edit' then @before[:edit_access] && @level != 'hidden' && !@entry[:edit_access]
+          end
+        end
+      end
     end
   end
 end

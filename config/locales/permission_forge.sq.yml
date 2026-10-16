@@ -792,8 +792,13 @@ sq:
         action_granted: "%{set} e lejon këtë veprim."
         action_muted: "%{set} e bllokon këtë veprim."
         action_none: Asnjë Grup lejesh nuk e lejon këtë veprim.
+        field_base_unreadable: 'E fshehur: trashëgon nga %{resource}, ku Lexo nuk
+          lejohet.'
         field_capped: Shfaqet si Vetëm lexim sepse Ndrysho nuk lejohet për këtë burim.
+        field_decided_by: 'Vendoset nga %{resource}, nga i cili trashëgon: fiton cilësimi
+          më i rreptë përgjatë trashëgimisë.'
         field_none: Asnjë Grup lejesh nuk e shfaq këtë fushë.
+        field_own_unreadable: E fshehur sepse Lexo nuk lejohet për këtë burim.
         field_unconfigured: 'Asnjë grup nuk e konfiguron këtë kolonë: %{behaviour}.'
         field_variant: Ndjek cilësimin e %{base}.
         field_virtual: Fushë virtuale nga modeli, e lexueshme përveç nëse një grup
@@ -974,8 +979,12 @@ sq:
         pick_relationship: Zgjidh një lidhje…
         preview: Pamja paraprake
         preview_empty: Zgjidh një fushë për ta parë rregullin si fjali.
-        problem_field: Zgjidhni sërish fushën për ta korrigjuar.
-        problem_path: Zgjidhni sërish lidhjen për ta korrigjuar.
+        problem_fixes:
+          field: Zgjidhni sërish fushën për ta korrigjuar.
+          join: Zgjidhni sërish mënyrën e kombinimit, te Të avancuara, për ta korrigjuar.
+          operator: Zgjidhni sërish kushtin për ta korrigjuar.
+          path: Zgjidhni sërish lidhjen për ta korrigjuar.
+          value: Shkruani një vlerë që kjo fushë mund ta mbajë, për ta korrigjuar.
         problem_title: Ky rregull nuk përputhet me asgjë
         relationship: Lidhja
         remove_step: Hiq këtë hap të lidhjes
@@ -991,6 +1000,9 @@ sq:
         title: Ndrysho rregullin për %{resource}
       new:
         title: Rregull i ri për %{resource}
+      preview:
+        back: Kthehu te rregullat
+        title: Pamje paraprake e një rregulli për %{resource}
       value_input:
         from: Nga
         no_value: Nuk nevojitet vlerë për këtë kusht.

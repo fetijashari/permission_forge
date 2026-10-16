@@ -85,6 +85,7 @@ PermissionForge::Engine.routes.draw do
       resources :rules, controller: 'permission_set_rules', only: %i[new create edit update destroy] do
         collection do
           post :refresh
+          get :preview
         end
         member do
           patch :toggle

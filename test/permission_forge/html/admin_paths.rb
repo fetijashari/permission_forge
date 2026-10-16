@@ -86,7 +86,8 @@ module PermissionForge
           base, "#{base}?tab=actions", "#{base}?tab=rules", "#{base}/delete", "#{base}/fields/email",
           "#{base}/fields/domain?explain_user_id=#{id(:ana)}",
           "#{base}/actions/new", "#{base}/actions/#{id(:action)}", "#{base}/actions/#{id(:action)}/delete",
-          "#{base}/rules/new", "#{base}/rules/#{id(:rule)}/edit", "#{base}/rules/#{id(:rule)}/delete"
+          "#{base}/rules/new", "#{base}/rules/#{id(:rule)}/edit", "#{base}/rules/#{id(:rule)}/delete",
+          "#{base}/rules/preview?rule%5Bfield_name%5D=supplier_id&rule%5Boperator%5D=equal&rule%5Bcurrent_user%5D=1"
         ]
       end
 

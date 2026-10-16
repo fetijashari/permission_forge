@@ -10,37 +10,66 @@ module PermissionForge
     # Extra fields follow the engine: after every granting set is merged, each
     # declared name that nothing configured gets the implicit entry
     # (ExtraFieldDefaults). A row in any set wins, whatever the set order.
+    #
+    # The explanation comes from the entry that decides (EX): each set is
+    # credited with what it did to the final entry (FieldProvenance). A
+    # subclass's field is composed along its single-table-inheritance chain
+    # as ResourceChain composes it (`bases`, FieldChain): the strictest entry
+    # decides, and the outcome says which (FieldOutcome#decided_by).
     class EffectiveFields
       FieldOutcome = EffectiveAccess::FieldOutcome
-      FieldSource = EffectiveAccess::FieldSource
 
       # What FiltersResponseAttributes does with a column no set mentions
       # (any other strategy hides it).
       UNCONFIGURED_LEVELS = { 'pass_through' => 'read', 'warn' => 'read', 'mask_all' => 'masked' }.freeze
-      # What a muting set does to a field, most first (FieldSource#level).
-      MUTING_ORDER = %w[hide no_edit mask].freeze
 
       # @param sources [EffectiveAccess::ResourceSources]
-      def initialize(sources, configuration:, catalog:)
+      # @param bases [Array<EffectiveAccess::ResourceSources>] the entries the
+      #   user has for the model's STI bases, nearest first (ResourceChain)
+      def initialize(sources, configuration:, catalog:, bases: [])
         @sources = sources
         @configuration = configuration
         @catalog = catalog
-        # entry: { read_access:, edit_access:, mask_access:, mask_strategy:, sources: [[set, level]], variant_of: }
+        @bases = bases
+        # entry: { read_access:, edit_access:, mask_access:, mask_strategy:, sources: [[set, level, strategy]],
+        #          variant_of:, before: (the flags before muting), mutes: [[set, level]] }
         @entries = {}
       end
 
       # @return [Array<EffectiveAccess::FieldOutcome>]
       def call
-        merge_granting_fields
-        apply_muting_fields
-
+        chain = FieldChain.new(chain_tables)
         model = @catalog.find(@sources.name)
-        (@entries.keys + Array(model&.managed_field_names)).uniq.map do |field|
-          field_outcome(field, model.present? && model.virtual_field?(field))
+        (chain.names + Array(model&.managed_field_names)).uniq.map do |field|
+          composed_outcome(chain, field, model.present? && model.virtual_field?(field))
         end
       end
 
+      # The resource's own field entries, merged and muted as the engine does.
+      #
+      # @return [Hash{String => Hash}]
+      def entries
+        return @entries if @merged
+
+        @merged = true
+        merge_granting_fields
+        apply_muting_fields
+        @entries
+      end
+
       private
+
+      # The resource's FieldChain::Table, then each base's along its chain.
+      def chain_tables
+        [FieldChain::Table.new(@sources, entries, nil)] + @bases.map do |base|
+          FieldChain::Table.new(base, self.class.new(base, configuration: @configuration, catalog: @catalog).entries, base.name)
+        end
+      end
+
+      def composed_outcome(chain, name, virtual)
+        attributes = chain.attributes(name, virtual: virtual, editable: @sources.flags[:edit_access].granted?)
+        attributes ? FieldOutcome.new(name: name, unconfigured: false, **attributes) : unconfigured_outcome(name, virtual)
+      end
 
       def active_fields(resource)
         resource.resource_fields.select(&:is_active)
@@ -97,6 +126,7 @@ module PermissionForge
       end
 
       def apply_muting_fields
+        @entries.each_value { |entry| entry[:before] = entry.slice(:read_access, :edit_access, :mask_access) }
         @sources.mutes.each do |ps, resource|
           active_fields(resource).each { |field| apply_muting_field(ps, field) }
           hide_every_field(ps) if resource.read_access
@@ -105,7 +135,7 @@ module PermissionForge
 
       # A muting set that revokes the resource's read hides every field, as
       # the engine does (PermissionHashBuilder#mute_fields_of_resource). One
-      # that revokes its edit caps every field to read: level_attrs does that
+      # that revokes its edit caps every field to read: FieldProvenance does that
       # from the resource's edit outcome.
       def hide_every_field(permission_set)
         @entries.each_value { |entry| hide_entry(entry, permission_set) }
@@ -138,57 +168,10 @@ module PermissionForge
         (entry[:mutes] ||= []) << [permission_set, level]
       end
 
-      def field_outcome(name, virtual)
-        entry = @entries[name]
-        return unconfigured_outcome(name, virtual) if entry.nil?
-
-        implicit = entry[:extra].present?
-        grants = granting_sources(entry)
-        FieldOutcome.new(
-          name: name, mask_strategy: entry[:mask_strategy], granted_by: grants.map(&:permission_set), grants: grants,
-          unconfigured: false, virtual: virtual || implicit, implicit: implicit, variant_of: entry[:variant_of],
-          **level_attrs(entry), **muting_attrs(entry)
-        )
-      end
-
-      # Editable fields are capped to Read when the resource's Edit is not granted.
-      def level_attrs(entry)
-        level = FieldLevel.effective_level(entry)
-        capped = level == 'edit' && !@sources.flags[:edit_access].granted?
-        { level: capped ? 'read' : level, capped: capped }
-      end
-
-      # One FieldSource per muting set at the most it takes away: hide, then
-      # no_edit (edit muted, read kept), then mask.
-      def muting_attrs(entry)
-        sources = muting_sources(entry)
-        { blocked_by: sources.map(&:permission_set), blocked_level: entry[:mutes]&.last&.last, mutes: sources }
-      end
-
-      def muting_sources(entry)
-        (entry[:mutes] || []).group_by(&:first).map { |ps, rows| muting_source(ps, rows.map(&:last)) }
-      end
-
-      def muting_source(permission_set, levels)
-        FieldSource.new(permission_set: permission_set, level: MUTING_ORDER.find { |level| levels.include?(level) } || 'mask')
-      end
-
-      # The sets that make the field readable, one FieldSource each at its
-      # most open level, most open first. A set that lists the field as
-      # Hidden grants nothing and, like the engine, has no say in the mask.
-      # An implicit entry exists only when no set configured the field, so no
-      # set is credited for it: the level comes from the virtual-field default.
-      def granting_sources(entry)
-        return [] if entry[:extra]
-
-        entry[:sources].select { |_, lvl, _| FieldLevel.rank(lvl) >= 1 }
-                       .sort_by { |_, lvl, _| -FieldLevel.rank(lvl) }.uniq(&:first)
-                       .map { |ps, lvl, strategy| FieldSource.new(permission_set: ps, level: lvl, mask_strategy: strategy) }
-      end
-
       def unconfigured_outcome(name, virtual)
         FieldOutcome.new(name: name, level: unconfigured_level, mask_strategy: 'full', granted_by: [], grants: [],
-                         blocked_by: [], mutes: [], capped: false, unconfigured: true, virtual: virtual, implicit: false)
+                         blocked_by: [], mutes: [], capped: false, unconfigured: true, virtual: virtual, implicit: false,
+                         decided_by: nil, unreadable: false)
       end
 
       def unconfigured_level

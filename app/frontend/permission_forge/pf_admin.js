@@ -423,21 +423,26 @@
   });
 
   /* ------------------------------------------- rule builder preview */
-  // The preview sentence's value token follows "the current user" and the
-  // value input as they change (one-value operators only: the server renders
-  // data-pf-rule-preview for them). Everything else changes on refresh.
-  function syncRulePreview(form) {
-    const preview = form && $('[data-pf-rule-preview]', form);
-    const token = preview && $('.pf-token--value', preview);
-    if (!token) return;
-    const me = $('input[name="rule[current_user]"]', form);
-    const input = $('[name="rule[value]"]', form);
-    const value = input ? input.value.trim() : '';
-    if (me && me.checked) token.textContent = preview.getAttribute('data-pf-current-user');
-    else token.textContent = value === '' ? preview.getAttribute('data-pf-empty') : value;
+  // The preview is the sentence the saved rule shows, rendered by the server
+  // (the preview action, SentencesHelper): as the value, "the current user"
+  // or "or empty" change, the panel's content is fetched again. Field and
+  // operator changes re-render the whole builder (refresh above).
+  function previewRule(form) {
+    const panel = form && $('[data-pf-rule-preview]', form);
+    if (!panel) return;
+    const data = new FormData(form); data.delete('authenticity_token'); data.delete('_method');
+    const base = panel.getAttribute('data-pf-rule-preview');
+    const url = base + (base.indexOf('?') < 0 ? '?' : '&') + new URLSearchParams(data).toString();
+    fetch(url, { headers: { [FRAGMENT_HEADER]: '1' }, credentials: 'same-origin' })
+      .then(function (res) { return res.ok ? res.text() : Promise.reject(res.status); })
+      .then(function (html) { setContent(panel, html); })
+      .catch(function () {});
   }
+  const previewHandler = debounce(previewRule, 250);
+  const PREVIEW_INPUTS = '[name="rule[value]"], [name="rule[values_text]"], [name="rule[values][]"], [name="rule[value_from]"], ' +
+    '[name="rule[value_to]"], [name="rule[current_user]"], [name="rule[include_nulls]"]';
   ['input', 'change'].forEach(function (type) {
-    on(type, 'input[name="rule[current_user]"], [name="rule[value]"]', function (e, el) { syncRulePreview(el.form); });
+    on(type, PREVIEW_INPUTS, function (e, el) { previewHandler(el.form); });
   });
 
   /* ------------------------------------------- typed confirmation */
