@@ -119,11 +119,15 @@ module PermissionForge
     end
 
     # The SQL of "this row has an activation condition" (.conditional,
-    # .unconditional), the way #conditional? reads the row.
+    # .unconditional, the RLS policy's view_all bypass), the way
+    # #conditional? reads the row.
     #
+    # @param table [String, nil] the alias the row is read through (SQL as
+    #   written, e.g. `ps`); the quoted table name when nil
     # @return [String]
-    def self.conditions_present_sql
-      quoted = ->(column) { "#{connection.quote_table_name(table_name)}.#{connection.quote_column_name(column)}" }
+    def self.conditions_present_sql(table: nil)
+      qualifier = table || connection.quote_table_name(table_name)
+      quoted = ->(column) { "#{qualifier}.#{connection.quote_column_name(column)}" }
       text_present = ->(column) { "COALESCE(TRIM(#{without_blank_lines_sql(quoted.call(column))}), '') <> ''" }
       "(#{text_present.call('requires_session_flag')} OR #{text_present.call('allowed_ips')} " \
         "OR #{quoted.call('allowed_hours_start')} IS NOT NULL OR #{quoted.call('allowed_hours_end')} IS NOT NULL)"

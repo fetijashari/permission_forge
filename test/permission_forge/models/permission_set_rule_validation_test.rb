@@ -18,7 +18,7 @@ module PermissionForge
         elsif op == 'between'
           attrs[:field_value] = '1,10'
         elsif op.in?(%w[in not_in])
-          attrs[:field_value] = 'a,b'
+          attrs[:field_value] = '1,2'
         end
         rule = PermissionForge::PermissionSetRule.new(attrs)
         assert rule.valid?, "Expected rule with operator '#{op}' to be valid, errors: #{rule.errors.full_messages}"
@@ -83,13 +83,26 @@ module PermissionForge
 
     # --- in / not_in operator ---
 
+    # A value the column cannot hold makes the rule match nothing: refused
+    # for a new or changed value (Operators::RuleProblem :unusable_value).
+    test 'a value the column cannot hold is refused, in every element of a list' do
+      { 'equal' => '5_id', 'in' => '1, abc', 'between' => '1,abc', 'not_equal' => 'true' }.each do |operator, value|
+        rule = build_rule(operator: operator, field_value: value)
+
+        assert_not rule.valid?, operator
+        assert_equal ['is not a value Customer.supplier_id can hold'], rule.errors[:field_value], operator
+      end
+      assert_predicate build_rule(operator: 'equal', field_value: 'current_user'), :valid?
+      assert_predicate build_rule(operator: 'in', field_value: '1, 2'), :valid?
+    end
+
     test 'in with 1 value is valid' do
-      rule = build_rule(operator: 'in', field_value: 'active')
+      rule = build_rule(operator: 'in', field_name: 'name', field_value: 'active')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
     test 'in with 3 values is valid' do
-      rule = build_rule(operator: 'in', field_value: 'a,b,c')
+      rule = build_rule(operator: 'in', field_name: 'name', field_value: 'a,b,c')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
@@ -100,7 +113,7 @@ module PermissionForge
     end
 
     test 'not_in with 1 value is valid' do
-      rule = build_rule(operator: 'not_in', field_value: 'inactive')
+      rule = build_rule(operator: 'not_in', field_name: 'name', field_value: 'inactive')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
@@ -160,13 +173,13 @@ module PermissionForge
       end
 
       %w[equal in contains].each do |operator|
-        rule = build_rule(operator: operator, field_value: "a\0b")
+        rule = build_rule(operator: operator, field_name: 'name', field_value: "a\0b")
 
         assert_not rule.valid?, operator
         assert_equal [I18n.t('permission_forge.validations.permission_set_rule.nul_byte')], rule.errors[:field_value], operator
       end
 
-      rule = build_rule(field_value: 'ab')
+      rule = build_rule(field_name: 'name', field_value: 'ab')
       rule.save!
       rule.update_columns(field_value: "a\0b")
       rule.reload
@@ -186,7 +199,7 @@ module PermissionForge
     end
 
     test 'field_name created_at is valid' do
-      rule = build_rule(field_name: 'created_at')
+      rule = build_rule(field_name: 'created_at', field_value: '2026-01-01')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 

@@ -70,7 +70,7 @@ module PermissionForge
 
         assert rule.valid?, "#{path}: #{rule.errors.full_messages}"
       end
-      assert build_rule(field_accessor_path: 'supplier.owner', field_name: 'deactivated', join_type: 'left_joins').valid?
+      assert build_rule(field_accessor_path: 'supplier.owner', field_name: 'deactivated', field_value: 'true', join_type: 'left_joins').valid?
     end
 
     test 'each cause has its own message' do

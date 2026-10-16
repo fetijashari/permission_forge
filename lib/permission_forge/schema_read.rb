@@ -56,6 +56,8 @@ module PermissionForge
     @confirmed = Concurrent::Map.new
     @claims = Concurrent::Map.new
     @tables = Concurrent::Map.new
+    @enum_labels = Concurrent::Map.new
+    @enum_claims = Concurrent::Map.new
     @rereads = Concurrent::AtomicFixnum.new
 
     class << self
@@ -150,6 +152,28 @@ module PermissionForge
         cache.data_source_exists?(table)
       end
 
+      # Whether `label` is one of the labels of the native enum type `type`
+      # (PostgreSQL: `CREATE TYPE ... AS ENUM`), as the database has them.
+      # The labels are read once per process and type (one catalog query);
+      # a label they lack is asked of the database again once, while the
+      # labels stay as they were read: one a migration added while the
+      # process runs (`ALTER TYPE ... ADD VALUE`). A type the database does
+      # not know has no labels.
+      #
+      # @param model [Class] a model on the connection whose table has the column
+      # @param type [String] the column's SQL type: the enum type's name
+      # @param label [String]
+      # @return [Boolean]
+      def enum_label?(model, type, label)
+        key = [model.connection_db_config.name, type.to_s]
+        labels = @enum_labels.compute_if_absent(key) { enum_labels_of(model, type) }
+        return true if labels.include?(label)
+        return false unless @enum_claims.put_if_absent([key, labels.object_id, label], true).nil?
+
+        @rereads.increment
+        (@enum_labels[key] = enum_labels_of(model, type)).include?(label)
+      end
+
       # @return [Integer] how many times this process read a table's schema again
       def rereads
         @rereads.value
@@ -159,10 +183,22 @@ module PermissionForge
       #
       # @return [void]
       def reset!
-        [@confirmed, @claims, @tables].each(&:clear)
+        [@confirmed, @claims, @tables, @enum_labels, @enum_claims].each(&:clear)
       end
 
       private
+
+      # The type's labels in their order; none for a type the database does
+      # not know (to_regtype answers NULL where a cast would raise and fail
+      # the statement, and with it the caller's transaction).
+      def enum_labels_of(model, type)
+        model.connection_pool.with_connection do |connection|
+          connection.select_values(<<~SQL.squish, 'SCHEMA').freeze
+            SELECT enumlabel::text FROM pg_catalog.pg_enum
+            WHERE enumtypid = to_regtype(#{connection.quote(type.to_s)}) ORDER BY enumsortorder
+          SQL
+        end
+      end
 
       def table_columns(model)
         model.connection.schema_cache.columns_hash(model.table_name)

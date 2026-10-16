@@ -315,8 +315,9 @@ module PermissionForge
       test 'field_value is not coerced to an integer: one that is no number denies' do
         # No magic coercion: "<id>_id" is not a value an integer column can hold,
         # so the rule denies access on every database (it was once silently
-        # .to_i'd, and MySQL would still read it as <id>).
-        create_rule(operator: 'equal', field_value: "#{@user.id}_id", include_nulls: false)
+        # .to_i'd, and MySQL would still read it as <id>). Saving refuses it;
+        # a row written before that check denies.
+        create_rule(operator: 'equal', field_value: @user.id.to_s, include_nulls: false).update_columns(field_value: "#{@user.id}_id")
         setup_permissions
         assert_raises(PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError) do
           Customer.find_by(uuid: @customer.uuid)

@@ -43,8 +43,8 @@ module PermissionForge
     #   the rule's and not in the database ({RuleColumn#unresolvable?});
     #   `name` is the qualifier;
     # - :unusable_value — a value the column cannot hold ({ValueTyping::UNUSABLE});
-    #   `name` is the column, `value` the value as stored. Valid to save, as
-    #   documented ("A value the column cannot hold"); listed and denied.
+    #   `name` is the column, `value` the value as stored. Refused for a new
+    #   or changed rule (on `field_value`); a stored one is listed and denied.
     #
     # The kinds are checked in the order the applier decides them, so a rule
     # with several problems is named by the one that denies it first. A rule
@@ -83,8 +83,10 @@ module PermissionForge
       MESSAGE_KEYS = { missing_column: :unknown_column, unknown_operator: :invalid_operator,
                        unknown_join_type: :invalid_join_type }.freeze
       # What `current_user` is typed as when a stored value is judged: an id
-      # is a number or its text, whoever the user is, never a boolean or a date.
-      ANY_USER_ID = 0
+      # is a number, a uuid or the text of either, whoever the user is — never
+      # a boolean, a date, an address or an enum label. The value is unusable
+      # only when it is for every one of them.
+      ANY_USER_IDS = [0, '00000000-0000-0000-0000-000000000000'].freeze
 
       # `cause` and `value` are optional: a column problem has no cause, only a value problem a value.
       def initialize(kind:, name:, model:, cause: nil, value: nil)
@@ -162,7 +164,7 @@ module PermissionForge
       end
 
       # A value the column cannot hold, typed as the applier types it
-      # (ValueTyping; `current_user` as ANY_USER_ID). Only for a column that
+      # (ValueTyping; `current_user` as each of ANY_USER_IDS). Only for a column that
       # was found: the column's own problem comes first. A blank value is
       # none (the presence validation's business; a rule being built has
       # none yet).
@@ -184,8 +186,8 @@ module PermissionForge
       def self.unusable_value?(rule, column)
         operator = rule.operator.to_s
         value = rule.field_value
-        value = ANY_USER_ID if ValueTyping.current_user?(operator, value)
-        ValueTyping.call(operator, value, column).equal?(ValueTyping::UNUSABLE)
+        values = ValueTyping.current_user?(operator, value) ? ANY_USER_IDS : [value]
+        values.all? { |typed| ValueTyping.call(operator, typed, column).equal?(ValueTyping::UNUSABLE) }
       rescue *RuleColumn::UNTELLABLE
         false
       end

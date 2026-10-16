@@ -49,8 +49,8 @@ module PermissionForge
     end
 
     test 'a column of the model, in any notation the database resolves, is accepted' do
-      %w[supplier_id customers.supplier_id created_at id].each do |name|
-        rule = build_rule(field_name: name)
+      { 'supplier_id' => '5', 'customers.supplier_id' => '5', 'created_at' => '2026-01-01', 'id' => '5' }.each do |name, value|
+        rule = build_rule(field_name: name, field_value: value)
 
         assert rule.valid?, "#{name}: #{rule.errors.full_messages}"
       end
@@ -65,7 +65,7 @@ module PermissionForge
 
       assert build_rule(field_name: 'owner_id', **join).valid?
       assert build_rule(field_name: 'suppliers.owner_id', **join).valid?
-      assert build_rule(field_name: 'deactivated', join_type: 'left_joins', field_accessor_path: 'supplier.owner').valid?
+      assert build_rule(field_name: 'deactivated', field_value: 'true', join_type: 'left_joins', field_accessor_path: 'supplier.owner').valid?
 
       on_path = build_rule(field_name: 'domain', **join)
 

@@ -2,6 +2,7 @@
 
 require_relative 'value_casters/number'
 require_relative 'value_casters/temporal'
+require_relative 'value_casters/postgresql_types'
 
 module PermissionForge
   module Operators
@@ -30,16 +31,28 @@ module PermissionForge
       # Compared as written; the id `current_user` stands for, as its text.
       TEXT = ->(value) { value.nil? ? UNUSABLE : value.to_s }
 
-      # A column type without a caster (uuid, json, an array column, ...) or a
-      # field name that names no known column: the value is left to the database.
+      # A column type without a caster (hstore, money, xml, ...) or a field
+      # name that names no known column: the value is left to the database.
       UNTYPED = ->(value) { value }
+
+      # A json, jsonb or array column: no rule value is one of its values.
+      # PostgreSQL raised on most texts compared with one, and the others
+      # (an array or JSON literal) compare a whole document; MySQL and SQLite
+      # compare text. A rule on such a column matches nothing under every
+      # built-in operator that takes a value — the null checks take none and
+      # work — and a custom operator gets the value as written.
+      OPAQUE = ->(_value) { UNUSABLE }
 
       BY_TYPE = {
         integer: NUMBER, float: NUMBER, decimal: NUMBER,
         boolean: BOOLEAN,
         string: TEXT, text: TEXT,
         date: Temporal::DATE, time: Temporal::TIME,
-        datetime: Temporal::DATETIME, timestamp: Temporal::DATETIME, timestamptz: Temporal::DATETIME
+        datetime: Temporal::DATETIME, timestamp: Temporal::DATETIME, timestamptz: Temporal::DATETIME,
+        json: OPAQUE, jsonb: OPAQUE,
+        # Types only PostgreSQL has (PostgresqlTypes); no other adapter reports them.
+        uuid: PostgresqlTypes::UUID, inet: PostgresqlTypes::INET, cidr: PostgresqlTypes::CIDR,
+        enum: PostgresqlTypes::NativeEnum
       }.freeze
 
       # PostgreSQL is typed like the others, with two things left the way it
@@ -68,12 +81,26 @@ module PermissionForge
 
       # @param column [ActiveRecord::ConnectionAdapters::Column, nil]
       # @param adapter_name [String, nil] the adapter of the column's model
+      # @param model [Class, nil] the model whose table the column is in (a
+      #   native enum's labels are read through it)
       # @return [#call] the caster for the column
-      def self.for(column, adapter_name = nil)
-        return UNTYPED if column.nil? || column.try(:array?)
+      def self.for(column, adapter_name = nil, model = nil)
+        return UNTYPED if column.nil?
+        return OPAQUE if column.try(:array?)
 
         casters = BY_ADAPTER.fetch(adapter_name, BY_TYPE)
-        casters.fetch(column.sql_type) { casters.fetch(column.type, UNTYPED) }
+        caster = casters.fetch(column.sql_type) { casters.fetch(column.type, UNTYPED) }
+        caster.respond_to?(:of) ? caster.of(column, model) : caster
+      end
+
+      # Whether a LIKE pattern can be matched against a column of the
+      # caster's type. Not a json or array column, nor one of the PostgreSQL
+      # types without LIKE (uuid, inet, cidr, a native enum): a rule with a
+      # LIKE operator on one matches nothing.
+      #
+      # @param caster [#call] a caster {.for} returned
+      def self.pattern?(caster)
+        !caster.equal?(OPAQUE) && PostgresqlTypes.pattern?(caster)
       end
     end
   end

@@ -56,13 +56,16 @@ module PermissionForge
 
       # How the session user's id is read for a comparison, by the caster the
       # column's type has in the app layer: the id itself where the column is
-      # a number or of a type nothing is known about, its text on a string
-      # column. A column of any other type (a boolean, a date) cannot equal an
-      # id — the rule is UNUSABLE there, as it is in the app layer.
+      # a number (or a uuid) the id is one of, or of a type nothing is known
+      # about, its text on a string column. A column of any other type (a
+      # boolean, a date, an address, a json or array column, a native enum)
+      # cannot equal an id — the rule is UNUSABLE there, as it is in the app
+      # layer.
       SESSION_USER_SQL = {
         Operators::ValueCasters::UNTYPED => :uid_sql,
         Operators::ValueCasters::NUMBER => :numeric_uid_sql,
         Operators::ValueCasters::Number::SINGLE_PRECISION => :numeric_uid_sql,
+        Operators::ValueCasters::PostgresqlTypes::UUID => :uuid_uid_sql,
         Operators::ValueCasters::TEXT => :uid_text_sql
       }.freeze
 
@@ -123,8 +126,20 @@ module PermissionForge
 
       # An id that is not a number (a uuid) is never the value of a number column.
       def numeric_uid_sql
+        uid_sql if user_id_caster.nil? || user_id_caster.equal?(Operators::ValueCasters::NUMBER)
+      end
+
+      # A uuid column equals the id only where user ids are uuids: compared
+      # with the text of any other id, PostgreSQL raises (or the app layer,
+      # with an id that is no uuid, matches nothing). A user_id column of
+      # text that holds uuids is narrower here than in the app layer: FALSE.
+      def uuid_uid_sql
+        uid_sql if user_id_caster.equal?(Operators::ValueCasters::PostgresqlTypes::UUID)
+      end
+
+      def user_id_caster
         column = PermissionForge::SchemaRead.column(PermissionForge::PermissionSetUser, 'user_id')
-        uid_sql if column.nil? || Operators::ValueCasters.for(column).equal?(Operators::ValueCasters::NUMBER)
+        column && Operators::ValueCasters.for(column)
       end
     end
   end

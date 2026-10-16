@@ -241,7 +241,7 @@ module PermissionForge
       #
       # @return [#call] see ValueCasters.for
       def caster
-        ValueCasters.for(column, @adapter_name)
+        ValueCasters.for(column, @adapter_name, model)
       end
     end
   end

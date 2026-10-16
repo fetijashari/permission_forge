@@ -681,16 +681,20 @@ module PermissionForge
 
       # --- array columns ---
 
-      test 'an array column gets the value untouched' do
+      # An array literal compared a whole array; any other text raised on
+      # PostgreSQL. No value is typed for an array column now (see
+      # operators/postgres_column_types_test.rb).
+      test 'an array column matches nothing under a built-in operator but the null checks' do
         skip 'PostgreSQL-only column type' unless POSTGRES
 
         record('listed', codes: [1, 2], tags: %w[a b])
         record('other', codes: [3], tags: %w[c])
 
-        assert_equal %w[listed], labels(:codes, 'equal', '{1,2}')
-        assert_equal %w[other], labels(:codes, 'not_equal', '{1,2}')
-        assert_equal %w[listed], labels(:tags, 'equal', '{a,b}')
-        assert_equal %w[other], labels(:codes, 'greater_than', '{2}')
+        assert_equal [], labels(:codes, 'equal', '{1,2}')
+        assert_equal [], labels(:codes, 'not_equal', '{1,2}')
+        assert_equal [], labels(:tags, 'equal', '{a,b}')
+        assert_equal [], labels(:codes, 'greater_than', '{2}')
+        assert_equal %w[listed other], labels(:codes, 'is_not_null', '')
       end
 
       # --- custom operators ---
@@ -829,10 +833,15 @@ module PermissionForge
         end.new
       end
 
-      def permit_rule(**attrs)
+      # A rule the user holds. Its value is written past the model (a value
+      # the column cannot hold is refused on save; a row saved before that
+      # check, or by another application, still holds one).
+      def permit_rule(field_value:, **attrs)
         @permission_set ||= create_permission_set.tap { |set| create_permission_set_user(user: @user, permission_set: set) }
         @resource ||= create_resource(permission_set: @permission_set, name: 'PfRuleRecord')
-        create_permission_set_rule(permission_set: @permission_set, resource: @resource, include_nulls: false, **attrs)
+        create_permission_set_rule(permission_set: @permission_set, resource: @resource, include_nulls: false,
+                                   **attrs, field_name: 'label', operator: 'equal', field_value: 'x')
+          .update_columns(field_value: field_value, **attrs.slice(:field_name, :operator))
         @user.invalidate_permissions
         Current.user = @user
       end

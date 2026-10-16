@@ -214,6 +214,8 @@ detectors:
       - PermissionForge::ResourceChain
       # Rule sentence helpers called from the views with (rule, model_name)
       - PermissionForge::SentencesHelper
+      # One function per operator shape (SHAPES, dispatched by name): (value, target)
+      - PermissionForge::Operators::ValueTyping
 
   # Tuned: Operator strategies require (query, col, rule, val) by design
   LongParameterList:

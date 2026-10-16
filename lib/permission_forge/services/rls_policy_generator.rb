@@ -73,7 +73,15 @@ module PermissionForge
       # state (the set's is_active was already read live).
       # 6: a rule naming a column the table does not have compiles to FALSE
       # (the sync failed on it), as the app layer matches nothing for it.
-      GENERATOR_VERSION = 6
+      # 7: every Operators::RuleProblem kind compiles to FALSE (an unknown
+      # operator, join type or table, a path no join is built through); a
+      # value is typed for a uuid, inet, cidr, json/jsonb, array or native
+      # enum column (one it cannot hold is FALSE); an assignment counts until
+      # its expires_at, that instant included (`>= now()`); and only a set
+      # without an activation condition as PermissionSet.unconditional reads
+      # it (a text of blanks is none, one hour of the two is one) grants the
+      # view_all bypass.
+      GENERATOR_VERSION = 7
 
       include RlsOperatorSql
 
@@ -190,22 +198,20 @@ module PermissionForge
         "(#{view_all_exists_sql(muting: false)} AND NOT #{view_all_exists_sql(muting: true)})"
       end
 
+      # Built without squish: the condition SQL quotes a newline, a carriage
+      # return and a tab (PermissionSet.conditions_present_sql), which squish
+      # would turn into spaces.
       def view_all_exists_sql(muting:)
-        <<~SQL.squish
-          EXISTS (
-            SELECT 1 FROM #{psu_table} psu
-            JOIN #{ps_table} ps ON ps.id = psu.permission_set_id
-            JOIN #{resources_table} r ON r.permission_set_id = ps.id
-            WHERE psu.user_id = (#{uid_sql})
-              AND #{assignment_active_sql}
-              AND ps.is_active = TRUE AND ps.is_muting = #{muting ? 'TRUE' : 'FALSE'}
-              #{"AND #{unconditional_set_sql}" unless muting}
-              AND r.name = #{@conn.quote(resource_name)}
-              AND r.is_active = TRUE
-              #{tenant_predicate_sql}
-              AND (r.view_all = TRUE OR r.modify_all = TRUE)
-          )
-        SQL
+        conditions = [
+          "psu.user_id = (#{uid_sql})", assignment_active_sql,
+          "ps.is_active = TRUE AND ps.is_muting = #{muting ? 'TRUE' : 'FALSE'}",
+          (unconditional_set_sql unless muting),
+          "r.name = #{@conn.quote(resource_name)}", 'r.is_active = TRUE',
+          tenant_predicate_sql.delete_prefix('AND ').presence,
+          '(r.view_all = TRUE OR r.modify_all = TRUE)'
+        ]
+        "EXISTS ( SELECT 1 FROM #{psu_table} psu JOIN #{ps_table} ps ON ps.id = psu.permission_set_id " \
+          "JOIN #{resources_table} r ON r.permission_set_id = ps.id WHERE #{conditions.compact.join(' AND ')} )"
       end
 
       # Ties the resource row to the protected row's tenant, when tenancy is
@@ -221,11 +227,10 @@ module PermissionForge
         "AND r.#{quoted} = #{quoted_table}.#{quoted}"
       end
 
-      # Mirrors PermissionSet.unconditional (activation conditions absent).
+      # PermissionSet.unconditional, on the `ps` alias: the one definition of
+      # "no activation condition".
       def unconditional_set_sql
-        "(ps.requires_session_flag IS NULL OR ps.requires_session_flag = '') " \
-          "AND (ps.allowed_ips IS NULL OR ps.allowed_ips = '') " \
-          'AND ps.allowed_hours_start IS NULL'
+        "NOT #{PermissionForge::PermissionSet.conditions_present_sql(table: 'ps')}"
       end
 
       # One conjunct per rule-bearing granting set:
@@ -259,8 +264,10 @@ module PermissionForge
         SQL
       end
 
+      # PermissionSetUser.active_assignments: an assignment counts until its
+      # expires_at, that instant included.
       def assignment_active_sql
-        clauses = ['(psu.expires_at IS NULL OR psu.expires_at > now())']
+        clauses = ['(psu.expires_at IS NULL OR psu.expires_at >= now())']
         clauses << 'psu.is_active = TRUE' if PermissionForge::SchemaRead.column?(PermissionForge::PermissionSetUser, 'is_active', ignored: false)
         clauses.join(' AND ')
       end

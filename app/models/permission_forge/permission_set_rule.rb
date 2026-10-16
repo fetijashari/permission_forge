@@ -87,6 +87,7 @@ module PermissionForge
     validate :validate_field_name_column, if: :column_check_due?
     validate :validate_field_value_text, if: -> { new_record? || will_save_change_to_field_value? }
     validate :validate_field_value_for_operator
+    validate :validate_field_value_column, if: :value_check_due?
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
@@ -98,6 +99,7 @@ module PermissionForge
     def initialize_dup(other)
       super
       @copied_column = column_parts
+      @copied_value = value_parts
     end
 
     private
@@ -119,6 +121,22 @@ module PermissionForge
     def column_parts_of(parts)
       name, path, join, model = parts
       [name, path, self.class.filter_join_type?(join) ? nil : join, model]
+    end
+
+    # What the rule's value is judged against: the value, the operator and
+    # what names the column.
+    def value_parts
+      [field_value, operator, *column_parts]
+    end
+
+    # On a new rule and when its value, operator or column changes: a row
+    # that already holds a value its column cannot hold stays editable in
+    # its other attributes (it matches nothing; the audit reports it). A copy
+    # keeps its original's value.
+    def value_check_due?
+      return false if @copied_value && @copied_value == value_parts
+
+      new_record? || will_save_change_to_field_value? || will_save_change_to_operator? || column_parts != column_parts_was
     end
 
     def operator_check_due?
@@ -212,6 +230,18 @@ module PermissionForge
 
       errors.add(:field_value, I18n.t('permission_forge.validations.permission_set_rule.nul_byte',
                                       default: 'must not contain a NUL byte'))
+    end
+
+    # A value the column cannot hold (Operators::RuleProblem.of_value: `'5_id'`
+    # on an integer column, `'banana'` on a uuid one) would make the rule
+    # match nothing for everyone it applies to. Judged only when the rule
+    # has no other problem and its column can be told (the columns compared
+    # with the database first, as for the column check).
+    def validate_field_value_column
+      return if errors.any? || field_value.blank?
+
+      problem = PermissionForge::Operators::RuleProblem.of_value(self, PermissionForge::Operators::RuleColumn.for_rule(self, verify: true))
+      errors.add(:field_value, problem.validation_message) if problem
     end
 
     def validate_field_value_for_operator
