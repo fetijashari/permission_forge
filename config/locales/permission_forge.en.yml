@@ -777,8 +777,13 @@ en:
         action_granted: "%{set} permits this action."
         action_muted: "%{set} blocks this action."
         action_none: No Permission Set permits this action.
+        field_base_unreadable: 'Hidden: it inherits from %{resource}, which doesn''t
+          allow Read.'
         field_capped: Shown as Read-only because Edit isn't allowed on this resource.
+        field_decided_by: 'Decided by %{resource}, which this inherits from: the strictest
+          setting along the inheritance wins.'
         field_none: No Permission Set shows this field.
+        field_own_unreadable: Hidden because Read isn't allowed on this resource.
         field_unconfigured: 'No set configures this column: %{behaviour}.'
         field_variant: Follows the setting of %{base}.
         field_virtual: Virtual field from the model, readable unless a set configures
@@ -957,8 +962,12 @@ en:
         pick_relationship: Pick a relationship…
         preview: Preview
         preview_empty: Pick a field to see the rule as a sentence.
-        problem_field: Pick the field again to correct it.
-        problem_path: Choose the relationship again to correct it.
+        problem_fixes:
+          field: Pick the field again to correct it.
+          join: Choose how to combine again, under Advanced, to correct it.
+          operator: Pick the condition again to correct it.
+          path: Choose the relationship again to correct it.
+          value: Enter a value this field can hold to correct it.
         problem_title: This rule matches nothing
         relationship: Relationship
         remove_step: Remove this relationship step
@@ -974,6 +983,9 @@ en:
         title: Edit rule for %{resource}
       new:
         title: New rule for %{resource}
+      preview:
+        back: Back to the rules
+        title: Preview of a rule on %{resource}
       value_input:
         from: From
         no_value: No value needed for this condition.

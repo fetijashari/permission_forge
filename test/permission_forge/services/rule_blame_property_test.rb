@@ -76,7 +76,7 @@ module PermissionForge
             position == 1 ? hash.merge(operator: 'invert') : hash
           end
           record = create_customer(record_attributes)
-          fallbacks += 1 if check_fallback(index, rules, record, registry)
+          fallbacks += 1 if fallback_reached?(index, rules, record, registry)
         end
 
         assert_operator fallbacks, :>=, 1, 'the generator reaches the cumulative attribution'
@@ -130,24 +130,35 @@ module PermissionForge
         first ? rules.drop(first - 1) : []
       end
 
+      def describe(index, rules, record)
+        "combination #{index}: #{rules.map { |r| r.slice(:field_accessor_path, :field_name, :operator, :field_value) }} " \
+          "on #{record.attributes.slice('name', 'domain', 'account_id', 'supplier_id')}"
+      end
+
       def check_combination(index, rules, record)
-        context = "combination #{index}: #{rules.map { |r| r.slice(:field_accessor_path, :field_name, :operator, :field_value) }} " \
-                  "on #{record.attributes.slice('name', 'domain', 'account_id', 'supplier_id')}"
+        context = describe(index, rules, record)
         if keeps?(rules, record)
           assert_equal record, Customer.find_by!(id: record.id), "#{context}: allowed"
           return :allowed
         end
 
         blamed = expected_blame(rules, record)
-        error = assert_raises(PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError, context) { Customer.find_by!(id: record.id) }
-        assert_equal blamed.map { |rule| rule[:failure_message] }, error.failure_messages, "#{context}: failure_messages"
-        details = blamed.map { |rule| "[Forbidden by Rule: #{rule[:name]}] with message: #{rule[:failure_message]}" }
-        assert_equal details, error.details, "#{context}: details"
-        assert_audit_event('access.denied', record_id: record.id.to_s, data: { 'messages' => details })
+        assert_blame(context, blamed, record)
         blamed.size == 1 ? :one : :several
       end
 
-      def check_fallback(index, rules, record, registry)
+      # NotAuthorizedError and access.denied name exactly the blamed rules.
+      def assert_blame(context, blamed, record)
+        error = assert_raises(PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError, context) do
+          Customer.find_by!(id: record.id)
+        end
+        assert_equal blamed.pluck(:failure_message), error.failure_messages, "#{context}: failure_messages"
+        details = blamed.map { |rule| "[Forbidden by Rule: #{rule[:name]}] with message: #{rule[:failure_message]}" }
+        assert_equal details, error.details, "#{context}: details"
+        assert_audit_event('access.denied', record_id: record.id.to_s, data: { 'messages' => details })
+      end
+
+      def fallback_reached?(index, rules, record, registry)
         _, messages, denying = PermissionRuleApplier.call(model_class: Customer, rules: rules, args: [{ id: record.id }],
                                                           current_user: @user, operator_registry: registry)
         expected = keeps?(rules, record, registry: registry) ? [] : expected_blame(rules, record, registry: registry)

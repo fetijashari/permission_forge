@@ -1,0 +1,8 @@
+<%# The rule being built as the sentence the saved rule shows: the builder's preview panel, and the
+    fragment pf_admin.js fetches from the preview action. %>
+<span class="pf-eyebrow"><%= t('permission_forge.permission_set_rules.builder.preview') %></span>
+<% if form.column %>
+  <%= pf_rule_sentence(form.preview_rule, resource.name) %>
+<% else %>
+  <span class="pf-text-3"><%= t('permission_forge.permission_set_rules.builder.preview_empty') %></span>
+<% end %>

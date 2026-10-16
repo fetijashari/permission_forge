@@ -64,10 +64,17 @@ module PermissionForge
     class RuleProblem < Data.define(:kind, :name, :model, :cause, :value)
       # Every kind, in the order the applier decides them. A new kind needs a
       # fixture in test/support/rule_problem_fixtures.rb, an entry in
-      # RULE_PROBLEM_MESSAGES (or MESSAGE_KEYS), and the message and the
-      # `ui.rules.problems` sentence in en, sq and mk.
+      # RULE_PROBLEM_MESSAGES (or MESSAGE_KEYS), one in REMEDIES, and the
+      # message and the `ui.rules.problems` sentence in en, sq and mk.
       KINDS = %i[unknown_join_type unknown_association unjoinable_association unknown_operator missing_column
                  unknown_table unusable_value].freeze
+      # What the admin changes to correct the rule, by kind — the rule
+      # builder's control (`permission_set_rules.builder.problem_fixes.<remedy>`):
+      # the join type (Advanced), the relationship, the condition, the field,
+      # or the value.
+      REMEDIES = { unknown_join_type: :join, unknown_association: :path, unjoinable_association: :path,
+                   unknown_operator: :operator, missing_column: :field, unknown_table: :field,
+                   unusable_value: :value }.freeze
       # The kinds that are the rule's association path (not its column or value).
       PATH_KINDS = %i[unknown_association unjoinable_association].freeze
       # The kinds whose `name` is a name that is not there, shown as stored.
@@ -196,6 +203,12 @@ module PermissionForge
       # Whether the problem is the rule's association path (not its column,
       # operator, join type or value).
       def path? = PATH_KINDS.include?(kind)
+
+      # What the admin changes to correct it (REMEDIES): :join, :path,
+      # :operator, :field or :value.
+      #
+      # @return [Symbol]
+      def remedy = REMEDIES.fetch(kind)
 
       # Whether `name` is shown as stored (`onwer_id`, `ownr`, `regex`,
       # `inner`, `nosuch`): a name that is not there has no label — humanized

@@ -48,8 +48,14 @@ module PermissionForge
         @problem = (PermissionForge::Operators::RuleProblem.for(@rule) if @rule&.persisted? && !@rule.changed?)
       end
 
-      # The saved rule's path and field name as stored: "ownr.owner_id".
-      def written_field = PermissionForge::Operators::RuleProblem.written_field(@rule)
+      # The saved rule's path and field name as stored ("ownr.owner_id"),
+      # beside the problem's sentence — nil when it is the name the sentence
+      # already says (field test round 6, B #63: "stauts is not a column of
+      # Customer · stauts").
+      def written_field
+        written = PermissionForge::Operators::RuleProblem.written_field(@rule)
+        written unless problem && written == problem.name
+      end
 
       def errors = form.errors
       def error_codes = errors.values

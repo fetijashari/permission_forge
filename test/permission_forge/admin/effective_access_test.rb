@@ -115,17 +115,24 @@ module PermissionForge
       end
 
       # A muting row with Edit only (API / console) takes editing away, not
-      # the field: the WHY panel must not say it hides it.
+      # the field: the WHY panel must not say it hides it. It is credited
+      # only where it took editing away (EX: what a set did to the entry).
       test 'a muting row that mutes only edit is no_edit and leaves the field readable' do
         contractors = create_permission_set(name: 'Contractors', is_muting: true)
         muted = create_resource(permission_set: contractors, read_access: false, edit_access: false)
         create_resource_field(resource: muted, name: 'email', read_access: false, edit_access: true)
+        create_resource_field(resource: muted, name: 'name', read_access: false, edit_access: true)
         create_permission_set_user(user: @user, permission_set: contractors)
+        @customer.resource_fields.find_by!(name: 'email').update!(mask_access: false)
 
         email = field('email')
+        name = field('name')
 
-        assert_equal([[contractors, 'no_edit']], email.mutes.map { |s| [s.permission_set, s.level] })
-        assert_predicate email, :visible?
+        assert_empty email.mutes, 'email was not editable: the row changed nothing'
+        assert_equal 'read', email.level
+        assert_equal([[contractors, 'no_edit']], name.mutes.map { |s| [s.permission_set, s.level] })
+        assert_equal 'read', name.level
+        assert_predicate name, :visible?
         assert_equal 'Contractors stops people editing this field.',
                      I18n.t('permission_forge.ui.level_sentences.no_edit', set: 'Contractors')
       end
@@ -377,18 +384,20 @@ module PermissionForge
       # field the chain configures. The admin's view of the subclass shows
       # what the attribute guard enforces (ResourceChain.fields), and says
       # which entry decided.
-      def assert_chain_parity(context, name)
+      def chain_levels(name)
         @user.regenerate_permissions
         names = PermissionForge::ResourceChain.names_for(name)
-        own = PermissionForge::ResourceChain.entries(@user, names).first
-        composed = PermissionForge::ResourceChain.fields(@user, names)
-        expected = composed.to_h do |field_name, entry|
+        editable = PermissionForge::ResourceChain.grants?(@user, names, :edit_access)
+        PermissionForge::ResourceChain.fields(@user, names).to_h do |field_name, entry|
           level = FieldLevel.effective_level(entry)
-          [field_name.to_s, level == 'edit' && !own[:permissions][:edit_access] ? 'read' : level]
+          [field_name.to_s, level == 'edit' && !editable ? 'read' : level]
         end
+      end
+
+      def assert_chain_parity(context, name)
         shown = outcome(name).fields.reject(&:unconfigured).to_h { |field| [field.name, field.level] }
 
-        assert_equal expected.sort, shown.sort, "#{context}: the subclass's fields as ResourceChain composes them"
+        assert_equal chain_levels(name).sort, shown.sort, "#{context}: the subclass's fields as ResourceChain composes them"
       end
 
       test 'a subclass shows its fields as the chain composes them: the strictest entry decides' do
@@ -406,7 +415,7 @@ module PermissionForge
         assert_equal 'masked', field('email', res).level, 'the base masks it: the strictest entry wins'
         assert_equal 'email', field('email', res).mask_strategy
         assert_equal 'PfStiTicket', field('email', res).decided_by
-        assert_equal [[@sales, 'masked']], field('email', res).grants.map { |source| [source.permission_set, source.level] }
+        assert_equal([[@sales, 'masked']], field('email', res).grants.map { |source| [source.permission_set, source.level] })
         assert_equal 'read', field('secret', res).level, 'configured on the base only'
         assert_equal 'PfStiTicket', field('secret', res).decided_by
         assert_equal 'edit', field('title', res).level

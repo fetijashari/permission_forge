@@ -197,7 +197,7 @@ module PermissionForge
         assert_response :success
         assert_select '.pf-banner--block', text: /This rule matches nothing/
         assert_select '.pf-banner--block', text: /regex is not a condition this version knows/
-        assert_select '.pf-banner--block', text: /Pick the field again/
+        assert_select '.pf-banner--block', text: /Pick the condition again/
         assert_equal 'regex', PermissionForge::Admin::RuleForm.new(resource: @resource, rule: rule).operator, 'kept, not rewritten'
       end
 

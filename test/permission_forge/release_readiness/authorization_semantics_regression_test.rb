@@ -100,8 +100,11 @@ module PermissionForge
         end
       end
 
+      # The fields as the attribute guard reads them: composed along the STI
+      # chain (ResourceChain.fields), not the entry alone.
       def assert_field_parity(engine, shown, name)
-        levels = engine[:fields].to_h { |field, field_entry| [field.to_s, engine_level(engine, field_entry)] }
+        fields = PermissionForge::ResourceChain.fields(Current.user, PermissionForge::ResourceChain.names_for(name))
+        levels = fields.to_h { |field, field_entry| [field.to_s, engine_level(engine, field_entry)] }
         assert_equal levels.sort, shown.fields.reject(&:unconfigured).to_h { |f| [f.name, f.level] }.sort, "#{name} fields"
       end
 

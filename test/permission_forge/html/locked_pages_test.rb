@@ -30,7 +30,8 @@ module PermissionForge
         'resource_actions#update' => %i[action edit], 'resource_actions#destroy' => %i[action delete],
         'resource_actions#confirm_destroy' => %i[action delete],
         'permission_set_rules#new' => %i[resource add], 'permission_set_rules#create' => %i[resource add],
-        'permission_set_rules#refresh' => %i[resource add], 'permission_set_rules#edit' => %i[rule edit],
+        'permission_set_rules#refresh' => %i[resource add], 'permission_set_rules#preview' => %i[resource add],
+        'permission_set_rules#edit' => %i[rule edit],
         'permission_set_rules#update' => %i[rule edit], 'permission_set_rules#toggle' => %i[rule edit],
         'permission_set_rules#destroy' => %i[rule delete], 'permission_set_rules#confirm_destroy' => %i[rule delete],
         'assignments#new' => %i[set_param grant], 'assignments#create' => :always, # each set_ids[] input is checked on its own

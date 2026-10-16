@@ -56,6 +56,10 @@ module PermissionForge
         assert_select 'h1'
         assert_select '.pf-sentence', count: 1
         assert_no_missing_translations
+
+        get pf("#{rules_base}/preview")
+        assert_response :success, 'no rule yet: the empty preview, never an error'
+        assert_includes response.body, I18n.t('permission_forge.permission_set_rules.builder.preview_empty')
       end
 
       test 'the builder renders the preview in place and tells the script where to fetch it' do
@@ -74,6 +78,7 @@ module PermissionForge
 
       test 'the banner names the fix for each kind of problem, in every locale' do
         assert_equal Operators::RuleProblem::KINDS.sort, FIXES.keys.sort, 'a fix per kind'
+        assert_equal FIXES, Operators::RuleProblem::REMEDIES.transform_values(&:to_s), 'RuleProblem#remedy is the one definition'
         failures = FIXES.flat_map do |kind, fix|
           resource = fixture_model_name(kind) == 'Customer' ? @resource : create_resource(permission_set: @set, name: fixture_model_name(kind))
           rule = broken_rule(kind, permission_set: @set, resource: resource)
