@@ -1,5 +1,7 @@
 require_relative 'admin_test_case'
 require_relative 'a11y_lint'
+require_relative '../rule_path_models'
+require_relative '../../support/rule_problem_fixtures'
 
 module PermissionForge
   module Html
@@ -7,8 +9,11 @@ module PermissionForge
     # nothing — the audit rates it High while people hold the set — and the
     # admin drew it as a normal sentence ("Only show Customers where Stauts
     # is active, or Stauts is empty"). Every place it is drawn says it
-    # matches nothing, and why; Home lists it.
+    # matches nothing, and why; Home lists it. Every kind of the taxonomy
+    # (Operators::RuleProblem::KINDS) is drawn, in every locale.
     class BrokenRulesAdminTest < AdminTestCase
+      include RuleProblemFixtures
+
       setup do
         @status = create_permission_set_rule(permission_set: @set, resource: @resource, name: 'Status',
                                              field_name: 'name', field_value: 'active', include_nulls: true)
@@ -142,6 +147,103 @@ module PermissionForge
 
         assert_response :success
         assert_includes CGI.unescapeHTML(response.body), '⊘ Matches nothing: <code class="pf-mono-key">ownr</code> is not a relationship of Customer'
+      end
+
+      # --- every kind of the taxonomy -------------------------------------------
+
+      EXPECTED_LINES = {
+        missing_column: 'Matches nothing: <code class="pf-mono-key">stauts</code> is not a column of Customer',
+        unknown_association: 'Matches nothing: <code class="pf-mono-key">ownr</code> is not a relationship of Customer',
+        unjoinable_association: 'Matches nothing: Subject is a polymorphic relationship of Pf rule path record: a rule cannot follow it',
+        unknown_operator: 'Matches nothing: <code class="pf-mono-key">regex</code> is not a condition this version knows',
+        unknown_join_type: 'Matches nothing: <code class="pf-mono-key">inner</code> is not a way of joining this version knows',
+        unknown_table: 'Matches nothing: <code class="pf-mono-key">nosuch</code> is not a table of this database',
+        unusable_value: 'Matches nothing: <code class="pf-mono-key">5_id</code> is not a value Supplier of Customer can hold'
+      }.freeze
+
+      test 'Home, the Rules tab and the edit page say why, for every kind, in every locale' do
+        [@status, @via_owner].each(&:destroy!)
+        rules = every_kind
+        assert_equal Operators::RuleProblem::KINDS.sort, EXPECTED_LINES.keys.sort, 'an expected line per kind'
+
+        get pf('/')
+        body = CGI.unescapeHTML(response.body)
+        EXPECTED_LINES.each { |kind, line| assert_includes body, line, kind }
+        assert_select "section[aria-labelledby='pf-card-broken-rules'] .pf-card__row", count: rules.size
+
+        failures = %w[en sq mk].flat_map do |locale|
+          rules.flat_map do |kind, rule|
+            paths = ['/', "/permission_sets/#{@set.id}/resources/#{rule.resource.name}?tab=rules",
+                     "/permission_sets/#{@set.id}/resources/#{rule.resource.name}/rules/#{rule.id}/edit"]
+            paths.flat_map do |path|
+              get pf(path), params: { locale: locale }
+              assert_response :success, "#{locale} #{kind} #{path}"
+              assert_no_missing_translations
+              problems = A11yLint.new(response.body).problems.map { |problem| "#{locale} #{kind} #{path}: #{problem}" }
+              problems << "#{locale} #{kind} #{path}: no matches-nothing state" unless response.body.include?('⊘')
+              problems
+            end
+          end
+        end
+
+        assert_empty failures, failures.join("\n")
+      end
+
+      test 'the edit page of a rule with an unknown condition keeps it as stored and says the rule matches nothing' do
+        rule = broken_rule(:unknown_operator, permission_set: @set, resource: @resource)
+
+        get pf("/permission_sets/#{@set.id}/resources/Customer/rules/#{rule.id}/edit")
+
+        assert_response :success
+        assert_select '.pf-banner--block', text: /This rule matches nothing/
+        assert_select '.pf-banner--block', text: /regex is not a condition this version knows/
+        assert_select '.pf-banner--block', text: /Pick the field again/
+        assert_equal 'regex', PermissionForge::Admin::RuleForm.new(resource: @resource, rule: rule).operator, 'kept, not rewritten'
+      end
+
+      test 'a posted condition that is not one is refused, never rewritten to "is"' do
+        post pf("/permission_sets/#{@set.id}/resources/Customer/rules"),
+             params: { rule: { name: 'Crafted', field_name: 'name', operator: 'regex', value: 'x' } }
+
+        assert_response :unprocessable_entity
+        assert_select '.pf-error', text: I18n.t('permission_forge.permission_set_rules.builder.errors.operator')
+        assert_not PermissionForge::PermissionSetRule.exists?(name: 'Crafted')
+      end
+
+      # --- a mask strategy this app does not know -------------------------------
+
+      test 'a field whose mask strategy this app does not know is drawn masked, with a badge, never a 500' do
+        @email.update_columns(mask_strategy: 'gone')
+
+        get pf("/permission_sets/#{@set.id}/resources/Customer?tab=fields")
+
+        assert_response :success
+        assert_includes response.body, '********'
+
+        get pf("/permission_sets/#{@set.id}/resources/Customer/fields/email")
+
+        assert_response :success
+        assert_select '.pf-badge', text: I18n.t('permission_forge.ui.badges.unknown_mask_strategy')
+        assert_select '#pf-fd-strategy option[selected]', text: /Full/
+
+        %w[sq mk].each do |locale|
+          get pf("/permission_sets/#{@set.id}/resources/Customer/fields/email"), params: { locale: locale }
+          assert_response :success
+          assert_no_missing_translations
+        end
+        assert_empty A11yLint.new(response.body).problems
+      end
+
+      private
+
+      # One rule per kind of RuleProblem::KINDS, on a Resource of its model.
+      def every_kind
+        resources = { 'Customer' => @resource }
+        FIXTURES.each_key.to_h do |kind|
+          name = fixture_model_name(kind)
+          resource = resources[name] ||= create_resource(permission_set: @set, name: name, read_access: true)
+          [kind, broken_rule(kind, permission_set: @set, resource: resource)]
+        end
       end
     end
   end

@@ -17,14 +17,13 @@ module PermissionForge
         @theirs = create_customer(name: 'theirs', supplier: create_supplier(owner_id: @user.id + 1))
       end
 
-      test 'a join_type that is not one raises and never reaches the relation' do
+      # A join type this version does not know matches nothing (every holder
+      # is denied every record), never a raise for every holder and never a
+      # method called on the relation.
+      test 'a join_type that is not one matches nothing and never reaches the relation' do
         %w[send public_send delete_all destroy_all unscope unscoped none reorder extending instance_eval JOINS].each do |join_type|
           ['delete_all', 'supplier', 'where', nil].each do |path|
-            error = assert_raises(PermissionForge::ConfigurationError, "#{join_type} #{path.inspect}") do
-              scoped(owner_rule(join_type: join_type, field_accessor_path: path)).to_a
-            end
-
-            assert_includes error.message, join_type.inspect
+            assert_empty scoped(owner_rule(join_type: join_type, field_accessor_path: path)).to_a, "#{join_type} #{path.inspect}"
           end
         end
 
@@ -34,9 +33,7 @@ module PermissionForge
       test 'a join_type that is not one cannot drop the rules applied before it' do
         own = { name: 'Own', failure_message: 'No', field_name: 'name', operator: 'equal', field_value: 'mine', include_nulls: false }
 
-        assert_raises(PermissionForge::ConfigurationError) do
-          scoped(own, owner_rule(join_type: 'unscope', field_accessor_path: 'where')).to_a
-        end
+        assert_empty scoped(own, owner_rule(join_type: 'unscope', field_accessor_path: 'where')).to_a
         assert_equal [@mine], scoped(own).where(id: [@mine.id, @theirs.id]).to_a
       end
 
@@ -59,7 +56,7 @@ module PermissionForge
         end
       end
 
-      test 'find_by raises as well' do
+      test 'find_by and permission_scoped deny as well, never a 500' do
         set = create_permission_set
         create_permission_set_user(user: @user, permission_set: set)
         resource = create_resource(permission_set: set, name: 'Customer', read_access: true)
@@ -69,9 +66,11 @@ module PermissionForge
         @user.invalidate_permissions
         Current.user = @user
 
-        assert_raises(PermissionForge::ConfigurationError) { Customer.find_by(id: @mine.id) }
-        assert_raises(PermissionForge::ConfigurationError) { Customer.permission_scoped.to_a }
+        assert_raises(PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError) { Customer.find_by(id: @mine.id) }
+        assert_empty Customer.permission_scoped.to_a
         assert Customer.unscoped.exists?(@mine.id)
+      ensure
+        Current.user = nil
       end
 
       test 'the three join types join, written as text or as a symbol' do

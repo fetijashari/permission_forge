@@ -1,0 +1,109 @@
+# frozen_string_literal: true
+
+require 'test_helper'
+
+module PermissionForge
+  module Services
+    # The applier never raises on a stored rule: a value of the rule tables
+    # it cannot interpret matches nothing (every holder is denied every
+    # record), never a 500 for every holder. Before: an unknown operator
+    # raised ArgumentError, an unknown join type ConfigurationError, and a
+    # qualifier naming no table reached SQL as written.
+    class PermissionRuleApplierTest < ActiveSupport::TestCase
+      NotAuthorizedError = PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError
+
+      setup do
+        @user = create_user
+        @supplier = create_supplier(name: 'Acme', owner_id: @user.id)
+        @mine = create_customer(name: 'mine', supplier: @supplier)
+        @theirs = create_customer(name: 'theirs')
+      end
+
+      teardown do
+        Current.user = nil
+        PermissionForge.configuration.auto_query_scoping = false
+      end
+
+      test 'an operator this version does not know matches nothing, under any join type' do
+        [nil, 'joins'].each do |join_type|
+          relation = scoped(rule(operator: 'regex', field_value: 'm.*', join_type: join_type,
+                                 field_accessor_path: (join_type ? 'supplier' : nil)))
+
+          assert_empty relation.to_a, join_type.inspect
+        end
+        assert_equal [@mine], scoped(rule(operator: 'equal', field_value: 'mine')).to_a, 'a known operator still filters'
+      end
+
+      test 'a join type this version does not know matches nothing and never reaches the relation' do
+        %w[inner send public_send delete_all destroy_all unscope unscoped none reorder extending instance_eval JOINS].each do |join_type|
+          ['delete_all', 'supplier', 'where', nil].each do |path|
+            assert_empty scoped(rule(join_type: join_type, field_accessor_path: path)).to_a, "#{join_type} #{path.inspect}"
+          end
+        end
+        assert_equal 2, Customer.where(id: [@mine.id, @theirs.id]).count
+      end
+
+      test 'a join type that is not one cannot drop the rules applied before it' do
+        own = rule(field_value: 'mine')
+
+        assert_empty scoped(own, rule(join_type: 'unscope', field_accessor_path: 'where')).to_a
+        assert_equal [@mine], scoped(own).where(id: [@mine.id, @theirs.id]).to_a
+      end
+
+      test 'a qualifier naming no table, on a rule that joins nothing, matches nothing' do
+        %w[nosuch.name customer.name].each do |field_name|
+          assert_empty scoped(rule(field_name: field_name, field_value: 'mine')).to_a, field_name
+        end
+      end
+
+      test 'a qualifier naming a table along the path is typed and compared' do
+        relation = scoped(rule(join_type: 'joins', field_accessor_path: 'supplier', field_name: 'suppliers.name', field_value: 'Acme'))
+
+        assert_equal [@mine], relation.to_a
+      end
+
+      test 'the holder of such rules is denied every record, in every read path, never a 500' do
+        set = create_permission_set
+        create_permission_set_user(user: @user, permission_set: set)
+        resource = create_resource(permission_set: set, name: 'Customer', read_access: true)
+        stored = create_permission_set_rule(permission_set: set, resource: resource, field_name: 'name', field_value: 'mine')
+        Current.user = @user
+
+        { { operator: 'regex' } => 'operator', { join_type: 'inner', field_accessor_path: 'supplier' } => 'join type',
+          { field_name: 'nosuch.name' } => 'table' }.each do |attrs, what|
+          stored.update_columns({ operator: 'equal', join_type: nil, field_accessor_path: nil, field_name: 'name' }.merge(attrs))
+          @user.invalidate_permissions
+
+          assert_empty Customer.permission_scoped.to_a, what
+          assert_raises(NotAuthorizedError, what) { Customer.find_by(id: @mine.id) }
+          assert_raises(NotAuthorizedError, what) { Customer.find_by!(id: @mine.id) }
+          PermissionForge.configuration.auto_query_scoping = :filter_only
+
+          assert_equal 0, Customer.count, "#{what}: count under :filter_only"
+          assert_empty Customer.all.to_a, "#{what}: all under :filter_only"
+          assert_not Customer.where(nil).exists?, "#{what}: exists? under :filter_only"
+          PermissionForge.configuration.auto_query_scoping = false
+        end
+        assert Customer.unscoped.exists?(@mine.id)
+      end
+
+      test 'a registry injected as a Hash is asked the same way' do
+        registry = { 'equal' => PermissionForge::Operators::Registry.fetch('equal') }
+
+        assert_equal [@mine], scoped(rule(field_value: 'mine'), registry: registry).to_a
+        assert_empty scoped(rule(operator: 'regex', field_value: 'mine'), registry: registry).to_a
+      end
+
+      private
+
+      def rule(**attrs)
+        { name: 'Own', failure_message: 'No', field_name: 'name', operator: 'equal', field_value: 'mine',
+          include_nulls: false }.merge(attrs)
+      end
+
+      def scoped(*rules, registry: PermissionForge::Operators::Registry)
+        PermissionRuleApplier.scope(model_class: Customer, rules: rules, current_user: @user, operator_registry: registry)
+      end
+    end
+  end
+end

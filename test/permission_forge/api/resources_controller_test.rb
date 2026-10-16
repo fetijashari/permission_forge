@@ -96,6 +96,24 @@ module PermissionForge
         assert_response :unprocessable_entity
       end
 
+      # A Resource named after a constant that is no model with a table
+      # (`Kernel`, `String`, a model whose table is not there) has no columns
+      # to generate rows from: a 422 keyed by name, never a 500 and never the
+      # generic message.
+      test 'POST generate_fields on a Resource naming no model this app can load is a 422 on name' do
+        %w[Kernel String PermissionForge].each do |name|
+          resource = create_resource(permission_set: @ps, name: name)
+
+          post "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{resource.uuid}/generate_fields",
+               params: { grant_all: 'true' }
+
+          assert_response :unprocessable_entity, name
+          assert_equal({ 'name' => [I18n.t('permission_forge.api.errors.resource_names_no_model')] },
+                       JSON.parse(response.body).dig('error', 'messages'), name)
+          assert_equal 0, resource.resource_fields.count, name
+        end
+      end
+
       test 'POST generate_fields auto-generates fields' do
         resource = create_resource(permission_set: @ps, name: 'Customer')
 

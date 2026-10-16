@@ -79,9 +79,24 @@ module PermissionForge
       assert_not build_rule(field_name: 'owner_id', field_accessor_path: 'supplier').valid?
     end
 
+    # A qualifier naming no table, on a rule that joins nothing, would reach
+    # SQL as written and raise for every holder: refused on field_name. One
+    # naming a real table that is none of the rule's is left to the query
+    # (the host may join it); with a path the name may be an alias the join
+    # gives a table (a self-join), so it is left to the query as well.
+    test 'a qualifier naming no table is refused on a rule that joins nothing, and left to the query with a path' do
+      rule = build_rule(field_name: 'elsewhere.anything')
+
+      assert_not rule.valid?
+      assert_equal ['names elsewhere, which is no table of this database'], rule.errors[:field_name]
+      assert_not build_rule(field_name: 'customer.name').valid?, 'a typo of the own table'
+      assert build_rule(field_name: 'suppliers.anything').valid?, 'a real table that is none of the rule\'s'
+      assert build_rule(field_name: 'elsewhere.anything', join_type: 'joins', field_accessor_path: 'supplier').valid?,
+             'with a path: an alias the join may give'
+    end
+
     # What the check cannot tell is left to the query, as before.
     test 'where the columns cannot be told, the rule is not refused for its column' do
-      assert build_rule(field_name: 'elsewhere.anything').valid?, 'a table that is none of the rule\'s (an alias the query joins)'
       # A path it cannot follow is refused on field_accessor_path (PermissionSetRulePathTest), not on field_name.
       %w[nowhere supplier.nowhere].each do |path|
         rule = build_rule(field_name: 'anything', join_type: 'joins', field_accessor_path: path)
