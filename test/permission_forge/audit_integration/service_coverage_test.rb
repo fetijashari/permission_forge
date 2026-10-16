@@ -59,6 +59,7 @@ module PermissionForge
         'resource_with_fields_builder' => { events: %w[resource.created resource_field.created], drive: :resource_builder },
         'rls_operator_sql' => { none: 'compiles a rule to SQL text' },
         'rls_policy_generator' => { none: 'installs PostgreSQL row-level security policies (DDL); no permission data' },
+        'rls_read_access_sql' => { none: 'compiles the read-access gate of a policy to SQL text' },
         'security_audit' => { none: 'read-only review (the rake task records report.generated)' },
         'stale_assignment_auditor' => { none: 'read-only report (the rake task records report.generated)' },
         'unscoped_query_detector' => { none: 'reports unscoped queries (query.unscoped is a runtime event)' }
