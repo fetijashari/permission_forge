@@ -269,6 +269,11 @@ module PermissionForge
         # The template leaves the profile to the default builder (which keeps uuid and leaves an
         # encrypted attribute out of the cached hash); the line is a commented example.
         assert_no_match(/^\s*config\.profile_builder =/, template)
+        # Review of the round-7 fixes (P2-4): the example calls the public readers (they decrypt, and may be
+        # masked), so its comment says how it differs from the default instead of calling itself the default.
+        comment = template[/^ *# The profile cached.*?(?=^ *# config\.profile_builder)/m].to_s
+        assert_no_match(/the default is this/i, comment)
+        assert_match(/public readers.*decrypt/m, comment)
         profile = install_template_configuration.profile_builder.call(create_user(uuid: 'u-32', name: 'Ada', email: 'ada@example.com'))
         assert_equal({ id: profile[:id], uuid: 'u-32', name: 'Ada', email: 'ada@example.com' }, profile)
       end
