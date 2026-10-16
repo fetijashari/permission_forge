@@ -96,7 +96,7 @@ module PermissionForge
         post pf("#{@base}/review"), params: URI.encode_www_form(ticked)
 
         assert_redirected_to pf(@base)
-        assert_equal I18n.t('permission_forge.flash.permission_sets.no_changes'), flash[:notice]
+        assert_equal I18n.t('permission_forge.flash.no_changes'), flash[:notice]
         assert_equal 'masked', level_of('email')
       end
     end

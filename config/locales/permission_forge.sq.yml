@@ -506,6 +506,7 @@ sq:
           other: U hoqën %{count} caktime të skaduara, por ruajtja e cache-it nuk
             konfirmoi që lejet e ruajtura të personave të prekur u pastruan. Lejet
             e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.
+      no_changes: Nuk ka ndryshime për të ruajtur.
       not_editable: Ky regjistrim nuk mund të ndryshohet.
       not_null: Mungonte një vlerë e detyrueshme. Asgjë nuk u ndryshua; faqja tregon
         çfarë ka tani.
@@ -551,7 +552,6 @@ sq:
         duplicated_outside_group: 'U dublikua “%{name}”: u kopjuan burimet, fushat,
           veprimet dhe rregullat. Caktimet nuk u kopjuan. Kopja nuk është në “%{group}”,
           që është i kyçur.'
-        no_changes: Nuk ka ndryshime për të ruajtur.
         nothing_applied: 'Asgjë për të ruajtur: %{reasons}.'
         save_failed: 'Asgjë nuk u ruajt: %{errors}'
         saved:
@@ -1050,6 +1050,7 @@ sq:
             title: Ky rregull krahason një kolonë që mban një sekret
         operator: Kushti
         optional: opsionale
+        path_html: 'Shtegu i lidhjeve: %{path}'
         pick_field: Zgjidh një fushë…
         pick_relationship: Zgjidh një lidhje…
         preview: Pamja paraprake

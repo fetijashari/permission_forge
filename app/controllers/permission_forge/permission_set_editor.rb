@@ -31,6 +31,15 @@ module PermissionForge
       @assignments = @permission_set.permission_set_users.includes(:user).order(:created_at).to_a
     end
 
+    # The Conditions tab again, with the refused form's values and errors.
+    def render_conditions_refused
+      @tab = 'conditions'
+      @ip_text = params[:allowed_ips].to_s
+      load_editor
+      load_conditions_tab
+      render :show, status: :unprocessable_entity
+    end
+
     def load_conditions_tab
       @ip_text ||= helpers.pf_ip_list(@permission_set.allowed_ips).join("\n")
       configured = (PermissionForge.configuration.admin_session_flags || {}).keys.map(&:to_s)

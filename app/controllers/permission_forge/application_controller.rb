@@ -26,6 +26,7 @@ module PermissionForge
     include PermissionForge::TenantRequired
     include PermissionForge::ParamShapes
     include PermissionForge::HtmlFormat
+    include PermissionForge::SaveNotice
 
     THEMES = %w[auto light dark].freeze
     FRAGMENT_HEADER = 'X-PF-Fragment'.freeze
