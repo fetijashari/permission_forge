@@ -54,8 +54,9 @@ module PermissionForge
               null_shapes(column).filter_map do |value, as|
                 code, json = api_answer(verb, path, { key => rest.merge(column => value) }, as)
                 next if code == 422 && json.dig('error', 'messages', column).is_a?(Array)
-                # The gem fills it on create (ResourceField#label).
-                next if code == 201 && !json.dig('data', column).nil?
+                # A blank label is no label, stored as the row's name, on create
+                # and on update (Concerns::NormalizesLabel; blank_label_api_test.rb).
+                next if column == 'label' && [200, 201].include?(code) && json.dig('data', 'label') == (rest['name'] || @field.name)
 
                 "#{verb.upcase} #{key}.#{column}=#{value.inspect} (#{as || :form}): #{code} #{json.to_s[0, 120]}"
               end

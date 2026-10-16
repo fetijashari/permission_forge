@@ -10,6 +10,7 @@ module PermissionForge
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::ValidatesColumnLengths
     include PermissionForge::Concerns::RequiresName # name present, on create or rename
+    include PermissionForge::Concerns::NormalizesLabel # a blank label is stored as nil
     include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -86,6 +87,10 @@ module PermissionForge
     end
 
     private
+
+    # A blank label is stored as no label (NormalizesLabel): the admin names
+    # the model from the host's translation (Admin::ModelLabel).
+    def generated_label = nil
 
     def note_newly_named_model
       @pf_newly_named = true if previously_new_record? || saved_change_to_name?

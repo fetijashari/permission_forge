@@ -184,9 +184,24 @@ module PermissionForge
         end
       end
 
-      test 'a foreign identifier still answers the numeric id (unchanged until a later version)' do
+      test 'a foreign identifier still answers the numeric id, and the key after it the uuid' do
         get "#{ROOT}/api/permission_sets/#{@set.uuid}"
-        assert_equal @group.id, response.parsed_body.dig('data', 'permission_set_group_id')
+        assert_equal [@group.id, @group.uuid], response.parsed_body['data'].values_at('permission_set_group_id', 'permission_set_group_uuid')
+      end
+
+      # Field test round 8 (D#29): a client that only knows uuids could not
+      # follow a reference. Each one is followed by the uuid of the same record.
+      test 'every foreign identifier is followed by the uuid of the same record, null where it may be null' do
+        Schema::PAYLOADS.each do |name, fields|
+          keys = fields.keys
+          Schema.foreign_identifiers(name).each do |id_key|
+            uuid_key = keys[keys.index(id_key) + 1]
+            assert_equal :"#{id_key.to_s.delete_suffix('_id')}_uuid", uuid_key, "#{name}.#{id_key}"
+            next if name == :audit_event # a snapshot column, kept after the set is deleted
+
+            assert_equal fields[id_key].to_s.sub('foreign_identifier', 'foreign_uuid'), fields[uuid_key].to_s, "#{name}.#{uuid_key}"
+          end
+        end
       end
 
       # --- the checks bite ------------------------------------------------------

@@ -441,6 +441,24 @@ none.** (code and API clients that create without a name, or with a blank one), 
   <!-- pin: test/permission_forge/release_readiness/cache_report_guard_test.rb#negative fixture: an unmeasured method in a file that measures elsewhere is a hit -->
   <!-- pin: test/permission_forge/release_readiness/integer_param_guard_test.rb#no request value is read with to_i -->
   <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#every warning has its severity in SEVERITY, the one its site passes, and a reason when it is config -->
+- **API: every reference to another record is answered by its uuid too.** Under `api_record_identifier = :uuid` the
+  answers named the records they refer to by numeric id only — a Permission Set said `permission_set_group_id: 4` right
+  after the PATCH that sent the group's uuid — so a client that only knows uuids could not follow them (field test
+  round 8, D#29). Each such key is now followed by the record's uuid: `permission_set_group_uuid` (a Permission Set, a
+  group member), `permission_set_uuid` (a Resource, a rule, an assignment) and `resource_uuid` (a field, an action, a
+  rule), under either identifier setting; the `_id` keys keep their value and type. One declaration in the serializer
+  layer (`Serializers::BaseSerializer.reference`), one query per reference for a page of records; `Api::Schema` types
+  the new keys `:foreign_uuid`. The `_uuid` keys are answer-only: send the `_id` key to change a reference (it takes
+  the uuid under `:uuid`, as before); a `_uuid` key sent back with a whole answer is ignored like any key the endpoint
+  does not take, so such a PATCH stays idempotent and a stale copy cannot undo another admin's move.
+  `user_id` (your user's key), a serializer of your own (`api_serializer_overrides`) and an AMS serializer are
+  unchanged.
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#a set moved into a group by its uuid answers the group by its uuid too -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#every answer names the set, the Resource and the group it refers to by their uuids -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#a page looks the uuids up in one query per reference, however many rows it has -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#an answer sent back whole moves the set as its id key says, the same every time -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#a body with only permission_set_group_uuid changes nothing: the companion is answer-only -->
+  <!-- pin: test/permission_forge/api/envelope_schema_test.rb#every foreign identifier is followed by the uuid of the same record, null where it may be null -->
 
 ### Changed
 
@@ -2098,6 +2116,25 @@ none.** (code and API clients that create without a name, or with a blank one), 
   <!-- pin: test/permission_forge/security/api_require_authorization_default_test.rb#the boot names each authorization lambda the API needs and does not have, and what it refuses -->
   <!-- pin: test/permission_forge/services/security_audit_test.rb#an API with api_auth whose authorization lambdas are unset gets an info note naming each and what it guards -->
   <!-- pin: test/permission_forge/security/api_require_authorization_default_test.rb#the install initializer shows all three authorization lambdas -->
+- **A blank label is "no label" on every write path: `null`, `""` and white space store the row's name.** Through the
+  JSON API a field row's `label: null` was a 422 `{"label": ["can't be blank"]}` while `label: ""` answered 200 and
+  stored the empty label, and an action row stored either as sent; the admin stored a blanked field label as the name
+  and a blanked action label as `""` (field test round 8, D#25). One model concern, `Concerns::NormalizesLabel`, now
+  stores a blank label — and on a new row the install's `'Untitled Field'` column default — as the row's name, on create
+  and on update, in code, through the API (200 / 201) and in the admin alike; a Resource's blank label is stored as
+  `nil`. A rename relabels a row whose label the gem would generate (the old name or its humanized form:
+  `GeneratedText.label?`) instead of leaving
+  the old name to read as a label an admin wrote. Checked on create, when the label changes and on a rename only: a
+  row stored with a blank label keeps it through a save of its other attributes, whose audit event names no label
+  change. **No opt-out:** a label was never meant to be empty; write a label of
+  your own to show something else.
+  <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a blank field or action label is stored as the name, on create and on update -->
+  <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a blank Resource label is stored as nil -->
+  <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a save of other attributes leaves a stored blank label, and its event says nothing of a label -->
+  <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a rename relabels a row whose label was generated, and keeps one someone wrote -->
+  <!-- pin: test/permission_forge/api/blank_label_api_test.rb#a blank label is stored as the name on PATCH, for a field row and an action row alike -->
+  <!-- pin: test/permission_forge/api/blank_label_api_test.rb#a blank label is stored as the name on POST, for a field row and an action row alike -->
+  <!-- pin: test/permission_forge/html/editing_flows_test.rb#an action label an admin blanks is stored as the name, on create and on edit -->
 ### Documentation
 
 - [Migration guide](docs/migration-guide.md#upgrading-to-015): "Upgrading to 0.15" — run `rake

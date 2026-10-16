@@ -10,6 +10,7 @@ module PermissionForge
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::ValidatesColumnLengths
     include PermissionForge::Concerns::RequiresName # name present, on create or rename
+    include PermissionForge::Concerns::NormalizesLabel # a blank label is stored as the name
     include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping

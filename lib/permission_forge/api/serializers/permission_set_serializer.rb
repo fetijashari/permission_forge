@@ -9,7 +9,7 @@ module PermissionForge
       class PermissionSetSerializer < BaseSerializer
         attributes :id, :uuid, :name, :description, :is_active, :is_editable, :is_muting,
                    :requires_session_flag, :allowed_ips, :allowed_ip_list, :allowed_hours_start, :allowed_hours_end,
-                   :permission_set_group_id, :created_at, :updated_at
+                   *reference(:permission_set_group), :created_at, :updated_at
       end
     end
   end

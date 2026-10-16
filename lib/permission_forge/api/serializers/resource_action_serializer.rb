@@ -4,7 +4,7 @@ module PermissionForge
   module Api
     module Serializers
       class ResourceActionSerializer < BaseSerializer
-        attributes :id, :uuid, :resource_id, :name, :label, :description,
+        attributes :id, :uuid, *reference(:resource), :name, :label, :description,
                    :is_permitted, :is_active,
                    :created_at, :updated_at
       end

@@ -138,7 +138,12 @@ module PermissionForge
             next if name == record.class.primary_key
 
             record.reload.send(:write_attribute, name, nil)
-            "#{record.class.name}##{name}" if record.valid? || (record.errors[name].empty? && covered_elsewhere(record, name).empty?)
+            valid = record.valid?
+            # Filled before validation, so nil never reaches the column (a
+            # blank label is the row's name: Concerns::NormalizesLabel).
+            next unless record.read_attribute(name).nil?
+
+            "#{record.class.name}##{name}" if valid || (record.errors[name].empty? && covered_elsewhere(record, name).empty?)
           end
         end
 
