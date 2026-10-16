@@ -1,0 +1,9 @@
+{
+  "name": "permission_forge-browser",
+  "private": true,
+  "description": "The browser layout probe of the admin (layout_probe.js): playwright-core drives the system Chrome, no browser is downloaded.",
+  "license": "MIT",
+  "devDependencies": {
+    "playwright-core": "1.56.1"
+  }
+}

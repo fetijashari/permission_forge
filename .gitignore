@@ -8,6 +8,7 @@
 /test/dummy/db/*.sqlite3*
 /test/dummy/log/
 /test/dummy/tmp/
+/test/browser/node_modules/
 /tmp/
 *.gem
 Gemfile.lock
