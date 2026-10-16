@@ -131,8 +131,6 @@ module PermissionForge
       test 'by pattern (a store that matches keys): every entry of every user goes, fully revoked and idle users included' do
         warm
         revoked_by_an_old_pod
-        legacy = legacy_key(@holder)
-        PermissionForge.cache.write(legacy, sentinel)
         assert_equal 1, keys.grep(/_c_\h/).size, 'precondition: a variant is cached'
         assert_not_nil PermissionForge.cache.read(@idle.permission_cache_key), 'precondition: the idle user has an entry'
 
@@ -142,7 +140,6 @@ module PermissionForge
         assert_equal({ strategy: :pattern, users: nil, tenants: tenants, unconfirmed: 0,
                        cache: { confirmed: true, process_local: true, unconfirmed: 0, in_request: false } }, result)
         assert_nothing_left
-        assert_nil PermissionForge.cache.read(legacy)
         assert_not User.find(@revoked.id).can_delete?(:Customer), 'K1: the entry a 0.13 revocation could not reach'
         assert_equal tenants + 1, AuditEvent.unscoped.where(event: 'cache.cleared').count, 'one per tenant, one without'
         assert_audit_event('cache.cleared', actor_type: 'system', actor_label: 'ops: TCK-12', reason: 'deploy 0.14',
@@ -157,8 +154,6 @@ module PermissionForge
         PermissionForge.configuration.reset_cache_store!
         warm
         revoked_by_an_old_pod
-        legacy = legacy_key(@holder)
-        PermissionForge.cache.write(legacy, sentinel)
         assert Cache::HolderInvalidation.by_id?(User), 'precondition: the bulk path applies'
         everyone = User.unscoped.count
         tenants = Account.unscoped.count
@@ -171,7 +166,6 @@ module PermissionForge
         assert_equal everyone * (tenants + 1), result[:users]
         assert_equal 0, result[:unconfirmed]
         assert_nothing_left
-        assert_nil PermissionForge.cache.read(legacy)
         assert_not User.find(@revoked.id).can_delete?(:Customer), 'K1 under enumeration'
         assert_audit_event('cache.cleared', data: { 'strategy' => 'enumerated', 'users' => everyone, 'unconfirmed' => 0 })
         assert_equal({ 'operation' => 'cache_clear', 'strategy' => 'enumerated', 'users' => everyone * (tenants + 1),
@@ -348,10 +342,6 @@ module PermissionForge
       def tenantless_event
         column = AuditEvent.tenant_column
         AuditEvent.unscoped.where(event: 'cache.cleared').order(:id).to_a.find { |event| event.read_attribute(column).nil? }
-      end
-
-      def legacy_key(user)
-        user.permission_cache_key.delete_prefix("#{Cache::UserKeys::ENTRY_NAMESPACE}:")
       end
 
       def sentinel

@@ -30,7 +30,7 @@ module PermissionForge
   module Deprecation
     # The version that removes what is deprecated now. A test fails once
     # VERSION reaches it: remove the deprecated code, then move the horizon.
-    HORIZON = '0.15'
+    HORIZON = '0.16'
     GEM_NAME = 'PermissionForge'
 
     DEPRECATOR = ActiveSupport::Deprecation.new(HORIZON, GEM_NAME)

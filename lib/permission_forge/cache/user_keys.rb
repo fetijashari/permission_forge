@@ -15,7 +15,9 @@ module PermissionForge
     # another version never reads an entry it would misread. An invalidation
     # removes the keys of the previous namespaces as well
     # (PREVIOUS_ENTRY_NAMESPACES), so a change made through either version
-    # reaches both. The stamp is not namespaced: every version must see it.
+    # reaches both — for one minor version after a bump (0.15 dropped the
+    # bare keys of 0.13; none is listed now). The stamp is not namespaced:
+    # every version must see it.
     #
     # An invalidation removes the base entries, and reads nothing: the
     # per-context variants of a user with conditional sets cannot be reached
@@ -30,8 +32,10 @@ module PermissionForge
     # @api private
     module UserKeys
       ENTRY_NAMESPACE = 'v2'
-      # '' is the bare key of 0.13. Drop in 0.15.
-      PREVIOUS_ENTRY_NAMESPACES = [''].freeze
+      # The namespaces of the previous entry format, removed by every
+      # invalidation for one minor version after a bump ('' would be a bare
+      # key). Empty since 0.15, which dropped the bare keys of 0.13.
+      PREVIOUS_ENTRY_NAMESPACES = [].freeze
 
       module_function
 
@@ -118,7 +122,7 @@ module PermissionForge
         [current, previous]
       end
 
-      # `key`, of this namespace, in another one ('' : the bare key of 0.13).
+      # `key`, of this namespace, in another one ('' : a bare key).
       def in_namespace(key, namespace)
         bare = key.delete_prefix("#{ENTRY_NAMESPACE}:")
         namespace.empty? ? bare : "#{namespace}:#{bare}"
