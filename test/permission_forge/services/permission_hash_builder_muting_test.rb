@@ -1,5 +1,6 @@
 require 'test_helper'
 require_relative '../field_variant_models'
+require_relative '../sti_variant_models'
 
 module PermissionForge
   module Services
@@ -183,6 +184,28 @@ module PermissionForge
       end
 
       # --- Action-level muting ---
+
+      # Field test round 8 (review P1): a base row reaches a subclass entry
+      # (single-table inheritance), and its variants are the subclass's —
+      # `price` is a reader only PfStiVipOrder has, so the variants of the
+      # muting row's own Resource (the base) left it readable while the
+      # column it derives from was hidden.
+      test 'a base row mutes the variants of each entry it reaches, a reader only the subclass has included' do
+        sales = create_permission_set(name: 'Orders')
+        %w[PfStiOrder PfStiVipOrder].each do |name|
+          create_resource_field(resource: create_resource(permission_set: sales, name: name, read_access: true, edit_access: true),
+                                name: 'price_cents', read_access: true, edit_access: true)
+        end
+        mute = create_permission_set(name: 'No prices', is_muting: true)
+        create_resource_field(resource: create_resource(permission_set: mute, name: 'PfStiOrder', read_access: false),
+                              name: 'price_cents', read_access: true)
+
+        fields = PermissionHashBuilder.call(user: @user, permission_sets: [sales, mute])[:resources]['PfStiVipOrder'][:fields]
+
+        assert_equal false, fields['price_cents'][:read_access]
+        assert_equal false, fields['price'][:read_access], 'the derived value of a hidden column is hidden too'
+        assert_equal false, fields['price'][:edit_access]
+      end
 
       test 'muting set revokes action is_permitted' do
         create_resource_action(

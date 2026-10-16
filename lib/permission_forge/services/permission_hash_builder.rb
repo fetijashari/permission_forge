@@ -142,7 +142,7 @@ module PermissionForge
 
         add_source_permission_set(resource_data[:source_permission_sets], permission_set)
         merge_resource_permissions(resource_data[:permissions], resource)
-        FieldPermissionMerger.call(fields: resource_data[:fields], resource: resource, variants: field_variants(resource))
+        FieldPermissionMerger.call(fields: resource_data[:fields], resource: resource, variants: field_variants(resource.name))
         merge_resource_actions(resource_data[:actions], resource)
         merge_permission_set_rules(resource_data[:permission_set_rules], resource)
       end
@@ -235,30 +235,34 @@ module PermissionForge
       # row naming a subclass reaches that subclass alone.
       def apply_muting_permission_set(data, permission_set)
         permission_set.resources.select(&:is_active).each do |resource|
-          entries_under(data, resource.name).each do |resource_data|
-            apply_muting_resource(resource_data, permission_set, resource)
+          entries_under(data, resource.name).each do |entry|
+            apply_muting_resource(entry, permission_set, resource)
           end
         end
       end
 
-      # The entries whose chain includes the resource name, in hash order;
-      # each entry's chain is worked out once per build.
+      # [entry name, entry] for the entries whose chain includes the resource
+      # name, in hash order; each entry's chain is worked out once per build.
       def entries_under(data, name)
         muted = name.to_sym
         @entry_chains ||= {}
-        data[:resources].filter_map do |entry_name, resource_data|
-          chain = (@entry_chains[entry_name] ||= PermissionForge::ResourceChain.names_for(entry_name))
-          resource_data if chain.include?(muted)
+        data[:resources].select do |entry_name, _|
+          (@entry_chains[entry_name] ||= PermissionForge::ResourceChain.names_for(entry_name)).include?(muted)
         end
       end
 
       # The set is listed once per entry: one with rows for a base and its
-      # subclass reaches the subclass entry twice.
-      def apply_muting_resource(resource_data, permission_set, resource)
+      # subclass reaches the subclass entry twice. `entry`: [entry name,
+      # entry]; the variants muted are the entry's own (FieldVariants of the
+      # entry's model, not of the muting row's Resource): a base row reaching
+      # a subclass entry mutes the variants the subclass has, as the granting
+      # phase wrote them.
+      def apply_muting_resource(entry, permission_set, resource)
+        entry_name, resource_data = entry
         sources = resource_data[:source_permission_sets]
         add_source_permission_set(sources, permission_set) if sources.none? { |source| source[:uuid] == permission_set.uuid }
         mute_resource_permissions(resource_data[:permissions], resource)
-        mute_field_permissions(resource_data[:fields], resource)
+        mute_field_permissions(resource_data[:fields], resource, field_variants(entry_name))
         mute_fields_of_resource(resource_data[:fields], resource)
         mute_resource_actions(resource_data[:actions], resource)
       end
@@ -286,7 +290,7 @@ module PermissionForge
         end
       end
 
-      def mute_field_permissions(fields, resource)
+      def mute_field_permissions(fields, resource, variants)
         resource.resource_fields.select(&:is_active).each do |field|
           next unless field.is_active
 
@@ -294,16 +298,16 @@ module PermissionForge
           # _cents, etc.), matching the variants the granting phase writes — otherwise
           # a muting set that revokes `user_id` would leave `user_uuid` readable.
           mute_single_field(fields, field.name, field)
-          field_variants(resource).call(field.name).each do |variant|
+          variants.call(field.name).each do |variant|
             mute_single_field(fields, variant, field)
           end
         end
       end
 
-      # The field variants of a resource's model (FieldVariants), one lookup
-      # per resource name for the whole build.
-      def field_variants(resource)
-        (@field_variants ||= {})[resource.name] ||= PermissionForge::FieldVariants.new(resource.name)
+      # The field variants of an entry's model (FieldVariants), one lookup
+      # per Resource name for the whole build.
+      def field_variants(name)
+        (@field_variants ||= {})[name.to_s] ||= PermissionForge::FieldVariants.new(name.to_s)
       end
 
       # A row that mutes read mutes edit too: a field nobody may read is not

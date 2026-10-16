@@ -2005,6 +2005,53 @@ none.** (code and API clients that create without a name, or with a blank one), 
   colon anywhere but the Technical details panels and the initializer snippets.
   <!-- pin: test/permission_forge/html/raw_attribute_names_test.rb#the rule builder names the stored relationship path in the page language -->
   <!-- pin: test/permission_forge/html/raw_attribute_names_test.rb#no screen prints a column name of the gem as a label -->
+- **A person's Effective access row names the Resource a Muting Permission Set acts through.** On a single-table-
+  inheritance subclass, Email (muted on Customer) and Phone (muted on VipCustomer) both read "Hidden by No PII exports"
+  beside "from Sales rep · VipCustomer", while the Why panel said "No PII exports · Customer" / "· VipCustomer" (field
+  test round 8, B#38): the row named the set by itself, and the Why panel found the Resource by walking the set's rows
+  again (a guess that missed a field variant and a row whose mute the resource's Read made moot). Each
+  `EffectiveAccess::FieldSource` now carries the Resource whose row it credits (`resource_name`: the deciding entry's
+  for a grant, the muting row's for a mute) and each blocked flag or action the Resource whose row blocks it
+  (`Outcome#muted_on`, the row nearest the model first); the row, the Why panel and "Explain for" name every set
+  through `pf_field_source_set_name` / `pf_muting_set_name`. The row and "Explain for" also word the level the
+  deciding mutes give and name the same sets (`FieldOutcome#deciding_mutes`: the strongest mute, when its level is the
+  level shown, and every set at it): "Masked by MaskA" / "Ana sees it masked: MaskA masks it.", where the row said
+  "Hidden by" next to a Masked badge and "Explain for" said "MaskA and NoEditB hides or masks it" (counted now: "HideA
+  and HideB hide it", per-level keys in en, sq and mk). A mute that only takes editing away decides nothing when a
+  grant shows the field masked (the Why panel still lists it), and is not credited at all when the Resource gives no
+  Edit: the field reads "from Sales rep", shown as Read-only because Edit isn't allowed.
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#the row names the Resource whose row mutes the field, as the Why panel and the grants beside it do -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a muting reason words the level the mute decides, not always Hidden -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#Explain for words the deciding mute's level and names the sets the row names -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#two sets that hide a field are counted in Explain for -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a mute that only takes editing away from a masked field does not decide it: the mask does -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#an edit mute on a resource that gives no Edit changes nothing and is not credited -->
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#each source names the Resource whose row it credits; a set with two rows, the one nearest the model -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: the Resource a set acts through on a person's effective access (FieldSource#resource_name, Outcome#muted_on) -->
+- **A field hidden by the entry it inherits says so on every surface.** Bob's VipCustomer › Notes row read "∅ Hidden ·
+  No set shows it" and "Explain for" said "No set shows this field to Bob.", beside "Sales rep · VipCustomer ◉
+  Read-only", while the Why panel said Customer decides (field test round 8, B#39). What decides is the granting
+  Customer entry, which hides Notes — not No PII exports, whose mute on Customer.notes changes nothing the granting
+  sets showed, so it still never reads "Hidden by muting". `EffectiveAccess::FieldOutcome#reason` is the one decision
+  (`:muted`, `:unconfigured`, `:granted`, `:implicit`, `:unreadable`, `:inherited`, `:none`) the row, its colour, the
+  Why panel and "Explain for" all word: an inherited hidden field reads "Hidden on Customer, which this inherits from."
+  on all three (Explain for draws no other sentence then), and an entry without Read says why on the row too, where it
+  read "No set shows it".
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a field hidden on the base reads the same on the row, the Why panel and Explain for, in every locale -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#every field of the subclass reads the same reason on the row, the Why panel and Explain for, in every locale -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#the hidden-on reason follows the decision: muting the subclass row too still leaves the base deciding -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a subclass entry without Read says so on the row, as the Why panel does -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#Explain for draws no empty sentence when the inherited entry decides -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: why a person's field is at its level (EffectiveAccess::FieldOutcome#reason) -->
+- **A muting row on a single-table-inheritance base mutes the variants of the subclass entries it reaches.** This
+  widens protection: a muting set whose base Resource hid `price_cents` left the subclass entry's `price` (a reader
+  only the subclass defines, a configured field variant) readable and editable in the permission hash, so the derived
+  value of a hidden column stayed readable through the subclass, while the admin showed it hidden (field test round 8,
+  review P1). `PermissionHashBuilder` took the variants from the muting row's Resource; it now takes each reached
+  entry's own (`FieldVariants` of the entry's model), the variants the granting phase wrote. The hash format is
+  unchanged.
+  <!-- pin: test/permission_forge/services/permission_hash_builder_muting_test.rb#a base row mutes the variants of each entry it reaches, a reader only the subclass has included -->
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#a base row hides a variant only the subclass has, in the engine and here -->
 ### Documentation
 
 - [Migration guide](docs/migration-guide.md#upgrading-to-015): "Upgrading to 0.15" — run `rake

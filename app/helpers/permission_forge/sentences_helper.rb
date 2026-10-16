@@ -42,6 +42,39 @@ module PermissionForge
       pf_t_markup(set: set_name) { |held| pf_ui("level_sentences.#{source.level}", **held, strategy: strategy) }
     end
 
+    # A person's Effective access row for a field a Muting Permission Set
+    # decides (FieldOutcome#reason :muted): the level the deciding mutes
+    # give (FieldOutcome#deciding_mutes: hidden, masked or read-only) and
+    # their sets, each named with the Resource whose row mutes
+    # (#pf_field_source_set_name; B#38).
+    def pf_field_muted_by(field, leaf_name)
+      pf_t_markup(set: pf_deciding_mute_names(field, leaf_name)) do |held|
+        case field.blocked_level
+        when 'mask' then t('permission_forge.people.effective_field_source.masked_by', **held)
+        when 'no_edit' then t('permission_forge.people.effective_field_source.read_only_by', **held)
+        else t('permission_forge.people.effective_field_source.muted_by', **held)
+        end
+      end
+    end
+
+    # The field drawer's "Explain for" for the same decision: the level and
+    # the same sets as the row (#pf_field_muted_by), counted for the verb.
+    def pf_field_muted_explain(field, leaf_name, person_name)
+      count = field.deciding_mutes.size
+      pf_t_markup(sets: pf_deciding_mute_names(field, leaf_name)) do |held|
+        case field.blocked_level
+        when 'mask' then t('permission_forge.resource_fields.explain.masked_by', name: person_name, count: count, **held)
+        when 'no_edit' then t('permission_forge.resource_fields.explain.read_only_by', name: person_name, count: count, **held)
+        else t('permission_forge.resource_fields.explain.hidden_by', name: person_name, count: count, **held)
+        end
+      end
+    end
+
+    # The sets of FieldOutcome#deciding_mutes as one list, each named with its Resource.
+    def pf_deciding_mute_names(field, leaf_name)
+      pf_markup_sentence(field.deciding_mutes.map { |source| pf_field_source_set_name(source, leaf_name) })
+    end
+
     # --- record rules ---------------------------------------------------------
 
     def pf_operator_label(operator)

@@ -81,7 +81,7 @@
                       <% if field.virtual %><%= pf_badge(t('permission_forge.ui.badges.virtual')) %><% end %>
                     </span>
                     <%= pf_effective_field_badge(field) %>
-                    <span class="pf-fs-12 <%= field.blocked_by.any? ? 'pf-text-block' : (field.unconfigured ? 'pf-text-warn' : 'pf-text-3') %>">
+                    <span class="pf-fs-12 <%= { muted: 'pf-text-block', unconfigured: 'pf-text-warn' }.fetch(field.reason, 'pf-text-3') %>">
                       <%= render 'effective_field_source', field: field, res_name: res.name %>
                     </span>
                   <% end %>

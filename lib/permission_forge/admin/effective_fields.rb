@@ -31,8 +31,9 @@ module PermissionForge
         @configuration = configuration
         @catalog = catalog
         @bases = bases
-        # entry: { read_access:, edit_access:, mask_access:, mask_strategy:, sources: [[set, level, strategy]],
-        #          variant_of:, before: (the flags before muting), mutes: [[set, level]] }
+        # entry: { read_access:, edit_access:, mask_access:, mask_strategy:, sources: [[set, level, strategy, resource]],
+        #          variant_of:, before: (the flags before muting), mutes: [[set, level, resource]] }
+        # (resource: the name of the Resource whose row it is)
         @entries = {}
       end
 
@@ -107,7 +108,7 @@ module PermissionForge
       # The engine's own merge (FieldPermissionMerger.merge_row), plus provenance.
       def merge_into(entry, field, permission_set)
         Services::FieldPermissionMerger.merge_row(entry, field)
-        entry[:sources] << [permission_set, FieldLevel.level_of(field, muting: false), field.mask_strategy]
+        entry[:sources] << [permission_set, FieldLevel.level_of(field, muting: false), field.mask_strategy, @sources.name]
       end
 
       # Declared names that get the implicit read + edit entry; none under
@@ -128,8 +129,8 @@ module PermissionForge
       def apply_muting_fields
         @entries.each_value { |entry| entry[:before] = entry.slice(:read_access, :edit_access, :mask_access) }
         @sources.mutes.each do |ps, resource|
-          active_fields(resource).each { |field| apply_muting_field(ps, field) }
-          hide_every_field(ps) if resource.read_access
+          active_fields(resource).each { |field| apply_muting_field(ps, field, resource.name) }
+          hide_every_field(ps, resource.name) if resource.read_access
         end
       end
 
@@ -137,35 +138,36 @@ module PermissionForge
       # the engine does (PermissionHashBuilder#mute_fields_of_resource). One
       # that revokes its edit caps every field to read: FieldProvenance does that
       # from the resource's edit outcome.
-      def hide_every_field(permission_set)
-        @entries.each_value { |entry| hide_entry(entry, permission_set) }
+      def hide_every_field(permission_set, resource_name)
+        @entries.each_value { |entry| hide_entry(entry, permission_set, resource_name) }
       end
 
-      def hide_entry(entry, permission_set)
+      def hide_entry(entry, permission_set, resource_name)
         entry[:read_access] = false
         entry[:edit_access] = false
-        (entry[:mutes] ||= []) << [permission_set, 'hide']
+        (entry[:mutes] ||= []) << [permission_set, 'hide', resource_name]
       end
 
-      def apply_muting_field(permission_set, field)
+      def apply_muting_field(permission_set, field, resource_name)
         name = field.name
         ([name] + variants_of(name)).each do |key|
           entry = @entries[key]
-          mute_field(entry, field, permission_set) if entry
+          mute_field(entry, field, [permission_set, resource_name]) if entry
         end
       end
 
       # The engine's own muting of a row (PermissionHashBuilder
       # #mute_single_field: a row that mutes read mutes edit too), plus
-      # provenance.
-      def mute_field(entry, field, permission_set)
+      # provenance (`muting`: [set, the name of the Resource of the row]).
+      def mute_field(entry, field, muting)
         level = FieldLevel.muting_provenance(field)
         return if level == 'leave'
 
         entry[:read_access] = false if field.read_access
         entry[:edit_access] = false if field.read_access || field.edit_access
         entry[:mask_access] = true if field.mask_access
-        (entry[:mutes] ||= []) << [permission_set, level]
+        permission_set, resource_name = muting
+        (entry[:mutes] ||= []) << [permission_set, level, resource_name]
       end
 
       def unconfigured_outcome(name, virtual)

@@ -71,7 +71,10 @@ module PermissionForge
         assert(muted.any? { |text| text.include?('Contractor hold · PfStiTicket') && text.include?(flag) }, "the read flag: #{muted}")
         assert(muted.any? { |text| text.include?('Contractor hold · PfStiBugTicket') && !text.include?(flag) }, "the action: #{muted}")
         status = doc.css('[id="pf-why-PfStiBugTicket.field.status"] li.pf-why__reason').map { |node| node.at_css('.pf-stack > span').text.squish }
-        assert(status.any? { |text| text.include?('Contractor hold · PfStiBugTicket') }, "the field: #{status}")
+        # The field's mute is the one that decides (B#38): the base row takes
+        # the subclass entry's Read away, so it hides every field — its own
+        # row of status on the subclass changes nothing more.
+        assert(status.any? { |text| text.include?('Contractor hold · PfStiTicket') }, "the field: #{status}")
         assert_not(muted.any? { |text| text.match?(/Contractor hold(?! ·)/) }, 'never the set alone')
       end
 

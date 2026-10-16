@@ -34,7 +34,7 @@ module PermissionForge
         def muted?(name) = provenance(name).mutes.any?
 
         # A field hidden because this entry does not grant read (ResourceChain::HIDDEN_ENTRY).
-        def hidden_attributes = FieldProvenance.hidden_by(sources.flags[:read_access].blocked_by, decided_by: decided_by)
+        def hidden_attributes = FieldProvenance.hidden_by(sources.flags[:read_access].muted_on, decided_by: decided_by)
       end
 
       # @param tables [Array<Table>] the resource's first, then its bases' nearest first

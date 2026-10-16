@@ -17,16 +17,32 @@ module PermissionForge
       CRUD = %i[read_access create_access edit_access delete_access].freeze
       RESOURCE_FLAGS = (CRUD + %i[view_all modify_all]).freeze
 
-      # A permission outcome with the sets that caused it.
-      Outcome = Struct.new(:state, :granted_by, :blocked_by, keyword_init: true) do
+      # A permission outcome with the sets that caused it. `muted_on`: each
+      # blocking set => the Resource whose row blocks (a single-table-
+      # inheritance base or the resource itself; the row nearest the
+      # resource when the set has several), so a reason names the Resource
+      # the set acts through (LabelsHelper#pf_chain_set_name).
+      Outcome = Struct.new(:state, :granted_by, :blocked_by, :muted_on, keyword_init: true) do
+        # The outcome of the granting sets and the blocking ones (set => Resource).
+        def self.of(granted_by, muted_on)
+          state = if granted_by.empty? then :none
+                  elsif muted_on.any? then :blocked
+                  else :granted
+                  end
+          new(state: state, granted_by: granted_by, blocked_by: muted_on.keys, muted_on: muted_on)
+        end
+
         def granted? = state == :granted
         def blocked? = state == :blocked
       end
 
       # What one Permission Set does to a field: its most open level (a
       # granting set: masked, read or edit, with that row's mask strategy) or
-      # what it takes away (a muting set: mask or hide) — Admin::FieldLevel names.
-      FieldSource = Struct.new(:permission_set, :level, :mask_strategy, keyword_init: true)
+      # what it takes away (a muting set: mask, hide or no_edit) —
+      # Admin::FieldLevel names. `resource_name`: the Resource whose row
+      # does it — the deciding entry's for a grant, the muting row's (an STI
+      # base's or the resource's own) for a mute (field test round 8, B#38).
+      FieldSource = Struct.new(:permission_set, :level, :mask_strategy, :resource_name, keyword_init: true)
 
       # `implicit` — no set configures the field for this outcome: it is a
       # declared virtual field on the implicit read + edit grant
@@ -37,12 +53,50 @@ module PermissionForge
       # Resource whose entry decides the field (ResourceChain: the strictest
       # entry along the chain); nil when the resource's own entry does.
       # `unreadable` — that entry does not grant Read, so it hides every field.
+      # The level a field shows when a mute decides it (FieldSource#level of a
+      # mute => Admin::FieldLevel granting level): hide => Hidden, mask =>
+      # Masked, no_edit => Read-only.
+      MUTED_LEVELS = { 'hide' => 'hidden', 'mask' => 'masked', 'no_edit' => 'read' }.freeze
+
       FieldOutcome = Struct.new(:name, :level, :mask_strategy, :granted_by, :blocked_by, :blocked_level,
                                 :capped, :unconfigured, :virtual, :variant_of, :implicit, :grants, :mutes,
                                 :decided_by, :unreadable, keyword_init: true) do
         def visible? = level != 'hidden'
         # Hidden because a Muting Permission Set takes it away, not because no set grants it.
         def hidden_by_muting? = level == 'hidden' && blocked_by.any?
+
+        # The mutes that decide the field's level: the strongest mute's level
+        # (blocked_level) when it is the level the field shows
+        # (MUTED_LEVELS), and every set credited at it; none otherwise — a
+        # mute that took editing away from a field a grant shows masked
+        # changed the entry but does not decide what it shows. The row and
+        # "Explain for" name these sets (review of round 8, D1/D2).
+        #
+        # @return [Array<FieldSource>]
+        def deciding_mutes
+          return [] unless blocked_level && MUTED_LEVELS[blocked_level] == level
+
+          mutes.select { |source| source.level == blocked_level }
+        end
+
+        # Why the field is at its level: the one decision a person's
+        # Effective access row, its Why panel and the field drawer's
+        # "Explain for" all word (field test round 8, B#39) —
+        # :muted (#deciding_mutes: a Muting Permission Set decides), :unconfigured, :granted,
+        # :implicit (a virtual field's default), :unreadable (the deciding
+        # entry does not grant Read), :inherited (an STI base's entry
+        # decides and shows it to nobody) or :none (no set shows it).
+        #
+        # @return [Symbol]
+        def reason
+          return :muted if deciding_mutes.any?
+          return :unconfigured if unconfigured
+          return :granted if granted_by.any?
+          return :implicit if implicit
+          return :unreadable if unreadable
+
+          decided_by ? :inherited : :none
+        end
       end
 
       RuleSource = Struct.new(:rule, :permission_set, keyword_init: true)
@@ -113,10 +167,11 @@ module PermissionForge
       end
 
       # [permission_set, resource] for every active row of the sets named by
-      # one of `names`, in set order then row order.
+      # one of `names`, in set order, then in the order of `names` (a muting
+      # set's row nearest the resource first), then row order.
       def pairs_for(permission_sets, names)
         permission_sets.flat_map do |ps|
-          active_resources(ps).select { |r| names.include?(r.name) }.map { |resource| [ps, resource] }
+          ChainEntries.in_chain_order(active_resources(ps), names).map { |resource| [ps, resource] }
         end
       end
 
@@ -170,21 +225,14 @@ module PermissionForge
       end
 
       # Granted by every granting set whose resource matches; muting sets only
-      # block what some set granted. The block gets the row and whether it
-      # is a granting one.
-      def outcome_for(grants, mutes, &)
-        granted_by = sets_matching(grants, true, &)
-        blocked_by = granted_by.any? ? sets_matching(mutes, false, &) : []
-        state = if granted_by.empty? then :none
-                elsif blocked_by.any? then :blocked
-                else :granted
-                end
-        Outcome.new(state: state, granted_by: granted_by, blocked_by: blocked_by)
-      end
-
-      # Each set once: a muting set may reach an entry through two rows.
-      def sets_matching(pairs, granting)
-        pairs.select { |_, resource| yield resource, granting }.map(&:first).uniq
+      # block what some set granted, each set once (a muting set may reach an
+      # entry through two rows: its first that blocks is named, pairs_for
+      # puts the one nearest the resource first). The block gets the row and
+      # whether it is a granting one.
+      def outcome_for(grants, mutes)
+        granted_by = grants.select { |_, resource| yield resource, true }.map(&:first).uniq
+        blocking = granted_by.any? ? mutes.select { |_, resource| yield resource, false } : []
+        Outcome.of(granted_by, blocking.group_by(&:first).transform_values { |rows| rows.first.last.name })
       end
 
       def rules_for(grants)
@@ -197,16 +245,12 @@ module PermissionForge
 
       def action_outcomes(sources)
         grants = sources.grants
-        names = grants.flat_map { |_, r| active_actions(r).map(&:name) }.uniq
+        names = grants.flat_map { |_, r| r.resource_actions.select(&:is_active).map(&:name) }.uniq
         names.map { |action| [action, outcome_for(grants, sources.mutes) { |r, _granting| permitted?(r, action) }] }
       end
 
-      def active_actions(resource)
-        resource.resource_actions.select(&:is_active)
-      end
-
       def permitted?(resource, action)
-        active_actions(resource).select(&:is_permitted).map(&:name).include?(action)
+        resource.resource_actions.any? { |row| row.is_active && row.is_permitted && row.name == action }
       end
     end
   end

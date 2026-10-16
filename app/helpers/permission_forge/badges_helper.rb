@@ -117,8 +117,10 @@ module PermissionForge
 
     # [glyph, sentence] for the entry along a single-table-inheritance chain
     # that decides a person's field (EffectiveAccess::FieldOutcome#decided_by,
-    # #unreadable), or nil when the resource's own entry decides and grants
-    # Read: the Why panel and the field drawer's "Explain for" both say it.
+    # #unreadable, #reason), or nil when the resource's own entry decides and
+    # grants Read: the Why panel and the field drawer's "Explain for" both
+    # say it, and the Effective access row says it when it is the reason
+    # (FieldOutcome#reason :unreadable or :inherited, B#39).
     def pf_field_chain_reason(field)
       base = field.decided_by
       if field.unreadable
@@ -126,7 +128,10 @@ module PermissionForge
 
         return ['∅', t('permission_forge.people.effective_why.field_base_unreadable', resource: pf_resource_label(base))]
       end
-      ['↑', t('permission_forge.people.effective_why.field_decided_by', resource: pf_resource_label(base))] if base
+      return unless base
+      return ['↑', t('permission_forge.people.effective_why.field_hidden_on', resource: pf_resource_label(base))] if field.reason == :inherited
+
+      ['↑', t('permission_forge.people.effective_why.field_decided_by', resource: pf_resource_label(base))]
     end
 
     # A level as a badge ("•• Masked (Email) · j***@acme.com"): a field level

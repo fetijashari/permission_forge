@@ -838,8 +838,10 @@ sq:
           one: " dhe %{count} tjetër"
           other: " dhe %{count} të tjera"
         from: nga %{set}
-        muted_by: I fshehur nga %{set}
+        masked_by: E maskuar nga %{set}
+        muted_by: E fshehur nga %{set}
         none: Asnjë grup nuk e shfaq
+        read_only_by: E kufizuar në Vetëm lexim nga %{set}
         unconfigured: "%{state} · %{behaviour}"
         virtual: Fushë virtuale, e lexueshme si parazgjedhje
       effective_tab:
@@ -864,6 +866,7 @@ sq:
         field_capped: Shfaqet si Vetëm lexim sepse Ndrysho nuk lejohet për këtë burim.
         field_decided_by: 'Vendoset nga %{resource}, nga i cili trashëgon: fiton cilësimi
           më i rreptë përgjatë trashëgimisë.'
+        field_hidden_on: E fshehur te %{resource}, nga i cili trashëgon.
         field_none: Asnjë Grup lejesh nuk e shfaq këtë fushë.
         field_own_unreadable: E fshehur sepse Lexo nuk lejohet për këtë burim.
         field_title: "%{resource} › %{field}"
@@ -1351,9 +1354,17 @@ sq:
         capped: Shfaqet si Vetëm lexim sepse Ndrysho nuk lejohet për këtë burim.
         full_picture: Shiko gjithçka që %{name} mund të shohë →
         granted: "%{name} e sheh përmes %{sets}."
-        muted: "%{name} nuk e sheh të plotë sepse %{sets} e fsheh ose e maskon."
+        hidden_by:
+          one: "%{name} nuk e sheh: %{sets} e fsheh."
+          other: "%{name} nuk e sheh: %{sets} e fshehin."
+        masked_by:
+          one: "%{name} e sheh të maskuar: %{sets} e maskon."
+          other: "%{name} e sheh të maskuar: %{sets} e maskojnë."
         no_access: "%{name} nuk mund të lexojë %{resources}."
         none: Asnjë grup nuk ia shfaq këtë fushë %{name}.
+        read_only_by:
+          one: "%{name} nuk mund ta ndryshojë: %{sets} heq mundësinë e ndryshimit."
+          other: "%{name} nuk mund ta ndryshojë: %{sets} heqin mundësinë e ndryshimit."
         unconfigured: Asnjë grup nuk e konfiguron këtë kolonë, prandaj për %{name}
           vendos cilësimi për fushat e pakonfiguruara.
         virtual_default: "%{name} e merr këtë fushë virtuale si parazgjedhje, të lexueshme
