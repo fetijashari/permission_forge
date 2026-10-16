@@ -141,6 +141,46 @@ module PermissionForge
                                      registry: PermissionForge::Operators::Registry.strategies.merge(echo)).to_a
       end
 
+      # Review R1 #1: the qualifier was looked for in the joined query's SQL
+      # text, where a column of the JOIN's ON clause ("customers"."supplier_id")
+      # passed for a table: "supplier_id"."id" reached the database and raised
+      # for every holder. A qualifier is now one of the names the query's
+      # FROM and JOINs give (the table aliases ActiveRecord assigns).
+      test 'a join rule qualified with a name the ON clause mentions, which is no table or alias, matches nothing' do
+        %w[supplier_id.id customers.supplier_id.id supplier.id id.id].each do |field_name|
+          relation = scoped(rule(join_type: 'joins', field_accessor_path: 'supplier', field_name: field_name, field_value: '1'))
+
+          assert_empty relation.to_a, field_name
+        end
+        assert_equal [@mine], scoped(rule(join_type: 'joins', field_accessor_path: 'supplier', field_name: 'suppliers.id',
+                                          field_value: @supplier.id.to_s)).to_a, 'a table the join names is compared'
+      end
+
+      # Review R1 #2: a filter rule compares the model's own table. One
+      # qualified with another model's table reached SQL as written and
+      # raised in every query of its holders (the default scope included).
+      test 'a filter rule qualified with a table of another model matches nothing in every gem-built query' do
+        set = create_permission_set
+        create_permission_set_user(user: @user, permission_set: set)
+        resource = create_resource(permission_set: set, name: 'Customer', read_access: true)
+        stored = create_permission_set_rule(permission_set: set, resource: resource, field_name: 'name', field_value: 'Acme')
+        stored.update_columns(field_name: 'suppliers.name')
+        Current.user = @user
+
+        assert_empty scoped(rule(field_name: 'suppliers.name', field_value: 'Acme')).to_a
+        assert_empty Customer.permission_scoped.to_a
+        assert_raises(NotAuthorizedError) { Customer.find_by(id: @mine.id) }
+        assert_raises(NotAuthorizedError) { Customer.find_by!(id: @mine.id) }
+        PermissionForge.configuration.auto_query_scoping = :filter_only
+
+        assert_equal 0, Customer.count
+        assert_not Customer.where(nil).exists?
+        assert_empty Customer.joins(:supplier).to_a, 'also where the host query joins that table'
+        PermissionForge.configuration.auto_query_scoping = :off
+
+        assert_equal [@mine], scoped(rule(field_name: 'customers.name', field_value: 'mine')).to_a, 'its own table is compared'
+      end
+
       test 'a registry injected as a Hash is asked the same way' do
         registry = { 'equal' => PermissionForge::Operators::Registry.fetch('equal') }
 

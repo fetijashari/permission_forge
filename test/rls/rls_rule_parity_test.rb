@@ -78,6 +78,7 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     unknown_operator: { field_name: 'label', operator: 'regex', field_value: 'five' },
     missing_column: { field_name: 'onwer_id', operator: 'equal', field_value: 'current_user' },
     unknown_table: { field_name: 'nosuch.label', operator: 'equal', field_value: 'five' },
+    foreign_table: { field_name: 'users.name', operator: 'equal', field_value: 'five' },
     unusable_value: { field_name: 'ref', operator: 'equal', field_value: 'banana' }
   }.freeze
   # A field name that is not a name is a missing column to RuleProblem.
