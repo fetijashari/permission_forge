@@ -118,7 +118,7 @@ Changes made from a console, a runner or a job are not API requests: wrap them i
 
 ## Response Format
 
-JSON responses use the envelope below. Some answers have no body: the 401 while `api_auth` is not set, the 404 while the API is disabled and the 204 of a delete.
+JSON responses use the envelope below. Some answers have no body: the 401 while `api_auth` is not set, the 404 while the API is disabled and the 204 of a delete (removing an assignment answers 200 with the removed assignment and its `meta.cache`).
 
 **Success (single record):**
 ```json sample=permission_set
@@ -556,12 +556,17 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
   -H "Content-Type: application/json" \
   -d '{ "user_id": 42, "expires_at": "2026-12-31T23:59:00Z" }'
 # Response: 201 Created — expires_at is optional (time-bound assignment)
+# { "data": { "id": 7, "uuid": "…", "permission_set_id": 1, "user_id": 42, … },
+#   "meta": { "cache": { "confirmed": true, "process_local": false, "in_request": true, "unconfirmed": 0 } } }
 # Assigning a user who is already in the set returns 422 (uniqueness validation)
 # An expires_at that is not ISO 8601 (see below), or not after now, returns 422 and assigns nobody
 
 # Remove a user from a permission set (:uuid is the assignment's identifier)
 DELETE /permissions/api/permission_sets/:ps_uuid/users/:uuid
+# Response: 200 OK — the removed assignment and "meta.cache" (through 0.14.x: 204 No Content)
 ```
+
+Both answer `meta.cache`, what the cache store confirmed about the person's cached permissions, as a [bulk assignment](#bulk-user-assignment) answers `cache`: `"confirmed": false` means the store did not confirm the removal and the old permissions may stay in use until `cache_ttl` ends. Group membership changes no permissions and answers no `cache`.
 
 ##### `expires_at` formats
 

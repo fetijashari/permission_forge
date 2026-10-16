@@ -35,7 +35,7 @@ module PermissionForge
 
         delete "/permission_forge/api/permission_sets/#{@ps.uuid}/users/#{psu.uuid}"
 
-        assert_response :no_content
+        assert_response :ok # the revoked assignment and meta.cache (R2 P1-2)
         assert_nil PermissionForge::PermissionSetUser.find_by(id: psu.id)
       end
 

@@ -398,6 +398,7 @@ sq:
         pick_resource: Zgjidh një burim…
         who_can_see: Kush mund ta shohë %{field}?
     flash:
+      cache_not_confirmed: "Ruajtja e cache-it nuk konfirmoi që lejet e ruajtura u pastruan: lejet e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it."
       not_null: "Mungonte një vlerë e detyrueshme. Asgjë nuk u ndryshua; faqja tregon çfarë ka tani."
       actions:
         created: U shtua veprimi “%{action}”.

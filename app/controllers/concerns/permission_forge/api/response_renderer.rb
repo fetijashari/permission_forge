@@ -21,6 +21,20 @@ module PermissionForge
         end
       end
 
+      # One record and the cache outcome of the change that made or removed
+      # it (Cache::Outcome, as a bulk assignment answers it):
+      # `{ "data": { ... }, "meta": { "cache": { ... } } }`, the record by
+      # the serializer of its type (`permission_set_user`).
+      def render_record_with_cache(record, outcome, status:)
+        serializer_class = serializer_for(record.model_name.element.to_sym)
+        meta = { cache: outcome.to_h }
+        if ams_serializer?(serializer_class)
+          render json: record, serializer: serializer_class, root: :data, meta: meta, status: status
+        else
+          render json: { data: serializer_class.new(record).as_json, meta: meta }, status: status
+        end
+      end
+
       def render_collection(scope, serializer_class)
         paginator = PermissionForge.configuration.api_pagination_handler
         records = paginator ? paginate_scope(scope, paginator) : default_paginate_scope(scope)

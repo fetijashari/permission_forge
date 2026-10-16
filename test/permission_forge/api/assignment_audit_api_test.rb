@@ -33,7 +33,7 @@ module PermissionForge
         assert event.data['snapshot']['expires_at']
 
         delete "#{users_path}/#{row.uuid}"
-        assert_response :no_content
+        assert_response :ok # the revoked assignment and meta.cache (R2 P1-2)
         assert_audit_event('assignment.revoked', record_id: row.id.to_s, actor_id: @admin.id.to_s)
       end
 

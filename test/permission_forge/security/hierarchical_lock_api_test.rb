@@ -97,7 +97,7 @@ module PermissionForge
 
         assert_no_difference -> { PermissionForge::AuditEvent.where(event: 'admin.lock_refused').count } do
           delete "#{set_path}/users/#{@assignment.uuid}"
-          assert_response :no_content
+          assert_response :ok
           post "#{set_path}/users/bulk", params: { user_ids: [other.id], bulk_action: 'revoke' }
           assert_response :ok
         end
@@ -205,7 +205,7 @@ module PermissionForge
         post "#{set_path}/users", params: { user_id: @user.id }
         assert_response :created
         delete "#{set_path}/users/#{@assignment.uuid}"
-        assert_response :no_content
+        assert_response :ok
         post "#{ROOT}/permission_set_groups/#{@group.uuid}/users", params: { user_id: @user.id }
         assert_response :created
         patch set_path, params: { permission_set: { permission_set_group_id: @group.id } }

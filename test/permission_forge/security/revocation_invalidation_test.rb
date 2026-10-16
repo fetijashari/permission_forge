@@ -26,7 +26,7 @@ module PermissionForge
 
       test 'API single-user revoke invalidates the cache (revoked access actually gone)' do
         delete "/permission_forge/api/permission_sets/#{@ps.uuid}/users/#{@psu.uuid}"
-        assert_response :no_content
+        assert_response :ok
 
         assert_nil PermissionForge.cache.read(@user.permission_cache_key)
         assert_not @user.reload.can_read?(:Customer)

@@ -9,6 +9,7 @@ module PermissionForge
   class AssignmentsController < ApplicationController
     include PermissionForge::AssignmentAuthorization
     include PermissionForge::ActingAdmin
+    include PermissionForge::CacheConfirmation
 
     # What config.admin_assignment_authorization is asked for each member action.
     CHANGE_ACTIONS = { update: :change_expiry, destroy: :revoke, keep: :review }.freeze
@@ -30,8 +31,9 @@ module PermissionForge
       back = pf_back_or(permission_forge.person_path(@person))
       return if pf_assignment_refused?(@chosen_sets, @person.id, :grant, back)
 
-      created = assign_chosen_sets
-      pf_redirect back, notice: assigned_notice(created), undo: assign_undo(created, back)
+      created = nil
+      outcome = cache_outcome { created = assign_chosen_sets }
+      pf_redirect back, undo: assign_undo(created, back), **cache_flash_text(outcome, assigned_notice(created))
     end
 
     # Change the end date (presets) or extend by 30 days. On a locked
@@ -43,8 +45,8 @@ module PermissionForge
       return redirect_to(return_path) if expires_at == :invalid
       return if widening_refused?(expires_at)
 
-      @assignment.update!(expires_at: expires_at)
-      redirect_to return_path, notice: end_changed_notice(expires_at)
+      outcome = cache_outcome { @assignment.update!(expires_at: expires_at) }
+      redirect_to return_path, **cache_flash_text(outcome, end_changed_notice(expires_at))
     end
 
     def confirm_destroy
@@ -58,17 +60,17 @@ module PermissionForge
       name = person_name(@assignment.user)
       set_name = @assignment.permission_set.name
       undo = restore_undo
-      @assignment.destroy!
-      pf_redirect return_path, notice: t('permission_forge.flash.assignments.removed', name: name, set: set_name), undo: undo
+      outcome = cache_outcome { @assignment.destroy! }
+      pf_redirect return_path, undo: undo, **cache_flash_text(outcome, t('permission_forge.flash.assignments.removed', name: name, set: set_name))
     end
 
     # Access review "Keep": records the reviewer and the date
     # (PermissionSetUser#mark_reviewed!, one assignment.reviewed event);
     # staleness is measured from the last review.
     def keep
-      @assignment.mark_reviewed!(reviewer: pf_acting_admin_record)
-      redirect_to return_path, notice: t('permission_forge.flash.assignments.kept',
-                                         name: person_name(@assignment.user), set: @assignment.permission_set.name)
+      outcome = cache_outcome { @assignment.mark_reviewed!(reviewer: pf_acting_admin_record) }
+      redirect_to return_path, **cache_flash_text(outcome, t('permission_forge.flash.assignments.kept',
+                                                             name: person_name(@assignment.user), set: @assignment.permission_set.name))
     end
 
     # Undo for "Remove": recreates the assignment.
@@ -77,8 +79,8 @@ module PermissionForge
       set, user = restore_target
       return if pf_widening_refused?(pf_widening_lock(set, :grant), return_path) || pf_assignment_refused?(set, user.id, :grant, return_path)
 
-      restore_assignment(set, user, expires_at)
-      redirect_to return_path, notice: t('permission_forge.flash.assignments.restored', name: person_name(user), set: set.name)
+      outcome = cache_outcome { restore_assignment(set, user, expires_at) }
+      redirect_to return_path, **cache_flash_text(outcome, t('permission_forge.flash.assignments.restored', name: person_name(user), set: set.name))
     end
 
     # Undo for "Assign": removes the assignments just created (narrows
@@ -88,8 +90,8 @@ module PermissionForge
       assignments = undo_assignments
       return if undo_refused?(assignments)
 
-      PermissionForge::Audit.correlate { assignments.each(&:destroy!) }
-      redirect_to return_path, notice: t('permission_forge.flash.assignments.undone')
+      outcome = cache_outcome { PermissionForge::Audit.correlate { assignments.each(&:destroy!) } }
+      redirect_to return_path, **cache_flash_text(outcome, t('permission_forge.flash.assignments.undone'))
     end
 
     private

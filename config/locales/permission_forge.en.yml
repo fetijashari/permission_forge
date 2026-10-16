@@ -388,6 +388,7 @@ en:
         pick_resource: Pick a resource…
         who_can_see: Who can see %{field}?
     flash:
+      cache_not_confirmed: "The cache store did not confirm that the cached permissions were cleared: the old permissions may stay in use until the cache lifetime ends."
       not_null: "A required value was missing. Nothing was changed; the page shows what is there now."
       actions:
         created: Added the action “%{action}”.

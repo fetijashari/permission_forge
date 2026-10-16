@@ -38,7 +38,7 @@ module PermissionForge
 
         delete "#{ROOT}/permission_sets/#{@set.uuid}/users/#{assignment.uuid}"
 
-        assert_response :no_content
+        assert_response :ok
         assert_equal [[@user.id]], @seen
       end
 

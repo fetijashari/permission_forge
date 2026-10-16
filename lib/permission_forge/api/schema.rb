@@ -12,6 +12,7 @@ module PermissionForge
     # endpoint answers when it succeeds.
     #
     #   { "data": { ... } }                                        single
+    #   { "data": { ... }, "meta": { "cache": { ... } } }          single_with_cache (one assignment)
     #   { "data": [ ... ], "meta": { "pagination": { ... } } }     collection
     #   { "data": [ ... ] }                                        list (generate_fields)
     #   { "error": { "status": 404, "messages": "..." } }          error
@@ -108,6 +109,10 @@ module PermissionForge
         }
       }.freeze
 
+      # Cache::Outcome as the API answers it: what one change did to the
+      # cached permissions (a bulk assignment, one assignment).
+      CACHE = { confirmed: :boolean?, process_local: :boolean, unconfirmed: :integer?, in_request: :boolean }.freeze
+
       # The payloads a controller builds itself (no serializer).
       RESULTS = {
         stats: {
@@ -119,7 +124,7 @@ module PermissionForge
         # caller's transaction.
         bulk_assignment: {
           assigned: :integer, revoked: :integer, invalidated: :integer?,
-          cache: { confirmed: :boolean?, process_local: :boolean, unconfirmed: :integer?, in_request: :boolean },
+          cache: CACHE,
           skipped: :host_key_list
         }
       }.freeze
@@ -129,6 +134,8 @@ module PermissionForge
       # The success envelopes, each around a payload spec.
       ENVELOPES = {
         single: ->(payload) { { data: payload } },
+        # One assignment made or revoked, and its Cache::Outcome.
+        single_with_cache: ->(payload) { { data: payload, meta: { cache: CACHE } } },
         collection: ->(payload) { { data: [payload], meta: { pagination: PAGINATION } } },
         list: ->(payload) { { data: [payload] } }
       }.freeze
@@ -163,8 +170,10 @@ module PermissionForge
         **prefixed.call('resource_fields', crud.call(:resource_field)),
         **prefixed.call('resource_actions', crud.call(:resource_action)),
         **prefixed.call('permission_set_rules', crud.call(:permission_set_rule)),
-        **prefixed.call('permission_set_users', crud.call(:permission_set_user).slice('index', 'create', 'destroy')
-                                                  .merge('bulk' => Endpoint.new(200, :single, :bulk_assignment))),
+        **prefixed.call('permission_set_users', crud.call(:permission_set_user).slice('index')
+                                                  .merge('create' => Endpoint.new(201, :single_with_cache, :permission_set_user),
+                                                         'destroy' => Endpoint.new(200, :single_with_cache, :permission_set_user),
+                                                         'bulk' => Endpoint.new(200, :single, :bulk_assignment))),
         **prefixed.call('permission_set_groups', crud.call(:permission_set_group)
                                                    .merge('clone' => Endpoint.new(201, :single, :permission_set_group))),
         **prefixed.call('permission_set_group_users', crud.call(:permission_set_group_user).slice('index', 'create', 'destroy')),
