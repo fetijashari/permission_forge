@@ -48,24 +48,31 @@ module PermissionForge
 
       # The engine's variants (FieldVariants): only names the model has.
       def variants_of(name)
-        (@variants ||= FieldVariants.new(@sources.name, @configuration)).call(name)
+        variants.call(name)
       end
 
+      # The engine's own targets (FieldPermissionMerger.targets_of): a
+      # resource's rows under their own names, then the derived variants of
+      # the names no row of the resource has.
       def merge_granting_fields
         @sources.grants.each do |ps, resource|
-          active_fields(resource).each { |field| merge_granting_field(ps, field) }
+          Services::FieldPermissionMerger.targets_of(active_fields(resource), variants).each do |name, field, variant_of|
+            merge_into(entry_for(name, variant_of), field, ps)
+          end
         end
         implicit_names.each { |name| @entries[name] ||= implicit_entry }
       end
 
-      def merge_granting_field(permission_set, field)
-        name = field.name
-        variants_of(name).each { |variant| merge_into(entry_for(variant, name), field, permission_set) }
-        merge_into(entry_for(name, nil), field, permission_set)
+      # An explicit row for the name (variant_of nil) makes the entry a field
+      # of its own, whichever set wrote the derived entry first.
+      def entry_for(key, variant_of)
+        entry = (@entries[key] ||= { sources: [], variant_of: variant_of })
+        entry[:variant_of] = nil if variant_of.nil?
+        entry
       end
 
-      def entry_for(key, variant_of)
-        @entries[key] ||= { sources: [], variant_of: variant_of }
+      def variants
+        @variants ||= FieldVariants.new(@sources.name, @configuration)
       end
 
       # The engine's own merge (FieldPermissionMerger.merge_row), plus provenance.

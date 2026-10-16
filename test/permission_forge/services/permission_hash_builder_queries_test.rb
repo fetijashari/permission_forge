@@ -94,8 +94,10 @@ module PermissionForge
       end
 
       # The database returns rows in whatever order its plan gives; the first
-      # row of a name decides a tie (two fields mapping to one variant:
-      # "first mask_strategy wins"), and rules and actions keep their order.
+      # row of a name decides a tie between derived variants ("first
+      # mask_strategy wins"), an explicit row for a variant name decides that
+      # name whatever the order (FieldPermissionMerger.targets_of), and rules
+      # and actions keep their order.
       test 'the hash does not depend on the order the rows come back in' do
         user = create_user
         set = create_permission_set
@@ -116,7 +118,8 @@ module PermissionForge
         end
 
         assert_equal expected, PermissionHashBuilder.call(user: user, permission_sets: reversed)
-        assert_equal 'last4', expected.dig(:resources, 'PfVariantOrder', :fields, 'owner_uuid', :mask_strategy), 'the older row wins'
+        assert_equal 'email', expected.dig(:resources, 'PfVariantOrder', :fields, 'owner_uuid', :mask_strategy),
+                     'the explicit owner_uuid row decides, whichever row is older'
       end
 
       private

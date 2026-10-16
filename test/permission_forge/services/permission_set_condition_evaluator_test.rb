@@ -97,9 +97,14 @@ module PermissionForge
         assert_not evaluate(ps, { ip: IPAddr.new('::ffff:192.168.1.50') }), 'an IPv6 address is outside an IPv4 range'
       end
 
-      test 'ip: skips invalid CIDRs in allowed_ips gracefully' do
-        ps = create_permission_set(allowed_ips: 'invalid, 192.168.1.0/24')
-        assert evaluate(ps, { ip: '192.168.1.5' })
+      # An entry that is not an address used to be skipped, so the set passed
+      # on the entries beside it; since 0.15 such a list is refused on save
+      # and, where stored anyway, never passes (nobody can judge it).
+      test 'ip: an invalid CIDR is refused on save and never passes when stored' do
+        assert_raises(ActiveRecord::RecordInvalid) { create_permission_set(allowed_ips: 'invalid, 192.168.1.0/24') }
+
+        ps = stored(allowed_ips: 'invalid, 192.168.1.0/24')
+        assert_not evaluate(ps, { ip: '192.168.1.5' })
       end
 
       test 'ip: nil condition always passes' do

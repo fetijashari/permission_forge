@@ -17,7 +17,11 @@ sq:
         bulk_action_invalid: duhet të jetë assign ose revoke
         expires_at_past: duhet të jetë në të ardhmen
         field_generation_failed: Fushat për këtë burim nuk mund të gjenerohen
+        flag_shape: duhet të jetë varg ose null
         forbidden: E ndaluar
+        hour_shape: duhet të jetë numër i plotë nga 0 deri në 23, ose null
+        ip_list_shape: duhet të jetë varg ose listë vargjesh (adresa IP ose diapazone
+          CIDR), ose null
         not_editable: Ky regjistrim nuk mund të redaktohet
         not_found: Regjistrimi nuk u gjet
         not_iso8601_time: nuk është datë ose kohë ISO 8601
@@ -365,6 +369,8 @@ sq:
         flag: Flamujt e sesionit mund të përmbajnë vetëm shkronja, numra, pika, dy
           pika, viza dhe nënviza.
         group_blank: Jepi një emër grupimit.
+        hours_equal: Ora e fillimit dhe e mbarimit duhet të ndryshojnë (një dritare
+          nga 9 në 9 është bosh).
         ip: 'Rreshti %{line}: “%{ip}” nuk është adresë IP ose diapazon CIDR i vlefshëm.'
         person: Zgjidh së pari një person.
         resource_model: Zgjidh një model nga lista.
@@ -2111,7 +2117,10 @@ sq:
           sso_login: pas hyrjes me SSO të kompanisë
         from_ips: nga %{ips}
         hours: ndërmjet %{from} dhe %{to}
+        hours_broken: ndërmjet %{from} dhe %{to} (një dritare që askush s'mund ta
+          gjykojë — rregullojeni te skeda Kushtet)
         hours_overnight: ndërmjet %{from} dhe %{to} (gjatë natës)
+        no_hour: pa orë
         only_works: Funksionon vetëm %{parts}.
         or: " ose "
       dates:
@@ -2261,6 +2270,12 @@ sq:
       name_blank: nuk mund të jetë bosh
       permission_set:
         group_missing: duhet të jetë një grupim ekzistues i grupeve të lejeve
+        hours_equal: duhet të ndryshojë nga ora e fillimit (një dritare nga një orë
+          në të njëjtën orë është bosh; lërini të dyja bosh për asnjë dritare)
+        hours_incomplete: duhet të vendoset bashkë me orën tjetër (ose të dyja të
+          lihen bosh)
+        invalid_ip_entry: përmban “%{entry}”, që nuk është adresë IP ose diapazon
+          CIDR
         name_taken: përdoret tashmë nga një Grup lejesh tjetër
       permission_set_rule:
         between_requires_two_values: duhet të përmbajë saktësisht 2 vlera të ndara

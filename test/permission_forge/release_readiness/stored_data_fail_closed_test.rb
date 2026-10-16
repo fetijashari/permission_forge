@@ -5,7 +5,7 @@ require_relative '../field_variant_models'
 
 # A host controller the fuzz authorizes against: `export` is the custom
 # action of that name, `destroy` is REST (delete_access).
-class PfFuzzCustomersController < ::ApplicationController
+class PfFuzzCustomersController < ApplicationController
   include PermissionForge::Concerns::ControllerActionGuard
 
   permission_forge_actions resource: 'Customer', actions: { export: :export }
@@ -24,8 +24,9 @@ module PermissionForge
     # request path is read again. For every poisoning:
     #
     # 1. nothing raises — the lookups that may deny (find_by!, find_by) may
-    #    raise NotAuthorizedError / RecordNotFound, nothing else may raise
-    #    anything;
+    #    raise NotAuthorizedError / RecordNotFound, a clone of a row the
+    #    validations refuse is refused whole (RecordInvalid), nothing else
+    #    may raise anything;
     # 2. when the value is one the validations refuse for a new row
     #    (#refused?), nothing widens against the baseline: the rows a scope
     #    yields are a subset, a `can_*?` that is true was true, an attribute
@@ -50,13 +51,26 @@ module PermissionForge
       # 'Model.column' => why it is not poisoned.
       SKIP = {}.freeze
       # 'Model.column' => the WP-1 fix its failures wait for (plan-final.md §3 WP-1).
-      PENDING_ON_WP1 = {}.freeze
+      # The lead removes each entry once WP-1 is merged; an entry whose column
+      # no longer fails fails this test.
+      PENDING_ON_WP1 = {
+        'PermissionSetRule.operator' => 'A2.2: an unknown operator raises ArgumentError (Registry.fetch); the applier answers none',
+        'PermissionSetRule.join_type' => 'A2.2: a join type outside JOIN_METHODS raises ConfigurationError; the applier answers none',
+        'PermissionSetRule.field_name' => 'A2.4: a name qualified with no table, or holding a newline, reaches SQL ' \
+                                          '(StatementInvalid); RuleColumn answers UNRESOLVABLE and the applier none',
+        'PermissionSetRule.field_value' => 'A2.2: a value holding a NUL byte is quoted into SQL cut short (StatementInvalid ' \
+                                           '"unrecognized token"); the applier/registry must bind or refuse it',
+        'ResourceField.mask_strategy' => 'A2.1: MaskValue raises for an unknown or blank name; it masks full and reports',
+        'Resource.name' => 'A2.6: ResourceFieldGenerator raises NoMethodError on a Resource named after a module (Kernel); ' \
+                           '[] through ModelLookup'
+      }.freeze
 
       STRINGS = ['', 'zzz', 'a..b', 'nosuch.col', 'Kernel', 'regex', 'inner', 'gone',
                  "10.0.0.0/8\n192.168.0.0/16", 'office', "x\u0000y", 'ü' * 300].freeze
       INTEGERS = [-1, 0, 9, 25, 2**40].freeze
       BOOLEANS = [true, false].freeze
       DATETIMES = -> { [nil, 1.year.ago, 1.year.from_now] }
+      TYPED_VALUES = { string: STRINGS, text: STRINGS, integer: INTEGERS, boolean: BOOLEANS, datetime: DATETIMES }.freeze
       # The hour window is two columns: poisoned as pairs too.
       HOUR_PAIRS = {
         'allowed_hours_start' => [{ allowed_hours_start: 9, allowed_hours_end: 9 }, { allowed_hours_start: 9, allowed_hours_end: nil }],
@@ -92,7 +106,6 @@ module PermissionForge
         PermissionForge.configuration.request_context_resolver = -> { @context }
         @context = MATCHED
         build_fixture
-        @paths = read_paths
         @baseline = read_all
       end
 
@@ -104,13 +117,39 @@ module PermissionForge
       # resource with an owner_id row), a muting set conditional on an office
       # IP that hides domain, and a group holding the granting set.
       def build_fixture
+        build_records
+        build_granting_set
+        build_muting_set
+        build_holdings
+        Current.user = @user
+        @rows = {
+          'PermissionSet' => [@granting, @muting], 'Resource' => [@resource, @muting_resource],
+          'ResourceField' => [@fields[:email], @fields[:supplier_id], @muting_field], 'ResourceAction' => [@action],
+          'PermissionSetRule' => [@filter_rule, @join_rule], 'PermissionSetUser' => [@assignment, @muting_assignment],
+          'PermissionSetGroup' => [@group], 'PermissionSetGroupUser' => [@membership]
+        }
+      end
+
+      # The user, three customers (one the rules allow, one each rule denies)
+      # and an order with a secret owner_uuid.
+      def build_records
         @user = create_user
         @supplier = create_supplier(owner: @user)
         @customer = create_customer(**RAW, supplier: @supplier)
         @foreign = create_customer(email: 'f@example.com', domain: 'other.com', supplier: @supplier)
         @unowned = create_customer(email: 'u@example.com', domain: 'example.com', supplier: create_supplier)
         @order = PfVariantOrder.create!(title: 't', owner_id: 1, owner_uuid: 'secret-uuid')
+      end
 
+      def build_holdings
+        @group = create_permission_set_group(name: 'Group')
+        @granting.update!(permission_set_group: @group)
+        @membership = PermissionForge::PermissionSetGroupUser.create!(uuid: SecureRandom.uuid, user: @user, permission_set_group: @group)
+        @assignment = create_permission_set_user(user: @user, permission_set: @granting)
+        @muting_assignment = create_permission_set_user(user: @user, permission_set: @muting)
+      end
+
+      def build_granting_set
         @granting = create_permission_set(name: 'Granting')
         @resource = create_resource(permission_set: @granting, read_access: true, edit_access: true, delete_access: true)
         @fields = {
@@ -127,33 +166,18 @@ module PermissionForge
                                                 join_type: 'joins', field_accessor_path: 'supplier')
         @orders = create_resource(permission_set: @granting, name: 'PfVariantOrder', read_access: true)
         create_resource_field(resource: @orders, name: 'owner_id', read_access: true)
+      end
 
+      def build_muting_set
         @muting = create_permission_set(name: 'Lockdown', is_muting: true, allowed_ips: '10.0.0.0/8')
         @muting_resource = create_resource(permission_set: @muting, read_access: false)
         @muting_field = create_resource_field(resource: @muting_resource, name: 'domain', read_access: true, edit_access: true)
-
-        @group = create_permission_set_group(name: 'Group')
-        @granting.update!(permission_set_group: @group)
-        @membership = PermissionForge::PermissionSetGroupUser.create!(uuid: SecureRandom.uuid, user: @user, permission_set_group: @group)
-        @assignment = create_permission_set_user(user: @user, permission_set: @granting)
-        @muting_assignment = create_permission_set_user(user: @user, permission_set: @muting)
-        Current.user = @user
       end
 
       # The rows poisoned per model: the ones in effect for the user, in both
       # directions where the model has one.
       def rows_of(model)
-        case model.name.demodulize
-        when 'PermissionSet' then [@granting, @muting]
-        when 'Resource' then [@resource, @muting_resource]
-        when 'ResourceField' then [@fields[:email], @fields[:supplier_id], @muting_field]
-        when 'ResourceAction' then [@action]
-        when 'PermissionSetRule' then [@filter_rule, @join_rule]
-        when 'PermissionSetUser' then [@assignment, @muting_assignment]
-        when 'PermissionSetGroup' then [@group]
-        when 'PermissionSetGroupUser' then [@membership]
-        else raise ArgumentError, "no fixture rows for #{model.name}: add them to rows_of"
-        end
+        @rows.fetch(model.name.demodulize) { raise ArgumentError, "no fixture rows for #{model.name}: add them to build_fixture" }
       end
 
       # --- the read paths -----------------------------------------------------
@@ -195,7 +219,7 @@ module PermissionForge
         result
       end
 
-      def authorize(action)
+      def allowed?(action)
         PermissionForge::ControllerActions::Authorizer.allowed?(controller_path: 'pf_fuzz_customers', action_name: action,
                                                                 controller_class: PfFuzzCustomersController, user: fresh_user)
       end
@@ -204,59 +228,70 @@ module PermissionForge
         with_context(context) { fresh_user.permissions_hash_for(:Customer)&.dig(:fields)&.slice('email', 'domain') }
       end
 
-      # Every path once per poisoning. The reports (REPORTS) are read when a
-      # cheaper path changed or the row was refused; the audit and the
-      # attention items only then (they cost the most and are the third
-      # assertion's evidence).
-      def read_paths
-        {
-          hash: -> { fresh_user.permissions_hash.dig(:permissions, :resources).keys.map(&:to_s).sort },
-          can_read: -> { fresh_user.can_read?(:Customer) },
-          can_create: -> { fresh_user.can_create?(:Customer) },
-          can_edit: -> { fresh_user.can_edit?(:Customer) },
-          can_delete: -> { fresh_user.can_delete?(:Customer) },
-          can_view_all: -> { fresh_user.can_view_all?(:Customer) },
-          can_modify_all: -> { fresh_user.can_modify_all?(:Customer) },
-          can_export: -> { fresh_user.can?(:export, :Customer) },
-          scoped: -> { Customer.permission_scoped.pluck(:id).sort },
-          find_by: -> { Customer.find_by(id: @customer.id)&.id },
-          find_by_bang: -> { Customer.find_by!(id: @customer.id).id },
-          find_by_unowned: -> { Customer.find_by(id: @unowned.id)&.id },
-          filter_all: -> { with_scoping(:filter_only) { Customer.all.map(&:id).sort } },
-          filter_count: -> { with_scoping(:filter_only) { Customer.count } },
-          filter_exists: -> { with_scoping(:filter_only) { Customer.where(nil).exists? } },
-          getters: -> { RAW.keys.to_h { |column| [column, customer.public_send(column)] } },
-          bracket: -> { RAW.keys.to_h { |column| [column, customer[column]] } },
-          attributes: -> { customer.attributes.slice(*RAW.keys) },
-          as_json: -> { customer.as_json.slice(*RAW.keys) },
-          variant: -> { PfVariantOrder.find(@order.id).owner_uuid },
-          filtered: lambda {
-            PermissionForge::Services::FiltersResponseAttributes.call(attributes: RAW.dup, resource_name: 'Customer', user: fresh_user)
-                                                                 .transform_keys(&:to_s)
-          },
-          permitted: lambda {
-            PermissionForge::Services::PermitsAttributes.call(resource: Customer, permitted_params: RAW.merge('supplier_id' => 1))
-                                                        .keys.map(&:to_s).sort
-          },
-          authorize_export: -> { authorize('export') },
-          authorize_destroy: -> { authorize('destroy') },
-          fields_matched: -> { fields_in(MATCHED) },
-          fields_unmatched: -> { fields_in(UNMATCHED) },
-          fields_no_context: -> { fields_in({}) },
-          managed: -> { PermissionForge::ControllerActions::ManagedIndex.managed_actions('Customer') },
-          explain: -> { capture_io { PermissionForge::Concerns::MaskedAttributes.explain_all(customer) }.first.lines.size },
-          effective: lambda {
-            PermissionForge::Admin::EffectiveAccess.call(user: fresh_user).to_h do |outcome|
-              [outcome.name, [outcome.fields.to_h { |field| [field.name, field.level] }, outcome.rules.size]]
-            end
-          },
-          rls: -> { PermissionForge::Services::RlsPolicyGenerator.call(model_class: Customer).fetch(:statements).join("\n") },
-          generate: -> { rolled_back { PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource.reload).size } },
-          clone: lambda {
-            rolled_back { PermissionForge::Services::PermissionSetCloner.call(permission_set: @granting.reload, attrs: { name: 'Clone' }).persisted? }
-          }
-        }
+      def filtered_response
+        filtered = PermissionForge::Services::FiltersResponseAttributes.call(attributes: RAW.dup, resource_name: 'Customer', user: fresh_user)
+        filtered.transform_keys(&:to_s)
       end
+
+      def permitted_keys
+        PermissionForge::Services::PermitsAttributes.call(resource: Customer, permitted_params: RAW.merge('supplier_id' => 1))
+                                                    .keys.map(&:to_s).sort
+      end
+
+      def effective_levels
+        PermissionForge::Admin::EffectiveAccess.call(user: fresh_user).to_h do |outcome|
+          [outcome.name, [outcome.fields.to_h { |field| [field.name, field.level] }, outcome.rules.size]]
+        end
+      end
+
+      # Every path once per poisoning, run on the test instance (instance_exec).
+      # The reports (REPORTS) are read when a cheaper path changed or the row
+      # was refused; the audit only then (it costs the most and is the third
+      # assertion's evidence).
+      PERMISSION_PATHS = {
+        hash: -> { fresh_user.permissions_hash.dig(:permissions, :resources).keys.map(&:to_s).sort },
+        can_read: -> { fresh_user.can_read?(:Customer) },
+        can_create: -> { fresh_user.can_create?(:Customer) },
+        can_edit: -> { fresh_user.can_edit?(:Customer) },
+        can_delete: -> { fresh_user.can_delete?(:Customer) },
+        can_view_all: -> { fresh_user.can_view_all?(:Customer) },
+        can_modify_all: -> { fresh_user.can_modify_all?(:Customer) },
+        can_export: -> { fresh_user.can?(:export, :Customer) },
+        authorize_export: -> { allowed?('export') },
+        authorize_destroy: -> { allowed?('destroy') },
+        fields_matched: -> { fields_in(MATCHED) },
+        fields_unmatched: -> { fields_in(UNMATCHED) },
+        fields_no_context: -> { fields_in({}) },
+        managed: -> { PermissionForge::ControllerActions::ManagedIndex.managed_actions('Customer') }
+      }.freeze
+
+      RECORD_PATHS = {
+        scoped: -> { Customer.permission_scoped.pluck(:id).sort },
+        find_by: -> { Customer.find_by(id: @customer.id)&.id },
+        find_by_bang: -> { Customer.find_by!(id: @customer.id).id },
+        find_by_unowned: -> { Customer.find_by(id: @unowned.id)&.id },
+        filter_all: -> { with_scoping(:filter_only) { Customer.all.map(&:id).sort } },
+        filter_count: -> { with_scoping(:filter_only) { Customer.count } },
+        filter_exists: -> { with_scoping(:filter_only) { Customer.where(nil).exists? } },
+        getters: -> { RAW.keys.to_h { |column| [column, customer.public_send(column)] } },
+        bracket: -> { RAW.keys.to_h { |column| [column, customer[column]] } },
+        attributes: -> { customer.attributes.slice(*RAW.keys) },
+        as_json: -> { customer.as_json.slice(*RAW.keys) },
+        variant: -> { PfVariantOrder.find(@order.id).owner_uuid },
+        filtered: -> { filtered_response },
+        permitted: -> { permitted_keys },
+        explain: -> { capture_io { PermissionForge::Concerns::MaskedAttributes.explain_all(customer) }.first.lines.size }
+      }.freeze
+
+      REPORT_PATHS = {
+        effective: -> { effective_levels },
+        rls: -> { PermissionForge::Services::RlsPolicyGenerator.call(model_class: Customer).fetch(:statements).join("\n") },
+        generate: -> { rolled_back { PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource.reload).size } },
+        clone: lambda {
+          rolled_back { PermissionForge::Services::PermissionSetCloner.call(permission_set: @granting.reload, attrs: { name: 'Clone' }).persisted? }
+        }
+      }.freeze
+      PATHS = PERMISSION_PATHS.merge(RECORD_PATHS, REPORT_PATHS).freeze
 
       REPORTS = %i[effective rls generate clone].freeze
       # A smaller answer than the baseline's: a subset of rows, a false, a
@@ -267,12 +302,19 @@ module PermissionForge
       LOOKUPS = %i[find_by find_by_bang find_by_unowned].freeze
       VALUES = %i[getters bracket attributes as_json filtered].freeze
       CONTEXTS = %i[fields_matched fields_unmatched fields_no_context].freeze
+      # Which check tells a wider answer apart, per path (none: the path is
+      # read for "nothing raises" only).
+      WIDENING_CHECKS = {
+        **SUBSETS.index_with(:subset_widened?), **FLAGS.index_with(:flag_widened?), **LOOKUPS.index_with(:lookup_widened?),
+        **VALUES.index_with(:value_widened?), **CONTEXTS.index_with(:fields_widened?),
+        filter_count: :count_widened?, variant: :variant_widened?, effective: :levels_widened?
+      }.freeze
 
       # A lookup may deny; a clone of a row the validations refuse is
       # refused whole (ActiveRecord::RecordInvalid), never half-made. Any
       # other error from any path is a failure.
       def read(path)
-        Outcome.new(instance_exec(&@paths.fetch(path)), nil)
+        Outcome.new(instance_exec(&PATHS.fetch(path)), nil)
       rescue *DENIALS => e
         LOOKUPS.include?(path) ? Outcome.new(:denied, nil) : Outcome.new(nil, e)
       rescue ActiveRecord::RecordInvalid => e
@@ -281,7 +323,7 @@ module PermissionForge
         Outcome.new(nil, e)
       end
 
-      def read_all(only: @paths.keys)
+      def read_all(only: PATHS.keys)
         reset_reads
         only.index_with { |path| read(path) }
       end
@@ -307,17 +349,18 @@ module PermissionForge
         model.column_names - BOOKKEEPING - pointers
       end
 
+      # The poisonings of one column: the values of its type (plus nil where
+      # nullable), each as an attributes Hash, and the column's pairs.
       def values_for(model, column)
         type = model.columns_hash.fetch(column)
-        values = case type.type
-                 when :string, :text then STRINGS
-                 when :integer then INTEGERS
-                 when :boolean then BOOLEANS
-                 when :datetime then DATETIMES.call
-                 else raise ArgumentError, "#{model.name}.#{column}: give #{type.type} columns values"
-                 end
+        values = typed_values(type, "#{model.name}.#{column}")
         values += [nil] if type.null && !values.include?(nil)
         values.map { |value| { column => value } } + Array(HOUR_PAIRS[column]).map(&:stringify_keys)
+      end
+
+      def typed_values(type, label)
+        values = TYPED_VALUES.fetch(type.type) { raise ArgumentError, "#{label}: give #{type.type} columns values" }
+        values.respond_to?(:call) ? values.call : values
       end
 
       # --- refusal and change ---------------------------------------------------
@@ -355,19 +398,33 @@ module PermissionForge
       # --- assertions per poisoning ------------------------------------------------
 
       def check(record, attrs, failures)
-        model = record.class.name.demodulize
-        column = attrs.keys.first
-        value = attrs.size == 1 ? attrs.values.first : attrs
-        fail_on = ->(path, message) { failures << Failure.new(model, column, value, path, message) }
+        fail_on = failure_recorder(record, attrs, failures)
         refused = refused?(record, attrs)
-
-        results = read_all(only: @paths.keys - REPORTS)
-        results.merge!(read_all(only: REPORTS)) if refused || changed?(results)
+        results = results_for(refused)
         results.each { |path, outcome| fail_on.call(path, "raised #{outcome.error.class}: #{outcome.error.message[0, 160]}") if outcome.error }
         return unless refused
 
         assert_not_widened(results, fail_on)
-        assert_named(record, attrs, fail_on) if changed?(results) && NAMED_BY_AUDIT.fetch(model, []).include?(column)
+        assert_named(record, attrs, fail_on) if changed?(results) && named_by_audit?(record, attrs)
+      end
+
+      def failure_recorder(record, attrs, failures)
+        model = record.class.name.demodulize
+        column = attrs.keys.first
+        value = attrs.size == 1 ? attrs.values.first : attrs
+        ->(path, message) { failures << Failure.new(model, column, value, path, message) }
+      end
+
+      # The cheap paths always; the reports when a cheap answer changed or
+      # the row was refused.
+      def results_for(refused)
+        results = read_all(only: PATHS.keys - REPORTS)
+        results.merge!(read_all(only: REPORTS)) if refused || changed?(results)
+        results
+      end
+
+      def named_by_audit?(record, attrs)
+        NAMED_BY_AUDIT.fetch(record.class.name.demodulize, []).include?(attrs.keys.first)
       end
 
       def assert_not_widened(results, fail_on)
@@ -375,36 +432,35 @@ module PermissionForge
           next if outcome.error
 
           base = @baseline[path].value
-          wider = widening(path, outcome.value, base)
-          fail_on.call(path, "widened: #{base.inspect[0, 120]} -> #{outcome.value.inspect[0, 120]}") if wider
+          fail_on.call(path, "widened: #{base.inspect[0, 120]} -> #{outcome.value.inspect[0, 120]}") if widening?(path, outcome.value, base)
         end
       end
 
-      def widening(path, value, base)
-        case path
-        when *SUBSETS then !(Array(value) - Array(base)).empty?
-        when *FLAGS then value == true && base != true
-        when :filter_count then value.to_i > base.to_i
-        when *LOOKUPS then value != :denied && base == :denied
-        when *VALUES then RAW.any? { |column, raw| base[column] != raw && value[column] == raw }
-        when :variant then base != 'secret-uuid' && value == 'secret-uuid'
-        when *CONTEXTS then widened_fields?(value, base)
-        when :effective then widened_levels?(value, base)
-        else false
-        end
+      def widening?(path, value, base)
+        check = WIDENING_CHECKS[path]
+        check ? send(check, value, base) : false
       end
 
-      def widened_fields?(value, base)
+      def subset_widened?(value, base) = !(Array(value) - Array(base)).empty?
+      def flag_widened?(value, base) = value == true && base != true
+      def count_widened?(value, base) = value.to_i > base.to_i
+      def lookup_widened?(value, base) = value != :denied && base == :denied
+      def value_widened?(value, base) = RAW.any? { |column, raw| base[column] != raw && value[column] == raw }
+      def variant_widened?(value, base) = base != 'secret-uuid' && value == 'secret-uuid'
+
+      def fields_widened?(value, base)
         return false if value.nil?
         return true if base.nil?
 
-        value.any? do |name, entry|
-          %i[read_access edit_access].any? { |flag| entry[flag] == true && base.dig(name, flag) != true } ||
-            (entry[:mask_access] == false && base.dig(name, :mask_access) == true)
-        end
+        value.any? { |name, entry| entry_widened?(entry, base[name] || {}) }
       end
 
-      def widened_levels?(value, base)
+      def entry_widened?(entry, base)
+        %i[read_access edit_access].any? { |flag| entry[flag] == true && base[flag] != true } ||
+          (entry[:mask_access] == false && base[:mask_access] == true)
+      end
+
+      def levels_widened?(value, base)
         rank = PermissionForge::Admin::FieldLevel.method(:rank)
         value.any? do |name, (fields, _rules)|
           base_fields = base.dig(name, 0) || {}
@@ -416,8 +472,7 @@ module PermissionForge
       def assert_named(record, attrs, fail_on)
         row = record.reload
         label = row_label(row)
-        items = audit_items
-        fail_on.call(:audit, "no finding names #{label.inspect}") unless items.any? { |item| names?(item, label) }
+        fail_on.call(:audit, "no finding names #{label.inspect}") unless audit_items.any? { |item| names?(item, label) }
         return unless row.is_a?(PermissionForge::PermissionSetRule) && RULE_NAMING.include?(attrs.keys.first)
 
         fail_on.call(:rule_problem, 'RuleProblem.for is nil') if PermissionForge::Operators::RuleProblem.for(row).nil?
@@ -451,20 +506,32 @@ module PermissionForge
               end
             end
           end
-          report(model, columns, failures)
+          report(model.name.demodulize, columns, failures)
         end
       end
 
-      def report(model, columns, failures)
-        name = model.name.demodulize
+      def report(name, columns, failures)
         pending, real = failures.partition { |failure| PENDING_ON_WP1.key?(failure.key) }
+        report_pending(pending)
+        assert_pending_current(name, columns, pending)
+        assert_no_failures(name, real)
+      end
+
+      def report_pending(pending)
         pending.group_by(&:key).each do |key, list|
           puts "[G1 pending on WP-1] #{key} (#{PENDING_ON_WP1[key]}): #{list.size} failures, first: #{list.first}"
         end
+      end
+
+      # Every pending entry of the model names a column that still fails.
+      def assert_pending_current(name, columns, pending)
         PENDING_ON_WP1.keys.select { |key| key.start_with?("#{name}.") }.each do |key|
           assert columns.include?(key.split('.').last), "#{key}: no such column — remove the PENDING_ON_WP1 entry"
           assert pending.any? { |failure| failure.key == key }, "#{key} no longer fails: remove the PENDING_ON_WP1 entry"
         end
+      end
+
+      def assert_no_failures(name, real)
         grouped = real.group_by { |failure| [failure.key, failure.path, failure.message[0, 90]] }
         lines = grouped.map { |(key, path, message), list| "#{key} (#{list.size}×, e.g. #{list.first.value.inspect[0, 40]}): #{path} — #{message}" }
         assert_empty lines.first(60), "#{name}: #{real.size} failures in #{grouped.size} groups (first 60 shown)"

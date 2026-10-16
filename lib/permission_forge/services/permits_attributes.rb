@@ -271,10 +271,16 @@ module PermissionForge
         @user.respond_to?(:permissions_hash) && PermissionForge::ResourceChain.entries(@user, resource_names(klass)).any?
       end
 
+      # A key is editable where the field is readable AND editable: the hash
+      # the builder writes says so already (FieldPermissionMerger counts edit
+      # only with read), but a hash another version cached may still say
+      # `edit_access: true, read_access: false` — a field nobody may read is
+      # not one they may write.
       def editable_fields_for(klass)
         return {} unless @user.respond_to?(:permissions_hash)
 
-        PermissionForge::ResourceChain.fields(@user, resource_names(klass)).select { |_, access| access[:edit_access] }
+        PermissionForge::ResourceChain.fields(@user, resource_names(klass))
+                                      .select { |_, access| access[:read_access] && access[:edit_access] }
       end
 
       def each_pair?(value)

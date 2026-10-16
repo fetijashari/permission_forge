@@ -16,6 +16,7 @@ module PermissionForge
     include PermissionForge::Concerns::PermissionsRegenerator
     include PermissionForge::Concerns::InvalidatesManagedActions
     include PermissionForge::Concerns::RecordsAuditEvents
+    include PermissionForge::ActivationConditions
 
     # Its name is configuration, not personal data: #inspect shows it even
     # when filter_parameters (the GDPR patterns) hide a `name` (InspectionFilters).
@@ -50,19 +51,23 @@ module PermissionForge
               if: -> { permission_set_group_id.present? && will_save_change_to_permission_set_group_id? }
     validates :allowed_hours_start, numericality: { in: 0..23, allow_nil: true }
     validates :allowed_hours_end, numericality: { in: 0..23, allow_nil: true }
+    # The activation conditions (ActivationConditions), checked for a new
+    # row and when the condition changes — a row stored before the check
+    # stays editable in its other attributes, and is read as unjudgeable:
+    # a granting set never passes on it, a muting set always applies. The
+    # IP list is stored with commas between the entries, whatever the
+    # request wrote (newlines, spaces, an Array through the API).
+    before_validation :normalize_allowed_ips, if: :will_save_change_to_allowed_ips?
+    validate :allowed_ips_are_addresses, if: -> { allowed_ips.present? && (new_record? || will_save_change_to_allowed_ips?) }
+    validate :hours_window_is_judgeable, if: -> { hours_window.set? && (new_record? || hours_changed?) }
 
     scope :muting, -> { where(is_muting: true) }
     scope :granting, -> { where(is_muting: false) }
-    scope :conditional, lambda {
-      where.not(requires_session_flag: [nil, ''])
-           .or(where.not(allowed_ips: [nil, '']))
-           .or(where.not(allowed_hours_start: nil))
-    }
-    scope :unconditional, lambda {
-      where(requires_session_flag: [nil, ''])
-        .where(allowed_ips: [nil, ''])
-        .where(allowed_hours_start: nil)
-    }
+    # Mirrors #conditional?: a text of blanks is no condition (TRIM), one
+    # hour of the two is one (it cannot be judged, and must be selected per
+    # request to fail closed).
+    scope :conditional, -> { where(conditions_present_sql) }
+    scope :unconditional, -> { where("NOT #{conditions_present_sql}") }
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
@@ -108,6 +113,17 @@ module PermissionForge
       unique_name(I18n.t('permission_forge.permission_sets.copy_name', name: name))
     end
 
+    # The SQL of "this row has an activation condition" (.conditional,
+    # .unconditional), the way #conditional? reads the row.
+    #
+    # @return [String]
+    def self.conditions_present_sql
+      quoted = ->(column) { "#{connection.quote_table_name(table_name)}.#{connection.quote_column_name(column)}" }
+      text_present = ->(column) { "COALESCE(TRIM(#{quoted.call(column)}), '') <> ''" }
+      "(#{text_present.call('requires_session_flag')} OR #{text_present.call('allowed_ips')} " \
+        "OR #{quoted.call('allowed_hours_start')} IS NOT NULL OR #{quoted.call('allowed_hours_end')} IS NOT NULL)"
+    end
+
     def active?
       is_active
     end
@@ -124,8 +140,13 @@ module PermissionForge
       !is_muting
     end
 
+    # Whether the set has an activation condition: a session flag, an IP
+    # list, or any hour of the window (one hour of the two counts: such a
+    # window cannot be judged, so the set must be selected per request).
+    #
+    # @return [Boolean]
     def conditional?
-      requires_session_flag.present? || allowed_ips.present? || allowed_hours_start.present?
+      requires_session_flag.present? || allowed_ips.present? || hours_window.set?
     end
 
     def unconditional?
@@ -139,6 +160,33 @@ module PermissionForge
     end
 
     private
+
+    def normalize_allowed_ips
+      self.allowed_ips = allowed_ip_list.join(',').presence
+    end
+
+    def allowed_ips_are_addresses
+      invalid_ip_entries.each do |entry|
+        errors.add(:allowed_ips, :invalid_ip_entry,
+                   message: I18n.t('permission_forge.validations.permission_set.invalid_ip_entry', entry: entry))
+      end
+    end
+
+    def hours_changed?
+      will_save_change_to_allowed_hours_start? || will_save_change_to_allowed_hours_end?
+    end
+
+    # The error goes on the hour that is missing, or on the end hour that
+    # repeats the start; an hour outside 0..23 is the numericality's.
+    def hours_window_is_judgeable
+      case hours_window.problem
+      when :hours_incomplete
+        errors.add(allowed_hours_start.nil? ? :allowed_hours_start : :allowed_hours_end, :hours_incomplete,
+                   message: I18n.t('permission_forge.validations.permission_set.hours_incomplete'))
+      when :hours_equal
+        errors.add(:allowed_hours_end, :hours_equal, message: I18n.t('permission_forge.validations.permission_set.hours_equal'))
+      end
+    end
 
     def name_unique_in_tenant
       return unless same_name_in_tenant.exists?

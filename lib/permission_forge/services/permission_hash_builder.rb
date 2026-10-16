@@ -28,10 +28,12 @@ module PermissionForge
 
       # Resources and their rows in id order, in place. The database returns
       # them in whatever order its plan gives, and order decides: the first row
-      # of a name wins a tie (two fields mapping to one variant — "first
-      # mask_strategy wins"), and rules and actions keep it in the hash. The one
-      # definition: Admin::EffectiveAccess sorts the rows it shows with it. An
-      # unsaved row (no id yet) sorts first.
+      # of a name wins a tie between derived variants (two fields mapping to
+      # one name — "first mask_strategy wins"; an explicit row for the name
+      # decides it whatever the order, FieldPermissionMerger.targets_of), and
+      # rules and actions keep it in the hash. The one definition:
+      # Admin::EffectiveAccess sorts the rows it shows with it. An unsaved row
+      # (no id yet) sorts first.
       def self.sort_rows(permission_set)
         resources = sorted(permission_set.association(:resources))
         resources.each { |resource| RESOURCE_ROWS.each { |rows| sorted(resource.association(rows)) } }
@@ -41,6 +43,23 @@ module PermissionForge
         association.target.sort_by! { |row| row.id.to_i }
       end
       private_class_method :sorted
+
+      # The flags a granting Resource row grants, each only with the
+      # permission it depends on (ValidatesDependency: edit and delete need
+      # read, Modify All needs View All) — a row written past the validation
+      # grants no more than the dependency allows, so `can_edit?` is never
+      # true where `can_read?` is false. The one definition; the admin's
+      # effective-access view follows it.
+      #
+      # @param resource [Resource, #read_access]
+      # @return [Hash{Symbol => Boolean}] RESOURCE_PERMISSION_OPTIONS
+      def self.granted_flags(resource)
+        read = resource.read_access == true
+        view_all = resource.view_all == true
+        { read_access: read, create_access: resource.create_access == true,
+          edit_access: read && resource.edit_access == true, delete_access: read && resource.delete_access == true,
+          view_all: view_all, modify_all: view_all && resource.modify_all == true }
+      end
 
       # Builds a user's permission hash from their permission sets.
       # @param user [Object]
@@ -172,8 +191,8 @@ module PermissionForge
       end
 
       def merge_resource_permissions(permissions, resource)
-        RESOURCE_PERMISSION_OPTIONS.each do |action|
-          permissions[action] ||= resource.send(action)
+        self.class.granted_flags(resource).each do |action, granted|
+          permissions[action] ||= granted
         end
       end
 

@@ -144,11 +144,14 @@ module PermissionForge
         assert_equal [@user.id.to_s], payloads.map { |p| p[:subject_user_id] }.uniq
         assert_same @user, payloads.first[:objects][:user]
 
-        # modify_all without view_all: a row written past the model's validation
+        # modify_all without view_all (a row written past the model's
+        # validation) grants nothing since 0.15: Modify All counts only with
+        # View All (PermissionHashBuilder.granted_flags), so the rules apply
+        # and nothing is bypassed.
         @resource.update_columns(view_all: false, modify_all: true)
         @user.regenerate_permissions
-        payloads = published('rule.bypassed') { Customer.find_by(uuid: @denied.uuid) }
-        assert_equal(['modify_all'], payloads.map { |p| p[:data]['reason'] })
+        payloads = published('rule.bypassed') { assert_raises(NotAuthorized) { Customer.find_by(uuid: @denied.uuid) } }
+        assert_empty payloads
       end
 
       test 'the bypass group is stored when configured' do

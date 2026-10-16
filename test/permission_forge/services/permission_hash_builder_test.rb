@@ -4,6 +4,11 @@ require_relative '../field_variant_models'
 module PermissionForge
   module Services
     class PermissionHashBuilderTest < ActiveSupport::TestCase
+      # G5f (plan-final.md §2 SD): the admin levels a field row can have.
+      LEVELS = PermissionForge::Admin::FieldLevel::GRANTING
+      # The ResourceField flags of each admin level, plus "no row".
+      VARIANT_CASES = (LEVELS.keys + [nil]).product(LEVELS.keys).freeze
+
       setup do
         @user = create_user
         @permission_set = create_permission_set
@@ -307,10 +312,6 @@ module PermissionForge
       private
 
       # --- G5f: explicit row over derived variant, read OR / mask AND (plan-final.md §2 SD) ---
-
-      LEVELS = PermissionForge::Admin::FieldLevel::GRANTING
-      # The ResourceField flags of each admin level, plus "no row".
-      VARIANT_CASES = (LEVELS.keys + [nil]).product(LEVELS.keys).freeze
 
       def orders_hash(sets)
         build_hash_with(sets).dig(:resources, 'PfVariantOrder', :fields)

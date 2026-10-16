@@ -229,7 +229,9 @@ module PermissionForge
           tie = create_permission_set(name: "Tie #{index}")
           resource = create_resource(permission_set: tie, name: 'PfVariantOrder', read_access: true)
           strategies = { 'owner_uuid' => 'email', 'owner_id' => 'last4' }
-          order.each { |name| create_resource_field(resource: resource, name: name, read_access: true, mask_access: true, mask_strategy: strategies[name]) }
+          order.each do |name|
+            create_resource_field(resource: resource, name: name, read_access: true, mask_access: true, mask_strategy: strategies[name])
+          end
           assignment = create_permission_set_user(user: @user, permission_set: tie)
 
           engine = engine_resource('PfVariantOrder')
@@ -245,7 +247,7 @@ module PermissionForge
       # P5: an explicit Hidden row next to an Editable base row.
       test 'an explicit Hidden row for a variant name is hidden, in the engine and here' do
         tie = create_permission_set(name: 'Hidden variant')
-        resource = create_resource(permission_set: tie, name: 'PfVariantOrder', read_access: true)
+        resource = create_resource(permission_set: tie, name: 'PfVariantOrder', read_access: true, edit_access: true)
         create_resource_field(resource: resource, name: 'owner_id', read_access: true, edit_access: true)
         create_resource_field(resource: resource, name: 'owner_uuid', read_access: false, edit_access: false)
         create_permission_set_user(user: @user, permission_set: tie)

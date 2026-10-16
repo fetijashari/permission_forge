@@ -32,7 +32,7 @@ module PermissionForge
 
         kept = PermitsAttributes.call(resource: @customer, permitted_params: { name: 'n', email: 'e' })
 
-        assert_equal({ 'name' => 'n' }, kept)
+        assert_equal({ name: 'n' }, kept)
       end
     end
   end

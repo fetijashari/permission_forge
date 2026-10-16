@@ -17,7 +17,11 @@ en:
         bulk_action_invalid: must be assign or revoke
         expires_at_past: must be in the future
         field_generation_failed: Could not generate fields for this resource
+        flag_shape: must be a string or null
         forbidden: Forbidden
+        hour_shape: must be a whole number from 0 to 23, or null
+        ip_list_shape: must be a string or an array of strings (IP addresses or CIDR
+          ranges), or null
         not_editable: This record is not editable
         not_found: Record not found
         not_iso8601_time: is not an ISO 8601 date or time
@@ -357,6 +361,7 @@ en:
         flag: Session flags can only contain letters, numbers, dots, colons, dashes
           and underscores.
         group_blank: Give the group a name.
+        hours_equal: The start and end hour must differ (a window from 9 to 9 is empty).
         ip: 'Line %{line}: “%{ip}” isn''t a valid IP address or CIDR range.'
         person: Choose a person first.
         resource_model: Pick a model from the list.
@@ -2061,7 +2066,10 @@ en:
           sso_login: after company SSO sign-in
         from_ips: from %{ips}
         hours: between %{from} and %{to}
+        hours_broken: between %{from} and %{to} (a window nobody can judge — fix it
+          on the Conditions tab)
         hours_overnight: between %{from} and %{to} (overnight)
+        no_hour: no hour
         only_works: Only works %{parts}.
         or: " or "
       dates:
@@ -2211,6 +2219,11 @@ en:
       name_blank: can't be blank
       permission_set:
         group_missing: must be an existing Permission Set Group
+        hours_equal: must differ from the start hour (a window from an hour to the
+          same hour is empty; leave both blank for no window)
+        hours_incomplete: must be set together with the other hour (or both left blank)
+        invalid_ip_entry: contains “%{entry}”, which is not an IP address or CIDR
+          range
         name_taken: is already used by another Permission Set
       permission_set_rule:
         between_requires_two_values: must contain exactly 2 comma-separated values
