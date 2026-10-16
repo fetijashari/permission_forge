@@ -167,6 +167,21 @@ module PermissionForge
       Customer.reset_column_information
     end
 
+    # The process asked about the name before the migration (a running
+    # request confirmed it missing, SchemaRead stops asking): the save
+    # compares with the database anyway.
+    test 'a column the process confirmed missing before a migration added it is accepted at save' do
+      Customer.columns_hash
+      assert_not PermissionForge::SchemaRead.column?(Customer, 'pf_late'), 'confirmed missing'
+      ActiveRecord::Base.connection.add_column(:customers, :pf_late, :string)
+
+      assert build_rule(field_name: 'pf_late').valid?
+    ensure
+      ActiveRecord::Base.connection.remove_column(:customers, :pf_late) if Customer.connection.column_exists?(:customers, :pf_late)
+      Customer.reset_column_information
+      PermissionForge::SchemaRead.reset!
+    end
+
     # --- a rule saved before: it denies, it does not raise ---
 
     test 'a holder of a rule naming a missing column is denied every record, never a 500' do
