@@ -9,12 +9,11 @@ module DocsApp
     BASIC = { 'HTTP_AUTHORIZATION' => "Basic #{Base64.strict_encode64('admin:docs')}" }.freeze
     KEY = { 'HTTP_X_API_KEY' => API_KEY }.freeze
     JSON_BODY = { 'CONTENT_TYPE' => 'application/json' }.freeze
-    FORM = { 'CONTENT_TYPE' => 'application/x-www-form-urlencoded' }.freeze
 
     module_function
 
     def run
-      Application.boot!(skeleton: 'skeleton_api', api_only: true)
+      Application.boot!(skeleton: 'skeleton_api', api_only: true, forgery_protection: true)
       Fixtures.host_tables!
       User.create!(email_address: Fixtures.email(:alice), password_digest: 'none', name: 'Alice Admin', admin: true)
       install = Install.from_readme!
@@ -51,9 +50,46 @@ module DocsApp
     def admin_checks
       { admin_page_without_middlewares: call(:get, '/permissions/', BASIC),
         admin_page_with_middlewares: call(:get, '/permissions/', BASIC, app: with_admin_middlewares),
-        admin_post_with_middlewares: call(:post, '/permissions/permission_sets', BASIC.merge(FORM), app: with_admin_middlewares,
-                                                                                                    body: 'permission_set[name]=From+the+admin') }
+        admin_post_with_middlewares: submit_new_set('From the admin'),
+        admin_post_without_token: submit_new_set('Without a token', token: false) }
     end
+
+    NEW_SET = '/permissions/permission_sets/new'
+
+    # The admin's "New Permission Set" form as a browser submits it behind the
+    # three middlewares: read from the page (its fields and authenticity
+    # token, the session cookie kept), the name filled in, posted with
+    # forgery protection on. `token: false` posts it without the token.
+    def submit_new_set(name, token: true)
+      browser = Rack::Test::Session.new(with_admin_middlewares)
+      fields = form_fields(browser.get(NEW_SET, {}, BASIC).body, '/permissions/permission_sets').merge('name' => name)
+      token_in_form = fields.key?('authenticity_token')
+      fields.delete('authenticity_token') unless token
+      posted(browser.post('/permissions/permission_sets', fields, BASIC), name).merge(token_in_form: token_in_form)
+    rescue StandardError => e
+      { status: nil, error: (e.cause || e).class.name, created: set?(name) }
+    end
+
+    def posted(response, name)
+      { status: response.status, location: response.location&.sub(%r{\Ahttps?://[^/]+}, ''), created: set?(name) }
+    end
+
+    def set?(name) = PermissionForge::PermissionSet.exists?(name: name)
+
+    # The fields a form posts: its inputs (checked radios and checkboxes only) and selects.
+    def form_fields(html, action)
+      form = form_posting_to(html, action)
+      inputs = form.css('input[name]').select { |input| posts?(input) }.to_h { |input| [input['name'], input['value'].to_s] }
+      inputs.merge(form.css('select[name]').to_h { |select| [select['name'], selected(select)] })
+    end
+
+    def form_posting_to(html, action)
+      Nokogiri::HTML(html).css('form').find { |candidate| candidate['action'] == action } || raise("no form posts to #{action}")
+    end
+
+    def posts?(input) = !%w[radio checkbox].include?(input['type']) || input['checked']
+
+    def selected(select) = select.at_css('option[selected]')&.[]('value').to_s
 
     # Naming ActionDispatch::Flash loads it, as `config.middleware.use` does:
     # that is what gives ActionDispatch::Request its `flash`.

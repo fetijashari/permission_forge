@@ -48,8 +48,7 @@ module PermissionForge
         assert_includes %w[NameError ActionDispatch::Request::Session::DisabledSessionError], without['error'], without.inspect
         assert_match(/flash|sessions disabled/, without['message'].to_s)
         assert_equal 200, result.dig('admin_page_with_middlewares', 'status'), result['admin_page_with_middlewares'].inspect
-        post = result.fetch('admin_post_with_middlewares')
-        assert_operator post['status'].to_i.clamp(1, 599), :<, 500, "an admin POST behind the middlewares is not a server error: #{post.inspect}"
+        assert_admin_form_posts(result)
         warning = result['boot_warning'].to_s
         %w[ActionDispatch::Cookies ActionDispatch::Session::CookieStore ActionDispatch::Flash].each do |middleware|
           assert_includes warning, middleware, 'the boot warning names the middlewares the admin needs'
@@ -58,6 +57,17 @@ module PermissionForge
       end
 
       private
+
+      # The admin's New Permission Set form, posted behind the three
+      # middlewares with forgery protection on: the token from the page
+      # creates the set (a redirect to it); without the token, nothing.
+      def assert_admin_form_posts(result)
+        post = result.fetch('admin_post_with_middlewares')
+        assert_equal [302, true, true], post.values_at('status', 'created', 'token_in_form'), post.inspect
+        assert_match(%r{\A/permissions/permission_sets/\d+\z}, post['location'])
+        refused = result.fetch('admin_post_without_token')
+        assert_equal [false, 'ActionController::InvalidAuthenticityToken'], refused.values_at('created', 'error'), refused.inspect
+      end
 
       def block_failures(file, block)
         failures = Array(block['expectations']).reject { |claim| claim['passed'] }
