@@ -227,9 +227,11 @@ module PermissionForge
       # leases a connection to the thread for good and, from Rails 7.2,
       # raises under ActiveRecord.permanent_connection_checkout =
       # :disallowed. The pool's cache takes a connection only for the read
-      # it makes, and is the one the connection's own cache is.
+      # it makes, and is the one the connection's own cache is. Rails 7.1
+      # has no pool cache (nor :disallowed): the connection's.
       def schema_cache(model)
-        model.connection_pool.schema_cache
+        pool = model.connection_pool
+        pool.respond_to?(:schema_cache) ? pool.schema_cache : model.connection.schema_cache
       end
 
       # Reads the table again when one of `names` is no column of it and was

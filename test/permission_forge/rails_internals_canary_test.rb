@@ -283,6 +283,11 @@ module PermissionForge
         ActiveRecord::Base.connection_pool
       end
 
+      # The cache SchemaRead reads: the pool's (Rails 7.2+), the connection's on 7.1.
+      def pool_schema_cache
+        pool.respond_to?(:schema_cache) ? pool.schema_cache : leased_connection.schema_cache
+      end
+
       # The calling thread's connection, kept (lease_connection from 7.2).
       def leased_connection
         pool.respond_to?(:lease_connection) ? pool.lease_connection : pool.connection
@@ -1377,7 +1382,7 @@ module PermissionForge
     # --- schema and loading -----------------------------------------------------------------------------------
 
     canary_test :schema_cache, 'connection_pool.schema_cache.columns_hash(table): Columns by name, with name and type' do
-      columns = pool.schema_cache.columns_hash('pf_canary_records')
+      columns = pool_schema_cache.columns_hash('pf_canary_records')
 
       assert_equal %w[email id name parent_id prefs], columns.keys.sort, canary(
         :schema_cache, 'schema_cache.columns_hash no longer answers the columns of a table by name',
@@ -1390,7 +1395,7 @@ module PermissionForge
 
     canary_test :schema_cache_data_sources,
                 'connection_pool.schema_cache.data_source_exists?(name) / clear_data_source_cache!(name): whether a table is there' do
-      cache = pool.schema_cache
+      cache = pool_schema_cache
 
       assert cache.data_source_exists?('pf_canary_records'), canary(
         :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers true for a table that is there',
@@ -1410,7 +1415,7 @@ module PermissionForge
 
     canary_test :schema_cache_columns_identity,
                 'the pool\'s schema_cache.columns_hash(table) answers the same Hash until the table is read again (reset_column_information)' do
-      read = -> { PfCanaryRecord.connection_pool.schema_cache.columns_hash(PfCanaryRecord.table_name) }
+      read = -> { pool_schema_cache.columns_hash(PfCanaryRecord.table_name) }
       first = read.call
 
       assert_same first, read.call, canary(
