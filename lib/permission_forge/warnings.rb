@@ -29,6 +29,17 @@ module PermissionForge
   # is wider than configured, or a change goes unrecorded; it carries the
   # prefix `SECURITY warning:`. Adding a severity is one SEVERITIES entry.
   #
+  # A warning's audience (AUDIENCES) is the processes it is about. :all (the
+  # default): every process — the cache, the models, the rules, the audit
+  # table are used by a runner, a rake task, a job as much as by a server.
+  # :server: a warning about the admin screens or the JSON API, which only
+  # a web server process serves (HTTP Basic credentials, the actor of an
+  # admin change, the API's authorization lambdas, an API-only host's
+  # middlewares, tenantless admin access); outside a server process
+  # (server_process?) it goes to the log only. A runner does not serve the
+  # admin, and the credentials it would warn about are often set for the
+  # server alone (round 7, a-onboarding #23).
+  #
   # Nothing here raises for a channel: a terminal that cannot be written is
   # skipped, a missing logger is skipped. Never called at require time.
   #
@@ -50,12 +61,26 @@ module PermissionForge
     # require rails/generators as it loads.
     GENERATOR_COMMANDS = %w[Rails::Command::GenerateCommand Rails::Command::DestroyCommand].freeze
 
-    # What a web server process has loaded before it boots the app:
-    # `bin/rails server` (Rails::Server) and the `puma` command (Puma::CLI;
-    # `require "puma"` alone defines neither). Another server (unicorn, thin,
-    # falcon) counts as a process whose log is not read: its standard error
-    # gets the warning unless the logger already writes there.
-    SERVER_COMMANDS = %w[Rails::Server Puma::CLI].freeze
+    # The processes a warning is about (see the module): every process, or
+    # a web server's only. Adding an audience is one entry here and a rule
+    # in .channels.
+    AUDIENCES = %i[all server].freeze
+
+    # What a web server's own command has loaded before it boots the app,
+    # never what `require "<gem>"` (Bundler.require in a runner) loads:
+    # `bin/rails server` (Rails::Server), `puma` (Puma::CLI), `unicorn` and
+    # `unicorn_rails` (Unicorn::Launcher), Passenger's Rack loaders
+    # (PhusionPassenger::App), `falcon serve` / `falcon host`
+    # (Falcon::Command). Another server (thin, a custom Rack launcher)
+    # counts as a process whose log is not read: its standard error gets
+    # the warning unless the logger already writes there, and a :server
+    # warning goes to its log only.
+    SERVER_COMMANDS = %w[Rails::Server Puma::CLI Unicorn::Launcher PhusionPassenger::App Falcon::Command].freeze
+
+    # Servers whose command defines no constant of its own, by program name
+    # ($PROGRAM_NAME's basename): `pitchfork` (bin/pitchfork requires what
+    # `require "pitchfork"` does).
+    SERVER_PROGRAMS = %w[pitchfork].freeze
 
     # The channels, in writing order.
     CHANNELS = %i[log terminal].freeze
@@ -83,11 +108,15 @@ module PermissionForge
       #   names the condition, its consequence and the remedy
       # @param severity [Symbol] a SEVERITIES key: :security for a condition
       #   under which access widens or a change goes unrecorded, else :config
+      # @param audience [Symbol] an AUDIENCES entry: :server for a warning
+      #   about the admin or the API a server process serves (the log only
+      #   in any other process), else :all
       # @return [String] the text written
-      # @raise [ArgumentError] for a severity not in SEVERITIES
-      def emit(key, message, severity: :config)
+      # @raise [ArgumentError] for a severity not in SEVERITIES, an audience
+      #   not in AUDIENCES
+      def emit(key, message, severity: :config, audience: :all)
         text = "#{PREFIX}#{Warnings.severity_prefix(severity)}#{message}"
-        Warnings.channels(@context).each do |channel|
+        Warnings.channels(@context, audience: audience).each do |channel|
           channel == :log ? @context.logger&.warn(text) : terminal(key, text)
         end
         text
@@ -111,18 +140,23 @@ module PermissionForge
       #
       # @param (see Emitter#emit)
       # @return [String] the text written
-      def emit(key, message, severity: :config)
-        Emitter.new.emit(key, message, severity: severity)
+      def emit(key, message, severity: :config, audience: :all)
+        Emitter.new.emit(key, message, severity: severity, audience: audience)
       end
 
       # The channels a warning goes to under `context`: [] while a generator
-      # runs, [:log] where the log is read, [:log, :terminal] elsewhere (see
-      # the module).
+      # runs, [:log] where the log is read — and for a :server warning in a
+      # process that is not a server —, [:log, :terminal] elsewhere (see the
+      # module).
       #
       # @param context [Context]
+      # @param audience [Symbol] an AUDIENCES entry
       # @return [Array<Symbol>]
-      def channels(context = context())
+      # @raise [ArgumentError] for an audience not in AUDIENCES
+      def channels(context = context(), audience: :all)
+        check_audience!(audience)
         return [] if context.generator
+        return CHANNELS.first(1) if audience == :server && !context.server
 
         terminal?(context) ? CHANNELS : CHANNELS.first(1)
       end
@@ -152,12 +186,14 @@ module PermissionForge
         GENERATOR_COMMANDS.any? { |name| Object.const_defined?(name, false) }
       end
 
-      # Whether this process is a web server (SERVER_COMMANDS): its log is
-      # where its warnings are read, outside development.
+      # Whether this process is a web server (SERVER_COMMANDS,
+      # SERVER_PROGRAMS): its log is where its warnings are read, outside
+      # development, and the :server warnings are about it.
       #
       # @return [Boolean]
       def server_process?
-        SERVER_COMMANDS.any? { |name| Object.const_defined?(name, false) }
+        SERVER_COMMANDS.any? { |name| Object.const_defined?(name, false) } ||
+          SERVER_PROGRAMS.include?(File.basename($PROGRAM_NAME.to_s))
       end
 
       # Whether `logger` already writes to standard output or error (a
@@ -189,6 +225,12 @@ module PermissionForge
       end
 
       private
+
+      def check_audience!(audience)
+        return if AUDIENCES.include?(audience)
+
+        raise ArgumentError, "unknown warning audience #{audience.inspect}; one of #{AUDIENCES.inspect}"
+      end
 
       # Rails.logger, nil before the app has one.
       def current_logger

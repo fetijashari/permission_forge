@@ -121,7 +121,7 @@ module PermissionForge
                       'api_auth only proves identity — any authenticated caller can create ' \
                       'permission sets and assign them (privilege escalation). Configure both ' \
                       'authorization lambdas, or remove api_require_authorization = false ' \
-                      '(the default, true, denies mutations until they are set).', severity: :security)
+                      '(the default, true, denies mutations until they are set).', severity: :security, audience: :server)
       end
 
       # One query for the distinct names of the rows in the clear that reach
@@ -156,7 +156,7 @@ module PermissionForge
         missing = ApiOnlyAdmin.missing_middlewares(application)
         return if missing.empty?
 
-        Warnings.emit(:api_only_admin, ApiOnlyAdmin.message(missing), severity: :config)
+        Warnings.emit(:api_only_admin, ApiOnlyAdmin.message(missing), severity: :config, audience: :server)
       end
 
       # The engine's after_routes_loaded hook: the api_only_admin warning,
@@ -221,7 +221,7 @@ module PermissionForge
       # AdminUiSettings#tenantless_admin_warning is the text; the emitter
       # puts the prefix on.
       def warn_tenantless_admin(message)
-        Warnings.emit(:tenantless_admin, message, severity: :security)
+        Warnings.emit(:tenantless_admin, message, severity: :security, audience: :server)
       end
 
       def warn_basic_auth_without_credentials(config)
@@ -230,7 +230,8 @@ module PermissionForge
 
         Warnings.emit(:basic_auth_without_credentials,
                       'HTTP Basic Auth is enabled but credentials are not configured. The admin UI will return ' \
-                      '401 for all requests. Set config.http_basic_auth_user and config.http_basic_auth_password.')
+                      '401 for all requests. Set config.http_basic_auth_user and config.http_basic_auth_password.',
+                      audience: :server)
       end
 
       # Taken as the per-read selection takes it: a Hash, or anything with
