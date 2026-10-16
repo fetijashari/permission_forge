@@ -15,11 +15,12 @@ module DocsApp
     # @param skeleton [String] the directory under docs_app/ to copy
     # @param api_only [Boolean] a `rails new --api` host
     # @param serve [Boolean] what a browser needs: forgery protection, a cache, Rails' error pages
-    def boot!(skeleton:, api_only: false, serve: false)
+    # @param forgery_protection [Boolean] verify authenticity tokens (as every app outside the test environment does)
+    def boot!(skeleton:, api_only: false, serve: false, forgery_protection: serve)
       FileUtils.cp_r(File.join(SKELETONS, skeleton, '.'), root)
       %w[config/initializers db/migrate log tmp public].each { |dir| FileUtils.mkdir_p(File.join(root, dir)) }
       Dir.chdir(root)
-      define(api_only: api_only, serve: serve)
+      define(api_only: api_only, serve: serve, forgery_protection: forgery_protection)
       importmap_macro!
       Rails.application.initialize!
     end
@@ -34,10 +35,11 @@ module DocsApp
       end
     end
 
-    def define(api_only:, serve:)
+    def define(api_only:, serve:, forgery_protection:)
       Class.new(Rails::Application) do
         Application.basics(config)
         Application.web(config, api_only: api_only, serve: serve)
+        config.action_controller.allow_forgery_protection = forgery_protection
       end
     end
 
@@ -61,7 +63,6 @@ module DocsApp
       config.cache_store = serve ? :memory_store : :null_store
       config.action_dispatch.show_exceptions = serve ? :all : :none
       config.consider_all_requests_local = false
-      config.action_controller.allow_forgery_protection = serve
       config.action_controller.raise_on_missing_callback_actions = false
     end
 

@@ -110,6 +110,10 @@ module PermissionForge
       PermissionForge::BootChecks.run(PermissionForge.configuration)
     end
 
+    # The checks that read the routes, once they are drawn: at boot, or at
+    # their first use where Rails 8 draws them lazily (eager_load off).
+    config.after_routes_loaded { |app| PermissionForge::BootChecks.routes_loaded(app) }
+
     # A setting a model reads as it loads (user_class, audit_user_class,
     # tenant_model) changed by the host's own after_initialize, once a
     # production boot has eager-loaded the models: the classes keep what they

@@ -10,7 +10,7 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 Before upgrading, run `bin/rails permission_forge:audit`: it lists the stored rows this release reads differently (rules
 that match nothing, broken activation conditions, variant rows, unknown mask strategies). The
-[migration guide](docs/migration-guide.md#upgrading-to-015) has the steps, the behaviour changes with their opt-outs
+[migration guide](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015) has the steps, the behaviour changes with their opt-outs
 and the RLS re-sync.
 
 ### Added
@@ -110,8 +110,11 @@ and the RLS re-sync.
 - **A boot warning for an API-only application that mounts the engine** (`config.api_only = true`): it names the
   middlewares its admin screens need (`ActionDispatch::Cookies`, `ActionDispatch::Session::CookieStore`,
   `ActionDispatch::Flash`) and the lines to add — without them every admin page that renders a form is a 500; the
-  JSON API works without them.
+  JSON API works without them. Checked once the routes are drawn (it never draws them); an app that uses only the
+  API sets `config.api_only_admin_warning = false`.
   <!-- pin: test/permission_forge/boot_checks_api_only_test.rb#the warning goes through the emitter and names the middlewares and the lines to add -->
+  <!-- pin: test/permission_forge/boot_checks_api_only_test.rb#the warning comes when the routes are drawn, which the check never does itself -->
+  <!-- pin: test/permission_forge/boot_checks_api_only_test.rb#config.api_only_admin_warning = false silences the warning (an app that uses only the JSON API) -->
 - **One cache outcome for every operation that clears cached permissions.** `PermissionForge::Cache::Outcome`
   (`confirmed`, `process_local`, `in_request`, `unconfirmed`), measured by `Cache::Report`, is what the terminal, the
   admin flash, the API body and the summary audit event report: `PermissionCacheClearer`, `DataSubjectErasure`,
@@ -308,10 +311,13 @@ and the RLS re-sync.
   documentation app executes, `# => literal` asserted), `file=<path>` (a complete file written into that app) or
   `fragment`. A ruby block that rescues a denial error is held to the handler that works in a Rails 8 Turbo app.
   <!-- pin: test/permission_forge/docs/doc_blocks_test.rb#every ruby, erb and bash block in README.md and docs/ carries a marker and follows the rules -->
-- **The documentation names only what exists** (`docs/references_test.rb`): links and anchors, `config.<name>`
-  options, `permission_forge:<task>` names (every task documented with the environment variables it reads),
-  `PermissionForge::…` constants, and the defaults a sentence states.
+- **The documentation names only what exists** (`docs/references_test.rb`): links and anchors (GitHub links to
+  this repository too, also those the code prints), options (`config.<name>`, `name = value`, a bare name shaped like
+  one), `permission_forge:<task>` names (each documented with the environment variables it reads, `ACTOR` / `REASON`
+  included), `PermissionForge::…` constants, and the defaults a sentence states.
   <!-- pin: test/permission_forge/docs/references_test.rb#every defined rake task is documented, with the environment variables it reads -->
+  <!-- pin: test/permission_forge/docs/references_test.rb#every link to this repository the code prints names a file and anchor of it -->
+  <!-- pin: test/permission_forge/docs/references_test.rb#every option the docs write as `name = value`, or as a bare `name` shaped like an option, is one -->
 - **`bundle exec rake docs:configuration`** regenerates the Option reference of `docs/configuration.md` from the code
   (the Settings catalog's sections and order, `Configuration.new`'s defaults, `StrategyValues`' values; every public
   option has an entry); the suite fails while it is stale. Gem development only.
@@ -795,10 +801,10 @@ and the RLS re-sync.
   Hashes and events are additive. A script that matched `Cache cleared: true` matches `Cached permissions removed:`.
   <!-- pin: test/permission_forge/tasks/cache_clear_task_test.rb#with ACTOR and REASON: every holder is invalidated, the event names the actor from rake -->
   <!-- pin: test/permission_forge/tasks/rake_output_test.rb#an erasure on an in-memory store says the running servers kept the cached permissions, in output and event -->
-- **`DRY_RUN=1`, `yes` or `TRUE` now mean a dry run for `rake permission_forge:erasure`; only `DRY_RUN=false`, `0`
-  or `no` executes.** The task treated only the literal `DRY_RUN=true` as a dry run (its default), so `DRY_RUN=1` —
-  the value `audit_events:purge` documents for a dry run — really erased the person. **No opt-out:** an erasure runs
-  only when asked for explicitly.
+- **`DRY_RUN=1`, `yes` or `TRUE` now mean a dry run for `rake permission_forge:erasure` and `audit_events:purge`;
+  only `false`, `0` or `no` executes.** The erasure took only the literal `true` as a dry run, so `DRY_RUN=1` (the
+  purge's documented dry run) erased the person. Unset, each keeps its default: the erasure is a dry run, the purge
+  deletes. **No opt-out:** a value other than an explicit false never deletes.
   <!-- pin: test/permission_forge/tasks/gdpr_erasure_task_test.rb#test DRY_RUN values other than an explicit false are a dry run -->
 - **Service results gained keys (additive).** `ConsentWithdrawalHandler.call` answers the same keys for a real run and
   a dry run (the real run answered `{ revoked_sets:, invalidated: }` only; it now also answers `affected_sets`,
@@ -1478,8 +1484,9 @@ and the RLS re-sync.
   deprecations, and the RLS re-sync (`GENERATOR_VERSION` 7).
   <!-- pin: docs/migration-guide.md#upgrading-to-015 -->
 - Every `run` and `file=` block of README.md and docs/*.md executes in a generated Rails 8.1 app (`bin/rails generate
-  authentication` + a scaffold `Customer`, PermissionForge installed by the README's own install lines) on every test
-  run, one console per document, with `# => literal` comments asserted; the denial flows of "Handling Denials" (a
+  authentication` + a scaffold `Customer` as generated, PermissionForge installed by the README's own install lines)
+  on every test run, one console per document where nobody holds a set yet, with `# => literal` comments asserted;
+  the denial flows of "Handling Denials" (a
   Turbo sign-in with no Permission Set, Reload, Sign out, the public index with and without `resume_session`, the
   sign-in page under the guard, README step 4 after an admin-made set, seeds under `:strict`) are driven as requests,
   and in Chrome with Turbo in the `browser` CI job (`test/browser/docs_flows.spec.js`).
