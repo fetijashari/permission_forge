@@ -39,6 +39,25 @@ module PermissionForge
       end
     end
 
+    # Review of D#25: a row stored with a blank label before was relabelled
+    # by the next save of anything else, and that save's audit event carried
+    # a label change nobody made.
+    test 'a save of other attributes leaves a stored blank label, and its event says nothing of a label' do
+      field = create_resource_field(resource: @resource, name: 'email', read_access: true)
+      action = create_resource_action(resource: @resource, name: 'export')
+      field.update_column(:label, '')
+      action.update_column(:label, nil)
+      @resource.update_column(:label, '')
+
+      [[field, { read_access: false }], [action, { is_permitted: true }], [@resource, { description: 'Clients' }]].each do |record, attrs|
+        record.reload.update!(attrs)
+        changes = audit_events_for(record).last.data.fetch('changes')
+
+        assert_equal attrs.keys.map(&:to_s), changes.keys, record.class.name
+      end
+      assert_equal ['', nil, ''], [field.reload.label, action.reload.label, @resource.reload.label]
+    end
+
     test 'a label someone wrote is stored as written' do
       field = ResourceField.create!(resource: @resource, name: 'domain', label: ' Web address ')
       action = ResourceAction.create!(resource: @resource, name: 'export', label: 'Export CSV')

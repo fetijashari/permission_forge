@@ -18,6 +18,10 @@ module PermissionForge
     # A rename that leaves a generated label as it was relabels the row with
     # its new name: the old name would read as a label an admin wrote.
     #
+    # Checked on create, when the label changes and on a rename only: a row
+    # stored with a blank label before keeps it through a save of its other
+    # attributes (no label change in that save's audit event).
+    #
     # Field test round 8 (D#25): through the API a field label `null` was a
     # 422 "can't be blank" while `""` was stored, and an action stored both
     # as sent — the admin stored a blanked label as the name.
@@ -30,6 +34,17 @@ module PermissionForge
         before_validation :normalize_label
       end
 
+      # What a label `text` written to this row is stored as: a blank one
+      # (nil, empty, white space) as no label — the row's name (a
+      # Resource: nil) — anything else as written. The admin's review asks
+      # it for the value it shows.
+      #
+      # @param text [String, nil]
+      # @return [String, nil]
+      def label_to_store(text)
+        text.to_s.strip.empty? ? generated_label : text
+      end
+
       private
 
       # The label "no label" is stored as: the row's name.
@@ -40,22 +55,20 @@ module PermissionForge
       end
 
       def normalize_label
-        return unless has_attribute?(:label)
+        return unless has_attribute?(:label) && label_check_due?
 
-        self.label = generated_label if unwritten_label?
+        self.label = unwritten_label? ? generated_label : label_to_store(label)
       end
 
-      # Blank; on a new row the column default; on a rename, a label
-      # generated for the old name that this save leaves as it is.
+      def label_check_due?
+        new_record? || will_save_change_to_label? || will_save_change_to_name?
+      end
+
+      # On a new row the column default; on a rename, a label generated for
+      # the old name that this save leaves as it is.
       def unwritten_label?
-        text = label
-        return true if text.to_s.strip.empty?
-        return text == self.class.column_defaults['label'] if new_record?
+        return label == self.class.column_defaults['label'] if new_record?
 
-        renamed_with_generated_label?
-      end
-
-      def renamed_with_generated_label?
         will_save_change_to_name? && !will_save_change_to_label? && !generated_label.nil? &&
           PermissionForge::GeneratedText.label?(label, name_in_database)
       end

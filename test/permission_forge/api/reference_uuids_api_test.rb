@@ -83,8 +83,15 @@ module PermissionForge
         end
         records = PermissionSetRule.where(id: rules.map(&:id)).order(:id).to_a
 
+        # The table each SELECT reads, as the adapter quotes it ("…" or `…`); any other SELECT as its SQL.
+        quoted = [PermissionSet, Resource, PermissionSetRule].to_h do |model|
+          ["FROM #{model.connection.quote_table_name(model.table_name)}", model.table_name]
+        end
         tables = []
-        callback = ->(*, payload) { tables << payload[:sql][/FROM\s+"?(\w+)"?/i, 1] if payload[:sql].start_with?('SELECT') }
+        callback = lambda do |*, payload|
+          sql = payload[:sql]
+          tables << (quoted.find { |from, _| sql.include?(from) }&.last || sql) if sql.start_with?('SELECT')
+        end
         rows = ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
           Serializers::PermissionSetRuleSerializer.collection(records)
         end
@@ -110,19 +117,51 @@ module PermissionForge
         assert_nil @set.reload.permission_set_group_id
       end
 
-      test 'an answer sent back whole moves nothing it does not name twice; two keys that disagree are a 422' do
+      def patch_set(attrs) = patch(set_path, params: { permission_set: attrs }, as: :json)
+
+      # Review of D#29: the answer carries both keys, so a client that edits
+      # one of them in a whole answer and sends it back sends the other as
+      # it was. The key that changes the stored group wins.
+      test 'an answer sent back whole with one reference key edited moves the set as that key says' do
         other = create_permission_set_group(name: 'Support')
         @set.update!(permission_set_group: @group)
+        get set_path
+        answer = data
 
-        patch set_path, params: { permission_set: { permission_set_group_id: @group.id, permission_set_group_uuid: @group.uuid } }, as: :json
+        [['permission_set_group_id', other.uuid, other.id], ['permission_set_group_id', other.id, other.id],
+         ['permission_set_group_id', nil, nil], ['permission_set_group_uuid', other.uuid, other.id]].each do |key, value, stored|
+          @set.update!(permission_set_group: @group)
+          patch_set(answer.merge(key => value))
+
+          assert_response :ok, "#{key}=#{value.inspect}: #{response.body}"
+          assert_equal [stored], [@set.reload.permission_set_group_id], "#{key}=#{value.inspect}"
+        end
+      end
+
+      test 'both reference keys changing the group must name the same one' do
+        other = create_permission_set_group(name: 'Support')
+        third = create_permission_set_group(name: 'Ops')
+        @set.update!(permission_set_group: @group)
+
+        patch_set(permission_set_group_id: @group.id, permission_set_group_uuid: @group.uuid)
         assert_response :ok
+        patch_set(permission_set_group_id: other.id, permission_set_group_uuid: other.uuid)
+        assert_response :ok
+        assert_equal other.id, @set.reload.permission_set_group_id
 
-        patch set_path, params: { permission_set: { permission_set_group_id: other.id, permission_set_group_uuid: @group.uuid } }, as: :json
+        patch_set(permission_set_group_id: third.id, permission_set_group_uuid: @group.uuid)
         assert_response :unprocessable_entity
         assert_equal ['permission_set_group_uuid'], response.parsed_body.dig('error', 'messages').keys
-        assert_equal @group.id, @set.reload.permission_set_group_id
+        assert_equal other.id, @set.reload.permission_set_group_id
 
-        patch set_path, params: { permission_set: { permission_set_group_uuid: SecureRandom.uuid } }, as: :json
+        assert_no_difference -> { PermissionSet.count } do
+          post "#{BASE}/permission_sets", params: { permission_set: { name: 'New', permission_set_group_id: other.id,
+                                                                      permission_set_group_uuid: @group.uuid } }, as: :json
+        end
+        assert_response :unprocessable_entity, 'a create has no stored group to tell which key changed'
+        assert_equal ['permission_set_group_uuid'], response.parsed_body.dig('error', 'messages').keys
+
+        patch_set(permission_set_group_uuid: SecureRandom.uuid)
         assert_response :unprocessable_entity
         assert_equal [I18n.t('permission_forge.validations.permission_set.group_missing')],
                      response.parsed_body.dig('error', 'messages', 'permission_set_group_uuid')

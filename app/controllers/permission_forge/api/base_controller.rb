@@ -187,18 +187,19 @@ module PermissionForge
         pf_text_param(:name)
       end
 
-      # `attrs` with the reference `key` (e.g. permission_set_group_id), or
-      # its uuid key (permission_set_group_uuid), replaced by the id of the
-      # record it names in `scope` (Api::ReferenceInput), looked up like
-      # every identifier (tenant-scoped): under `key` its numeric id, or —
-      # under api_record_identifier = :uuid — its uuid, the identifier the
-      # API answers with; under the uuid key its uuid. A uuid that starts
-      # with digits is never read as an id (the integer column would cast
-      # "12ab…" to 12).
+      # `attrs` with the reference's id key (e.g. permission_set_group_id),
+      # or its uuid key (permission_set_group_uuid), replaced by the id of
+      # the record it names in the reference's scope (Api::ReferenceInput),
+      # looked up like every identifier (tenant-scoped): under the id key its
+      # numeric id, or — under api_record_identifier = :uuid — its uuid, the
+      # identifier the API answers with; under the uuid key its uuid. A uuid
+      # that starts with digits is never read as an id (the integer column
+      # would cast "12ab…" to 12).
       #
+      # @param reference [ReferenceInput]
       # @raise [ParamShapes::InvalidParam]
-      def with_reference_id(attrs, key, scope)
-        ReferenceInput.call(attrs, key, scope) { |value| referenced_record(scope, value) }
+      def with_reference_id(attrs, reference)
+        reference.call(attrs) { |value| referenced_record(reference.scope, value) }
       end
 
       def referenced_record(scope, value)

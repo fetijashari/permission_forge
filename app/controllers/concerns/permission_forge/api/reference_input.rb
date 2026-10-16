@@ -14,59 +14,73 @@ module PermissionForge
     # - The uuid key takes the uuid under either setting.
     # - A blank value (null, "") is no reference (nil).
     # - A value that names no record of the scope is a 422 keyed by the key
-    #   it was sent in; both keys sent must name the same record (an answer
-    #   sent back whole names it twice), else a 422 keyed by the uuid key.
+    #   it was sent in.
+    # - Both keys sent, naming different records: on an update, the one that
+    #   changes the stored reference wins — the other was sent back as the
+    #   answer carried it (a client that edits one key of a whole answer);
+    #   a 422 keyed by the uuid key when both change it, or on a create.
     #
     # @api private
-    module ReferenceInput
+    class ReferenceInput
       # The references a body takes, by association, with the message of a
       # value that names no record (under either key).
       REFERENCES = {
         permission_set_group: 'permission_forge.validations.permission_set.group_missing'
       }.freeze
 
-      module_function
+      # What the uuid key is looked up by: text without a NUL byte (PostgreSQL raises on one).
+      UUID_TEXT = /\A[^\0]+\z/
 
-      # @param attrs [ActiveSupport::HashWithIndifferentAccess] the section, read by InputShapes
+      # @return [ActiveRecord::Relation, Class] where the record is looked up
+      attr_reader :scope
+
       # @param key [Symbol] the id key (e.g. :permission_set_group_id)
       # @param scope [ActiveRecord::Relation, Class] where the record is looked up
+      # @param record [ActiveRecord::Base, nil] the record an update changes (nil: a create)
+      def initialize(key, scope, record: nil)
+        @key = key
+        @scope = scope
+        @record = record if record&.persisted?
+        @association = key.to_s.delete_suffix('_id').to_sym
+        @uuid_key = Serializers::BaseSerializer.reference_keys(@association).last
+      end
+
+      # @param attrs [ActiveSupport::HashWithIndifferentAccess] the section, read by InputShapes
       # @yieldparam value [Object] a value sent under the id key
       # @yieldreturn [ActiveRecord::Base, nil] the record it names
       # @return [ActiveSupport::HashWithIndifferentAccess] attrs, the uuid key folded into the id key
       # @raise [ParamShapes::InvalidParam]
-      def call(attrs, key, scope, &by_id)
-        association = key.to_s.delete_suffix('_id').to_sym
-        uuid_key = Serializers::BaseSerializer.reference_keys(association).last
-        finders = { key => by_id, uuid_key => ->(value) { by_uuid(scope, value) } }.select { |param, _| attrs.key?(param) }
+      def call(attrs, &by_id)
+        finders = { @key => by_id, @uuid_key => uuid_finder }.select { |param, _| attrs.key?(param) }
         return attrs if finders.empty?
 
-        attrs.except(uuid_key).merge(key => id_sent(attrs, finders, I18n.t(REFERENCES.fetch(association))))
+        named = finders.map { |param, finder| id_named(attrs[param], param, finder) }.uniq
+        attrs.except(@uuid_key).merge(@key => id_sent(named))
       end
 
-      # The one id the keys sent name, nil for no reference.
-      def id_sent(attrs, finders, missing)
-        ids = finders.map { |param, finder| id_named(attrs[param], finder) || raise(ParamShapes::InvalidParam.new(param, missing)) }.uniq
-        if ids.size > 1
-          id_key, uuid_key = finders.keys
-          raise ParamShapes::InvalidParam.new(uuid_key, I18n.t('permission_forge.api.errors.reference_conflict', other: id_key))
-        end
+      private
 
-        ids.first == :none ? nil : ids.first
+      # Looks a value sent under the uuid key up by uuid.
+      def uuid_finder
+        ->(value) { scope.find_by(uuid: value) if value.is_a?(String) && UUID_TEXT.match?(value) }
       end
 
-      # The id of the record `value` names; :none for a blank value (no
-      # reference: nil once folded), nil when it names no record.
-      def id_named(value, finder)
-        return :none if value.nil? || value == ''
+      # The id of the record `value` names, nil for a blank value.
+      def id_named(value, param, finder)
+        return if value.nil? || value == ''
 
-        finder.call(value)&.id
+        finder.call(value)&.id || raise(ParamShapes::InvalidParam.new(param, I18n.t(REFERENCES.fetch(@association))))
       end
 
-      # A uuid is a String without a NUL byte (PostgreSQL raises on one).
-      def by_uuid(scope, value)
-        scope.find_by(uuid: value) if value.is_a?(String) && !value.empty? && !value.include?("\0")
+      # The one id the keys name (see the class).
+      def id_sent(named)
+        return named.first if named.size == 1
+
+        changing = @record ? named - [@record.attribute_in_database(@key.to_s)] : named
+        return changing.first if changing.size == 1
+
+        raise ParamShapes::InvalidParam.new(@uuid_key, I18n.t('permission_forge.api.errors.reference_conflict', other: @key))
       end
-      private_class_method :id_sent, :id_named, :by_uuid
     end
   end
 end

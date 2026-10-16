@@ -87,7 +87,7 @@ module PermissionForge
                                      :name, :description, :is_active, :is_editable, :is_muting,
                                      :permission_set_group_id, :permission_set_group_uuid,
                                      :requires_session_flag, :allowed_hours_start, :allowed_hours_end, :allowed_ips)
-        with_reference_id(attrs, :permission_set_group_id, PermissionForge::PermissionSetGroup)
+        with_reference_id(attrs, ReferenceInput.new(:permission_set_group_id, PermissionForge::PermissionSetGroup, record: @permission_set))
       end
     end
   end

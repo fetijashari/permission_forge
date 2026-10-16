@@ -449,14 +449,17 @@ none.** (code and API clients that create without a name, or with a blank one), 
   rule), under either identifier setting; the `_id` keys keep their value and type. One declaration in the serializer
   layer (`Serializers::BaseSerializer.reference`), one query per reference for a page of records; `Api::Schema` types
   the new keys `:foreign_uuid`. A Permission Set also takes `permission_set_group_uuid` as input (the group's uuid
-  under either setting; sent with `permission_set_group_id`, both must name the same group, else a 422 keyed by it).
+  under either setting). Sent with `permission_set_group_id` — a whole answer sent back with one key edited — the key
+  that changes the stored group wins; two keys that change it to different groups, or disagree on a create, are a 422
+  keyed by `permission_set_group_uuid`.
   `user_id` (your user's key), a serializer of your own (`api_serializer_overrides`) and an AMS serializer are
   unchanged.
   <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#a set moved into a group by its uuid answers the group by its uuid too -->
   <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#every answer names the set, the Resource and the group it refers to by their uuids -->
   <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#a page looks the uuids up in one query per reference, however many rows it has -->
   <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#permission_set_group_uuid is read as the group, under either identifier setting -->
-  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#an answer sent back whole moves nothing it does not name twice; two keys that disagree are a 422 -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#an answer sent back whole with one reference key edited moves the set as that key says -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#both reference keys changing the group must name the same one -->
   <!-- pin: test/permission_forge/api/envelope_schema_test.rb#every foreign identifier is followed by the uuid of the same record, null where it may be null -->
 
 ### Changed
@@ -2004,10 +2007,13 @@ none.** (code and API clients that create without a name, or with a blank one), 
   stores a blank label — and on a new row the install's `'Untitled Field'` column default — as the row's name, on create
   and on update, in code, through the API (200 / 201) and in the admin alike; a Resource's blank label is stored as
   `nil`. A rename relabels a row whose label was generated (`GeneratedText.label?` of the old name) instead of leaving
-  the old name to read as a label an admin wrote. **No opt-out:** a label was never meant to be empty; write a label of
+  the old name to read as a label an admin wrote. Checked on create, when the label changes and on a rename only: a
+  row stored with a blank label keeps it through a save of its other attributes, whose audit event names no label
+  change. **No opt-out:** a label was never meant to be empty; write a label of
   your own to show something else.
   <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a blank field or action label is stored as the name, on create and on update -->
   <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a blank Resource label is stored as nil -->
+  <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a save of other attributes leaves a stored blank label, and its event says nothing of a label -->
   <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a rename relabels a row whose label was generated, and keeps one someone wrote -->
   <!-- pin: test/permission_forge/api/blank_label_api_test.rb#a blank label is stored as the name on PATCH, for a field row and an action row alike -->
   <!-- pin: test/permission_forge/api/blank_label_api_test.rb#a blank label is stored as the name on POST, for a field row and an action row alike -->
