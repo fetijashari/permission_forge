@@ -12,7 +12,14 @@ require 'test_helper'
 # - PfEncryptedStiNote / PfEncryptedStiSecret: single-table inheritance where
 #   only the subclass encrypts `body` (the base class's own
 #   `encrypted_attributes` is nil), and PfEncryptedStiMemo, a sibling that
-#   encrypts nothing.
+#   encrypts nothing;
+# - PfEncryptedOwner / PfEncryptedLink / PfEncryptedItem: `has_many :items,
+#   through: :links`, where only the join table's model encrypts (`note`):
+#   a rule on the path `items` joins `pf_encrypted_links`, a table no model
+#   along its path is on (review of the round-7 fixes, P0-1);
+# - PfEncryptedScopedOwner: the owners table again, with a default scope
+#   that joins the links, so the applier's query joins a table neither the
+#   rule's path nor its own join brings in.
 ActiveRecord::Schema.define do
   create_table :pf_encrypted_twins, force: true do |t|
     t.string :title
@@ -23,6 +30,18 @@ ActiveRecord::Schema.define do
     t.string :type
     t.string :title
     t.text   :body
+  end
+  create_table :pf_encrypted_owners, force: true do |t|
+    t.string :title
+  end
+  create_table :pf_encrypted_links, force: true do |t|
+    t.bigint :owner_id
+    t.bigint :item_id
+    t.text   :note
+  end
+  create_table :pf_encrypted_items, force: true do |t|
+    t.string :title
+    t.bigint :owner_id
   end
 end
 
@@ -46,4 +65,35 @@ class PfEncryptedStiSecret < PfEncryptedStiNote
 end
 
 class PfEncryptedStiMemo < PfEncryptedStiNote
+end
+
+class PfEncryptedLink < ApplicationRecord
+  self.table_name = 'pf_encrypted_links'
+
+  encrypts :note
+  belongs_to :owner, class_name: 'PfEncryptedOwner', optional: true
+  belongs_to :item, class_name: 'PfEncryptedItem', optional: true
+end
+
+class PfEncryptedItem < ApplicationRecord
+  self.table_name = 'pf_encrypted_items'
+end
+
+class PfEncryptedOwner < ApplicationRecord
+  self.table_name = 'pf_encrypted_owners'
+
+  include PermissionForge::Concerns::PermissionScopedFindable
+
+  has_many :links, class_name: 'PfEncryptedLink', foreign_key: :owner_id, inverse_of: :owner
+  has_many :items, through: :links
+end
+
+class PfEncryptedScopedOwner < ApplicationRecord
+  self.table_name = 'pf_encrypted_owners'
+
+  include PermissionForge::Concerns::PermissionScopedFindable
+
+  default_scope { joins(:links) }
+  has_many :links, class_name: 'PfEncryptedLink', foreign_key: :owner_id, inverse_of: false
+  has_many :own_items, class_name: 'PfEncryptedItem', foreign_key: :owner_id, inverse_of: false
 end

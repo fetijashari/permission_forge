@@ -123,6 +123,74 @@ module PermissionForge
       assert Operators::ValueTyping.call('not_equal', 'mine', target).equal?(Operators::ValueTyping::UNUSABLE)
     end
 
+    # ---- P0-1 (review of the round-7 fixes): a table no model along the path is on ----
+    #
+    # A `has_many :through` joins its join table, and a default scope or a
+    # host's join can bring in another: tables the query joins that are on
+    # no model along the rule's path. Each table the query joins is resolved
+    # to every loaded model on it (EncryptedAttributes.models_on); one of
+    # them encrypting the column makes it encrypted.
+
+    LINKS = 'pf_encrypted_links'
+
+    def through_attrs
+      { join_type: Operators::Constants::JOINS, field_accessor_path: 'items', field_name: "#{LINKS}.note",
+        operator: 'not_equal', field_value: 'mine' }
+    end
+
+    def link_owners
+      mine = PfEncryptedOwner.create!(title: 'mine')
+      other = PfEncryptedOwner.create!(title: 'other')
+      PfEncryptedLink.create!(owner_id: mine.id, item: PfEncryptedItem.create!(title: 'a'), note: 'mine')
+      PfEncryptedLink.create!(owner_id: other.id, item: PfEncryptedItem.create!(title: 'b', owner_id: other.id), note: 'x')
+      [mine, other]
+    end
+
+    test 'a rule on an encrypted column of a has_many :through join table is refused on field_name' do
+      resource = create_resource(permission_set: @set, name: 'PfEncryptedOwner', read_access: true)
+      rule = new_rule(resource, **through_attrs)
+
+      assert_not rule.valid?
+      assert_includes rule.errors[:field_name], encrypted_message('PfEncryptedLink')
+      assert new_rule(resource, **through_attrs, operator: 'is_not_null', field_value: '').valid?, 'a null check is no comparison'
+      assert new_rule(resource, **through_attrs, field_name: "#{LINKS}.owner_id", field_value: '1').valid?,
+             'a plain column of the join table'
+    end
+
+    test 'a stored one on the join table matches nothing, never the row it should hide, and is reported' do
+      resource = create_resource(permission_set: @set, name: 'PfEncryptedOwner', read_access: true)
+      _mine, other = link_owners
+      rule = stored_rule(resource, **through_attrs)
+
+      assert_reported(rule)
+      assert_empty PfEncryptedOwner.permission_scoped.to_a, 'not_equal must not compare the ciphertext'
+      assert_raises(NotAuthorizedError) { PfEncryptedOwner.find_by(id: other.id) }
+    end
+
+    test 'RuleColumn resolves a joined table no model along the path is on to the models on it' do
+      joined = Operators::RuleSources.tables(PfEncryptedOwner.joins(:items))
+
+      assert_equal LINKS, joined.fetch(LINKS)
+      column = Operators::RuleColumn.find("#{LINKS}.note", [PfEncryptedOwner, PfEncryptedItem], joined: joined)
+
+      assert_predicate column, :encrypted?
+      assert_equal PfEncryptedLink, column.model
+      assert_includes EncryptedAttributes.models_on(LINKS), PfEncryptedLink
+      assert_same Operators::RuleColumn::UNKNOWN,
+                  Operators::RuleColumn.find("#{LINKS}.owner_id", [PfEncryptedOwner, PfEncryptedItem], joined: joined),
+                  'a column no model on the table encrypts stays with the database'
+    end
+
+    test 'a table a default scope joins is seen by the applier: the rule matches nothing' do
+      resource = create_resource(permission_set: @set, name: 'PfEncryptedScopedOwner', read_access: true)
+      _mine, other = link_owners
+      stored_rule(resource, **through_attrs, field_accessor_path: 'own_items')
+
+      assert_includes Operators::RuleSources.of(PfEncryptedScopedOwner.joins(:own_items)), LINKS
+      assert_empty PfEncryptedScopedOwner.permission_scoped.to_a, 'not_equal must not compare the ciphertext'
+      assert_raises(NotAuthorizedError) { PfEncryptedScopedOwner.find_by(id: other.id) }
+    end
+
     # ---- P2-2: single-table inheritance --------------------------------------------
 
     test 'a column a loaded subclass encrypts is encrypted for the whole hierarchy on its table' do
