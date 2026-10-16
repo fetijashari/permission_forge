@@ -65,6 +65,7 @@ detectors:
       - PermissionForge::PeopleHelper
       - PermissionForge::RuleProblemsHelper
       - PermissionForge::SentencesHelper
+      - PermissionForge::ConditionsHelper
       - PermissionForge::SettingsHelper
       - PermissionForge::UiHelper
       - PermissionForge::Api::Pagination
@@ -151,6 +152,7 @@ detectors:
       - PermissionForge::LabelsHelper
       - PermissionForge::PeopleHelper
       - PermissionForge::SentencesHelper
+      - PermissionForge::ConditionsHelper
       - PermissionForge::SettingsHelper
       - PermissionForge::UiHelper
       # Sentence helpers: format a passed event, no state (same as the other helpers)
@@ -214,6 +216,7 @@ detectors:
       - PermissionForge::ResourceChain
       # Rule sentence helpers called from the views with (rule, model_name)
       - PermissionForge::SentencesHelper
+      - PermissionForge::ConditionsHelper
       # One function per operator shape (SHAPES, dispatched by name): (value, target)
       - PermissionForge::Operators::ValueTyping
 
