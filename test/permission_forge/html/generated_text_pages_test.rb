@@ -69,6 +69,28 @@ module PermissionForge
         assert_not_includes response.body, INSTALL_MESSAGE, 'the builder pre-fills no generated message'
       end
 
+      # Review of the round-7 fixes (P2-1): the Permission Set Audit tab
+      # printed stored names and labels as they were; its CSV keeps them.
+      test 'the Permission Set Audit tab names generated text in the page language; its CSV keeps the stored values' do
+        PermissionForge.configuration.audit_trail_enabled = true
+        @set.update_columns(name: 'Untitled Permission Set')
+        @email.update_columns(label: 'Email')
+        create_resource_action(resource: @resource, name: 'sync', label: 'Sync')
+        create_permission_set_rule(permission_set: @set, resource: @resource).update_columns(name: 'Untitled Rule')
+
+        get pf("/permission_sets/#{@set.id}"), params: { tab: 'audit', locale: 'sq' }
+        assert_response :success
+        table = Nokogiri::HTML(response.body).at_css('.pf-table--audit').text
+        ['Untitled Permission Set', 'Untitled Rule', 'Email', 'Sync'].each { |text| assert_not_includes table, text }
+        assert_includes table, I18n.t('permission_forge.ui.untitled.permission_set', locale: :sq)
+        assert_includes table, I18n.t('permission_forge.ui.untitled.permission_set_rule', locale: :sq)
+        assert_includes table, 'email'
+        assert_includes table, 'sync'
+
+        get pf("/permission_sets/#{@set.id}.csv"), params: { tab: 'audit', locale: 'sq' }
+        ['Untitled Permission Set', 'Untitled Rule', 'Email', 'Sync'].each { |text| assert_includes response.body, text, 'the CSV keeps the stored value' }
+      end
+
       test 'a set and a rule stored under an install default name are named in the page language' do
         @set.update_columns(name: 'Untitled Permission Set')
         create_permission_set_rule(permission_set: @set, resource: @resource).update_columns(name: 'Untitled Rule')
