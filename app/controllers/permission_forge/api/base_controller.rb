@@ -30,12 +30,6 @@ module PermissionForge
       AUDIT_SOURCE = 'api'
       # Largest id a bigint column holds; past it PostgreSQL raises instead of matching nothing.
       MAX_RECORD_ID = (2**63) - 1
-      # Body attributes that refer to another record (#with_reference_id),
-      # with the message of a reference that names none.
-      REFERENCES = {
-        permission_set_group_id: 'permission_forge.validations.permission_set.group_missing'
-      }.freeze
-
       before_action :set_api_locale
       before_action :pf_require_tenant
       # After api_auth (a refused request records its own event).
@@ -193,24 +187,18 @@ module PermissionForge
         pf_text_param(:name)
       end
 
-      # `attrs` with the reference `key` (e.g. permission_set_group_id)
-      # replaced by the id of the record it names in `scope`, looked up like
-      # every identifier (tenant-scoped): its numeric id, or — under
-      # api_record_identifier = :uuid — its uuid, the identifier the API
-      # answers with. A blank value (null, "") is no reference (nil). Anything
-      # else that names no record of the scope is a 422 keyed by `key`; a
-      # uuid that starts with digits is never read as an id (the integer
-      # column would cast "12ab…" to 12).
+      # `attrs` with the reference `key` (e.g. permission_set_group_id), or
+      # its uuid key (permission_set_group_uuid), replaced by the id of the
+      # record it names in `scope` (Api::ReferenceInput), looked up like
+      # every identifier (tenant-scoped): under `key` its numeric id, or —
+      # under api_record_identifier = :uuid — its uuid, the identifier the
+      # API answers with; under the uuid key its uuid. A uuid that starts
+      # with digits is never read as an id (the integer column would cast
+      # "12ab…" to 12).
       #
       # @raise [ParamShapes::InvalidParam]
       def with_reference_id(attrs, key, scope)
-        return attrs unless attrs.key?(key)
-
-        value = attrs[key]
-        return attrs.merge(key => nil) if value.nil? || value == ''
-
-        attrs.merge(key => referenced_record(scope, value)&.id ||
-                           raise(ParamShapes::InvalidParam.new(key, I18n.t(REFERENCES.fetch(key)))))
+        ReferenceInput.call(attrs, key, scope) { |value| referenced_record(scope, value) }
       end
 
       def referenced_record(scope, value)

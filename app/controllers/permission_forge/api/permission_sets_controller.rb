@@ -80,11 +80,12 @@ module PermissionForge
       # The activation conditions take their shapes from Api::InputShapes
       # (allowed_ips a String or a list of Strings, an hour digits, a flag
       # text; null or "" clears); permission_set_group_id takes the group's
-      # id or, under api_record_identifier = :uuid, its uuid
-      # (BaseController#with_reference_id).
+      # id or, under api_record_identifier = :uuid, its uuid, and
+      # permission_set_group_uuid its uuid (BaseController#with_reference_id).
       def permission_set_params
         attrs = pf_record_attributes(:permission_set, PermissionForge::PermissionSet,
-                                     :name, :description, :is_active, :is_editable, :is_muting, :permission_set_group_id,
+                                     :name, :description, :is_active, :is_editable, :is_muting,
+                                     :permission_set_group_id, :permission_set_group_uuid,
                                      :requires_session_flag, :allowed_hours_start, :allowed_hours_end, :allowed_ips)
         with_reference_id(attrs, :permission_set_group_id, PermissionForge::PermissionSetGroup)
       end

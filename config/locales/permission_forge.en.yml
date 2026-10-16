@@ -32,6 +32,7 @@ en:
         not_null: A required value is missing. Nothing was saved.
         record_not_unique: Another request saved the same record a moment ago; it
           already exists
+        reference_conflict: must name the same record as %{other}
         resource_names_no_model: names no model this app can load
         route_not_found: No API endpoint answers this path and method
         section_missing: is missing, empty or not an object

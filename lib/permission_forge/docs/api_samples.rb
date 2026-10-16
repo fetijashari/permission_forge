@@ -26,7 +26,8 @@ module PermissionForge
       # A value for a key no EXAMPLES entry gives, by its type.
       TYPE_EXAMPLES = {
         integer: 1, string: 'text', boolean: true, uuid: '00000000-0000-4000-8000-000000000001', time: CREATED,
-        foreign_identifier: 1, host_key: 42, host_key_list: [], string_list: [], object: {}
+        foreign_identifier: 1, foreign_uuid: '00000000-0000-4000-8000-000000000002', host_key: 42, host_key_list: [],
+        string_list: [], object: {}
       }.freeze
 
       # The example record of each payload a sample shows.
@@ -35,7 +36,8 @@ module PermissionForge
           id: 12, uuid: 'd2b4c7e1-5a3f-4b8e-9c6d-1f2a3b4c5d6e', name: 'Sales Team', description: 'Read and edit customers',
           is_active: true, is_editable: true, is_muting: false, requires_session_flag: nil,
           allowed_ips: '203.0.113.0/24', allowed_ip_list: ['203.0.113.0/24'], allowed_hours_start: nil, allowed_hours_end: nil,
-          permission_set_group_id: 3, created_at: CREATED, updated_at: UPDATED
+          permission_set_group_id: 3, permission_set_group_uuid: '8a6f2c1d-3e4b-4f5a-8b7c-9d0e1f2a3b4c',
+          created_at: CREATED, updated_at: UPDATED
         },
         permission_set_group: {
           id: 3, uuid: '8a6f2c1d-3e4b-4f5a-8b7c-9d0e1f2a3b4c', name: 'Sales', description: nil,
@@ -125,7 +127,17 @@ module PermissionForge
           serializer = Api::Serializers.const_get("#{payload.to_s.camelize}Serializer")
           fields = Api::Schema.payload(payload)
           declared!(serializer, fields.keys)
-          serializer.new(record(payload, fields)).as_json
+          example = record(payload, fields)
+          serializer.new(example).with_reference_uuids(reference_uuids(serializer, example)).as_json
+        end
+
+        # The example's own uuid for each reference (it has no database to
+        # look them up in): association => { id => uuid }.
+        def reference_uuids(serializer, example)
+          serializer.references.to_h do |association|
+            id_key, uuid_key = Api::Serializers::BaseSerializer.reference_keys(association)
+            [association, { example[id_key] => example[uuid_key] }]
+          end
         end
 
         def declared!(serializer, keys)

@@ -32,6 +32,7 @@ sq:
         not_null: Mungon një vlerë e detyrueshme. Asgjë nuk u ruajt.
         record_not_unique: Një kërkesë tjetër e ruajti të njëjtin regjistrim një çast
           më parë; ai ekziston tashmë
+        reference_conflict: duhet të tregojë të njëjtin regjistrim si %{other}
         resource_names_no_model: nuk emërton asnjë model që ky aplikacion mund ta
           ngarkojë
         route_not_found: Asnjë pikë fundore e API-së nuk i përgjigjet këtij shtegu

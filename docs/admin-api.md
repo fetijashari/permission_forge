@@ -141,11 +141,14 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
     "allowed_hours_start": null,
     "allowed_hours_end": null,
     "permission_set_group_id": 3,
+    "permission_set_group_uuid": "8a6f2c1d-3e4b-4f5a-8b7c-9d0e1f2a3b4c",
     "created_at": "2026-03-10T12:00:00.000Z",
     "updated_at": "2026-03-12T09:30:00.000Z"
   }
 }
 ```
+
+**References to other records.** A key that names another PermissionForge record is answered twice: `<record>_id`, its numeric id (as through 0.14.1), then `<record>_uuid`, its uuid — `permission_set_group_id` / `permission_set_group_uuid` on a Permission Set, `permission_set_id` / `permission_set_uuid` on a Resource and an assignment, `resource_id` / `resource_uuid` on a field and an action, both pairs on a rule, `permission_set_group_id` / `permission_set_group_uuid` on a group member. Both are there under either `api_record_identifier`; under `:uuid` follow the `_uuid` key, the identifier the URLs take. The uuid is `null` where the id is. A page of records looks the uuids up in one query per reference. `user_id` is your user's key and has no companion. Through 0.15.0-rc only the numeric id was answered (field test round 8, D#29). A Permission Set takes its group back under either key (see [Attribute shapes](#attribute-shapes)).
 
 **Success (collection):** every list endpoint is paginated and answers `meta.pagination` with its page:
 ```json sample=permission_set_group_collection
@@ -239,8 +242,8 @@ Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 ca
 - a copy's `name` that is not text (`true`, `7`, a list, an object) on `…/clone`: `{"name": ["must be a string"]}`, and nothing is copied (through 0.15.0-rc the default copy name was used);
 - a single assignment or group membership whose `user_id` is missing, is not one user id (`"abc"` for an integer key, `[2]`, an object), or names nobody `user_list_resolver` lists: see [Permission Set Users](#permission-set-users-assign-users-to-sets);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
-- `null` for an attribute whose column is NOT NULL (`"is_active": null`, `"label": null`, `"mask_strategy": null`): `{"is_active": ["can't be blank"]}` (through 0.15.0-rc a 500). `""` for a boolean is no boolean: `{"is_active": ["must be true or false"]}`;
-- a `permission_set_group_id` that names no group of the current tenant;
+- `null` for an attribute whose column is NOT NULL (`"is_active": null`, `"mask_strategy": null`): `{"is_active": ["can't be blank"]}` (through 0.15.0-rc a 500). `""` for a boolean is no boolean: `{"is_active": ["must be true or false"]}`. A field's or action's `label` is not one of them: `null`, `""` and white space are "no label" and store the row's name (see [Resource Fields](#resource-fields-nested-under-resource));
+- a `permission_set_group_id` or `permission_set_group_uuid` that names no group of the current tenant, or both keys sent naming different groups (`{"permission_set_group_uuid": ["must name the same record as permission_set_group_id"]}`);
 - a record another request saved a moment ago: two requests creating the same assignment, group membership, Resource or field at once both pass the uniqueness validation and the database's unique index refuses the second — the answer is the validation's own message, keyed by its attribute: `{"user_id": ["already holds this Permission Set"]}` for an assignment, `{"user_id": ["is already a member of this group"]}` for a group membership, `{"name": ["already exists in this permission set"]}` for a Resource, `{"name": ["has already been taken"]}` for a field. Through 0.14.1 this was a 500 (`ActiveRecord::RecordNotUnique`). When the index the database names belongs to no validation of the gem's models (an index you added yourself), the message is on `base`;
 - a rule whose `field_name` is not a column of its model (`{"field_name": ["names onwer_id, which is not a column of Customer"]}`), or a join rule whose `field_accessor_path` names an association the model does not have or one no join can be built through (`{"field_accessor_path": ["names ownr, which is not an association of Customer"]}`): see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name);
 - a rule whose `field_value` its column cannot hold (`{"field_value": ["is not a value Customer.owner_id can hold"]}`: see [A value the column cannot hold](row-level-rules.md#a-value-the-column-cannot-hold)), or whose column holds a secret (`{"field_name": ["names a column that holds a secret …"]}`: see `config.rule_secret_column_patterns`), on a new rule and when what it compares changes;
@@ -263,6 +266,7 @@ Every attribute of a body section (`permission_set`, `resource`, `resource_field
 | a rule's `field_value` | a String, a JSON number or a JSON boolean; a list of them, none containing a comma, under `in`, `not_in` and `between` (the operator of the request, else the stored rule's) | the text: `5` → `"5"`, `1.5` → `"1.5"`, `true` → `"true"`, `["active", "lead"]` → `"active,lead"` |
 | `allowed_ips`, the hours, `requires_session_flag` | see [Activation conditions](#permission-sets) | |
 | `permission_set_group_id` | the group's id, or its uuid under `api_record_identifier = :uuid`; `null` or `""` clears it | the group's id |
+| `permission_set_group_uuid` | the group's uuid, under either `api_record_identifier` (the key the answer carries beside `permission_set_group_id`); `null` or `""` clears it. Sent with `permission_set_group_id`, both must name the same group | the group's id |
 
 `null` is passed on as a value: a nullable column is cleared, a NOT NULL one answers its own 422. A key the endpoint does not take is ignored, as strong parameters ignore it (logged, or raised under `action_on_unpermitted_parameters = :raise`).
 
@@ -346,10 +350,11 @@ curl -X PATCH http://localhost:3000/permissions/api/permission_sets/abc-123 \
     }
   }'
 # Response: 200 OK
-# Move the set into a group with "permission_set_group_id": the group's uuid (as
-# the API returns it) or its numeric id; null or "" takes it out of its group.
-# Under api_record_identifier = :id only the numeric id is read. A value that names
-# no group of the current tenant is a 422 {"permission_set_group_id": [...]}.
+# Move the set into a group with "permission_set_group_uuid": the group's uuid (as
+# the answer carries it), or with "permission_set_group_id": its numeric id, or
+# its uuid under api_record_identifier = :uuid; null or "" takes it out of its
+# group. A value that names no group of the current tenant is a 422 keyed by the
+# key it was sent in. The answer names the group under both keys.
 
 # Delete a permission set
 DELETE /permissions/api/permission_sets/:uuid
@@ -472,8 +477,11 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
     }
   }'
 # Response: 201 Created
-# "label" is what the admin shows; a missing or blank label defaults to the
-# field's name ("email_address"): the admin shows your translation of it, or the name
+# "label" is what the admin shows; a missing, null, "" or white-space label is
+# "no label" and stores the field's name ("email"), on create and on update (as
+# the admin stores a label it blanks): the admin shows your translation of the
+# column, or the name. An action's "label" works the same way. Through
+# 0.15.0-rc an update with "label": null was a 422 and "" stored an empty label.
 # mask_strategy options: "full", "email", "last4", "first1_last4",
 #                        plus any keys from config.custom_mask_strategies
 # Duplicate field names within a resource return 422
@@ -582,7 +590,7 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
   -H "Content-Type: application/json" \
   -d '{ "user_id": 42, "expires_at": "2026-12-31T23:59:00Z" }'
 # Response: 201 Created — expires_at is optional (time-bound assignment)
-# { "data": { "id": 7, "uuid": "…", "permission_set_id": 1, "user_id": 42, … },
+# { "data": { "id": 7, "uuid": "…", "permission_set_id": 1, "permission_set_uuid": "abc-123", "user_id": 42, … },
 #   "meta": { "cache": { "confirmed": true, "process_local": false, "in_request": true, "unconfirmed": 0 } } }
 # Assigning a user who is already in the set returns 422 (uniqueness validation)
 # An expires_at that is not ISO 8601 (see below), or not after now, returns 422 and assigns nobody

@@ -22,7 +22,9 @@ module PermissionForge
     # Array a list of that element. `:foreign_identifier` marks the numeric id
     # of another PermissionForge record, which the API's URLs do not take
     # under `api_record_identifier = :uuid`: its value is unchanged (the
-    # record's id) until a later version answers the identifier instead.
+    # record's id), and the key after it, `:foreign_uuid`, names the same
+    # record by its uuid (`permission_set_id`, `permission_set_uuid`:
+    # Serializers::BaseSerializer.reference).
     #
     # test/permission_forge/api/envelope_schema_test.rb asserts every route,
     # in every error class, against this module and every serializer's keys
@@ -40,6 +42,7 @@ module PermissionForge
         uuid: ->(value) { value.is_a?(String) && value.match?(UUID) },
         time: ->(value) { value.is_a?(String) && Check.iso8601?(value) },
         foreign_identifier: ->(value) { value.is_a?(Integer) },
+        foreign_uuid: ->(value) { value.is_a?(String) && value.match?(UUID) },
         host_key: ->(value) { value.is_a?(Integer) || value.is_a?(String) },
         host_key_list: ->(value) { value.is_a?(Array) && value.all? { |item| item.is_a?(Integer) || item.is_a?(String) } },
         string_list: ->(value) { value.is_a?(Array) && value.all?(String) },
@@ -61,36 +64,37 @@ module PermissionForge
           is_active: :boolean, is_editable: :boolean, is_muting: :boolean,
           requires_session_flag: :string?, allowed_ips: :string?, allowed_ip_list: :string_list,
           allowed_hours_start: :integer?, allowed_hours_end: :integer?,
-          permission_set_group_id: :foreign_identifier?, created_at: :time, updated_at: :time
+          permission_set_group_id: :foreign_identifier?, permission_set_group_uuid: :foreign_uuid?, created_at: :time, updated_at: :time
         },
         resource: {
-          id: :integer, uuid: :uuid, permission_set_id: :foreign_identifier, name: :string, description: :string?,
-          is_active: :boolean, is_editable: :boolean,
+          id: :integer, uuid: :uuid, permission_set_id: :foreign_identifier, permission_set_uuid: :foreign_uuid,
+          name: :string, description: :string?, is_active: :boolean, is_editable: :boolean,
           read_access: :boolean, create_access: :boolean, edit_access: :boolean, delete_access: :boolean,
           view_all: :boolean, modify_all: :boolean,
           created_at: :time, updated_at: :time
         },
         resource_field: {
-          id: :integer, uuid: :uuid, resource_id: :foreign_identifier, name: :string, label: :string, description: :string?,
-          is_active: :boolean, is_editable: :boolean,
+          id: :integer, uuid: :uuid, resource_id: :foreign_identifier, resource_uuid: :foreign_uuid,
+          name: :string, label: :string, description: :string?, is_active: :boolean, is_editable: :boolean,
           read_access: :boolean, edit_access: :boolean, mask_access: :boolean, mask_strategy: :string,
           created_at: :time, updated_at: :time
         },
         resource_action: {
-          id: :integer, uuid: :uuid, resource_id: :foreign_identifier, name: :string, label: :string?, description: :string?,
-          is_permitted: :boolean, is_active: :boolean,
+          id: :integer, uuid: :uuid, resource_id: :foreign_identifier, resource_uuid: :foreign_uuid,
+          name: :string, label: :string?, description: :string?, is_permitted: :boolean, is_active: :boolean,
           created_at: :time, updated_at: :time
         },
         permission_set_rule: {
-          id: :integer, uuid: :uuid, permission_set_id: :foreign_identifier, resource_id: :foreign_identifier,
+          id: :integer, uuid: :uuid, permission_set_id: :foreign_identifier, permission_set_uuid: :foreign_uuid,
+          resource_id: :foreign_identifier, resource_uuid: :foreign_uuid,
           name: :string, failure_message: :string?, join_type: :string?,
           field_name: :string, field_value: :string, field_accessor_path: :string?,
           operator: :string, include_nulls: :boolean, is_active: :boolean, is_editable: :boolean,
           created_at: :time, updated_at: :time
         },
         permission_set_user: {
-          id: :integer, uuid: :uuid, permission_set_id: :foreign_identifier, user_id: :host_key, expires_at: :time?,
-          created_at: :time, updated_at: :time
+          id: :integer, uuid: :uuid, permission_set_id: :foreign_identifier, permission_set_uuid: :foreign_uuid,
+          user_id: :host_key, expires_at: :time?, created_at: :time, updated_at: :time
         },
         audit_event: {
           id: :integer, uuid: :uuid, occurred_at: :time, event: :string, category: :string,
@@ -104,8 +108,8 @@ module PermissionForge
           created_at: :time, updated_at: :time
         },
         permission_set_group_user: {
-          id: :integer, uuid: :uuid, permission_set_group_id: :foreign_identifier, user_id: :host_key,
-          created_at: :time, updated_at: :time
+          id: :integer, uuid: :uuid, permission_set_group_id: :foreign_identifier, permission_set_group_uuid: :foreign_uuid,
+          user_id: :host_key, created_at: :time, updated_at: :time
         }
       }.freeze
 
@@ -192,6 +196,7 @@ module PermissionForge
       def payload_keys(name) = payload(name).keys
 
       # @return [Array<Symbol>] the keys of a payload that hold another record's numeric id
+      #   (each followed by its `:foreign_uuid` key)
       def foreign_identifiers(name)
         payload(name).select { |_key, type| type.is_a?(Symbol) && base_type(type) == :foreign_identifier }.keys
       end

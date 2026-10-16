@@ -11,6 +11,7 @@ module PermissionForge
     include PermissionForge::Concerns::KeepsCopiedValues
     include PermissionForge::Concerns::ValidatesColumnLengths
     include PermissionForge::Concerns::RequiresName # name present, on create or rename
+    include PermissionForge::Concerns::NormalizesLabel # a blank label is stored as the name
     include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -26,11 +27,9 @@ module PermissionForge
     permission_set_user_lookup :via_resource
 
     # The install migration's column default for label: a row created
-    # without one (the API, the console) would show it everywhere the admin
-    # names the field.
+    # without one (the API, the console) is labelled with its name instead
+    # (NormalizesLabel), never with this.
     UNTITLED_LABEL = PermissionForge::GeneratedText::UNTITLED_FIELD
-
-    before_validation :default_label, on: :create
 
     # optional: as declared since 0.13 (the foreign key holds); stated, so the
     # host's belongs_to_required_by_default decides nothing here.
@@ -142,16 +141,6 @@ module PermissionForge
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
     private
-
-    # A new row without a label (blank, or the column default) is labelled
-    # as generated rows are: with its name — never English made up from it
-    # (the admin shows the host's translation, or the name: GeneratedText).
-    # Only on create: a label an admin set later is never replaced.
-    def default_label
-      return if name.blank? || (label.present? && label != UNTITLED_LABEL)
-
-      self.label = name.to_s
-    end
 
     def mask_access?
       mask_access == true
