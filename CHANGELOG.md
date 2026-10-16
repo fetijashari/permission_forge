@@ -1965,9 +1965,12 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
 - **A Permission Set with two Resources of one single-table-inheritance chain is named with the Resource.** The field
   drawer's "Across all Permission Sets" showed "Sales rep ∅ Hidden" and "Sales rep ◉ Read-only" side by side, and a
   person's effective access "from Sales rep" (field test round 7, B#35); such a row reads "Sales rep · VipCustomer",
-  the model marked as host data (`Admin::ChainEntries`, `pf_set_entry_name`).
+  the model marked as host data (`Admin::ChainEntries`, `pf_set_entry_name`). A Muting Permission Set's reasons there —
+  a flag, a field or an action it takes away — name the Resource whose row does the muting the same way
+  (`pf_muting_set_name`).
   <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#the drawer's rows name the Resource when the set holds more than one of the chain -->
   <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#a person's effective access names the Resource the same way -->
+  <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#a person's effective access names the muting Resource the same way -->
 - **Home counts people with one Macedonian noun.** "1 лице го има овој сет" stood beside "1 корисник" (field test round
   7, C#92); every count of people on Home uses the noun of `ui.people_count`, in every locale (a glossary test).
   <!-- pin: test/permission_forge/locale_glossary_test.rb#mk: Home counts people with the noun of ui.people_count -->

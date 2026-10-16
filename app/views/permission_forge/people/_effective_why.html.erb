@@ -7,7 +7,7 @@
     <%= render 'why_item', key: "#{res.name}.#{flag}", title: t('.flag_title', flag: flag_label, resource: plural),
                badge: pf_state_cell(outcome.state, aria: t('.flag_title', flag: flag_label, resource: plural)),
                reasons: outcome.granted_by.map { |ps| ['✓', pf_t_markup(set: pf_chain_set_name(ps, res.name)) { |held| t('.flag_granted', **held, flag: flag_label) }, ps] } +
-                        outcome.blocked_by.map { |ps| ['⊘', t('.flag_muted', set: pf_record_name(ps), flag: flag_label), ps] } +
+                        outcome.blocked_by.map { |ps| ['⊘', pf_t_markup(set: pf_muting_set_name(ps, res.name) { |row| row.public_send(flag) == true }) { |held| t('.flag_muted', **held, flag: flag_label) }, ps] } +
                         (outcome.granted_by.empty? ? [['–', t('.flag_none', flag: flag_label), nil]] : []),
                note: outcome.blocked? ? t('.note_muting') : t('.note_add_up') %>
   <% end %>
@@ -26,7 +26,8 @@
     <% field_label = pf_field_label_text(res.name, field.name) %>
     <%# A grant is the deciding entry's: an STI base's (decided_by) or the resource's own (B#35). %>
     <% reasons = field.grants.map { |src| ['✓', pf_field_source_sentence(src, set_name: pf_chain_set_name(src.permission_set, res.name, field.decided_by || res.name)), src.permission_set] } %>
-    <% reasons += field.mutes.map { |src| ['⊘', pf_field_source_sentence(src), src.permission_set] } %>
+    <%# A mute names the Resource whose row takes the field away: its read or edit, or a row of the field (B#35). %>
+    <% reasons += field.mutes.map { |src| ['⊘', pf_field_source_sentence(src, set_name: pf_muting_set_name(src.permission_set, res.name) { |row| pf_row_mutes_field?(row, field.name) }), src.permission_set] } %>
     <% reasons << ['⚠', t('.field_unconfigured', behaviour: t("permission_forge.ui.unconfigured.#{PermissionForge.configuration.unconfigured_field_strategy}", default: t('permission_forge.ui.unconfigured.block'))), nil] if field.unconfigured %>
     <% reasons << ['–', t('.field_capped'), nil] if field.capped %>
     <% reasons << ['◇', t('.field_virtual'), nil] if field.implicit %>
@@ -45,7 +46,7 @@
     <%= render 'why_item', key: "#{res.name}.action.#{name}", title: t('.action_title', action: action_label, resource: plural),
                badge: pf_state_cell(outcome.state, aria: action_label),
                reasons: outcome.granted_by.map { |ps| ['✓', pf_t_markup(set: pf_chain_set_name(ps, res.name)) { |held| t('.action_granted', **held) }, ps] } +
-                        outcome.blocked_by.map { |ps| ['⊘', t('.action_muted', set: pf_record_name(ps)), ps] } +
+                        outcome.blocked_by.map { |ps| ['⊘', pf_t_markup(set: pf_muting_set_name(ps, res.name) { |row| pf_row_permits_action?(row, name) }) { |held| t('.action_muted', **held) }, ps] } +
                         (outcome.granted_by.empty? ? [['–', t('.action_none'), nil]] : []),
                note: outcome.blocked? ? t('.note_muting') : t('.note_add_up') %>
   <% end %>

@@ -55,8 +55,10 @@ module PermissionForge
         create_resource(permission_set: hold, name: 'PfStiTicket', read_access: true)
         held_sub = create_resource(permission_set: hold, name: 'PfStiBugTicket', read_access: false)
         create_resource_action(resource: held_sub, name: 'export', is_permitted: true)
-        create_resource_field(resource: held_sub, name: 'title', read_access: true)
+        create_resource_field(resource: held_sub, name: 'status', read_access: true)
         create_resource_action(resource: @sub, name: 'export', is_permitted: true)
+        create_resource_field(resource: @sub, name: 'status', read_access: true)
+        create_resource_field(resource: @both.resources.find_by!(name: 'PfStiTicket'), name: 'status', read_access: true)
         create_permission_set_user(user: @bo, permission_set: hold)
 
         get pf("/people/#{@bo.id}"), params: { tab: 'effective', open: ['PfStiBugTicket'] }
@@ -68,6 +70,8 @@ module PermissionForge
 
         assert(muted.any? { |text| text.include?('Contractor hold · PfStiTicket') && text.include?(flag) }, "the read flag: #{muted}")
         assert(muted.any? { |text| text.include?('Contractor hold · PfStiBugTicket') && !text.include?(flag) }, "the action: #{muted}")
+        status = doc.css('[id="pf-why-PfStiBugTicket.field.status"] li.pf-why__reason').map { |node| node.at_css('.pf-stack > span').text.squish }
+        assert(status.any? { |text| text.include?('Contractor hold · PfStiBugTicket') }, "the field: #{status}")
         assert_not(muted.any? { |text| text.match?(/Contractor hold(?! ·)/) }, 'never the set alone')
       end
 
