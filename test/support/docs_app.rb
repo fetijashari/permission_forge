@@ -15,7 +15,10 @@
 #   bundle exec ruby test/support/docs_app.rb --serve 4018
 #
 # The skeleton (docs_app/skeleton) holds the files those generators write,
-# unchanged where the docs do not replace them. Nothing from test/dummy or
+# as they write them: the documents' `file=` blocks do the wiring (the
+# Customer model, ApplicationController, the scaffold's controller). Only
+# the User model's include (a one-line fragment in the README), the engine
+# mount and the docs app's own routes and API controllers come pre-wired. Nothing from test/dummy or
 # test_helper is loaded: the app runs on the shipped defaults, as a reader's.
 
 ENV['RAILS_ENV'] = 'test'
@@ -71,15 +74,18 @@ module DocsApp
   module Default
     module_function
 
+    # The documents run on the app as installed (nobody holds a set); the
+    # scenarios' sets are seeded after them, on the app as the documents
+    # wired it.
     def run
       Application.boot!(skeleton: 'skeleton')
       Fixtures.host_tables!
       Fixtures.people!
       install = Install.from_readme!
-      Fixtures.permissions!
       Database.snapshot!
       documents = Programs.run_all(DocsApp.documents)
       Database.restore!
+      Fixtures.permissions!
       { mode: 'default', rails: Rails.version, install: install, documents: documents, scenarios: Scenarios.run }
     end
   end

@@ -18,8 +18,8 @@ module DocsApp
       Fixtures.host_tables!
       Fixtures.people!
       Install.from_readme!
-      Fixtures.permissions!
       apply_files!
+      Fixtures.permissions!
       turbo!
       Scenarios.option_b!
       announce(port)

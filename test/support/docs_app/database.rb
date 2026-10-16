@@ -9,16 +9,17 @@ module DocsApp
     module_function
 
     def file = File.join(Application.root, 'db/test.sqlite3')
-    def golden = "#{file}.golden"
+    def copy(name) = "#{file}.#{name}"
 
-    def snapshot!
+    # @param name [Symbol] :golden is the app as installed
+    def snapshot!(name = :golden)
       disconnect
-      FileUtils.cp(file, golden)
+      FileUtils.cp(file, copy(name))
     end
 
-    def restore!
+    def restore!(name = :golden)
       disconnect
-      FileUtils.cp(golden, file)
+      FileUtils.cp(copy(name), file)
       Dir["#{file}-*"].each { |journal| FileUtils.rm_f(journal) }
     end
 

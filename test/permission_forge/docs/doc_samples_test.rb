@@ -170,6 +170,14 @@ module PermissionForge
         assert_empty taken['retried']
         assert_operator taken['claims'].size, :>=, 2
         assert taken['claims'].all?, 'README step 5 holds once step 4 ran'
+        assert_step_five_needs_step_four(taken['claims'], taken.fetch('without_assignment'))
+      end
+
+      # The documents run where nobody holds a set: without step 4's
+      # assignment, step 5's claims fail (a fixture set would make them pass).
+      def assert_step_five_needs_step_four(claims, without)
+        assert_equal claims.size, without.size
+        assert_not without.all?, "README step 5's claims must fail when step 4 assigns nothing: #{without.inspect}"
       end
 
       def docs_app(mode)
