@@ -23,7 +23,8 @@ module PermissionForge
       }.freeze
 
       DAY_FILTERS = [7, 30, 90].freeze
-      CSV_HEADER = ['Type', 'Record', 'Where', 'Created by', 'Created at', 'Last edited by', 'Last edited at'].freeze
+      # The CSV's columns, named by permission_forge.ui.audit.csv.<column>.
+      CSV_COLUMNS = %w[type record where created_by created_at edited_by edited_at].freeze
 
       # `last_event` — the record's latest change event, or nil (no events:
       # auditing off, or the record predates the audit log).
@@ -93,7 +94,8 @@ module PermissionForge
       # @param describe [#call] (entry) -> [type_label, record_label, where]
       # @param person [#call] (entry) -> [created by, last edited by]
       def to_csv(entries, describe:, person:)
-        Csv.document([CSV_HEADER] + entries.map { |entry| csv_row(entry, describe, person) })
+        header = CSV_COLUMNS.map { |column| I18n.t("permission_forge.ui.audit.csv.#{column}") }
+        Csv.document([header] + entries.map { |entry| csv_row(entry, describe, person) })
       end
 
       private

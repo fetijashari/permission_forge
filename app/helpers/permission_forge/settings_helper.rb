@@ -54,7 +54,7 @@ module PermissionForge
       options << row.value unless options.include?(row.value.to_s)
       pills = options.map do |opt|
         current = opt == row.value.to_s
-        content_tag(:span, opt, class: "pf-pill pf-pill--opt#{' pf-pill--current' if current}", 'aria-current': (current ? 'true' : nil))
+        content_tag(:code, opt, class: "pf-pill pf-pill--opt#{' pf-pill--current' if current}", 'aria-current': (current ? 'true' : nil))
       end
       content_tag(:span, safe_join(pills, ' '), class: 'pf-row pf-row--tight')
     end
@@ -88,7 +88,7 @@ module PermissionForge
       value = row.value
       return content_tag(:span, t('permission_forge.settings.values.empty'), class: 'pf-text-3') if value.blank?
 
-      content_tag(:span, safe_join(value.map { |k, v| content_tag(:span, "#{k} → #{v}") }), class: 'pf-map')
+      content_tag(:span, safe_join(value.map { |k, v| content_tag(:code, "#{k} → #{v}") }), class: 'pf-map')
     end
 
     def pf_setting_secret(row)

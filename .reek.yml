@@ -61,6 +61,7 @@ detectors:
       - PermissionForge::AuditAttributionHelper
       - PermissionForge::BadgesHelper
       - PermissionForge::ChangesHelper
+      - PermissionForge::LabelsHelper
       - PermissionForge::PeopleHelper
       - PermissionForge::RuleProblemsHelper
       - PermissionForge::SentencesHelper
@@ -147,6 +148,7 @@ detectors:
       - PermissionForge::AuditAttributionHelper
       - PermissionForge::BadgesHelper
       - PermissionForge::ChangesHelper
+      - PermissionForge::LabelsHelper
       - PermissionForge::PeopleHelper
       - PermissionForge::SentencesHelper
       - PermissionForge::SettingsHelper

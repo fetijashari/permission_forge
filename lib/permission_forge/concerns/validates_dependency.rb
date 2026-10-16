@@ -44,7 +44,10 @@ module PermissionForge
           define_method(method_name) do
             return if belongs_to_muting_permission_set?
 
-            errors.add(field, "requires #{requires} to be enabled") if send(field) && !send(requires)
+            return unless send(field) && !send(requires)
+
+            errors.add(field, :requires,
+                       message: I18n.t('permission_forge.validations.requires', requires: requires))
           end
           private method_name
         end

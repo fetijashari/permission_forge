@@ -16,7 +16,7 @@
   </div>
   <div class="pf-setting__value">
     <%= pf_setting_value(row) %>
-    <span class="pf-fs-12 pf-text-3"><%= t('.default', value: pf_setting_default(row)) %></span>
+    <span class="pf-fs-12 pf-text-3"><%= t('.default_html', value: tag.code(pf_setting_default(row), class: 'pf-mono')) %></span>
   </div>
   <details class="pf-setting__how" <%= 'open' if focused %>>
     <summary class="pf-btn pf-btn--sm"><%= t('.how_to_change') %></summary>
@@ -32,7 +32,7 @@
         <li>2. <%= t('.step_deploy') %></li>
         <li>3. <%= t('.step_reload') %></li>
       </ol>
-      <%= link_to t('.docs', key: key), "#{PermissionForge.configuration.admin_docs_url}##{key}", class: 'pf-fs-12', target: '_blank', rel: 'noopener noreferrer' %>
+      <%= link_to t('.docs_html', key: tag.code(key)), "#{PermissionForge.configuration.admin_docs_url}##{key}", class: 'pf-fs-12', target: '_blank', rel: 'noopener noreferrer' %>
     </div>
   </details>
 </div>

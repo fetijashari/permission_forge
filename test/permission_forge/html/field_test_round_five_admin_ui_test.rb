@@ -184,7 +184,7 @@ module PermissionForge
                                                             operator: 'equal', current_user: '1' } }
 
         assert_response :success
-        assert_select '#pf-rule-path-0 option[selected]', text: Supplier.model_name.human
+        assert_select '#pf-rule-path-0 option[selected]', text: 'supplier'
         assert_select '#pf-rule-field option[selected][value=owner_id]', 1
       end
 

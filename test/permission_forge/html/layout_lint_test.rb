@@ -117,13 +117,6 @@ module PermissionForge
           ["GET #{path}", response.body]
         end
       end
-
-      def error_screens
-        error_states.select(&:renders?).map do |state|
-          send(state.verb, pf(state.path), params: state.params)
-          ["#{state.verb.upcase} #{state.path}", response.body]
-        end
-      end
     end
   end
 end

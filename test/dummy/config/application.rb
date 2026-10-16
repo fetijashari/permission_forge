@@ -7,7 +7,9 @@ require 'action_controller/railtie'
 require 'action_view/railtie'
 
 Bundler.require(*Rails.groups)
-require 'rails-i18n'
+# Never rails-i18n here: the suite proves that every string the admin, the
+# API, a CSV or an audit sentence shows in sq/mk is the gem's own
+# (test_helper asserts it is absent; html/locale_leak_test.rb).
 require 'permission_forge'
 
 module Dummy

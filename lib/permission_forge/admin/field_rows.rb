@@ -104,7 +104,7 @@ module PermissionForge
       def configured_row(field)
         name = field.name
         virtual = virtual?(name)
-        Row.new(name: name, label: field.label.presence || human(name), field: field, match: @sensitive.match(name),
+        Row.new(name: name, label: human(name, field), field: field, match: @sensitive.match(name),
                 virtual: virtual, missing: @model.present? && !virtual && @model.column_names.exclude?(name),
                 level: FieldLevel.level_of(field, muting: @muting), declared: declared?(name),
                 implicit_grant: !field.is_active && implicit_grant?(name))
@@ -132,8 +132,10 @@ module PermissionForge
         @model.present? && @model.declared_virtual_field_names.include?(name)
       end
 
-      def human(name)
-        @model ? @model.klass.human_attribute_name(name) : name.to_s.humanize
+      # The label of a field name (Admin::FieldLabel): the host's
+      # translation, else the row's label, else the name as stored.
+      def human(name, row = nil)
+        FieldLabel.for(@model, name, row: row).text
       end
 
       def match_filter?(row, filter)

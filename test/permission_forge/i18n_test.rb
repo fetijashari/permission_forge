@@ -196,7 +196,82 @@ module PermissionForge
       assert_equal %i[en sq], config.available_locales
     end
 
-    # ── J. Locale switcher helper ──
+    # ── J. A translation is not the English text ──
+    #
+    # A sq/mk value identical to en, when the en value has three Latin
+    # letters or more outside its placeholders and one of them lower-case
+    # (a format of placeholders, an acronym or a code such as "API" or
+    # "UUID" is no English), is an English string left in the file — unless
+    # the allow-list names it with a reason (a word the language shares, the
+    # brand, a UI name kept verbatim, a sample value).
+
+    IDENTICAL_ALLOWLIST = File.expand_path('i18n_identical_allowlist.yml', __dir__)
+    LATIN_LETTERS = /[A-Za-z]/
+    PLACEHOLDER = /%\{\w+\}/
+
+    def english_prose?(value)
+      return false unless value.is_a?(String)
+
+      letters = value.gsub(PLACEHOLDER, '').scan(LATIN_LETTERS)
+      letters.size >= 3 && letters.any? { |letter| letter.match?(/[a-z]/) }
+    end
+
+    def raw_values(locale)
+      flat = {}
+      collect_values(load_locale_hash(locale)[locale.to_s]['permission_forge'], 'permission_forge', flat)
+      flat
+    end
+
+    SUPPORTED_LOCALES.reject { |l| l == :en }.each do |locale|
+      test "#{locale} values identical to en are allow-listed with a reason" do
+        allowed = YAML.load_file(IDENTICAL_ALLOWLIST).fetch(locale.to_s, {}) || {}
+        values = raw_values(locale)
+        identical = en_values.select { |key, en_value| english_prose?(en_value) && values[key] == en_value }.keys
+
+        assert_empty identical - allowed.keys,
+                     "#{locale}: English left in the locale file (translate it, or list it in i18n_identical_allowlist.yml " \
+                     "with a reason): #{(identical - allowed.keys).join(', ')}"
+        assert_empty allowed.keys - identical, "#{locale}: stale allow-list entries (remove them): #{(allowed.keys - identical).join(', ')}"
+        assert_empty allowed.select { |_, reason| reason.to_s.strip.empty? }.keys, "#{locale}: give every allow-list entry a reason"
+      end
+    end
+
+    test 'the identical-value lint bites' do
+      assert english_prose?(en_values.fetch('permission_forge.ui.cancel'))
+      assert english_prose?('Fail-open')
+      assert_not english_prose?('%{who} · %{when}'), 'a format of placeholders' # rubocop:disable Style/FormatStringToken
+      assert_not english_prose?('JSON API'), 'an acronym'
+      identical = en_values.select { |key, value| english_prose?(value) && raw_values(:en)[key] == value }
+      assert_includes identical.keys, 'permission_forge.ui.cancel'
+    end
+
+    # ── K. One pair of quotation marks per locale ──
+    #
+    # Each locale file quotes with one pair (sq “…”, mk „…“, en “…”); any
+    # other typographic quotation mark is a mixed style (R6 #93: sq had
+    # both „…“ and “…”). The right single quote is the Albanian apostrophe
+    # (t’u) and allowed there; › is the breadcrumb separator, not a quote.
+
+    QUOTATION_MARKS = %w[„ “ ” « » ‚ ‘ ’].freeze
+    QUOTES = { en: %w[“ ”], sq: %w[“ ” ’], mk: %w[„ “] }.freeze
+
+    QUOTES.each do |locale, allowed|
+      test "#{locale} quotes with one pair of quotation marks" do
+        foreign = QUOTATION_MARKS - allowed
+        offending = File.readlines(File.join(LOCALE_DIR, "permission_forge.#{locale}.yml")).each_with_index.filter_map do |line, index|
+          marks = foreign.select { |mark| line.include?(mark) }
+          "#{index + 1}: #{marks.join(' ')} #{line.strip}" if marks.any?
+        end
+
+        assert_empty offending, "#{locale}: quotation marks outside #{allowed.join(' ')}:\n#{offending.join("\n")}"
+      end
+    end
+
+    test 'every bundled locale has a quote style' do
+      assert_equal SUPPORTED_LOCALES.sort, QUOTES.keys.sort
+    end
+
+    # ── L. Locale switcher helper ──
 
     test 'pf_locale_label returns correct labels' do
       helper = Class.new { include PermissionForge::ApplicationHelper }.new

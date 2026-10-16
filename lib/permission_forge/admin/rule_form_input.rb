@@ -52,7 +52,7 @@ module PermissionForge
       # rule again keeps it a filter rule.
       def self.rule_path(rule)
         path = rule.join_rule? ? rule.field_accessor_path.to_s.split('.').compact_blank : []
-        { name: rule.name.to_s, path: path, field_name: rule.field_name.to_s, operator: rule.operator.presence || 'equal' }
+        { name: Prefill.text(rule, :name), path: path, field_name: rule.field_name.to_s, operator: rule.operator.presence || 'equal' }
       end
 
       def self.rule_values(raw, arity)
@@ -63,7 +63,7 @@ module PermissionForge
       end
 
       def self.rule_options(rule)
-        { include_nulls: rule.include_nulls == true, failure_message: rule.failure_message.to_s,
+        { include_nulls: rule.include_nulls == true, failure_message: Prefill.text(rule, :failure_message),
           join: rule.join_rule? ? rule.join_type : 'auto', is_active: rule.is_active != false }
       end
 

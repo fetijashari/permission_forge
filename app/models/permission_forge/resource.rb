@@ -44,16 +44,14 @@ module PermissionForge
     has_many :permission_set_rules, class_name: 'PermissionForge::PermissionSetRule', dependent: :destroy,
                                     extend: Concerns::AuditedCollection
 
-    validates :name, presence: true
-    validates :name, uniqueness: { scope: :permission_set_id, message: 'already exists in this permission set' }
+    validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } }
+    validates :name, uniqueness: { scope: :permission_set_id,
+                                   message: ->(*) { I18n.t('permission_forge.validations.resource.name_taken') } }
     # Resource#name is resolved to a model class via safe_constantize (e.g. by
     # ResourceFieldGenerator and MaskedAttributes auto-apply), so constrain it to
     # a Ruby constant path. Prevents naming a resource after arbitrary strings.
-    validates :name, format: {
-      with: NAME_FORMAT,
-      message: I18n.t('permission_forge.validations.resource.invalid_name',
-                      default: 'must be a valid model class name (e.g. Customer or Admin::Report)')
-    }, allow_blank: true
+    validates :name, format: { with: NAME_FORMAT, message: ->(*) { I18n.t('permission_forge.validations.resource.invalid_name') } },
+                     allow_blank: true
 
     validates_dependency :edit_access, requires: :read_access
     validates_dependency :delete_access, requires: :read_access

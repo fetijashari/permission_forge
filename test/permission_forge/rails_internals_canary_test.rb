@@ -114,7 +114,9 @@ module PermissionForge
       sandbox: 'application.sandbox?',
       generator_commands: 'Rails::Command::GenerateCommand',
       journey_route: Regexp.union('@route.path.spec', '@route.verb', '@route.defaults', '@route.internal'),
-      association_target: Regexp.union('association.target.sort_by!', 'association(:user).target', 'return association.target if')
+      association_target: Regexp.union('association.target.sort_by!', 'association(:user).target', 'return association.target if'),
+      host_translation_default: Regexp.union('human_attribute_name(name, default: MISSING)',
+                                             'model_name.human(count: count, default: FieldLabel::MISSING)')
     }.freeze
 
     # What to change, per touch point, when a test fails on something its own
@@ -173,7 +175,10 @@ module PermissionForge
       sandbox: 'adapt OpenTransaction.sandbox?',
       generator_commands: 'adapt BootChecks.generator_running? (GENERATOR_COMMANDS: what `bin/rails generate` loads before it boots)',
       journey_route: 'adapt Admin::ControllerCatalog::RoutedAction',
-      association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)'
+      association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)',
+      host_translation_default: 'adapt Admin::FieldLabel.host_translation and Admin::ModelLabel.host_translation (how a host ' \
+                                'translation is told from Rails\' English fallback: the `default:` option is answered when no key ' \
+                                'of the lookup chain exists)'
     }.freeze
 
     # Marks a failure message as a canary's.
@@ -696,6 +701,25 @@ module PermissionForge
       error = assert_raises(ActiveModel::MissingAttributeError) { record.send(:missing_attribute, 'email', caller) }
       assert_includes error.message, 'email'
       assert_raises(ActiveModel::MissingAttributeError) { record.email }
+    end
+
+    canary_test :host_translation_default,
+                'human_attribute_name / ModelName#human: the default: option is answered when the host has no translation, ' \
+                'the host\'s translation when it has one' do
+      model = canary_model('PfCanaryLabelled')
+      sentinel = "\u0000missing\u0000"
+
+      assert_equal sentinel, model.human_attribute_name('zzz_column', default: sentinel)
+      assert_equal sentinel, model.model_name.human(count: 1, default: sentinel)
+      assert_equal sentinel, model.model_name.human(count: 2, default: sentinel)
+
+      I18n.backend.store_translations(I18n.locale, activerecord: { attributes: { pf_canary_labelled: { zzz_column: 'Zed' } },
+                                                                   models: { pf_canary_labelled: { one: 'Canary', other: 'Canaries' } } })
+      assert_equal 'Zed', model.human_attribute_name('zzz_column', default: sentinel)
+      assert_equal 'Canary', model.model_name.human(count: 1, default: sentinel)
+      assert_equal 'Canaries', model.model_name.human(count: 2, default: sentinel)
+    ensure
+      I18n.backend.store_translations(I18n.locale, activerecord: { attributes: { pf_canary_labelled: nil }, models: { pf_canary_labelled: nil } })
     end
 
     canary_test :dangerous_attribute_methods, 'AttributeMethods.dangerous_attribute_methods: the method names of ActiveRecord::Base, as Strings' do

@@ -32,6 +32,15 @@ module PermissionForge
       def error_states = admin_paths.error_states
       def flows = admin_paths.flows
 
+      # ["POST /permission_sets", body] for every error state that renders a
+      # page: the refused forms, re-rendered, for the walks that lint markup.
+      def error_screens
+        error_states.select(&:renders?).map do |state|
+          send(state.verb, pf(state.path), params: state.params)
+          ["#{state.verb.upcase} #{state.path}", response.body]
+        end
+      end
+
       # Built once per test: the audit fixtures (an update's before/after, a
       # destroy's snapshot) are recorded on the first use.
       def admin_paths

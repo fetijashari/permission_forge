@@ -43,14 +43,14 @@ module PermissionForge
         find(error)&.errors&.messages
       end
 
-      # The same as one sentence ("Name already exists in this permission
-      # set"); nil as for .messages.
+      # The same as one sentence in the current locale ("Name already exists
+      # in this permission set", Admin::ErrorSentence); nil as for .messages.
       #
       # @param error [ActiveRecord::RecordNotUnique]
       # @return [String, nil]
       def sentence(error)
         conflict = find(error)
-        conflict && conflict.errors.full_messages.first
+        conflict && Admin::ErrorSentence.first(conflict.errors)
       end
 
       # The uniqueness validation behind the unique index `error` names.

@@ -54,9 +54,9 @@ module PermissionForge
       is_active && resource.in_effect?
     end
 
-    # @return [String] the label, or the humanized name when there is none
+    # @return [String] the label, or the name as stored when there is none (Admin::ActionLabel)
     def display_name
-      label.presence || name.humanize
+      PermissionForge::Admin::ActionLabel.for(self).text
     end
   end
 end

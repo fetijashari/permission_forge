@@ -45,7 +45,8 @@ module PermissionForge
 
         error = assert_raises(ActiveRecord::RecordNotUnique, twin.class.name) { twin.save!(validate: false) }
         assert_equal expected, UniqueConflict.messages(error), twin.class.name
-        assert_equal twin.errors.full_messages.first, UniqueConflict.sentence(error), twin.class.name
+        assert_equal PermissionForge::Admin::ErrorSentence.first(twin.errors), UniqueConflict.sentence(error), twin.class.name
+        assert_not_includes UniqueConflict.sentence(error), 'User ', 'the attribute is named by the gem (Person), not by human_attribute_name'
       end
     end
 
