@@ -247,7 +247,8 @@ module PermissionForge
         Dir.mktmpdir do |dir|
           changelog = File.join(dir, 'CHANGELOG.md')
           File.write(changelog, "# Changelog\n\n## [9.9.9] - 2026-01-01\n\nRun the audit first.\n\n### Added\n\n#{bullet * 400}\n" \
-                                "### Fixed\n\n- **Wrapped bold lead\n  across two lines.** text\n\n## [9.9.8] - 2025-01-01\n\n### Added\n\n- **Old.**\n")
+                                "### Fixed\n\n- **Wrapped bold lead\n  across two lines.** text\n\n" \
+                                "## [9.9.8] - 2025-01-01\n\n### Added\n\n- **Old.**\n")
           notes, errors, status = Open3.capture3('bash', ROOT.join('.github/scripts/release_notes.sh').to_s, '9.9.9', changelog)
 
           assert status.success?, errors
