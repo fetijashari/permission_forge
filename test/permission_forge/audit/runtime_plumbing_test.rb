@@ -300,7 +300,9 @@ module PermissionForge
         assert_equal [['User', @user.id.to_s, @user.id.to_s]], payloads.map { |p| p.values_at(:record_type, :record_id, :subject_user_id) }.uniq
 
         payloads = published('permissions.invalidated') { @user.invalidate_permissions }
-        assert_equal([{ 'tenant_id' => nil, 'confirmed' => true }], payloads.map { |p| p[:data] })
+        # the memory store of the suite lives in this process; a test runs in no request
+        assert_equal([{ 'tenant_id' => nil, 'confirmed' => true, 'process_local' => true, 'in_request' => false }],
+                     payloads.map { |p| p[:data] })
 
         # a subscriber that reads the hash gets the state after the invalidation
         seen = []

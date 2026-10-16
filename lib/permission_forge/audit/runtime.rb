@@ -102,9 +102,16 @@ module PermissionForge
         end
 
         # permissions.invalidated (the `cache` group): a user's cached hash
-        # was removed, for which tenant, and whether the store confirmed it.
+        # was removed, for which tenant, whether the store confirmed it, and
+        # the scope of the store (Cache::Report: `process_local`, and
+        # `in_request` — which processes kept their entries when the store
+        # lives in each process).
         def invalidated(user, tenant_id:, confirmed:)
-          cache_event('permissions.invalidated', user, 'tenant_id' => tenant_id, 'confirmed' => confirmed)
+          return unless Audit.instrument?('permissions.invalidated')
+
+          scope = PermissionForge::Cache::Report.new
+          cache_event('permissions.invalidated', user, 'tenant_id' => tenant_id, 'confirmed' => confirmed,
+                                                       'process_local' => scope.process_local?, 'in_request' => scope.in_request?)
         end
 
         # Whether this is the first time in this request that `key` was
