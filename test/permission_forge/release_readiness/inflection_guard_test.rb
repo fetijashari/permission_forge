@@ -34,9 +34,6 @@ module PermissionForge
     INFLECTION_ALLOWLIST = [
       ['app/models/permission_forge/resource_field.rb', /self\.label = name\.to_s\.humanize/,
        'the label stored for a new row without one (default_label), as generated rows are labelled'],
-      ['lib/permission_forge/admin/column_fields.rb', /label: column\.humanize/, 'the label stored when a field row is generated from a column'],
-      ['lib/permission_forge/admin/change_set_parts/new_fields.rb', /label: column\.humanize/,
-       'the label stored when a field row is generated from a column'],
       ['lib/permission_forge/admin/change_set_parts/new_actions.rb', /label: key\.humanize/,
        'the label stored when an action row is created from a controller action key'],
       ['lib/permission_forge/admin/change_set_parts/field_edit.rb', /field\.name\.humanize/,
