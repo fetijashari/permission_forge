@@ -52,7 +52,7 @@ module DocsApp
     CUSTOMERS_CONTROLLER = 'app/controllers/customers_controller.rb'
     ALL = %i[dave_signin signed_out_root reload_after_turbo_signin public_index_without_resume_session public_index_with_resume_session
              bob_opens_carols_customer bob_api_customers customers_json bob_edits_status sign_in_page_guarded option_b_admin
-             permission_scoped_without_read name_taken seeds_under_strict].freeze
+             permission_scoped_without_read name_taken seeds_under_strict option_a_audit_actor].freeze
 
     module_function
 
@@ -189,7 +189,7 @@ module DocsApp
 
     def option_b_admin
       { signed_out: Visitor.new.chain('/permissions', limit: 1)[:hops].first,
-        bob: Visitor.new.sign_in(:bob).get('/permissions').status,
+        bob: Visitor.new.sign_in(:bob).tap { |bob| bob.get('/permissions') }.hop,
         alice: Visitor.new.sign_in(:alice).get('/permissions').status }
     end
 
@@ -234,6 +234,9 @@ module DocsApp
     ensure
       PermissionForge.configuration.preset = :compat
     end
+
+    # The generated initializer's Option A with its audit_actor_resolver (docs_app/option_a.rb).
+    def option_a_audit_actor = OptionA.run
 
     # A seed's find_or_create_by!, run twice; how many rows it left.
     def seed_twice(name)

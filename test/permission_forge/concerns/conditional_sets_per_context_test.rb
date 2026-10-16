@@ -683,19 +683,19 @@ module PermissionForge
 
       # --- the entry namespace (review MINOR-5) --------------------------------------------
 
-      test 'the entry key is namespaced, and an invalidation also removes the keys of the previous namespace' do
+      # The 0.13 keys were removed with 0.15 (Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES is empty):
+      # an invalidation removes this namespace's keys only.
+      test 'the entry key is namespaced, and an invalidation removes it' do
         unconditional_grant
         namespace = PermissionForge::Cache::UserKeys::ENTRY_NAMESPACE
         key = @user.permission_cache_key
         assert key.start_with?("#{namespace}:"), key
-        legacy = key.delete_prefix("#{namespace}:")
-        PermissionForge.cache.write(legacy, sentinel_entry(read_access: true))
         reader.permissions_hash
 
         reader.invalidate_permissions
 
-        assert_nil PermissionForge.cache.read(legacy), 'the key a 0.13 process reads'
         assert_nil PermissionForge.cache.read(key)
+        assert_empty PermissionForge::Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES
       end
 
       # --- details (review NITs, probes R6, R7, N1 and N5) ----------------------------------

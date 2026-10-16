@@ -16,36 +16,16 @@ module PermissionForge
 
     BASIC_AUTH_WARNING = /HTTP Basic Auth is enabled but credentials are not configured/
 
-    test 'Engine.apply_masked_attributes_to_managed_models still works, deprecated' do
-      calls = []
-      original = MaskedModels.method(:apply)
-      replace_singleton_method(MaskedModels, :apply) do |only: nil|
-        calls << only
-        true
-      end
-
-      Deprecation.reset! # it warns once per process
-      result, warnings = collect_deprecations(PermissionForge.deprecator) do
-        PermissionForge::Engine.apply_masked_attributes_to_managed_models(only: 'Customer')
-      end
-      assert_equal 1, warnings.size
-      assert_match(/MaskedModels\.apply.*PermissionForge #{Regexp.escape(Deprecation::HORIZON)} removes it/, warnings.first)
-      assert_match(/called from .*#{Regexp.escape(File.basename(__FILE__))}/, warnings.first, 'it names the caller, not the delegator')
-      assert_equal true, result
-      assert_equal ['Customer'], calls
-    ensure
-      replace_singleton_method(MaskedModels, :apply, original)
-    end
-
     # --- the engine only wires hooks -----------------------------------------
 
     test 'the engine carries no boot, masking or warning logic, and nothing reaches into it' do
       domain = [BootChecks, CacheWarnings, MaskedModels, MaskingSync, QueryScopingWarnings]
 
       assert_empty PermissionForge::Engine.singleton_class.ancestors & domain
-      # apply_masked_attributes_to_managed_models stays one minor version, as
-      # a deprecated delegator (Q8; test below).
-      %i[run_boot_checks apply_tenant_scoping_to_models permission_models].each do |name|
+      # apply_masked_attributes_to_managed_models was a deprecated delegator
+      # to MaskedModels.apply through 0.14; 0.15 removed it.
+      %i[run_boot_checks apply_tenant_scoping_to_models permission_models
+         apply_masked_attributes_to_managed_models].each do |name|
         assert_not PermissionForge::Engine.respond_to?(name, true), name
       end
       sources = Dir[PermissionForge::Engine.root.join('{app,lib}/**/*.{rb,rake}').to_s]

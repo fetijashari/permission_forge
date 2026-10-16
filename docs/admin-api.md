@@ -231,9 +231,12 @@ Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 ca
 - a single assignment or group membership whose `user_id` is missing, is not one user id (`"abc"` for an integer key, `[2]`, an object), or names nobody `user_list_resolver` lists: see [Permission Set Users](#permission-set-users-assign-users-to-sets);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
 - a `permission_set_group_id` that names no group of the current tenant;
-- a record another request saved a moment ago: two requests creating the same assignment, group membership, Resource or field at once both pass the uniqueness validation and the database's unique index refuses the second — the answer is the validation's own message, keyed by its attribute (`{"user_id": ["has already been taken"]}`, `{"name": ["already exists in this permission set"]}`). Through 0.14.1 this was a 500 (`ActiveRecord::RecordNotUnique`). When the index the database names belongs to no validation of the gem's models (an index you added yourself), the message is on `base`;
-- a rule whose `field_name` is not a column of its model (`{"field_name": ["is not a column of Customer"]}`), or a join rule whose `field_accessor_path` names an association the model does not have or one no join can be built through (`{"field_accessor_path": ["names ownr, which is not an association of Customer"]}`): see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name);
+- a record another request saved a moment ago: two requests creating the same assignment, group membership, Resource or field at once both pass the uniqueness validation and the database's unique index refuses the second — the answer is the validation's own message, keyed by its attribute: `{"user_id": ["already holds this Permission Set"]}` for an assignment, `{"user_id": ["is already a member of this group"]}` for a group membership, `{"name": ["already exists in this permission set"]}` for a Resource, `{"name": ["has already been taken"]}` for a field. Through 0.14.1 this was a 500 (`ActiveRecord::RecordNotUnique`). When the index the database names belongs to no validation of the gem's models (an index you added yourself), the message is on `base`;
+- a rule whose `field_name` is not a column of its model (`{"field_name": ["names onwer_id, which is not a column of Customer"]}`), or a join rule whose `field_accessor_path` names an association the model does not have or one no join can be built through (`{"field_accessor_path": ["names ownr, which is not an association of Customer"]}`): see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name);
+- a rule whose `field_value` its column cannot hold (`{"field_value": ["is not a value Customer.owner_id can hold"]}`: see [A value the column cannot hold](row-level-rules.md#a-value-the-column-cannot-hold)), or whose column holds a secret (`{"field_name": ["names a column that holds a secret …"]}`: see `config.rule_secret_column_patterns`), on a new rule and when what it compares changes;
 - a string longer than its column: `is too long (at most N characters)`. Only columns that declare a limit are checked — a `string` on MySQL is `varchar(255)` (counted in characters) and a `text` holds 65,535 bytes; on PostgreSQL and SQLite the install's `string` and `text` columns declare none, so nothing is checked there. A Permission Set name keeps its own 255-character rule on every database.
+
+Every message of a 4xx envelope is a `permission_forge.*` translation in the request's locale (`locale` parameter, else `Accept-Language`): the gem reads no Rails-core `errors.messages.*` key, so a host without `rails-i18n` gets Albanian and Macedonian messages too.
 
 **A flat JSON body is accepted where Rails wraps parameters.** With JSON parameter wrapping on, which `config.load_defaults 7.0` and later turn on for every controller (`wrap_parameters_by_default`), Rails copies the keys of a JSON body that are attributes of the endpoint's model under the section name before the API reads it: `POST /api/permission_sets` with `{"name":"Flat payload"}` reads as `{"permission_set":{"name":"Flat payload"}}` and creates the set (201). Only a body sent as `application/json` is wrapped, never one that already has the section. A flat body with none of the model's attributes then gives an empty section, and without wrapping (older defaults, a form-encoded body, `wrap_parameters false` in your `api_base_controller_class`) a missing section stays missing: both answer 422 `{"permission_set": ["is missing, empty or not an object"]}`. Send the section explicitly to be independent of this setting.
 
@@ -401,8 +404,12 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
 # only "true" and "1" granted: a JSON true created fields without edit.
 # With grant_all every field is readable and editable, unmasked — also the
 # personal-data columns under gdpr_defaults (their recommended mask_strategy
-# is returned, mask_access is false). Without it, under gdpr_defaults, those
-# columns come back readable and masked and the others without access.
+# is returned, mask_access is false). Without it every field comes back
+# without access (Hidden), the personal-data columns included; their
+# recommended mask_strategy is on the row. The rows are the ones the admin's
+# presets and Sync write for the same level (one row builder since 0.15.0).
+# On a Muting Permission Set grant_all takes every field away; without it
+# nothing is written (201 with an empty data array).
 # A mutation like any other: gated by api_action_authorization (action
 # :generate_fields) and refused with 403 when the resource or its permission
 # set is locked
@@ -514,9 +521,9 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
 #                   "contains", "not_contains", "starts_with", "ends_with",
 #                   "between", "is_null", "is_not_null"
 # "is_null" / "is_not_null" take no field_value (it is stored as empty)
-# include_nulls defaults to TRUE (the column default): a rule created without
-# it also lets through the rows whose field is NULL, for "equal", "not_equal",
-# "in" and "not_in". Send "include_nulls": false to keep them out.
+# include_nulls is off unless you send it: a rule created without it keeps the
+# rows whose field is NULL out, for "equal", "not_equal", "in" and "not_in".
+# Send "include_nulls": true to let them through.
 
 # Update a rule. A rule written before the current checks (an operator, join
 # type, field name or path this version refuses) can still be switched off
@@ -528,9 +535,9 @@ PATCH /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
 DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
 ```
 
-**Rule attributes** (`permission_set_rule`): `name`, `field_name`, `field_value`, `operator`, `join_type`, `field_accessor_path`, `include_nulls` (default **`true`**: NULL rows pass an `equal`, `not_equal`, `in` or `not_in` rule unless you send `false`; see [The `include_nulls` Flag](row-level-rules.md#the-include_nulls-flag)), `is_active`, `is_editable`, `failure_message`.
+**Rule attributes** (`permission_set_rule`): `name`, `field_name`, `field_value`, `operator`, `join_type`, `field_accessor_path`, `include_nulls` (default **`false`**: NULL rows pass an `equal`, `not_equal`, `in` or `not_in` rule only when you send `true`; see [The `include_nulls` Flag](row-level-rules.md#the-include_nulls-flag)), `is_active`, `is_editable`, `failure_message`.
 
-A `field_value` is compared in the type of the column the rule names; a value that column cannot hold (`"5_id"` on an integer column) is accepted and makes the rule match nothing. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
+A `field_value` is compared in the type of the column the rule names; a value that column cannot hold (`"5_id"` on an integer column) is refused with 422 (`{"field_value": ["is not a value Customer.owner_id can hold"]}`); a rule stored with one before 0.15 matches nothing and stays editable in its other attributes. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
 
 Rule `field_value`s can contain sensitive data (user IDs, account numbers, business logic values). Set `config.api_redact_rule_field_values = true` (default: `false`) to have API responses replace `field_value` with `"[REDACTED]"` — useful for GDPR/HIPAA environments.
 

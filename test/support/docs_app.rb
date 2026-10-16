@@ -91,6 +91,7 @@ require_relative 'docs_app/shell'
 require_relative 'docs_app/install'
 require_relative 'docs_app/programs'
 require_relative 'docs_app/scenarios'
+require_relative 'docs_app/option_a'
 require_relative 'docs_app/api_only'
 require_relative 'docs_app/server'
 

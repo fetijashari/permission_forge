@@ -200,18 +200,19 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   boolean, a date, the stored value of an enum label. A value the column cannot hold
   compiles to `FALSE` — the policy is created and hides every row from the members of that
   set, exactly as the application layer denies them. A date or time that is not ISO 8601
-  is written into the policy as it is, for PostgreSQL to read. A word like `tomorrow` or
-  `infinity` is read **once, when the policy is created** — it does not move with the
-  clock the way it does in the application layer, which sends it with every query. Text
-  PostgreSQL cannot read as a date fails the sync at that table: its policies, and those of
-  the tables that come after it, stay as they were. Use ISO dates in rules that back a
-  policy. `contains` and the other string operators compile to `ILIKE` on the column itself
+  is asked of PostgreSQL first, as in the application layer (once per process,
+  `ValueCasters::PostgresqlTypes::ReadBack`): text it reads is written into the policy as
+  it is, text it cannot read compiles to `FALSE` (through version 6 it failed the sync at
+  that table). A word like `tomorrow` or `infinity` is read **once, when the policy is
+  created** — it does not move with the clock the way it does in the application layer,
+  which sends it with every query. Use ISO dates in rules that back a policy. `contains` and the other string operators compile to `ILIKE` on the column itself
   (the padding of a `char(n)` value counts, as in the application layer), and
   `include_nulls` adds the NULL rows for `equal`, `not_equal`, `in` and `not_in` only — both
   as in the application layer.
 - **A policy is never wider than the application layer.** Where the application layer's
-  query raises — a string operator on a number, date or boolean column — the rule compiles
-  to `FALSE`. A field name that is not a name (`owner_id.`) compiles to `FALSE` as well, and
+  query raises — a string operator on a number, date or boolean column — or on a uuid,
+  inet, cidr, native enum, json or array column, where the application layer now matches
+  nothing too — the rule compiles to `FALSE`. A field name that is not a name (`owner_id.`) compiles to `FALSE` as well, and
   so does one that is not a column of the table (`onwer_id`), which the application layer
   denies too (see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name)).
 - **What a rule compiles to also depends on the model** — the column's type, an enum's
@@ -220,6 +221,14 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   generated SQL changed between versions (`RlsPolicyGenerator::GENERATOR_VERSION`, part of
   the stored digest). Run `rake permission_forge:rls:sync` once after the upgrade. Until you
   do, the old policies stay in force.
+  - **Version 7 (0.15):** every rule the application layer matches nothing for compiles to
+    `FALSE` (an operator, join type or table this version does not know, a relationship
+    path no join is built through, a value the column cannot hold — now also for `uuid`,
+    `inet`, `cidr`, native enum, `json` and array columns); an assignment counts until its
+    `expires_at`, that instant included (`>= now()`, as the application layer); and the
+    `view_all` bypass reads "no activation condition" as the application layer does — a
+    set with only an end hour no longer bypasses the rules (policies from before version 7
+    are wider there), and a set whose session flag or IP list is only blanks does.
   - **Version 6:** a rule whose field name is not a column of the table compiles to
     `FALSE`; the sync used to fail at that table.
   - **Version 5 (0.14):** the view_all bypass requires the resource row to be active and,

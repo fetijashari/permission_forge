@@ -8,6 +8,7 @@ The gem ships a read-only audit task. It changes no permission data (it writes o
 bin/rails permission_forge:audit                   # text report
 FORMAT=json bin/rails permission_forge:audit       # machine-readable
 FAIL_ON=high bin/rails permission_forge:audit      # exit 1 on any High or Critical finding (CI)
+ACTOR="CI" REASON="release check" bin/rails permission_forge:audit   # who ran it and why, on its report.generated event
 
 # On a Kamal deployment
 kamal app exec -i "bin/rails permission_forge:audit"
@@ -23,13 +24,16 @@ Findings are rated Critical / High / Medium / Low / Info and grouped by check:
 | `privilege` | View All / Modify All grants, active sets whose names look temporary (dev, debug, test…), sets that grant delete almost everywhere |
 | `assignment` | Permanent access not reviewed within `admin_stale_assignment_days` (counted from the last review, else the grant), assignments for deleted or deactivated users (`user_active_check`), expired rows not cleaned up, people holding 3+ sets, turned-off sets that still have people |
 | `user_model` | The user model against the nil-user strategies (see the findings below) |
-| `rule` | Record rules the app's query scoping doesn't apply to every query, rules in effect whose field name is not a column of their table or whose association path cannot be joined (`missing_rule_columns` — High when people hold the set, otherwise Medium), rules in effect whose value their column cannot hold and which therefore match nothing (`unusable_rule_values` — Medium when people hold the set, otherwise Low; both list set, resource, field, operator and value), rules ignored because of View All, text operators on id columns |
+| `rule` | Record rules the app's query scoping doesn't apply to every query, rules in effect whose field name is not a column of their table or whose association path cannot be joined (`missing_rule_columns` — High when people hold the set, otherwise Medium), rules in effect whose value their column cannot hold and which therefore match nothing (`unusable_rule_values` — Medium when people hold the set, otherwise Low; both list set, resource, field, operator and value), rules on a column that holds a secret (`secret_rule_columns`), rules ignored because of View All, text operators on id columns |
 | `integrity` | Duplicate field rows, duplicate action rows, rows that skip a required permission (edit without read, …), resources naming models the app doesn't have, field rows naming nothing on their model |
+| `conditions` | Activation conditions the validation refuses today, which nobody can judge (`incomplete_conditions`), and Resources holding a row and an explicit row for one of its variants (`variant_rows_conflict`) |
 | `personal_data` | `GdprFieldAuditor` results: unmasked, virtual, cross-set and unmapped personal data (see the findings below) |
 | `action` | Controller actions as permissions (see below) |
 | `audit_trail` | The [audit event log](audit-log.md): is it recording, can its actors be trusted, are the failure settings strict (see below) |
 
 The other checks report these findings (the id is the `code` of the finding; the last column is its severity). Where a finding has two severities, the higher one applies when people hold the set or the rule concerned.
+
+Every finding that can be Medium or worse and is about a record the admin can open has a card on the admin's Home (`test/permission_forge/admin/attention_parity_test.rb` enumerates them); a finding about a setting flags its row on the Settings page.
 
 | Check | Finding | Severity | Meaning |
 |-------|---------|----------|---------|
@@ -68,6 +72,7 @@ The other checks report these findings (the id is the `code` of the finding; the
 | `rule` | `unknown_rule_operators` | High or Medium | Rules in effect with an operator or join type this version does not know (written by a newer version, another application or past the model): they match nothing. High while people hold the set. |
 | `rule` | `foreign_table_names` | Info | Rules whose field name is qualified with a table this database has that is none of the rule's: left to the database, which raises unless the query joins that table. Name the relationship in `field_accessor_path` instead. |
 | `rule` | `unusable_rule_values` | Medium or Low | Rules in effect that match nothing (described above). |
+| `rule` | `secret_rule_columns` | Medium | Record rules in effect that compare a column holding a secret (`config.rule_secret_column_patterns`: password digests, tokens, encrypted values, secrets). They still apply; who can read which record tells the secret apart. The item names the rule and its column, not its value. A new rule on such a column is refused. Home lists the same rules. |
 | `rule` | `bypassed_rules` | Low | Rules ignored because of View All / Modify All. |
 | `rule` | `text_operator_on_ids` | Low | `contains`, `starts_with` or `ends_with` on an id column. |
 | `rule` | `no_rules` | Info | No record rules are in use; when it fires, it is the only `rule` finding. Its advice follows `auto_query_scoping`: add rules, and enable the setting only while it is off. |
@@ -79,7 +84,7 @@ The other checks report these findings (the id is the `code` of the finding; the
 | `conditions` | `incomplete_conditions` | Medium | Permission Sets whose stored activation condition the validation refuses today: an IP entry that is not an IP address or CIDR range, a list with no entry, the same start and end hour, one hour of the two, an hour outside 0–23. Nobody can judge such a condition, so a muting set applies to every request and a granting set never passes. Each item says what the set does now and how many people hold it. |
 | `conditions` | `variant_rows_conflict` | Info | Resources in effect holding a row and an explicit row for one of its variants (`owner_id` → `owner_uuid`). Since 0.15 the explicit row decides that name; the item shows both levels. |
 | `integrity` | `unknown_fields` | Low or Info | Field rows in effect whose name is nothing their model has — no column, attribute, alias, public method, declared or discovered virtual field, or configured variant (a typo such as `emial`). Low when a muting set holds one (it mutes nothing), otherwise Info (a granting row grants nothing on the model). Lists set, resource, field and people. Saving does not refuse such a name: a key only a serializer computes is filtered by a row of its name; declare it in `extra_fields_for_permissions` to say so. Skipped for a Resource whose model the app cannot load. |
-| `personal_data` | `unmasked_personal_data` | Medium | Fields that look like personal data and are readable unmasked, minus fields marked *This is intended* in the admin privacy audit (this finding only). |
+| `personal_data` | `unmasked_personal_data` | Medium | Fields that look like personal data and are readable unmasked, minus fields marked *This is intended* in the admin privacy audit (this finding only). A field counts when its row shows it in the clear (active, read on, no mask — `ResourceField#exposes_in_clear?`); a Hidden row is never listed. Columns your `filter_parameters` name count as personal data while `filter_parameters_integration` is on. |
 | `personal_data` | `implicit_virtual_personal_data` | Medium | Declared virtual fields that look like personal data, have no active field row and are granted by default (`extra_fields_default_access = :grant`). |
 | `personal_data` | `cross_set_unmasking` | Medium | One set unmasks what another masks (masks combine with AND). Each item names the set that unmasks and, in parentheses, the sets that mask. |
 | `personal_data` | `unmapped_personal_data` | High when `unconfigured_field_strategy` is `:pass_through` or `:warn`, otherwise Low | Model columns that look like personal data and have no active field row. |

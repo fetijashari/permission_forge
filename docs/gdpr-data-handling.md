@@ -47,7 +47,7 @@ The most actionable scope — finds and fixes unprotected PII:
 
 - **Runs `GdprFieldAuditor`** to identify unmasked PII fields, unmapped PII columns, `view_all`/`modify_all` bypasses on PII resources, and cross-set unmasking
 - **Validates mask strategies** match data types (email → `email`, SSN → `last4`, etc.)
-- **Checks `gdpr_defaults`** — when enabled, fields that look like personal data are masked when fields are generated (`ResourceFieldGenerator`), unless full access was asked for (`grant_all: true`, `grant_full_access!`, the admin's "Full access"): those fields are generated unmasked and reported by `GdprFieldAuditor` as `unmasked_field`
+- **Checks `gdpr_defaults`** — when enabled, a field that looks like personal data is masked when it is granted Read-only by any path that generates rows (the admin's presets, Sync, bulk add; `ResourceFieldGenerator` without `grant_all` creates every field Hidden, strategy recorded), unless full access was asked for (`grant_all: true`, `grant_full_access!`, the admin's "Full access"): those fields are generated unmasked and reported by `GdprFieldAuditor` as `unmasked_field`. What counts as personal data is one definition, `PermissionForge::SensitiveColumns`: `gdpr_field_patterns`, plus the columns your `filter_parameters` name while `filter_parameters_integration` is on — the audit and the boot warning report those too.
 - **Checks `filter_parameters_integration`** — prevents PII from leaking into Rails logs. The patterns match parameter names across the whole app, so any `name` parameter (a product's, the admin's Permission Set and Resource names) is logged as `[FILTERED]` too; [configuration.md](configuration.md#filter_parameters_integration) shows how to narrow it
 - **Finds uncovered columns** — model columns with no ResourceField row in effect (none, or only switched-off ones) fall to `unconfigured_field_strategy` (default `:block` — omitted from responses); they leak only if you've relaxed it to `:pass_through`/`:warn`
 - **Cross-set masking risk** — mask_access uses AND logic, so a single unmasking set exposes PII for all roles
@@ -162,7 +162,7 @@ The [audit log](audit-log.md) is a record of who did what, so it contains person
 | Art. 15 Access | The Audit log filtered to the person (Person page, Audit tab, "Events about …", then CSV/JSON export) and `GET /api/audit_events?subject_user_id=` list the events about a person; `actor_type=user&actor_id=` lists the events they caused. The Person page's own CSV lists only the records they created or last edited; the Effective-access tab lists their permissions. | Assembling the full response from all your systems, and checking the log's contents for others' data before you hand it over. |
 | Art. 17 Erasure | `DataSubjectErasure`: removes the person's assignments and memberships and clears their name snapshots, in the current tenant when one is set (`assignments_remaining_elsewhere` counts the rest) and in every tenant when none is; invalidates their cached permissions (the per-context variants included: every slot of the person's cache keys, whatever base entry they were built for, without relying on a read of the store; a variant that a request still in flight writes after the erasure may remain, unreachable, until `conditional_set_cache_ttl`, 300 s by default); records `erasure.performed`. Ids, IPs, `reason`, `data` and the `*_by_id` columns stay ([what remains](audit-log.md#erasure-and-the-names-in-the-log)); copies already forwarded are not reached. | Deleting the person's application data and the user record (`on_erasure` runs after the erasure commits); any backup; log copies you forwarded. |
 | Art. 18 Restriction | A muting Permission Set removes *permission-based* access without deleting data. | A restriction on your processing generally. |
-| Art. 25 Privacy by design | `gdpr_defaults` masks matching fields when fields are generated without full access (with `grant_all` / `grant_full_access!` they are generated unmasked and listed by `GdprFieldAuditor`); deny-by-default for unconfigured fields. | Choosing the patterns and reviewing them (`GdprFieldAuditor`). |
+| Art. 25 Privacy by design | `gdpr_defaults` masks matching fields when they are generated Read-only (Hidden stays Hidden) (with `grant_all` / `grant_full_access!` they are generated unmasked and listed by `GdprFieldAuditor`); deny-by-default for unconfigured fields. | Choosing the patterns and reviewing them (`GdprFieldAuditor`). |
 | Art. 30 Records of processing | Nothing. | Your register. |
 | Art. 33 Breach notification | Nothing automatic; the log can show who changed access in a period. | Detection, assessment and notification. |
 
@@ -207,7 +207,8 @@ PermissionForge::PermissionSetUser
 PermissionForge::Services::ExpiredAssignmentCleaner.call(dry_run: true)
 
 # Permanent assignments not reviewed for admin_stale_assignment_days (default 90; Art. 5(1)(e)).
-# As a rake task that exits 1 when it finds any (THRESHOLD_DAYS= for another threshold):
+# As a rake task that exits 1 when it finds any (THRESHOLD_DAYS= for another threshold;
+# ACTOR= and REASON= name who ran it and why on its report.generated event):
 #   bin/rails permission_forge:stale_assignments
 # (see assignment-expiration.md#rake-task-stale-assignments)
 PermissionForge::Services::StaleAssignmentAuditor.call
@@ -225,8 +226,9 @@ PermissionForge::Services::ConsentWithdrawalHandler.call(
 # Preview erasure of a user's permission data (Art. 17); a dry run writes no event. It counts the
 # audit-log name labels the run would clear (actor_labels_to_clear, record_labels_to_clear); a real
 # run returns actor_labels_cleared / record_labels_cleared, which the rake task prints.
-# As a rake task: USER_ID=42 bin/rails permission_forge:erasure (a dry run: DRY_RUN=true is the
-# default; DRY_RUN=false executes; ACTOR= and REASON= name who ran it on the events)
+# As a rake task: USER_ID=42 bin/rails permission_forge:erasure is a dry run, and so is any DRY_RUN
+# but an explicit false (DRY_RUN=1, yes, TRUE); only DRY_RUN=false, 0 or no executes. ACTOR= and
+# REASON= name who ran it and why on the events
 PermissionForge::Services::DataSubjectErasure.call(user: user, dry_run: true)
 # A real run answers { assignments_removed:, group_assignments_removed:, permission_sets:, groups:,
 #   actor_labels_cleared:, record_labels_cleared:, events_scrubbed:, cache_cleared:, callback_invoked:,
