@@ -89,8 +89,9 @@
           <button type="submit" formaction="<%= refresh %>" class="pf-btn pf-btn--xs" data-pf-js-hide><%= t('.update_form') %></button>
         </div>
       <% end %>
+      <%# The relationship path as stored (or as built so far), named in the page's language: never the column's name (round 8, B#95). %>
       <% if form.follows_relationship? %>
-        <code class="pf-mono-key">field_accessor_path: <%= form.path.join('.') %></code>
+        <p class="pf-hint"><%= t('.path_html', path: tag.code(form.path.join('.'), class: 'pf-mono-key')) %></p>
       <% end %>
       <% if builder.model_missing? %><p class="pf-error" role="alert"><%= t('.model_missing') %></p><% end %>
     </div>

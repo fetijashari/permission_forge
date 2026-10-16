@@ -98,7 +98,7 @@ module PermissionForge
 
       @rule.assign_attributes(@form.attributes)
       if @rule.save
-        redirect_to rules_path, notice: t("permission_forge.flash.rules.#{flash_key}", rule: pf_record_name(@rule))
+        redirect_to rules_path, **pf_save_flash(@rule) { t("permission_forge.flash.rules.#{flash_key}", rule: pf_record_name(@rule)) }
       else
         @model_errors = @rule.errors
         render template, status: :unprocessable_entity

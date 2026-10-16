@@ -149,7 +149,7 @@ module PermissionForge
 
         post pf("/permission_sets/#{@set.id}/review"), params: params
 
-        assert_equal t('flash.permission_sets.no_changes'), flash[:notice]
+        assert_equal t('flash.no_changes'), flash[:notice]
       end
 
       # --- b-admin-ui #118: a locked granting set ----------------------------------------------

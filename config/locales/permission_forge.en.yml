@@ -495,6 +495,7 @@ en:
           other: Removed %{count} expired assignments, but the cache store did not
             confirm that the affected people's cached permissions were cleared. The
             old permissions may stay in use until the cache lifetime ends.
+      no_changes: No changes to save.
       not_editable: This record is not editable.
       not_null: A required value was missing. Nothing was changed; the page shows
         what is there now.
@@ -542,7 +543,6 @@ en:
         duplicated_outside_group: 'Duplicated “%{name}”: resources, fields, actions
           and rules were copied. Assignments were not. The copy is not in “%{group}”,
           which is locked.'
-        no_changes: No changes to save.
         nothing_applied: 'Nothing to save: %{reasons}.'
         save_failed: 'Nothing was saved: %{errors}'
         saved:
@@ -1033,6 +1033,7 @@ en:
             title: This rule compares a column that holds a secret
         operator: Condition
         optional: optional
+        path_html: 'Relationship path: %{path}'
         pick_field: Pick a field…
         pick_relationship: Pick a relationship…
         preview: Preview

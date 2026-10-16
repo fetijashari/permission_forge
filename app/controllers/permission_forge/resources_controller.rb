@@ -54,9 +54,7 @@ module PermissionForge
     def apply
       changes = nil
       outcome = cache_outcome { changes = change_set.apply! }
-      redirect_to pf_back_or(resource_path),
-                  **cache_flash_text(outcome, t('permission_forge.flash.permission_sets.saved',
-                                                count: changes.size, people: helpers.pf_people_text(pf_people_count(@permission_set))))
+      redirect_to pf_back_or(resource_path), **pf_applied_flash(changes, outcome)
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to resource_path, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end

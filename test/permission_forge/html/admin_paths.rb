@@ -150,10 +150,10 @@ module PermissionForge
           ['audit_events#invalid_filters', :get, '/audit', { from: '2026-02-30' }],
           ['bulk_assignments#create', :post, "#{set_path}/bulk_assignment", { identifiers: 'nobody@x.test' }],
           ['people#erase', :post, "#{person}/erasure", { confirmation: 'someone else' }],
+          ['permission_set_editor#render_conditions_refused', :patch, "#{set_path}/conditions", { allowed_ips: "10.0.0.0/8\n10.0.0.300" }],
           ['permission_set_groups#render_blank_name', :post, '/groups', { name: '' }],
           ['permission_set_rules#save_rule', :post, "#{resource_base}/rules", rule_params],
           ['permission_set_rules#save_rule', :patch, "#{resource_base}/rules/#{id(:rule)}", rule_params],
-          ['permission_sets#conditions', :patch, "#{set_path}/conditions", { allowed_ips: "10.0.0.0/8\n10.0.0.300" }],
           ['permission_sets#create', :post, '/permission_sets', { type: 'granting', name: '' }],
           ['resource_actions#render_invalid', :post, "#{resource_base}/actions", { resource_action: { name: 'Bad Key!' } }],
           ['resources#create', :post, "#{set_path}/resources", { model_name: 'Customer', preset: 'read' }]

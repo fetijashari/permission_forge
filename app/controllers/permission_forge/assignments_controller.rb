@@ -40,13 +40,15 @@ module PermissionForge
     # Permission Set only a change that narrows access passes
     # (EditableLock.widening_lock): for a granting set an end date set or
     # moved earlier, for a Muting Permission Set one cleared or moved later.
+    # Nothing chosen (the select's own first entry), or the end date the
+    # assignment has, changes nothing and says so (SaveNotice).
     def update
       expires_at = new_expiry(params[:expiry].to_s)
-      return redirect_to(return_path) if expires_at == :invalid
+      return redirect_to(return_path, **pf_save_flash(false)) if expires_at == :invalid
       return if widening_refused?(expires_at)
 
       outcome = cache_outcome { @assignment.update!(expires_at: expires_at) }
-      redirect_to return_path, **cache_flash_text(outcome, end_changed_notice(expires_at))
+      redirect_to return_path, **pf_save_flash(@assignment) { cache_flash_text(outcome, end_changed_notice(expires_at)) }
     end
 
     def confirm_destroy

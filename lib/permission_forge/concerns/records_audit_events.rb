@@ -154,6 +154,9 @@ module PermissionForge
         saved_changes.except(*BOOKKEEPING_COLUMNS).as_json
       end
 
+      # Whether the last save wrote a change event: SaveNotice asks it.
+      def saved_audited_changes? = audit_changes.any?
+
       # The Permission Set an event about this record belongs to, if any.
       def audit_permission_set
         PERMISSION_SET[self.class.audit_model_key]&.call(self)
@@ -226,10 +229,9 @@ module PermissionForge
       end
 
       def record_audit_event_for_update
-        changes = audit_changes
-        return if changes.empty?
+        return unless saved_audited_changes?
 
-        record_audit_event(:update, audit_update_details.merge('changes' => changes))
+        record_audit_event(:update, audit_update_details.merge('changes' => audit_changes))
       end
 
       # Event data a model adds to its update events (the computed 'changes' wins).

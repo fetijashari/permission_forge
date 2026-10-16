@@ -1980,6 +1980,26 @@ none.** (code and API clients that create without a name, or with a blank one), 
 - **Home counts people with one Macedonian noun.** "1 лице го има овој сет" stood beside "1 корисник" (field test round
   7, C#92); every count of people on Home uses the noun of `ui.people_count`, in every locale (a glossary test).
   <!-- pin: test/permission_forge/locale_glossary_test.rb#mk: Home counts people with the noun of ui.people_count -->
+- **A save that changed nothing says "No changes to save." on every admin form.** The action form said "Saved
+  “Export”. It applies immediately.", the rule builder "Saved the rule “Own customers”.", the group page "Group saved.
+  No one's access changed.", the Conditions tab "Activation conditions saved.", an applied batch "Saved 0 changes", and
+  an end date set to the one the assignment had restated it — none of them changed a row or wrote an audit event (field
+  test round 8, B#70). "The save changed something" has one definition, `RecordsAuditEvents#saved_audited_changes?`
+  (saved changes minus the bookkeeping columns), which also decides whether the change event is written; the admin's
+  flash goes through `SaveNotice#pf_save_flash` (a record, or whether a batched edit applied any change), with no cache
+  note when nothing was done. The group keeps its sentence for a change that affects nobody. The key moved from
+  `flash.permission_sets.no_changes` to `flash.no_changes`.
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#every admin form that saves a record, submitted unchanged, says No changes to save and writes no event -->
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#a save that changes something still says what it saved -->
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#every template with a PATCH form is classified: walked as a save, or why it is not one -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: a save changed something (RecordsAuditEvents#saved_audited_changes?) -->
+- **The rule builder names a relationship path in the page's language.** Under the relationship picker it printed
+  `field_accessor_path: ownr` — the column's name — in every locale, while the banner and the picker's label said
+  "Relationship" in the page's language (field test round 8, B#95); it reads "Relationship path: `ownr`" (en, sq, mk).
+  A walk of every admin screen, error state and posted page now refuses a column name of the gem's tables followed by a
+  colon anywhere but the Technical details panels and the initializer snippets.
+  <!-- pin: test/permission_forge/html/raw_attribute_names_test.rb#the rule builder names the stored relationship path in the page language -->
+  <!-- pin: test/permission_forge/html/raw_attribute_names_test.rb#no screen prints a column name of the gem as a label -->
 ### Documentation
 
 - [Migration guide](docs/migration-guide.md#upgrading-to-015): "Upgrading to 0.15" — run `rake

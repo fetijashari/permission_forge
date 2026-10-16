@@ -6,6 +6,7 @@ module PermissionForge
   class ResourceFieldsController < ApplicationController
     include PermissionForge::ActingAdmin
     include PermissionForge::CacheConfirmation
+    include PermissionForge::ChangeReview
 
     before_action :load_field
     before_action :reject_locked, only: %i[update acknowledge apply_recommendation]
@@ -29,7 +30,7 @@ module PermissionForge
         changes = apply_field_changes(attrs)
         finish_new_field(attrs) unless @field
       end
-      redirect_to pf_back_or(resource_path), **cache_flash_text(outcome, saved_notice(changes))
+      redirect_to pf_back_or(resource_path), **pf_applied_flash(changes, outcome)
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to field_path, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end
@@ -52,8 +53,9 @@ module PermissionForge
       return redirect_to(field_path) unless match
 
       level = @permission_set.is_muting ? 'mask' : 'masked'
-      apply_field_changes('level' => level, 'mask_strategy' => match.strategy)
-      redirect_to pf_back_or(field_path), notice: t('permission_forge.flash.fields.recommendation_applied', field: @key)
+      changes = apply_field_changes('level' => level, 'mask_strategy' => match.strategy)
+      redirect_to pf_back_or(field_path),
+                  **pf_save_flash(changes.any?) { t('permission_forge.flash.fields.recommendation_applied', field: @key) }
     end
 
     private
@@ -107,13 +109,6 @@ module PermissionForge
       extra = attrs.slice('label', 'description').compact_blank
       extra['mask_strategy'] = attrs['mask_strategy'] if attrs['mask_strategy'].present? && field.mask_access
       field.update!(extra) if extra.any?
-    end
-
-    def saved_notice(changes)
-      return t('permission_forge.flash.permission_sets.no_changes') if changes.empty?
-
-      t('permission_forge.flash.permission_sets.saved', count: changes.size,
-                                                        people: helpers.pf_people_text(pf_people_count(@permission_set)))
     end
 
     # People holding a set with this Resource, or one of the STI bases its

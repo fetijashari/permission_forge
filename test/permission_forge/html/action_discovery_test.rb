@@ -87,7 +87,7 @@ module PermissionForge
         post pf("#{@base}/review"), params: new_action_params('archive' => { is_permitted: '1' })
 
         assert_redirected_to pf(@base)
-        assert_equal I18n.t('permission_forge.flash.permission_sets.no_changes'), flash[:notice]
+        assert_equal I18n.t('permission_forge.flash.no_changes'), flash[:notice]
       end
 
       # The badge texts are the ones the drawer rendered before controller-action

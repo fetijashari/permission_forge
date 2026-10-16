@@ -89,9 +89,7 @@ module PermissionForge
     def apply
       changes = nil
       outcome = cache_outcome { changes = change_set.apply! }
-      notice = t('permission_forge.flash.permission_sets.saved', count: changes.size,
-                                                                 people: helpers.pf_people_text(pf_people_count(@permission_set)))
-      redirect_to back_to_set, **cache_flash_text(outcome, notice)
+      redirect_to back_to_set, **pf_applied_flash(changes, outcome)
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to back_to_set, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end
@@ -135,14 +133,10 @@ module PermissionForge
       @condition_errors = @conditions_form.errors
       if @condition_errors.empty? && @permission_set.update(attrs)
         return redirect_to permission_forge.permission_set_path(@permission_set, tab: 'conditions'),
-                           notice: t('permission_forge.flash.permission_sets.conditions_saved')
+                           **pf_save_flash(@permission_set) { t('permission_forge.flash.permission_sets.conditions_saved') }
       end
 
-      @tab = 'conditions'
-      @ip_text = params[:allowed_ips].to_s
-      load_editor
-      load_conditions_tab
-      render :show, status: :unprocessable_entity
+      render_conditions_refused
     end
 
     private
