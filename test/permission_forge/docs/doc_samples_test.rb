@@ -16,17 +16,22 @@ module PermissionForge
     # (the Turbo sign-in of a person with no set, the public index with and
     # without resume_session, the sign-in page under the guard, Option B,
     # the generated initializer's Option A with its audit_actor_resolver, ...). A second child is a `rails new --api` host. SQLite only, like the
-    # fresh install test; the app's shape needs Rails 8.
+    # fresh install test. The documents need Rails 8; the API-only host runs
+    # on every Rails the gem supports (7.1 included).
     class DocSamplesTest < ActiveSupport::TestCase
       SCRIPT = File.expand_path('../../support/docs_app.rb', __dir__)
       FORBIDDEN = { 'status' => 403, 'layout' => true, 'sign_out' => true, 'forbidden_h1' => true }.freeze
 
       setup do
         skip 'the docs app is SQLite-only (the fresh install test is too)' unless ActiveRecord::Base.connection.adapter_name.match?(/sqlite/i)
-        skip 'the docs app has the shape of a Rails 8 app (params.expect, rate_limit)' if Rails::VERSION::MAJOR < 8
       end
 
+      # The documents and their flows need Rails 8 (the authentication
+      # generator's app, params.expect, rate_limit): on Rails 7 the API-only
+      # host below is what runs (it uses none of them).
       test 'every run and file= block of the documentation executes in the docs app, and every literal # => claim holds' do
+        skip 'the documents describe a Rails 8 app (bin/rails generate authentication, params.expect, rate_limit)' if Rails::VERSION::MAJOR < 8
+
         result = docs_app('default')
         failures = result.fetch('documents').flat_map do |file, document|
           document.fetch('blocks').flat_map { |block| block_failures(file, block) }
