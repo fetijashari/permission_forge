@@ -4,7 +4,10 @@
 # definitions at the end of the file), blank lines around it trimmed, without
 # the `<!-- pin: test#name -->` comments that tie each bullet to its test (for
 # the repository, not the release page). Fails when the section is missing or
-# empty, or longer than a GitHub Release body can hold.
+# empty. A section longer than a GitHub Release body can hold comes out
+# condensed: the headings, each bullet's bold lead (`- **...**`) and a link to
+# the full section in CHANGELOG.md at the release tag; it fails only when even
+# that does not fit.
 #
 # The release workflow's `build` job takes the GitHub Release notes from it,
 # before the approval (after the push, a missing section could no longer be
@@ -42,7 +45,26 @@ fi
 limit=124000
 size=$(printf '%s\n' "$notes" | wc -c | tr -d ' ')
 if [ "$size" -gt "$limit" ]; then
-  echo "release_notes.sh: the $version section is $size bytes; a GitHub Release body takes at most $limit here (125,000 characters with the release footer): shorten it" >&2
-  exit 1
+  # Each bullet (its continuation lines joined) down to its bold lead; text
+  # before the first heading and the headings stay as they are.
+  notes=$(awk -v link="https://github.com/fetijashari/permission_forge/blob/v$version/CHANGELOG.md" '
+    function flush() {
+      if (bullet == "") return
+      if (match(bullet, /^- \*\*[^*]+\*\*/)) print substr(bullet, RSTART, RLENGTH)
+      else print substr(bullet, 1, 160)
+      bullet = ""
+    }
+    /^- / { flush(); bullet = $0; next }
+    /^[ \t]+[^ \t]/ && bullet != "" { line = $0; sub(/^[ \t]+/, "", line); bullet = bullet " " line; next }
+    /^### / { flush(); print ""; print; print ""; next }
+    NF == 0 { flush(); next }
+    { flush(); print }
+    END { flush(); print ""; print "Each entry in full, with its opt-out and the test that proves it: " link }
+  ' <<<"$notes")
+  size=$(printf '%s\n' "$notes" | wc -c | tr -d ' ')
+  if [ "$size" -gt "$limit" ]; then
+    echo "release_notes.sh: the $version section is $size bytes even condensed; a GitHub Release body takes at most $limit here (125,000 characters with the release footer): shorten it" >&2
+    exit 1
+  fi
 fi
 printf '%s\n' "$notes"

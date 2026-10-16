@@ -10,7 +10,7 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 Before upgrading, run `bin/rails permission_forge:audit`: it lists the stored rows this release reads differently (rules
 that match nothing, broken activation conditions, variant rows, unknown mask strategies). The
-[migration guide](docs/migration-guide.md#upgrading-to-015) has the steps, the behaviour changes with their opt-outs
+[migration guide](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015) has the steps, the behaviour changes with their opt-outs
 and the RLS re-sync.
 
 ### Added
