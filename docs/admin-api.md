@@ -190,7 +190,7 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 }
 ```
 
-**A path or method no endpoint answers is a 404 in the same envelope.** Any other path under the API mount (`GET /permissions/api/unknown`, `GET …/permission_sets/:uuid/widgets`, `PUT /permissions/api/stats`, a `POST`, `PATCH` or `DELETE` on the read-only `audit_events`) answers:
+**A path or method no endpoint answers is a 404 in the same envelope.** Any other path under the API mount (`GET /permissions/api/unknown`, `GET …/permission_sets/:uuid/widgets`, `PUT /permissions/api/stats`, a `POST`, `PATCH` or `DELETE` on the read-only `audit_events`, any `OPTIONS` or `TRACE` request) answers:
 
 ```json sample=route_not_found
 { "error": { "status": 404, "messages": "No API endpoint answers this path and method" } }
@@ -220,7 +220,7 @@ The messages follow the request's locale. Through 0.14.1 an input error answered
 { "error": { "status": 400, "messages": "The request body could not be read. Send valid JSON with Content-Type application/json." } }
 ```
 
-Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 can come before a 401; while the API is disabled it stays a 404 without a body. The message follows the `Accept-Language` header (a `locale` parameter in the unreadable body cannot be read). Through 0.14.1 Rails answered its own `{"status":400,"error":"Bad Request"}`.
+Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 can come before a 401; while the API is disabled it stays a 404 without a body. The message follows the `Accept-Language` header (a `locale` parameter in the unreadable body cannot be read). Through 0.14.1 Rails answered its own `{"status":400,"error":"Bad Request"}`. A form or multipart body Rack cannot parse (`a[=1&%%%`, a multipart body without its end) answers the same 400 envelope; through 0.15.0-rc it was Rails' own 400 page (`text/html`).
 
 **What answers 422.** A failed validation (`messages` is the model's errors, as above), and input the API cannot read:
 
@@ -230,6 +230,7 @@ Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 ca
 - a bulk assignment without `user_ids` (missing, `[]`, `""` or only blanks), or with `user_ids` that is not a list (`"1,3"`, `3`): see [Bulk User Assignment](#bulk-user-assignment);
 - a single assignment or group membership whose `user_id` is missing, is not one user id (`"abc"` for an integer key, `[2]`, an object), or names nobody `user_list_resolver` lists: see [Permission Set Users](#permission-set-users-assign-users-to-sets);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
+- `null` for an attribute whose column is NOT NULL (`"is_active": null`, `"label": null`, `"mask_strategy": null`), or `""` for a boolean sent as a form value: `{"is_active": ["can't be blank"]}` (through 0.15.0-rc a 500);
 - a `permission_set_group_id` that names no group of the current tenant;
 - a record another request saved a moment ago: two requests creating the same assignment, group membership, Resource or field at once both pass the uniqueness validation and the database's unique index refuses the second — the answer is the validation's own message, keyed by its attribute: `{"user_id": ["already holds this Permission Set"]}` for an assignment, `{"user_id": ["is already a member of this group"]}` for a group membership, `{"name": ["already exists in this permission set"]}` for a Resource, `{"name": ["has already been taken"]}` for a field. Through 0.14.1 this was a 500 (`ActiveRecord::RecordNotUnique`). When the index the database names belongs to no validation of the gem's models (an index you added yourself), the message is on `base`;
 - a rule whose `field_name` is not a column of its model (`{"field_name": ["names onwer_id, which is not a column of Customer"]}`), or a join rule whose `field_accessor_path` names an association the model does not have or one no join can be built through (`{"field_accessor_path": ["names ownr, which is not an association of Customer"]}`): see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name);

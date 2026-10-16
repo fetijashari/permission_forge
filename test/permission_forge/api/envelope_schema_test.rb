@@ -76,7 +76,7 @@ module PermissionForge
       }.freeze
 
       # One request being prepared: the scenario's step changes what it needs.
-      Call = Struct.new(:verb, :path, :params, :raw, keyword_init: true)
+      Call = Struct.new(:verb, :path, :params, :raw, :content_type, keyword_init: true)
 
       # The error classes: [label, status, whether it applies to a route, the
       # step that provokes it]. The success follows, always.
@@ -87,6 +87,9 @@ module PermissionForge
         ['403 no tenant', 403, :every_route?, :leave_tenant!],
         ['404 unknown record', 404, :names_a_record?, :unknown_record!],
         ['400 unreadable body', 400, :takes_a_body?, :unreadable_body!],
+        # Rails reads these for its instrumentation, before rescue_from (R2 review, P2-2)
+        ['400 malformed form body', 400, :takes_a_body?, :malformed_form_body!],
+        ['400 malformed multipart body', 400, :takes_a_body?, :malformed_multipart_body!],
         ['422 unreadable input', 422, :reads_input?, :unreadable_input!],
         ['403 refused by the authorization lambdas', 403, :authorized?, :refuse_everything!],
         ['403 locked', 403, :locked_out?, :lock!]
@@ -266,9 +269,10 @@ module PermissionForge
 
       def perform(call)
         if call.raw
-          send(call.verb, call.path, params: call.raw, headers: HEADERS.merge('CONTENT_TYPE' => 'application/json'))
+          process(call.verb.to_sym, call.path, params: call.raw,
+                                               headers: HEADERS.merge('CONTENT_TYPE' => call.content_type || 'application/json'))
         else
-          send(call.verb, call.path, params: call.params, headers: HEADERS.dup, as: :json)
+          process(call.verb.to_sym, call.path, params: call.params, headers: HEADERS.dup, as: :json)
         end
       end
 
@@ -286,6 +290,17 @@ module PermissionForge
       def leave_tenant!(*) = no_tenant!
       def unknown_record!(call, _verb, spec, _key) = call.path = build_path(spec, unknown: true)
       def unreadable_body!(call, *) = call.raw = '{"x": '
+
+      def malformed_form_body!(call, *)
+        call.raw = 'a[=1&%%%'
+        call.content_type = 'application/x-www-form-urlencoded'
+      end
+
+      def malformed_multipart_body!(call, *)
+        call.raw = "--xyz\r\nContent-Disposition: form-data; name=\"a\"\r\n"
+        call.content_type = 'multipart/form-data; boundary=xyz'
+      end
+
       def unreadable_input!(call, _verb, _spec, key) = call.params = resolve(UNPROCESSABLE.fetch(key))
 
       def refuse_everything!(*)
