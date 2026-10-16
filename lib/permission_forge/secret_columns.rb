@@ -4,15 +4,17 @@ module PermissionForge
   # The one definition of "a column that holds a secret", which a record rule
   # never compares: config.rule_secret_column_patterns (default
   # Configuration::QueryScopingSettings::DEFAULT_RULE_SECRET_COLUMN_PATTERNS —
-  # `password_digest`, `*_digest`, `*token*`, `encrypted_*`, `*_secret*`;
-  # `[]` opts out). A rule on such a column turns the rule into an oracle on
+  # `*_digest`, `*token*`, `encrypted_*`, `*_secret*`, `*passw*`, `secret*`,
+  # `api_key` / `private_key` / `secret_key` / `access_key`, `crypted_*`,
+  # `*salt`, `otp_*`; `[]` opts out). A rule on such a column turns the rule into an oracle on
   # the secret (who may read which records tells its value apart), and the
   # rule's value (stored, shown in the admin and the API) would be a guess at it.
   #
   # Unlike SensitiveColumns (personal data, which a rule may well compare:
   # an owner's email) it judges the column a rule names: the name after the
   # last dot, in any case. Readers: PermissionSetRule's validation (a new
-  # rule, or a change of its column or path), the admin's rule builder (not
+  # rule, a change of its column or path, and on a rule stored before a
+  # change of its value or operator), the admin's rule builder (not
   # offered), the security audit's secret_rule_columns finding and Home's
   # card for the rules stored before (they keep evaluating as before).
   #

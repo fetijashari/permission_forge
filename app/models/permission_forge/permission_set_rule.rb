@@ -85,7 +85,7 @@ module PermissionForge
     validate :validate_field_name_segments, if: :field_name_changed?
     validate :validate_field_accessor_path, if: :path_check_due?
     validate :validate_field_name_column, if: :column_check_due?
-    validate :validate_secret_column, if: :column_check_due?
+    validate :validate_secret_column
     validate :validate_field_value_text, if: -> { new_record? || will_save_change_to_field_value? }
     validate :validate_field_value_for_operator
     validate :validate_field_value_column, if: :value_check_due?
@@ -200,10 +200,13 @@ module PermissionForge
     # A column that holds a secret (PermissionForge::SecretColumns:
     # config.rule_secret_column_patterns) is never compared by a rule: the
     # rule would tell its value apart. Checked with the column (a new rule,
-    # or a change of its name, path, join type or model); a rule stored
-    # before keeps evaluating and stays editable in its other attributes.
+    # or a change of its name, path, join type or model) and, on a rule
+    # stored before, with a change of its value or operator (each would be
+    # another guess at the secret); such a rule keeps evaluating and stays
+    # editable in its other attributes.
     def validate_secret_column
       return if field_name.blank? || errors[:field_name].any?
+      return unless column_check_due? || will_save_change_to_field_value? || will_save_change_to_operator?
       return unless PermissionForge::SecretColumns.new.rule?(self)
 
       errors.add(:field_name, I18n.t('permission_forge.validations.permission_set_rule.secret_column'))

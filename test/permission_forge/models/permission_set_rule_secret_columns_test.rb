@@ -33,6 +33,34 @@ module PermissionForge
       %w[label owner_id email name digest_count secretary].each { |name| assert_not columns.secret?(name), name }
     end
 
+    # The credentials a host's user table commonly has (Devise, Authlogic,
+    # has_secure_password, OTP gems, API keys), anchored to name segments
+    # so an ordinary column is never caught.
+    {
+      'password' => true, 'password_hash' => true, 'crypted_password' => true, 'encrypted_password' => true,
+      'password_salt' => true, 'salt' => true, 'secret' => true, 'secret_key' => true, 'api_key' => true,
+      'private_key' => true, 'access_key' => true, 'otp_secret' => true, 'otp_backup_codes' => true, 'passwd' => true,
+      'owner_id' => false, 'foreign_key' => false, 'sort_key' => false, 'keyword' => false, 'secretary' => false,
+      'salty_snack' => false, 'footprint' => false, 'hotpot' => false, 'crypto_wallet' => false, 'compass_bearing' => false,
+      'otter_count' => false, 'basalt' => false
+    }.each do |column, secret|
+      test "the default patterns #{secret ? 'name' : 'leave'} #{column}" do
+        assert_equal secret, SecretColumns.new(configuration: PermissionForge::Configuration.new).secret?(column)
+      end
+    end
+
+    test 'a stored rule on a secret column cannot change its value or operator (no guessing at the secret)' do
+      rule = create_permission_set_rule(permission_set: @set, resource: @records, field_name: 'label', field_value: 'x')
+      rule.update_columns(field_name: 'api_token', field_value: 'abc')
+      rule.reload
+
+      assert_not rule.update(field_value: 'abd'), 'a new guess at the value'
+      assert_includes rule.errors[:field_name], secret_message
+      assert_not rule.reload.update(operator: 'starts_with'), 'a new operator'
+      assert_includes rule.errors[:field_name], secret_message
+      assert rule.reload.update(name: 'Renamed'), 'the other attributes stay editable'
+    end
+
     test 'a new rule on a secret column is refused, with a message in every locale' do
       %w[password_digest api_token encrypted_note client_secret_hash pf_secret_records.api_token].each do |name|
         rule = new_rule(field_name: name)

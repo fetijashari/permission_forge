@@ -936,9 +936,9 @@ It does not govern model masking (`masked_attributes_nil_user_strategy`) or resp
 
 #### rule_secret_column_patterns
 
-**Default:** `[/\Apassword_digest\z/, /_digest\z/, /token/, /\Aencrypted_/, /_secret/]`
+**Default:** `[/\Apassword_digest\z/, /_digest\z/, /token/, /\Aencrypted_/, /_secret/, /passw/, /\Asecret(?:_|\z)/, /(?:\A|_)(?:api|private|secret|access)_key\z/, /(?:\A|_)crypted(?:_|\z)/, /(?:\A|_)salt\z/, /(?:\A|_)otp(?:_|\z)/]`
 
-**Secret column patterns.** The column names a record rule may not compare (`PermissionForge::SecretColumns`, matched against the column name — after the rule's association path, qualified or not — in lower case). A new rule on such a column, or a change of a rule's column, path, join type or model to one, is refused (`names a column that holds a secret`), and the admin's rule builder does not offer these columns. A rule stored before keeps evaluating as it did and stays editable in its other attributes; `rake permission_forge:audit` (`secret_rule_columns`) and the admin's Home list it. `[]` opts out; a narrower list (`[/\Apassword_digest\z/]`) keeps only those.
+**Secret column patterns.** The column names a record rule may not compare (`PermissionForge::SecretColumns`, matched against the column name — after the rule's association path, qualified or not — in lower case). The defaults also name passwords and their salts (`*passw*`, `*_salt`), `secret*`, API / private / secret / access keys (`*_key` after one of those words only: `sort_key` stays allowed) and OTP seeds (`otp_*`), each tied to a name segment. A new rule on such a column, or a change of a rule's column, path, join type or model to one, is refused (`names a column that holds a secret`), and the admin's rule builder does not offer these columns. A rule stored before keeps evaluating as it did and stays editable in its other attributes, except its value and operator (a new value would be another guess at the secret); `rake permission_forge:audit` (`secret_rule_columns`) and the admin's Home list it. `[]` opts out; a narrower list (`[/\Apassword_digest\z/]`) keeps only those.
 
 ### Controller actions
 
