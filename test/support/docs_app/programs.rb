@@ -24,6 +24,14 @@ module DocsApp
       { blocks: blocks }
     end
 
+    # The body of a block as a file: a block in a list item is indented with
+    # the item, so the common indent goes. A blank line stays a line (its
+    # spaces go, its newline stays).
+    def dedent(body)
+      indent = body.lines.reject { |line| line.strip.empty? }.map { |line| line[/\A */].size }.min.to_i
+      body.lines.map { |line| line.strip.empty? ? line.sub(/\A[ \t]+/, '') : line[indent..] }.join
+    end
+
     # Turns `expr # => literal` into a checked call. The expression becomes an
     # argument, not a block, so an assignment on that line still defines its
     # variable in the console's binding.
@@ -88,7 +96,7 @@ module DocsApp
       def write(block)
         path = File.join(Application.root, block.path)
         FileUtils.mkdir_p(File.dirname(path))
-        File.write(path, dedent(block.body))
+        File.write(path, Programs.dedent(block.body))
         note_written(block.path, path)
         { written: block.path }
       rescue StandardError => e
@@ -102,12 +110,6 @@ module DocsApp
         elsif relative.start_with?('config/locales/') then I18n.load_path << path and I18n.reload!
         elsif relative.match?(APP_FILES) then @reload = true
         end
-      end
-
-      # A block in a list item is indented with the item.
-      def dedent(body)
-        indent = body.lines.reject { |line| line.strip.empty? }.map { |line| line[/\A */].size }.min.to_i
-        body.lines.map { |line| line.strip.empty? ? line.lstrip : line[indent..] }.join
       end
 
       def shell(block)

@@ -59,6 +59,12 @@ module PermissionForge
       # or in middleware.
       attr_accessor :admin_tenantless_access
 
+      # Whether an API-only application (`config.api_only = true`) that
+      # mounts the engine is warned that the admin screens need the cookies,
+      # session and flash middlewares (default true). false for an app that
+      # uses only the JSON API and never opens the admin screens.
+      attr_accessor :api_only_admin_warning
+
       # Sets this group's defaults; called from Configuration#initialize.
       # @return [void]
       # @api private
@@ -70,6 +76,7 @@ module PermissionForge
         @admin_back_url = nil
         @admin_docs_url = 'https://github.com/fetijashari/permission_forge/blob/main/docs/configuration.md'
         @admin_tenantless_access = :deny
+        @api_only_admin_warning = true
       end
 
       # @return [Boolean] whether an admin or admin API request may run with

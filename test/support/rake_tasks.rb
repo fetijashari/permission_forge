@@ -17,8 +17,24 @@ module RakeTasks
              permission_forge_cache permission_forge_rls].freeze
   # The ENV the tasks read; cleared around every test.
   ENV_KEYS = %w[ACTOR REASON USER_ID DRY_RUN FAIL_ON FORMAT THRESHOLD_DAYS].freeze
+  # A literal read of a variable in a task body.
+  ENV_READ = /\bENV(?:\.fetch\(|\[|\.key\?\()\s*['"]([A-Z_]+)['"]/
+  # What PermissionForge::RakeAudit reads for a task that runs through it.
+  RAKE_AUDIT_READS = %w[ACTOR REASON].freeze
+  RAKE_AUDIT_CALL = /RakeAudit\.(?:changing|reporting)\(/
 
   module_function
+
+  # The environment variables a task body reads: its literal ENV reads, plus
+  # ACTOR and REASON when it runs through RakeAudit (which reads them).
+  #
+  # @param body [String] the source of the task's block
+  # @return [Array<String>] sorted
+  def env_keys_read(body)
+    keys = body.scan(ENV_READ).flatten
+    keys += RAKE_AUDIT_READS if body.match?(RAKE_AUDIT_CALL)
+    keys.uniq.sort
+  end
 
   def application
     @application ||= begin

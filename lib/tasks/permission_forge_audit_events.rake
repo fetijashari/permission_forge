@@ -3,11 +3,11 @@
 namespace :permission_forge do
   namespace :audit_events do
     # Prints the result the audit.purged events record (RakeOutput).
-    desc 'Delete audit events older than config.audit_retention_period; DRY_RUN=1 only counts them. ' \
-         'ACTOR= names who ran it, REASON= why.'
+    desc 'Delete audit events older than config.audit_retention_period. Deletes when DRY_RUN is unset or ' \
+         'false (or 0, no); any other DRY_RUN value (1, true, yes) only counts. ACTOR= names who ran it, REASON= why.'
     task purge: :environment do
       task_name = 'permission_forge:audit_events:purge'
-      dry_run = %w[1 true].include?(ENV.fetch('DRY_RUN', nil))
+      dry_run = PermissionForge::RakeDryRun.dry_run?(ENV.fetch('DRY_RUN', nil), default: false)
       purge = -> { PermissionForge::Services::AuditEventPurger.call(dry_run: dry_run) }
       result = begin
         dry_run ? purge.call : PermissionForge::RakeAudit.changing(task_name, &purge)

@@ -16,17 +16,22 @@ module PermissionForge
     # (the Turbo sign-in of a person with no set, the public index with and
     # without resume_session, the sign-in page under the guard, Option B,
     # the generated initializer's Option A with its audit_actor_resolver, ...). A second child is a `rails new --api` host. SQLite only, like the
-    # fresh install test; the app's shape needs Rails 8.
+    # fresh install test. The documents need Rails 8; the API-only host runs
+    # on every Rails the gem supports (7.1 included).
     class DocSamplesTest < ActiveSupport::TestCase
       SCRIPT = File.expand_path('../../support/docs_app.rb', __dir__)
       FORBIDDEN = { 'status' => 403, 'layout' => true, 'sign_out' => true, 'forbidden_h1' => true }.freeze
 
       setup do
         skip 'the docs app is SQLite-only (the fresh install test is too)' unless ActiveRecord::Base.connection.adapter_name.match?(/sqlite/i)
-        skip 'the docs app has the shape of a Rails 8 app (params.expect, rate_limit)' if Rails::VERSION::MAJOR < 8
       end
 
+      # The documents and their flows need Rails 8 (the authentication
+      # generator's app, params.expect, rate_limit): on Rails 7 the API-only
+      # host below is what runs (it uses none of them).
       test 'every run and file= block of the documentation executes in the docs app, and every literal # => claim holds' do
+        skip 'the documents describe a Rails 8 app (bin/rails generate authentication, params.expect, rate_limit)' if Rails::VERSION::MAJOR < 8
+
         result = docs_app('default')
         failures = result.fetch('documents').flat_map do |file, document|
           document.fetch('blocks').flat_map { |block| block_failures(file, block) }
@@ -48,8 +53,7 @@ module PermissionForge
         assert_includes %w[NameError ActionDispatch::Request::Session::DisabledSessionError], without['error'], without.inspect
         assert_match(/flash|sessions disabled/, without['message'].to_s)
         assert_equal 200, result.dig('admin_page_with_middlewares', 'status'), result['admin_page_with_middlewares'].inspect
-        post = result.fetch('admin_post_with_middlewares')
-        assert_operator post['status'].to_i.clamp(1, 599), :<, 500, "an admin POST behind the middlewares is not a server error: #{post.inspect}"
+        assert_admin_form_posts(result)
         warning = result['boot_warning'].to_s
         %w[ActionDispatch::Cookies ActionDispatch::Session::CookieStore ActionDispatch::Flash].each do |middleware|
           assert_includes warning, middleware, 'the boot warning names the middlewares the admin needs'
@@ -58,6 +62,17 @@ module PermissionForge
       end
 
       private
+
+      # The admin's New Permission Set form, posted behind the three
+      # middlewares with forgery protection on: the token from the page
+      # creates the set (a redirect to it); without the token, nothing.
+      def assert_admin_form_posts(result)
+        post = result.fetch('admin_post_with_middlewares')
+        assert_equal [302, true, true], post.values_at('status', 'created', 'token_in_form'), post.inspect
+        assert_match(%r{\A/permissions/permission_sets/\d+\z}, post['location'])
+        refused = result.fetch('admin_post_without_token')
+        assert_equal [false, 'ActionController::InvalidAuthenticityToken'], refused.values_at('created', 'error'), refused.inspect
+      end
 
       def block_failures(file, block)
         failures = Array(block['expectations']).reject { |claim| claim['passed'] }
@@ -170,6 +185,14 @@ module PermissionForge
         assert_empty taken['retried']
         assert_operator taken['claims'].size, :>=, 2
         assert taken['claims'].all?, 'README step 5 holds once step 4 ran'
+        assert_step_five_needs_step_four(taken['claims'], taken.fetch('without_assignment'))
+      end
+
+      # The documents run where nobody holds a set: without step 4's
+      # assignment, step 5's claims fail (a fixture set would make them pass).
+      def assert_step_five_needs_step_four(claims, without)
+        assert_equal claims.size, without.size
+        assert_not without.all?, "README step 5's claims must fail when step 4 assigns nothing: #{without.inspect}"
       end
 
       def docs_app(mode)

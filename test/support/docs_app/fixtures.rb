@@ -2,9 +2,11 @@
 
 module DocsApp
   # The host rows of the docs app (the tables the generators' migrations
-  # create, the people of the recordings) and, once PermissionForge is
-  # installed, the Permission Sets the scenarios need. Named apart from the
-  # sets the documents create ("Sales Team").
+  # create, the people of the recordings) and, once the documents have run,
+  # the Permission Sets the scenarios need: the documents run on the app as
+  # installed, where nobody holds a set yet, so README step 5's claims hold
+  # only because step 4 assigned one. Named apart from the sets the
+  # documents create ("Sales Team").
   #
   #   Alice  Account managers   every Customer, every field, edits all (view_all, modify_all); an admin
   #   Bob    Sales reps         her own customers (a rule), name editable, email masked
@@ -66,10 +68,16 @@ module DocsApp
       PEOPLE.each do |key, name|
         User.create!(email_address: email(key), password: PASSWORD, name: name, admin: key == :alice)
       end
-      CUSTOMERS.each do |name, owner|
-        Customer.create!(name: name, email: "#{name.downcase}@example.test", phone: '+1 555 0100', status: 'active',
-                         notes: "Notes about #{name}", owner: person(owner))
-      end
+      customers!
+    end
+
+    # Inserted, not created: the scaffold's model (`belongs_to :owner`, no
+    # such class) cannot save one until docs/getting-started.md wires it.
+    def customers!
+      Customer.insert_all!(CUSTOMERS.map do |name, owner|
+        { name: name, email: "#{name.downcase}@example.test", phone: '+1 555 0100', status: 'active', notes: "Notes about #{name}",
+          owner_id: person(owner).id }
+      end)
     end
 
     def permissions!
