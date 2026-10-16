@@ -11,6 +11,15 @@ module PermissionForge
       # variants (the explicit row decides since 0.15).
       class ConditionsCheck < BaseCheck
         LEVEL_LABELS = { 'hidden' => 'Hidden', 'masked' => 'Masked', 'read' => 'Read-only', 'edit' => 'Editable' }.freeze
+        # ActivationConditions#condition_problems kind => its sentence (the value, the set).
+        PROBLEMS = {
+          ip_entry: ->(value, _set) { "IP entry “#{value}” is not an IP address or CIDR range" },
+          ip_empty: ->(_value, _set) { 'IP list has no entry' },
+          flag_unusable: ->(value, _set) { "session flag #{value.inspect} holds a control character no request carries" },
+          hours_equal: ->(_value, set) { "start hour #{set.allowed_hours_start} equals end hour #{set.allowed_hours_end}" },
+          hours_incomplete: ->(_value, set) { set.allowed_hours_start.nil? ? 'start hour missing' : 'end hour missing' },
+          hours_range: ->(_value, _set) { 'hour outside 0–23' }
+        }.freeze
 
         def call
           [incomplete_conditions, variant_rows_conflict].compact
@@ -24,7 +33,8 @@ module PermissionForge
 
           finding(:medium, :incomplete_conditions, 'Activation conditions nobody can judge',
                   'These rows hold a condition the validation refuses today: an IP entry that is not an IP address or ' \
-                  'CIDR range, a list with no entry, the same start and end hour, one hour of the two, or an hour outside ' \
+                  'CIDR range, a list with no entry, a session flag with a control character, the same start and end ' \
+                  'hour, one hour of the two, or an hour outside ' \
                   '0–23. Such a condition cannot be judged, so a muting set applies to every request and a granting set ' \
                   'never passes, with or without a request context: it grants nothing. Fix the condition on the ' \
                   'set\'s Conditions tab (the admin and the API normalise the list; newline or comma lists and arrays ' \
@@ -39,13 +49,7 @@ module PermissionForge
         end
 
         def describe_problem(kind, value, set)
-          case kind
-          when :ip_entry then "IP entry “#{value}” is not an IP address or CIDR range"
-          when :ip_empty then 'IP list has no entry'
-          when :hours_equal then "start hour #{set.allowed_hours_start} equals end hour #{set.allowed_hours_end}"
-          when :hours_incomplete then set.allowed_hours_start.nil? ? 'start hour missing' : 'end hour missing'
-          when :hours_range then 'hour outside 0–23'
-          end
+          PROBLEMS.fetch(kind).call(value, set)
         end
 
         # Granting resources in effect: a muting resource's rows and variants

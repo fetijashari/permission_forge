@@ -102,7 +102,7 @@ module PermissionForge
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
     # A copy keeps these unchecked while they hold its original's values (KeepsCopiedValues).
-    keeps_copied :operator, :join_type, :field_name, :field_value
+    keeps_copied :operator, :join_type, :field_name, :field_accessor_path, :field_value
 
     # A copy (Services::Clonable) names what its original names. A rule
     # written before its column was checked is copied as it is: it matches

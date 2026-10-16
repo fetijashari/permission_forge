@@ -18,6 +18,27 @@ module PermissionForge
       row.errors[column]
     end
 
+    # --- the session flag --------------------------------------------------
+
+    # A flag with a control character is one no request carries: refused for
+    # a new or changed flag, and a stored one is a condition nobody can judge
+    # (a muting set applies to every request, a granting set never grants).
+    test 'a session flag with a control character is refused, and a stored one cannot be judged' do
+      assert_equal [I18n.t('permission_forge.validations.permission_set.flag_unusable')],
+                   errors_on(:requires_session_flag, requires_session_flag: "mfa\nverified")
+      assert_empty errors_on(:requires_session_flag, requires_session_flag: 'mfa_verified')
+
+      granting = create_permission_set(requires_session_flag: 'mfa_verified')
+      granting.update_column(:requires_session_flag, "mfa\tverified")
+      granting.reload
+
+      assert granting.conditions_broken?
+      assert granting.never_grants?
+      assert_equal [[:flag_unusable, "mfa\tverified"]], granting.condition_problems
+      assert_includes PermissionForge::PermissionSet.with_broken_conditions, granting
+      assert granting.update(description: 'still editable'), 'the other attributes stay editable'
+    end
+
     # --- the IP list ---------------------------------------------------------
 
     test 'allowed_ip_list splits on commas, newlines and spaces and drops blanks' do

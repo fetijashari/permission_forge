@@ -161,7 +161,15 @@ module PermissionForge
     #
     # @return [Boolean]
     def conditions_broken?
-      ip_list_broken? || hours_window.broken?
+      ip_list_broken? || hours_window.broken? || session_flag_broken?
+    end
+
+    # A session flag no request can carry: its name holds a control
+    # character (a NUL byte, a newline, a tab). The validation refuses one.
+    #
+    # @return [Boolean]
+    def session_flag_broken?
+      requires_session_flag.to_s.match?(/[[:cntrl:]]/)
     end
 
     # A granting set whose condition nobody can judge: it never applies, with
@@ -175,12 +183,14 @@ module PermissionForge
 
     # What the validations refuse about the row's conditions, for a stored
     # row too: `[:ip_entry, entry]` per entry that is no address, `[:ip_empty,
-    # text]` for a list of separators, and the window's problem with the
-    # window (:hours_incomplete, :hours_range, :hours_equal).
+    # text]` for a list of separators, `[:flag_unusable, flag]` for a session
+    # flag no request can carry, and the window's problem with the window
+    # (:hours_incomplete, :hours_range, :hours_equal).
     #
     # @return [Array<Array(Symbol, Object)>]
     def condition_problems
       problems = invalid_ip_entries.map { |entry| [:ip_entry, entry] }
+      problems << [:flag_unusable, requires_session_flag] if session_flag_broken?
       problems << [:ip_empty, allowed_ips] if allowed_ips.present? && allowed_ip_list.empty?
       window = hours_window
       problems << [window.problem, window] if window.problem

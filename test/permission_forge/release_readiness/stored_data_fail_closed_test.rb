@@ -80,6 +80,8 @@ module PermissionForge
         'Resource.name' => [{ paths: ROW_PATHS, reason: RULES_ONLY }, { paths: VALUE_PATHS, reason: NAMES_ELSEWHERE }],
         'ResourceField.name' => [{ paths: VALUE_PATHS, reason: NAMES_ELSEWHERE }],
         'PermissionSet.allowed_ips' => [{ paths: ROW_PATHS, reason: RULES_ONLY }],
+        # A flag no request can carry (a control character): the granting set never grants (ActivationConditions).
+        'PermissionSet.requires_session_flag' => [{ paths: ROW_PATHS, reason: RULES_ONLY }],
         'PermissionSet.allowed_hours_start' => [{ paths: ROW_PATHS, reason: RULES_ONLY }],
         'PermissionSet.allowed_hours_end' => [{ paths: ROW_PATHS, reason: RULES_ONLY }]
       }.freeze

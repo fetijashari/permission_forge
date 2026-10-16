@@ -31,7 +31,7 @@ What the resolver must do:
 - **It is called on every permission read of a user who holds a conditional set** — every `permissions_hash` call, so every `can_*?` check and every `MaskedAttributes` getter, memoized or not. It is never called for a user without conditional sets. Keep it cheap: read values your app already holds (`Current` attributes), no queries.
 - **Where there is no request** (a job, the console, a rake task), return `{}` or a context without `:ip` and `:session_flags`. A resolver that raises there raises on every read of such a user. Return a Hash.
 - **It must not read the permissions of the user it resolves for** — a masked attribute of `Current.user`, a `can_*?` check. Such a read raises `PermissionForge::ConfigurationError` (it would otherwise be answered a hash from another context, or an empty one).
-- `:ip` is a String or an `IPAddr`. `:session_flags` is an Array of Strings; a set's `requires_session_flag` must be one of them exactly.
+- `:ip` is a String or an `IPAddr`. `:session_flags` is an Array of Strings; a set's `requires_session_flag` must be one of them exactly. A flag with a control character (a newline, a tab, a NUL byte) is refused on save; one stored before is a condition nobody can judge, like a broken IP list or hour window.
 - `:time` is optional (default `Time.current`). It is fixed once per read, and the conditions compare its hour.
 
 If it returns `{}` or isn't configured, every conditional set applies by default — enable `config.conditional_sets_strict_mode` to fail closed instead (see [Strict Mode](#strict-mode)).

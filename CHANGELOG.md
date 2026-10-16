@@ -1108,6 +1108,10 @@ and the RLS re-sync.
 
 ### Fixed
 
+- **A session flag with a control character is a condition nobody can judge.** `requires_session_flag` with a newline,
+  a tab or a NUL byte is refused on save; a stored one makes a muting set apply to every request and a granting set grant
+  nothing (`ActivationConditions#session_flag_broken?`), and `rake permission_forge:audit` and Home list it with the other
+  broken conditions. <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#a session flag with a control character is refused, and a stored one cannot be judged -->
 - **A NUL byte in any text attribute of the permission models is a validation error.** A save from code (the console,
   a host's service) with one raised — PostgreSQL's driver refuses any statement carrying it, the uniqueness checks
   included, and SQLite on Rails 7.1 reads the statement cut short; the admin and the API already dropped NUL bytes from

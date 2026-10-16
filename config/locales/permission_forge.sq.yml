@@ -2448,6 +2448,8 @@ sq:
       name_blank: nuk mund të jetë bosh
       nul_byte: nuk duhet të përmbajë bajt NUL
       permission_set:
+        flag_unusable: 'nuk duhet të përmbajë karakter kontrolli (rresht i ri, tabulator):
+          asnjë kërkesë nuk e mbart një flamur të tillë'
         group_missing: duhet të jetë një grupim ekzistues i grupeve të lejeve
         hours_equal: duhet të ndryshojë nga ora e fillimit (një dritare nga një orë
           në të njëjtën orë është bosh; lërini të dyja bosh për asnjë dritare)

@@ -71,6 +71,10 @@ module PermissionForge
       allowed_ips.present? && !copied_unchanged?(:allowed_ips) && (new_record? || will_save_change_to_allowed_ips?)
     }
     validate :hours_window_is_judgeable, if: -> { hours_window.set? && hours_check_due? }
+    # A flag no request can carry (ActivationConditions#session_flag_broken?): for a new or changed flag.
+    validate :session_flag_is_judgeable, if: lambda {
+      session_flag_broken? && !copied_unchanged?(:requires_session_flag) && (new_record? || will_save_change_to_requires_session_flag?)
+    }
 
     scope :muting, -> { where(is_muting: true) }
     scope :granting, -> { where(is_muting: false) }
@@ -229,6 +233,10 @@ module PermissionForge
 
         self[attribute] = PermissionForge::ActivationConditions.condition_text(self[attribute])
       end
+    end
+
+    def session_flag_is_judgeable
+      errors.add(:requires_session_flag, :flag_unusable, message: I18n.t('permission_forge.validations.permission_set.flag_unusable'))
     end
 
     # The error goes on the hour that is missing, or on the end hour that

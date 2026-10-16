@@ -2390,6 +2390,8 @@ en:
       name_blank: can't be blank
       nul_byte: must not contain a NUL byte
       permission_set:
+        flag_unusable: 'must not hold a control character (a newline, a tab): no request
+          can carry such a flag'
         group_missing: must be an existing Permission Set Group
         hours_equal: must differ from the start hour (a window from an hour to the
           same hour is empty; leave both blank for no window)
