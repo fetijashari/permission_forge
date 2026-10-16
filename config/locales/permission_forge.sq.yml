@@ -438,7 +438,7 @@ sq:
         i mbajnë lejet e tyre të ruajtura derisa të rinisen ose derisa hyrjet të skadojnë.'
       copy_refused:
         kinds:
-          permission_set: Permission Set “%{name}”
+          permission_set: Grupi i lejeve “%{name}”
           permission_set_group: Permission Set Group “%{name}”
           permission_set_rule: rregulli “%{name}”
           record: një rresht

@@ -434,7 +434,7 @@ mk:
         своите кеширани дозволи додека не се рестартираат или додека записите не истечат.'
       copy_refused:
         kinds:
-          permission_set: Permission Set „%{name}“
+          permission_set: сетот на дозволи „%{name}“
           permission_set_group: Permission Set Group „%{name}“
           permission_set_rule: правилото „%{name}“
           record: еден ред
