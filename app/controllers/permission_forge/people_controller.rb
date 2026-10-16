@@ -150,7 +150,8 @@ module PermissionForge
     def load_audit_tab
       @changes = audit.changes_by(@person.id, limit: CHANGES_SHOWN)
       @changes_capped = audit.capped?
-      @timeline_log = PermissionForge::Admin::AuditLog.new({ views: params[:views] },
+      @views = pf_text_param(:views).presence # a Hash or a list is no toggle (it would reach url_for)
+      @timeline_log = PermissionForge::Admin::AuditLog.new({ views: @views },
                                                            scope: PermissionForge::Admin::AuditLog.for_person(@person.id))
       @timeline = @timeline_log.page(params[:page], per_page: TIMELINE_PER_PAGE)
       @timeline_lookups = PermissionForge::Admin::AuditLookups.new(@timeline.events)

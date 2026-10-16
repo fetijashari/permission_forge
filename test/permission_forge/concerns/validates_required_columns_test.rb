@@ -108,8 +108,8 @@ module PermissionForge
             name = column.name
             next if name == record.class.primary_key
 
-            record.reload.public_send(:write_attribute, name, nil)
-            "#{record.class.name}##{name}" if record.valid? || record.errors[name].empty? && covered_elsewhere(record, name).empty?
+            record.reload.send(:write_attribute, name, nil)
+            "#{record.class.name}##{name}" if record.valid? || (record.errors[name].empty? && covered_elsewhere(record, name).empty?)
           end
         end
 
