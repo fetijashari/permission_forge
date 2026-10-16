@@ -128,7 +128,7 @@ module PermissionForge
     test 'the erasure task description is not cut at an abbreviation' do
       comment = Rake::Task['permission_forge:erasure'].comment
 
-      assert_includes comment, 'in the audit log (supports GDPR Article 17)'
+      assert_includes comment, 'for a GDPR Article 17 request'
       assert_not_includes comment, 'Art.'
     end
 
@@ -146,8 +146,8 @@ module PermissionForge
     # cache:clear opening with "(0.14)" upgrade text on a fresh install.
     # Task#comment is the first sentence, what rake -T shows.
     test 'the audit task says it changes no permission data and records the run' do
-      assert_equal 'Security review of the PermissionForge setup: changes no permission data, records the run in ' \
-                   'the audit log', Rake::Task['permission_forge:audit'].comment
+      assert_equal 'Security review of the setup: changes no permission data, records the run in the audit log',
+                   Rake::Task['permission_forge:audit'].comment
     end
 
     test 'the cache:clear description leads with what it does, the upgrade hint last' do
@@ -173,7 +173,8 @@ module PermissionForge
 
       out, = run_task('permission_forge:erasure')
 
-      assert_includes out, "Audit log name labels to clear: #{actor} as actor, #{subject} as subject"
+      assert_includes out, "Audit log name labels to clear as actor: #{actor}\n"
+      assert_includes out, "Audit log name labels to clear as subject: #{subject}\n"
     end
 
     test 'the erasure says how many audit-log name labels it cleared' do
@@ -182,31 +183,35 @@ module PermissionForge
       out, = run_task('permission_forge:erasure')
 
       event = PermissionForge::AuditEvent.unscoped.where(event: 'erasure.performed').order(:id).last
-      assert_includes out, "Audit log name labels cleared: #{event.data['actor_labels_cleared']} as actor, " \
-                           "#{event.data['record_labels_cleared']} as subject"
+      assert_includes out, "Audit log name labels cleared as actor: #{event.data['actor_labels_cleared']}\n"
+      assert_includes out, "Audit log name labels cleared as subject: #{event.data['record_labels_cleared']}\n"
       assert_predicate event.data['record_labels_cleared'], :positive?
       assert_equal [0, 0], labels_naming(@user)
     end
 
     # --- e-operations #82: an erasure or clean-up from rake on an in-memory store ----------------
+    # The lines are the one Cache::Outcome (RakeOutput): the store confirmed
+    # it in this process, and the scope line says the servers kept theirs.
 
     test 'an erasure on an in-memory store says the running servers kept the cached permissions, in output and event' do
       ENV.update('USER_ID' => @user.id.to_s, 'DRY_RUN' => 'false', 'ACTOR' => 'dpo')
 
       out, = run_task('permission_forge:erasure')
 
-      assert_includes out, 'Cache cleared: true (in this rake process only: an in-memory store'
-      assert_includes out, 'the web and job processes keep their cached permissions'
-      assert_audit_event('erasure.performed', subject_user_id: @user.id.to_s, data: { 'process_local' => true })
+      assert_includes out, "Cached permissions removed: #{PermissionForge::RakeOutput::CONFIRMED_HERE}"
+      assert_includes out, "Cache scope: #{PermissionForge::RakeOutput::PROCESS_LOCAL_NOTE}"
+      assert_includes out, 'Ran in: a process of its own'
+      assert_audit_event('erasure.performed', subject_user_id: @user.id.to_s,
+                                              data: { 'process_local' => true, 'in_request' => false, 'cache_confirmed' => nil })
     end
 
-    test 'a clean-up on an in-memory store says so; on a shared store neither task adds anything' do
+    test 'a clean-up on an in-memory store says so; on a shared store neither task says process-local' do
       PermissionForge::PermissionSetUser.find_by!(user: @user).update!(expires_at: 1.day.from_now)
       travel_to(2.days.from_now) do
         out, = run_task('permission_forge:cleanup_expired_assignments')
 
-        assert_includes out, 'invalidated 1 user(s) (in this rake process only: an in-memory store'
-        assert_audit_event('cleanup.expired_assignments', data: { 'process_local' => true })
+        assert_includes out, "Cache scope: #{PermissionForge::RakeOutput::PROCESS_LOCAL_NOTE}"
+        assert_audit_event('cleanup.expired_assignments', data: { 'process_local' => true, 'in_request' => false, 'cache_confirmed' => true })
       end
 
       PermissionForge.configuration.cache_backend = :null
@@ -214,7 +219,9 @@ module PermissionForge
       ENV.update('USER_ID' => @user.id.to_s, 'DRY_RUN' => 'false', 'ACTOR' => 'dpo')
       out, = run_task('permission_forge:erasure')
 
-      assert_includes out, "Cache cleared: true\n"
+      assert_includes out, 'Cached permissions removed: yes (the cache store confirmed it)'
+      assert_includes out, "Cache scope: #{PermissionForge::RakeOutput::SHARED_NOTE}"
+      assert_not_includes out, 'this process only'
       assert_audit_event('erasure.performed', subject_user_id: @user.id.to_s, data: { 'process_local' => false })
     end
   end

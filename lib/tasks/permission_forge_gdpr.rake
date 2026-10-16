@@ -3,8 +3,9 @@
 namespace :permission_forge do
   # Exits 1 when it finds stale assignments, 2 when THRESHOLD_DAYS is not a
   # number of days (rather than reading it as 0, which flags everything).
-  desc 'Find permanent permission assignments not reviewed within THRESHOLD_DAYS ' \
-       '(default: config.admin_stale_assignment_days, 90). Exits 1 when it finds any.'
+  # People are named as the admin names them (RakeOutput.people).
+  desc 'Find permanent assignments not reviewed in THRESHOLD_DAYS, by default admin_stale_assignment_days. ' \
+       'Exits 1 when it finds any. ACTOR= names who ran it, REASON= why (recorded as report.generated).'
   task stale_assignments: :environment do
     task_name = 'permission_forge:stale_assignments'
     threshold = ENV.fetch('THRESHOLD_DAYS', nil)&.then do |given|
@@ -27,9 +28,10 @@ namespace :permission_forge do
     if result[:stale_count].zero?
       puts "No stale assignments found (threshold: #{result[:threshold_days]} days)."
     else
-      puts "Found #{result[:stale_count]} stale assignment(s) affecting #{result[:affected_user_ids].size} user(s):"
+      puts "Found #{result[:stale_count]} stale assignment(s) affecting #{result[:affected_user_ids].size} person(s):"
+      names = PermissionForge::RakeOutput.people(result[:assignments].map { |a| a[:user_id] })
       result[:assignments].each do |a|
-        puts "  User #{a[:user_id]} — #{a[:permission_set] || '(set not found)'} (#{a[:days_stale]} days since last review or grant)"
+        puts "  #{names.fetch(a[:user_id].to_s)} — #{a[:permission_set] || '(set not found)'} (#{a[:days_stale]} days since last review or grant)"
       end
       puts "\nConsider reviewing these assignments or setting expires_at for time-bound access."
       exit 1
@@ -43,11 +45,12 @@ namespace :permission_forge do
   # request id, reason and data of every audit event, the *_by_id columns on
   # rows the person created, edited or reviewed, and the person's own record
   # in the app. Assignments in other tenants stay when a tenant is current.
-  # rake -T shows a description up to its first full stop: the first sentence
-  # carries no abbreviation ("Article 17", not "Art. 17").
-  desc "Remove a user's assignments, group memberships and cached permissions, and clear their name labels " \
-       'in the audit log (supports GDPR Article 17). Ids and other event data stay. USER_ID required; ' \
-       'DRY_RUN=true by default.'
+  # rake -T shows a description up to its first full stop after a word: the
+  # first sentence carries no abbreviation ("Article 17", not "Art. 17") and
+  # ends on a word, not a parenthesis. What it prints is the result the
+  # erasure.performed event records (RakeOutput), the cache outcome included.
+  desc "Erase a person's permission data (assignments, cache, audit-log names) for a GDPR Article 17 request. " \
+       'Ids and other event data stay. USER_ID= required; DRY_RUN=true by default; ACTOR= names who ran it, REASON= why.'
   task erasure: :environment do
     user_id = ENV.fetch('USER_ID', nil)
     dry_run = ENV.fetch('DRY_RUN', 'true') == 'true'
@@ -68,22 +71,13 @@ namespace :permission_forge do
              end
     PermissionForge::RakeAudit.log(task_name, "user #{user_id}, dry_run=#{dry_run}: #{result.except(:permission_sets).to_json}")
 
+    person = PermissionForge::RakeOutput.person(user)
     if dry_run
-      puts "Dry run — would remove for user #{user_id}:"
-      puts "  Permission set assignments: #{result[:assignments_count]}"
-      puts "  Group assignments: #{result[:group_assignments_count]}"
-      puts "  Permission sets: #{result[:permission_sets].join(', ')}" if result[:permission_sets].any?
-      puts "  Audit log name labels to clear: #{result[:actor_labels_to_clear]} as actor, " \
-           "#{result[:record_labels_to_clear]} as subject (plus those on the events the erasure writes)"
+      PermissionForge::RakeOutput.report("Dry run — would erase for #{person}:", result.except(:dry_run))
+      puts '  (plus the name labels on the events the erasure itself writes)'
       puts "\nRun with DRY_RUN=false to execute."
     else
-      puts "Erasure complete for user #{user_id}:"
-      puts "  Assignments removed: #{result[:assignments_removed]}"
-      puts "  Group assignments removed: #{result[:group_assignments_removed]}"
-      puts "  Audit log name labels cleared: #{result[:actor_labels_cleared]} as actor, " \
-           "#{result[:record_labels_cleared]} as subject"
-      puts "  Cache cleared: #{result[:cache_cleared]}#{PermissionForge::RakeAudit.process_local_note}"
-      puts "  Assignments remaining in other tenants: #{result[:assignments_remaining_elsewhere]}"
+      PermissionForge::RakeOutput.report("Erasure complete for #{person}:", result)
       puts '  Kept: audit event ids, ip, request id, reason and data; *_by_id columns; the user record itself.'
     end
   end

@@ -183,6 +183,12 @@ sq:
       boolean:
         'false': Jo
         'true': Po
+      cache_scope:
+        own_process: 'Lejet e ruajtura në cache u pastruan vetëm në procesin e vet
+          (një ruajtje në memorie): proceset e uebit dhe të punëve i mbajtën të tyret.'
+        server_process: 'Lejet e ruajtura në cache u pastruan vetëm në këtë proces
+          të serverit (një ruajtje në memorie): punëtorët e tjerë të uebit dhe proceset
+          e punëve i mbajtën të tyret.'
       categories:
         access: Qasje
         admin: Administrim
@@ -220,15 +226,6 @@ sq:
       sentence_variants:
         assignment_revoked_expired: "%{actor} i hoqi %{person} Grupin e lejeve %{set}
           pasi kishte skaduar më %{date}."
-        cache_cleared_process_local: "%{actor} pastroi lejet e ruajtura në cache të
-          të gjithë përdoruesve vetëm në procesin e vet (një ruajtje në memorie):
-          proceset e uebit dhe të punëve i mbajtën të tyret."
-        cleanup_expired_assignments_process_local: "%{actor} hoqi caktimet e skaduara;
-          lejet e ruajtura në cache u pastruan vetëm në procesin e vet (një ruajtje
-          në memorie): proceset e uebit dhe të punëve i mbajtën të tyret."
-        erasure_performed_process_local: "%{actor} fshiu të dhënat e lejeve të %{person};
-          lejet e ruajtura në cache u pastruan vetëm në procesin e vet (një ruajtje
-          në memorie): proceset e uebit dhe të punëve i mbajtën të tyret."
         field_access_limited: "%{actor} lexoi %{record} me këto fusha të fshehura
           ose të maskuara: %{fields}."
       sentences:
@@ -422,9 +419,26 @@ sq:
         assigned:
           one: "%{set} iu caktua %{count} personi."
           other: "%{set} iu caktua %{count} personave."
+        assigned_cache_kept:
+          one: "%{set} iu caktua %{count} personi, por ruajtja e cache-it nuk konfirmoi
+            që lejet e tij të ruajtura u pastruan. Lejet e vjetra mund të mbeten në
+            përdorim derisa të mbarojë jetëgjatësia e cache-it."
+          other: "%{set} iu caktua %{count} personave, por ruajtja e cache-it nuk
+            konfirmoi që lejet e tyre të ruajtura u pastruan. Lejet e vjetra mund
+            të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it."
         revoked:
           one: "%{set} iu hoq %{count} personi."
           other: "%{set} iu hoq %{count} personave."
+        revoked_cache_kept:
+          one: "%{set} iu hoq %{count} personi, por ruajtja e cache-it nuk konfirmoi
+            që lejet e tij të ruajtura u pastruan. Lejet e vjetra mund të mbeten në
+            përdorim derisa të mbarojë jetëgjatësia e cache-it."
+          other: "%{set} iu hoq %{count} personave, por ruajtja e cache-it nuk konfirmoi
+            që lejet e tyre të ruajtura u pastruan. Lejet e vjetra mund të mbeten
+            në përdorim derisa të mbarojë jetëgjatësia e cache-it."
+      cache_process_local: 'Ruajtja e cache-it jeton vetëm në këtë proces të serverit
+        (një ruajtje në memorie): punëtorët e tjerë të uebit dhe proceset e punëve
+        i mbajnë lejet e tyre të ruajtura derisa të rinisen ose derisa hyrjet të skadojnë.'
       fields:
         acknowledged: Në rregull. “%{field}” nuk do të shënohet më në auditimin e
           privatësisë.
@@ -447,6 +461,13 @@ sq:
         cleaned:
           one: U hoq %{count} caktim i skaduar.
           other: U hoqën %{count} caktime të skaduara.
+        cleaned_cache_kept:
+          one: U hoq %{count} caktim i skaduar, por ruajtja e cache-it nuk konfirmoi
+            që lejet e ruajtura të personave të prekur u pastruan. Lejet e vjetra
+            mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.
+          other: U hoqën %{count} caktime të skaduara, por ruajtja e cache-it nuk
+            konfirmoi që lejet e ruajtura të personave të prekur u pastruan. Lejet
+            e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.
       not_editable: Ky regjistrim nuk mund të ndryshohet.
       people:
         cache_refresh_failed: Lejet e ruajtura të %{name} nuk mund të rifreskoheshin.

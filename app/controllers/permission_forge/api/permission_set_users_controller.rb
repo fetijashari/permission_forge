@@ -107,10 +107,12 @@ module PermissionForge
         raise ParamShapes::InvalidParam.new(:user_ids, message) if message
       end
 
-      # The service's counts plus `skipped`: the ids of the request that
-      # name nobody config.user_list_resolver lists. A revoke ignores
-      # expires_at (it removes the assignments whatever their end), also
-      # one that cannot be read.
+      # The service's counts and its cache outcome (`cache`: `confirmed`,
+      # `process_local`, `unconfirmed` — Cache::Outcome, as every
+      # cache-touching operation answers it) plus `skipped`: the ids of the
+      # request that name nobody config.user_list_resolver lists. A revoke
+      # ignores expires_at (it removes the assignments whatever their end),
+      # also one that cannot be read.
       def bulk_assignment
         user_ids = bulk_user_ids
         result = PermissionForge::Services::BulkPermissionSetAssignment.call(

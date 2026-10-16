@@ -299,7 +299,10 @@ module PermissionForge
         assert_not PermissionForge::PermissionSetUser.exists?(user_id: outside.id)
 
         post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'revoke' }, as: :json
-        assert_equal({ 'assigned' => 0, 'revoked' => 1, 'invalidated' => 1, 'skipped' => [] }, JSON.parse(response.body)['data'])
+        # `cache`: the one Cache::Outcome (the suite's memory store is process-local; the API serves a request)
+        assert_equal({ 'assigned' => 0, 'revoked' => 1, 'invalidated' => 1, 'skipped' => [],
+                       'cache' => { 'confirmed' => true, 'process_local' => true, 'unconfirmed' => 0, 'in_request' => true } },
+                     JSON.parse(response.body)['data'])
       end
 
       test 'POST bulk revokes multiple users' do

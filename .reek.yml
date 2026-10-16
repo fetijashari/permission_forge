@@ -229,6 +229,8 @@ detectors:
       - PermissionForge::Admin::SettingsCatalog#self.d
       # Finding builder: severity, code, title, detail, items: — one per report field
       - PermissionForge::Services::SecurityAuditChecks::BaseCheck#finding
+      # Event registration: name, category:, runtime_group:, cache: — one per catalogue column
+      - PermissionForge::Audit::EventCatalog#register
       - PermissionForge::Concerns::MaskedAttributes
       - PermissionForge::Operators::Registry
       - PermissionForge::Services::AttributeAccessGuard

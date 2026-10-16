@@ -3,11 +3,15 @@ module PermissionForge
   #
   # @api private
   class MaintenanceController < ApplicationController
-    # Removes expired assignments (the dry run is shown on Home first).
+    include PermissionForge::CacheConfirmation
+
+    # Removes expired assignments (the dry run is shown on Home first). The
+    # flash says what the cache store confirmed for the affected people, and
+    # when the store lives in this process only (CacheConfirmation).
     def cleanup
       result = PermissionForge::Services::ExpiredAssignmentCleaner.call
       redirect_to permission_forge.root_path,
-                  notice: t('permission_forge.flash.maintenance.cleaned', count: result[:removed])
+                  **cache_flash(result[:cache], { notice: :cleaned, alert: :cleaned_cache_kept }, count: result[:removed])
     end
   end
 end

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../cache/report'
+
 module PermissionForge
   module Services
     # Removes every cached permission hash — this version's entries, the
@@ -34,20 +36,22 @@ module PermissionForge
     #
     # @example
     #   result = PermissionCacheClearer.call(actor: 'ops: TCK-12', reason: 'deploy 0.14')
-    #   # => { strategy: :enumerated, users: 240, tenants: 2, unconfirmed: 0 }
-    #   # => { strategy: :pattern, users: nil, tenants: 2, unconfirmed: 0 }
+    #   # => { strategy: :enumerated, users: 240, tenants: 2, unconfirmed: 0,
+    #   #      cache: { confirmed: true, process_local: false, unconfirmed: 0 } }
+    #   # => { strategy: :pattern, users: nil, tenants: 2, unconfirmed: 0, cache: { ... } }
     #
     # `users` counts visits (a user once per tenant); `unconfirmed` the ones
     # the cache store did not confirm (each also reported through
-    # `config.on_cache_failure`, and owed). The audit log: one `cache.cleared`
-    # event per tenant, in that tenant with that tenant's counts, plus one
-    # without a tenant with the totals (`across_tenants`); under :pattern
-    # the counts are not known and the events say `counted: false`. Every
-    # event says `process_local: true` when the store lives in this process
-    # only (a memory store, Cache::Base#process_local?): the clear then did
-    # not reach the web and job processes, and the audit log says so.
-    # `actor:` and `reason:` as the other housekeeping services (rake:
-    # ACTOR=, REASON=).
+    # `config.on_cache_failure`, and owed); `cache` is the one Cache::Outcome
+    # every cache-touching operation answers (Cache::Report). The audit log:
+    # one `cache.cleared` event per tenant, in that tenant with that tenant's
+    # counts, plus one without a tenant with the totals (`across_tenants`);
+    # under :pattern the counts are not known and the events say
+    # `counted: false`. Every event carries the outcome's keys, and says
+    # `process_local: true` when the store lives in this process only (a
+    # memory store, Cache::Base#process_local?): the clear then did not reach
+    # the web and job processes, and the audit log says so. `actor:` and
+    # `reason:` as the other housekeeping services (rake: ACTOR=, REASON=).
     #
     # @api public
     class PermissionCacheClearer
@@ -60,7 +64,7 @@ module PermissionForge
       #
       # @param actor [Object, nil] who runs it, for the cache.cleared events
       # @param reason [String, nil] why
-      # @return [Hash] strategy:, users:, tenants:, unconfirmed:
+      # @return [Hash] strategy:, users:, tenants:, unconfirmed:, cache:
       def self.call(...) = new(...).call
 
       def initialize(actor: nil, reason: nil)
@@ -68,18 +72,21 @@ module PermissionForge
         @reason = reason
       end
 
-      # @return [Hash] strategy:, users:, tenants:, unconfirmed:
+      # @return [Hash] strategy:, users:, tenants:, unconfirmed:, cache:
       def call
         audited(actor: @actor, reason: @reason) { clear }
       end
 
       private
 
+      # The whole clear is one measured operation (Cache::Report); the
+      # unconfirmed count is this service's own (by slice).
       def clear
-        result = clear_by_pattern || clear_by_enumeration
+        @report = Cache::Report.new
+        result = @report.measure { clear_by_pattern || clear_by_enumeration }.value
         # retire every memo in this process, as an invalidation does
         PermissionForge.bump_permissions_cache_version!
-        result
+        result.merge(cache: @report.outcome(unconfirmed: result[:unconfirmed]).to_h)
       end
 
       # @return [Hash, nil] nil when the store cannot remove by pattern
@@ -163,16 +170,20 @@ module PermissionForge
         defined?(ActsAsTenant) ? ActsAsTenant.without_tenant(&) : yield
       end
 
-      # `process_local`: the store lives in this process only (a memory
-      # store), so the clear did not reach the web and job processes.
-      def record(tenant_id, **data)
-        data = data.transform_keys(&:to_s).merge('operation' => 'cache_clear', 'process_local' => process_local?)
-        PermissionForge::Audit.record(EVENT, tenant_id: tenant_id, data: data)
+      # With the outcome of its rows (Cache::Outcome#event_data:
+      # `process_local` says the store lives in this process only, so the
+      # clear did not reach the web and job processes).
+      def record(tenant_id, **counts)
+        PermissionForge::Audit.record(EVENT, tenant_id: tenant_id, data: event_data(**counts))
       end
 
-      def process_local?
-        @process_local = PermissionForge.cache.process_local? if @process_local.nil?
-        @process_local
+      def event_data(unconfirmed:, **counts)
+        { 'operation' => 'cache_clear', **counts.transform_keys(&:to_s), **outcome_data(unconfirmed) }
+      end
+
+      # The outcome's keys, `unconfirmed` among them.
+      def outcome_data(unconfirmed)
+        @report.outcome(unconfirmed: unconfirmed).event_data
       end
 
       # The event without a tenant — recorded with none ambient, so it is one.

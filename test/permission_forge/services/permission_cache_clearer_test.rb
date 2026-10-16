@@ -139,7 +139,8 @@ module PermissionForge
         tenants = Account.unscoped.count
         result = PermissionCacheClearer.call(actor: 'ops: TCK-12', reason: 'deploy 0.14')
 
-        assert_equal({ strategy: :pattern, users: nil, tenants: tenants, unconfirmed: 0 }, result)
+        assert_equal({ strategy: :pattern, users: nil, tenants: tenants, unconfirmed: 0,
+                       cache: { confirmed: true, process_local: true, unconfirmed: 0, in_request: false } }, result)
         assert_nothing_left
         assert_nil PermissionForge.cache.read(legacy)
         assert_not User.find(@revoked.id).can_delete?(:Customer), 'K1: the entry a 0.13 revocation could not reach'
@@ -147,7 +148,8 @@ module PermissionForge
         assert_audit_event('cache.cleared', actor_type: 'system', actor_label: 'ops: TCK-12', reason: 'deploy 0.14',
                                             data: { 'operation' => 'cache_clear', 'strategy' => 'pattern', 'counted' => false })
         assert_equal({ 'operation' => 'cache_clear', 'strategy' => 'pattern', 'counted' => false, 'unconfirmed' => 0,
-                       'tenants' => tenants, 'across_tenants' => true, 'process_local' => true }, tenantless_event.data)
+                       'tenants' => tenants, 'across_tenants' => true, 'process_local' => true, 'cache_confirmed' => true, 'in_request' => false },
+                     tenantless_event.data)
       end
 
       test 'by enumeration (a store without delete_matched): every user, once per tenant and once without, through the bulk path' do
@@ -173,8 +175,8 @@ module PermissionForge
         assert_not User.find(@revoked.id).can_delete?(:Customer), 'K1 under enumeration'
         assert_audit_event('cache.cleared', data: { 'strategy' => 'enumerated', 'users' => everyone, 'unconfirmed' => 0 })
         assert_equal({ 'operation' => 'cache_clear', 'strategy' => 'enumerated', 'users' => everyone * (tenants + 1),
-                       'tenants' => tenants,
-                       'unconfirmed' => 0, 'across_tenants' => true, 'process_local' => true }, tenantless_event.data)
+                       'tenants' => tenants, 'unconfirmed' => 0, 'across_tenants' => true, 'process_local' => true, 'in_request' => false,
+                       'cache_confirmed' => true }, tenantless_event.data)
       end
 
       test 'enumeration goes through each user\'s own invalidate_permissions where the bulk path must not be used' do

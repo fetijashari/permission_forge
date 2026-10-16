@@ -69,10 +69,12 @@ module PermissionForge
         real = ConsentWithdrawalHandler.call(user: @user, consent_flag: 'marketing_consent')
 
         assert_equal dry.keys.sort, real.keys.sort
+        # `cache`: the one Cache::Outcome; a dry run asks nothing of the store (the suite's memory store is process-local)
+        cache = { confirmed: true, process_local: true, unconfirmed: 0, in_request: false }
         assert_equal({ revoked_sets: 0, invalidated: false, affected_sets: ['Marketing Consent Access'],
-                       affected_assignment_count: 1, dry_run: true }, dry)
+                       affected_assignment_count: 1, dry_run: true, cache: cache }, dry)
         assert_equal({ revoked_sets: 1, invalidated: true, affected_sets: ['Marketing Consent Access'],
-                       affected_assignment_count: 1, dry_run: false }, real)
+                       affected_assignment_count: 1, dry_run: false, cache: cache }, real)
       end
 
       test 'handles multiple sets with the same consent flag' do

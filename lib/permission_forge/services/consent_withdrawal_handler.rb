@@ -1,3 +1,5 @@
+require_relative '../cache/report'
+
 module PermissionForge
   module Services
     # Handles consent withdrawal by removing a user from all permission sets
@@ -10,12 +12,17 @@ module PermissionForge
     #     consent_flag: 'marketing_consent'
     #   )
     #   # => { revoked_sets: 2, invalidated: true, affected_sets: ["Marketing Access", "Newsletter"],
-    #   #      affected_assignment_count: 2, dry_run: false }
+    #   #      affected_assignment_count: 2, dry_run: false,
+    #   #      cache: { confirmed: true, process_local: false, unconfirmed: 0 } }
     #
     # `invalidated` is false when nothing was revoked, and when the cache
     # store did not confirm the invalidation (reported through
-    # `config.on_cache_failure`). A dry run and a real run answer the same
-    # keys: `affected_sets` (the names of the sets gated on the flag),
+    # `config.on_cache_failure`). `cache` is the one Cache::Outcome every
+    # cache-touching operation answers (Cache::Report): `confirmed` (true
+    # also when nothing had to be invalidated), `process_local` (the store
+    # lives in this process only: other processes kept their entries),
+    # `unconfirmed`. A dry run and a real run answer the same keys:
+    # `affected_sets` (the names of the sets gated on the flag),
     # `affected_assignment_count` (this person's assignments to them),
     # `dry_run`; a dry run's `revoked_sets` is 0 and its `invalidated` false.
     #
@@ -26,7 +33,7 @@ module PermissionForge
     #     dry_run: true
     #   )
     #   # => { revoked_sets: 0, invalidated: false, affected_sets: ["Marketing Access"],
-    #   #      affected_assignment_count: 1, dry_run: true }
+    #   #      affected_assignment_count: 1, dry_run: true, cache: { confirmed: true, ... } }
     #
     # The audit log: assignments are destroyed through their callbacks (one
     # `assignment.revoked` each), then ONE `consent.withdrawn` event names the
@@ -37,8 +44,10 @@ module PermissionForge
     # The revocations and `consent.withdrawn` happen in ONE transaction, like
     # DataSubjectErasure: if the summary cannot be written under
     # audit_change_failure_strategy :raise, no assignment is removed. The
-    # cache invalidation runs after the commit (so the summary does not say
-    # whether the store confirmed it; the result's `invalidated` does).
+    # cache invalidation runs after the commit, so the summary records the
+    # outcome as pending (`cache_confirmed: nil`, the store's scope in
+    # `process_local`); the result's `invalidated` and `cache` say what the
+    # store confirmed.
     #
     # Tenants: with a tenant ambient, the person's assignments in that
     # tenant. With none (a platform task) in every tenant — also under
@@ -64,7 +73,7 @@ module PermissionForge
         @reason = reason
       end
 
-      # @return [Hash] `{ revoked_sets:, invalidated:, affected_sets:, affected_assignment_count:, dry_run: }`
+      # @return [Hash] `{ revoked_sets:, invalidated:, affected_sets:, affected_assignment_count:, dry_run:, cache: }`
       def call
         validate!
 
@@ -72,7 +81,7 @@ module PermissionForge
           affected_sets = consent_gated_sets
           affected_assignments = user_assignments_for(affected_sets)
           found = found(affected_sets, affected_assignments)
-          next found.merge(revoked_sets: 0, invalidated: false) if @dry_run
+          next found.merge(revoked_sets: 0, invalidated: false, cache: PermissionForge::Cache::Report.of { nil }.to_h) if @dry_run
 
           audited(actor: @actor, reason: @reason) { withdraw(affected_assignments).merge(found) }
         end
@@ -81,11 +90,12 @@ module PermissionForge
       private
 
       def withdraw(affected_assignments)
+        @report = PermissionForge::Cache::Report.new
         revoked_count = ActiveRecord::Base.transaction { revoke_and_record(affected_assignments) }
         # what the store confirmed — not what a host's override of the method returns
-        invalidated = revoked_count.positive? && PermissionForge::Cache::Failure.none? { @user.invalidate_permissions }
+        outcome = @report.measure { @user.invalidate_permissions if revoked_count.positive? }.outcome
 
-        { revoked_sets: revoked_count, invalidated: invalidated }
+        { revoked_sets: revoked_count, invalidated: revoked_count.positive? && outcome.confirmed, cache: outcome.to_h }
       end
 
       def revoke_and_record(affected_assignments)
@@ -103,6 +113,7 @@ module PermissionForge
         end
       end
 
+      # The cache outcome is pending here: the invalidation follows the commit.
       def summary_data(sets, revoked_count)
         {
           'operation' => 'consent_withdrawal',
@@ -111,7 +122,8 @@ module PermissionForge
           'set_uuids' => sets.map(&:uuid).uniq,
           'set_names' => sets.map(&:name).uniq,
           'revoked' => revoked_count,
-          'dry_run' => false
+          'dry_run' => false,
+          **@report.pending.event_data
         }
       end
 

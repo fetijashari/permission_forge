@@ -15,11 +15,17 @@ module PermissionForge
       class UnknownEventError < ArgumentError; end
 
       # `notification` is computed once: Audit.instrument asks for it on hot paths.
+      # `cache`: the event sums up an operation that invalidated, cleared or
+      # removed cached permissions, so its data carries the one Cache::Outcome
+      # (`cache_confirmed`, `process_local`, `unconfirmed`).
       #
       # @api private
-      Entry = Struct.new(:name, :category, :runtime_group, :notification, keyword_init: true) do
+      Entry = Struct.new(:name, :category, :runtime_group, :notification, :cache, keyword_init: true) do
         # Runtime events are published by Audit.instrument and stored per group.
         def runtime? = category == 'access'
+
+        # Whether the event's data carries a Cache::Outcome.
+        def cache? = cache == true
       end
 
       CATEGORIES = %w[change admin system access].freeze
@@ -34,10 +40,13 @@ module PermissionForge
         # @param category [String] change, admin, system or access
         # @param runtime_group [Symbol, nil] required for access events, refused
         #   for the others
+        # @param cache [Boolean] the event's data carries a Cache::Outcome (a
+        #   cache-touching operation's summary; test/permission_forge/audit/cache_scope_events_test.rb
+        #   runs every flagged event's operation)
         # @return [Entry]
-        def register(name, category:, runtime_group: nil)
+        def register(name, category:, runtime_group: nil, cache: false)
           entry = Entry.new(name: name.to_s, category: category.to_s, runtime_group: runtime_group&.to_sym,
-                            notification: "#{name}.permission_forge").freeze
+                            notification: "#{name}.permission_forge", cache: cache == true).freeze
           validate!(entry)
           REGISTRY_MUTEX.synchronize { @entries[entry.name] = entry }
         end
@@ -92,8 +101,9 @@ module PermissionForge
          group_membership.added group_membership.changed group_membership.removed field.sensitive_acknowledged]
         .each { |name| register(name, category: 'change') }
 
-      %w[erasure.performed consent.withdrawn cleanup.expired_assignments cache.cleared audit.purged audit.settings_observed
-         report.generated].each { |name| register(name, category: 'system') }
+      %w[erasure.performed consent.withdrawn cleanup.expired_assignments cache.cleared]
+        .each { |name| register(name, category: 'system', cache: true) }
+      %w[audit.purged audit.settings_observed report.generated].each { |name| register(name, category: 'system') }
 
       %w[admin.effective_access_viewed audit.viewed audit.exported admin.auth_failed api.auth_failed admin.lock_refused]
         .each { |name| register(name, category: 'admin') }
