@@ -22,8 +22,10 @@ module PermissionForge
     # - NOT_ON_HOME: about records Home leaves to the audit, with the reason.
     #
     # HOME and SETTINGS entries each have a fixture that raises the finding;
-    # the test asserts the finding (medium or worse) and the card or the row.
-    class AttentionParityTest < ActiveSupport::TestCase
+    # the test asserts the finding (medium or worse) and the card or the row
+    # — the card as Home draws it (AttentionItems::CARDS: list => partial),
+    # so a list dropped from the map or a card that no longer renders fails.
+    class AttentionParityTest < ActionDispatch::IntegrationTest
       include RuleProblemFixtures
 
       CHECKS = Dir[File.expand_path('../../../lib/permission_forge/services/security_audit/*_check.rb', __dir__)].freeze
@@ -135,6 +137,7 @@ module PermissionForge
           assert_includes %i[critical high medium], finding.severity
           items = AttentionItems.new.public_send(collection)
           assert(items.any? { |item| about?(item, record) }, "Home's #{collection} lists #{record.inspect}")
+          assert_home_card(collection)
         end
       end
 
@@ -149,9 +152,25 @@ module PermissionForge
         end
       end
 
+      test 'every Home list has a card partial, and only those' do
+        partials = Dir[File.expand_path('../../../app/views/permission_forge/home/_*_card.html.erb', __dir__)]
+                   .map { |file| File.basename(file, '.html.erb').delete_prefix('_') }
+
+        assert_equal partials.sort, AttentionItems::CARDS.values.sort
+        assert_empty HOME.values.uniq - AttentionItems::CARDS.keys
+      end
+
       private
 
       def config = PermissionForge.configuration
+
+      # GET Home: the card of `collection` is drawn, titled by its heading.
+      def assert_home_card(collection)
+        get '/permission_forge/'
+        assert_response :success
+        id = "pf-card-#{AttentionItems::CARDS.fetch(collection).delete_suffix('_card').tr('_', '-')}"
+        assert_select "section[aria-labelledby='#{id}'] ##{id}", 1, "Home draws the #{collection} card"
+      end
 
       def about?(item, record)
         return item == record if record.is_a?(Symbol)

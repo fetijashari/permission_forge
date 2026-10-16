@@ -104,12 +104,23 @@ module PermissionForge
         @sensitive = sensitive
       end
 
-      # Every list Home draws a card for (the navigation counts them all).
-      CARDS = %i[audit_findings broken_rules secret_rules unknown_mask_strategies broken_conditions privacy_findings
-                 unenforced_rules ending_soon expired stale tidy].freeze
+      # Every list Home draws a card for (the navigation counts them all) =>
+      # the partial (home/_<partial>) that draws it, in Home's priority
+      # order: the one list Home renders from (#cards).
+      CARDS = { audit_findings: 'audit_card', broken_rules: 'broken_rules_card', privacy_findings: 'privacy_card',
+                unknown_mask_strategies: 'mask_strategies_card', broken_conditions: 'conditions_card',
+                secret_rules: 'secret_rules_card', unenforced_rules: 'rules_card', ending_soon: 'ending_card',
+                expired: 'expired_card', stale: 'stale_card', tidy: 'tidy_card' }.freeze
 
       def total
-        CARDS.sum { |card| public_send(card).size }
+        CARDS.each_key.sum { |card| public_send(card).size }
+      end
+
+      # The partials of the cards Home draws: those whose list has items.
+      #
+      # @return [Array<String>]
+      def cards
+        CARDS.filter_map { |list, partial| partial if public_send(list).any? }
       end
 
       def all_good?

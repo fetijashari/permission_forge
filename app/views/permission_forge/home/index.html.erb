@@ -55,14 +55,9 @@
   </section>
 <% else %>
   <%# Two independent stacks (no shared grid rows), so a tall card never leaves
-      a gap in the other column. Cards alternate in priority order. %>
-  <% cards = { 'audit_card' => @attention.audit_findings, 'broken_rules_card' => @attention.broken_rules,
-               'privacy_card' => @attention.privacy_findings, 'mask_strategies_card' => @attention.unknown_mask_strategies,
-               'conditions_card' => @attention.broken_conditions, 'secret_rules_card' => @attention.secret_rules,
-               'rules_card' => @attention.unenforced_rules,
-               'ending_card' => @attention.ending_soon,
-               'expired_card' => @attention.expired, 'stale_card' => @attention.stale,
-               'tidy_card' => @attention.tidy }.select { |_, items| items.any? }.keys %>
+      a gap in the other column. Cards alternate in priority order
+      (Admin::AttentionItems::CARDS). %>
+  <% cards = @attention.cards %>
   <div class="pf-masonry">
     <% cards.partition.with_index { |_, i| i.even? }.reject(&:empty?).each do |column| %>
       <div class="pf-masonry__col">
