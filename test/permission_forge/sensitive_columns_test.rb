@@ -52,6 +52,48 @@ module PermissionForge
       assert_equal :gdpr_pattern, match.source
     end
 
+    # The filter_parameters a new Rails application generates
+    # (config/initializers/filter_parameter_logging.rb, Rails 7.1+).
+    RAILS_GENERATED_FILTERS = %i[passw email secret token _key crypt salt certificate otp ssn cvv cvc].freeze
+
+    # A String / Symbol entry names a column when one of the name's segments
+    # (split on `_`) starts with it; a leading or trailing underscore ties it
+    # to a segment boundary (`_key`: a segment after the first starts with
+    # `key`). Not a substring anywhere, as ActiveSupport::ParameterFilter
+    # matches a request parameter.
+    {
+      'email_address' => true, 'password' => true, 'password_digest' => true, 'api_key' => true, 'otp_secret' => true,
+      'ssn' => true, 'secret_question' => true, 'auth_token' => true, 'card_cvv' => true, 'crypted_password' => true,
+      'footprint' => false, 'classname' => false, 'hotpot' => false, 'keynote' => false, 'description' => false,
+      'tokenless_count' => true, 'persalted' => false, 'keyword' => false, 'monkey_id' => false,
+      'sort_key' => true # the residual: `_key` names any `*_key` column
+    }.each do |column, expected|
+      test "Rails' generated filter_parameters #{expected ? 'name' : 'do not name'} #{column}" do
+        configuration = PermissionForge::Configuration.new
+        configuration.gdpr_field_patterns = {}
+        configuration.filter_parameters_integration = true
+        matcher = SensitiveColumns.new(configuration: configuration, filter_parameters: RAILS_GENERATED_FILTERS)
+
+        assert_equal expected, matcher.sensitive?(column)
+      end
+    end
+
+    test 'a filter_parameters Regexp keeps its own semantics, a Proc entry is skipped' do
+      configuration = PermissionForge::Configuration.new
+      configuration.gdpr_field_patterns = {}
+      configuration.filter_parameters_integration = true
+      calls = []
+      filters = [/print/, ->(key, value) { calls << [key, value] }, 'trailing_']
+      matcher = SensitiveColumns.new(configuration: configuration, filter_parameters: filters)
+
+      assert matcher.sensitive?('footprint'), 'a Regexp matches where it matches'
+      assert_not matcher.sensitive?('status')
+      assert matcher.sensitive?('trailing_note'), 'a trailing underscore ties the entry to the end of a segment'
+      assert_not matcher.sensitive?('trailing'), 'nothing follows the last segment'
+      assert_not matcher.sensitive?('trailingx_note')
+      assert_empty calls, 'a Proc entry is never called'
+    end
+
     test 'takes an injected configuration' do
       configuration = PermissionForge::Configuration.new
       configuration.gdpr_field_patterns = { /\Acodename\z/ => 'last4' }

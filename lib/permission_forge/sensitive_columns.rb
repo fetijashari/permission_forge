@@ -73,12 +73,34 @@ module PermissionForge
       false
     end
 
+    # A column name is not a request parameter: ActiveSupport::
+    # ParameterFilter matches a String / Symbol entry anywhere in the key,
+    # so Rails' generated `:otp`, `:ssn`, `:salt` would call `footprint`,
+    # `classname`, `persalted` personal data. Here such an entry names a
+    # column when one of the name's segments (split on `_`) starts with it;
+    # a leading or trailing underscore ties it to a segment boundary
+    # (`_key`: a segment after the first starts with `key` — `api_key`, and
+    # also `sort_key`). A Regexp entry matches as it is written; a Proc
+    # entry (it rewrites values) names no column.
     def filtered_parameter?(name)
-      filters = host_filter_parameters
-      return false if filters.empty?
+      @filter_patterns ||= host_filter_parameters.filter_map { |entry| filter_pattern(entry) }
+      @filter_patterns.any? { |pattern| name.match?(pattern) }
+    end
 
-      @parameter_filter ||= ActiveSupport::ParameterFilter.new(filters)
-      @parameter_filter.filter(name => 'x')[name] != 'x'
+    def filter_pattern(entry)
+      case entry
+      when Regexp then entry
+      when String, Symbol then segment_pattern(entry.to_s)
+      end
+    end
+
+    def segment_pattern(entry)
+      core = entry.delete_prefix('_').delete_suffix('_')
+      return if core.empty?
+
+      start = entry.start_with?('_') ? '(?<=_)' : '(?:\\A|(?<=_))'
+      finish = entry.end_with?('_') ? '(?=_)' : ''
+      Regexp.new("#{start}#{Regexp.escape(core)}#{finish}", Regexp::IGNORECASE)
     end
 
     def host_filter_parameters
