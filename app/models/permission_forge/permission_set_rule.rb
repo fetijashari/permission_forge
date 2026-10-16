@@ -192,12 +192,12 @@ module PermissionForge
     end
 
     # The rule's column problem (Operators::RuleProblem.of_column). The
-    # column lookup reads the schema again before it calls a name missing
-    # (PermissionForge::SchemaRead): the schema cache may predate a column a
-    # migration just added, or a table (a running server, an old process in
-    # a rolling deploy).
+    # columns are compared with the database before a name is called missing
+    # (Operators::RuleColumn.for_rule, `verify: true`): the schema cache may
+    # predate a column a migration just added, or a table (a running server,
+    # an old process in a rolling deploy).
     def column_problem
-      PermissionForge::Operators::RuleProblem.of_column(self)
+      PermissionForge::Operators::RuleProblem.of_column(self, PermissionForge::Operators::RuleColumn.for_rule(self, verify: true))
     end
 
     def valueless_operator?

@@ -115,14 +115,21 @@ module PermissionForge
         # for its columns fails the statement, and with it a transaction) or
         # the database cannot be asked.
         #
+        # `verify: true` (a rule being saved) compares the columns of every
+        # model along the path with the database first (one metadata query
+        # each, PermissionForge::SchemaRead): a name the process confirmed
+        # missing before a migration added it is accepted at save. The
+        # describing callers (the admin's pages, the audit) ask without it.
+        #
         # @param rule [PermissionForge::PermissionSetRule]
+        # @param verify [Boolean]
         # @return [RuleColumn, nil]
-        def for_rule(rule)
+        def for_rule(rule, verify: false)
           model = rule_model(rule)
           return unless model
 
           models = models_along(model, rule.join_rule? ? path_segments(rule.field_accessor_path) : [])
-          find(rule.field_name, models) if models.any? && models.all? { |model| PermissionForge::SchemaRead.table?(model, model.table_name) }
+          find(rule.field_name, models) if readable?(models, verify)
         rescue *UNTELLABLE
           nil
         end
@@ -157,6 +164,16 @@ module PermissionForge
         end
 
         private
+
+        # Every table along the path is there (asking a missing one for its
+        # columns fails the statement); compared with the database first when
+        # `verify`.
+        def readable?(models, verify)
+          return false unless models.any? && models.all? { |model| PermissionForge::SchemaRead.table?(model, model.table_name) }
+
+          models.each { |model| PermissionForge::SchemaRead.columns(model, verify: true) } if verify
+          true
+        end
 
         # The model a table name stands for; without one, the model the rule ends on.
         def table_model(table, models)

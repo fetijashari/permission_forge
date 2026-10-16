@@ -51,7 +51,7 @@ module PermissionForge
         Services::GdprFieldAuditor.call.any? { |f| f[:type] == :unmapped_column && f[:resource] == MODEL.name && f[:column] == 'email' }
       },
       'Services::RlsPolicyGenerator tenant predicate' => lambda { |_t|
-        Services::RlsPolicyGenerator.call(model_class: MODEL)[:statements].join.include?('r."account_id"')
+        Services::RlsPolicyGenerator.call(model_class: MODEL)[:statements].join.include?("r.#{MODEL.connection.quote_column_name('account_id')}")
       }
     }.freeze
 
