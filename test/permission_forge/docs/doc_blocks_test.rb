@@ -38,6 +38,16 @@ module PermissionForge
         assert_equal ['fixture.md:1: file= needs a path'], problems("```ruby file=\nx = 1\n```\n")
       end
 
+      # docs/admin-api.md's generated JSON (Docs::ApiSamples, rake docs:api).
+      test 'a json block may say sample=<name>; no other language may, and the name is required' do
+        block = parse("```json sample=not_found\n{}\n```\n").first
+        assert_equal 'not_found', block.sample
+        assert_empty problems("```json sample=not_found\n{}\n```\n")
+        assert_equal ['fixture.md:1: `sample=x` is not a marker (run, fragment, file=<path>)'], problems("```ruby sample=x\nx = 1\n```\n")
+        assert_equal ['fixture.md:1: sample= needs a name'], problems("```json sample=\n{}\n```\n")
+        assert_nil parse("```json\n{}\n```\n").first.sample
+      end
+
       test 'a language alias is refused so a grep for ```ruby finds every block' do
         assert_equal ['fixture.md:1: spell the language `bash`, not `sh`',
                       'fixture.md:1: ```sh block has no marker: say `run`, `fragment` or `file=<path>`'],
