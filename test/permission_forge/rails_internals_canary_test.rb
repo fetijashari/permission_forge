@@ -109,6 +109,7 @@ module PermissionForge
       schema_cache: 'schema_cache(model).columns_hash(',
       schema_cache_data_sources: Regexp.union('cache.data_source_exists?(', 'cache.clear_data_source_cache!('),
       schema_cache_columns_identity: Regexp.union('columns.object_id', 'fresh.object_id'),
+      define_attribute_methods_again: 'super.tap { |generated| pf_define_late_column_accessors if generated }',
       association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!',
                                             'reflection.chain.any?', 'link.through_reflection?', 'link.source_reflection'),
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
@@ -172,6 +173,9 @@ module PermissionForge
                                  'nothing; the schema is read again once before that answer)',
       schema_cache_columns_identity: 'adapt SchemaRead.reread! / .confirmed? (a name confirmed missing is tied to the ' \
                                      'columns read: tell a read apart by something else, or a missing name re-reads every time)',
+      define_attribute_methods_again: 'adapt MaskedAttributes.define_attribute_methods (the hook that guards a column added ' \
+                                      'after the include: find where Rails defines a model\'s attribute methods after ' \
+                                      'reset_column_information, or a column a migration added is read raw through its getter)',
       association_join_checks: 'adapt Operators::RulePath#through / #unjoinable_cause / #record_dependent? to what ' \
                                'Associations::JoinDependency#build checks before it joins and the scopes a :through ' \
                                'evaluates along its chain (a path it raises for must stay broken, one it joins followed)',
@@ -1418,6 +1422,23 @@ module PermissionForge
       assert_not_same first, read.call, canary(
         :schema_cache_columns_identity, 'reset_column_information no longer reads the table into a new Hash',
         'SchemaRead tells a later read of the table from the one that confirmed a name missing by it: adapt SchemaRead.reread!'
+      )
+    end
+
+    canary_test :define_attribute_methods_again,
+                'define_attribute_methods (a class method) runs, answering true, the first time a record is built after reset_column_information' do
+      calls = []
+      model = canary_model('PfCanaryDefineAttributeMethods') do
+        define_singleton_method(:define_attribute_methods) { super().tap { |generated| calls << generated } }
+      end
+      model.instantiate('id' => 1)
+      calls.clear
+      model.reset_column_information
+      model.instantiate('id' => 1)
+
+      assert_includes calls, true, canary(
+        :define_attribute_methods_again, 'building a record after reset_column_information no longer calls define_attribute_methods',
+        'MaskedAttributes defines the guarded getter of a column a migration added there'
       )
     end
 
