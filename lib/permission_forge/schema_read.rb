@@ -12,10 +12,16 @@ module PermissionForge
   # fields would not offer it, its timestamps would not be read-only.
   #
   # So a read that answers "no" — the name is not a column of the table, the
-  # table is not there — reads the schema again first: the model's column
-  # information is reset (reset_column_information) and the answer asked
-  # again. A name is read again at most once per process while the table's
-  # columns stay as they were read: a name found missing by a re-read is
+  # table is not there — reads the schema again first: the table's column
+  # names are asked of the database (one metadata query) and, only when they
+  # differ from what the cache holds, the model's column information is reset
+  # (reset_column_information) and the answer asked again. A process whose
+  # schema did not change never resets a model on the request path (a reset
+  # drops the model's generated attribute methods while other threads use
+  # it); the question the builder asks for every `_id` field's `_uuid`
+  # variant costs one query per model and name per process. A name is read
+  # again at most once per process while the table's columns stay as they
+  # were read: a name found missing by a re-read is
   # *confirmed* missing and costs nothing afterwards, until something else
   # reads the table again (a reload in development, a migration in the
   # process, another re-read). A column that is there costs nothing extra:
@@ -191,19 +197,19 @@ module PermissionForge
       # confirmed before, and every column an earlier read had (the cache
       # being dropped, the last re-read) — a removed column among them — that
       # the new read lacks.
-      def reread!(model, missing)
+      def reread!(model, missing, live: live_names(model))
         known = missing | known_names(model)
-        model.reset_column_information
         @rereads.increment
+        model.reset_column_information unless current?(model, live)
         fresh = table_columns(model)
         @confirmed[slot(model)] = Confirmed.new(token: fresh.object_id, names: (known - fresh.keys).freeze, columns: fresh.keys.freeze)
       end
 
-      # The columns the cache holds and, from the last re-read, the columns
-      # it read and the names it confirmed missing.
+      # The columns the cache and the model hold and, from the last re-read,
+      # the columns it read and the names it confirmed missing.
       def known_names(model)
         before = @confirmed[slot(model)]
-        table_columns(model).keys | (before ? before.names + before.columns : [])
+        table_columns(model).keys | model.columns_hash.keys | (before ? before.names + before.columns : [])
       end
 
       # What the memo is keyed by: the class's object_id, so that a class
@@ -212,9 +218,22 @@ module PermissionForge
       def slot(model) = model.object_id
 
       def verify!(model)
-        cached = table_columns(model).keys
-        live = model.connection_pool.with_connection { |connection| connection.columns(model.table_name).map(&:name) }
-        reread!(model, []) unless live.sort == cached.sort
+        live = live_names(model)
+        reread!(model, [], live: live) unless current?(model, live)
+      end
+
+      # Whether both reads Rails keeps — the schema cache's columns and the
+      # model's own (`columns_hash`, which DDL run in the process does not
+      # clear) — are the database's `live` names.
+      def current?(model, live)
+        live.sort == table_columns(model).keys.sort &&
+          model.columns_hash.keys.sort == (live - model.ignored_columns.map(&:to_s)).sort
+      end
+
+      # The table's column names as the database has them now (a metadata
+      # query).
+      def live_names(model)
+        model.connection_pool.with_connection { |connection| connection.columns(model.table_name).map(&:name) }
       end
     end
   end

@@ -118,6 +118,28 @@ module PermissionForge
       assert_equal 2, SchemaRead.rereads - before
     end
 
+    # The builder asks for every `_id` field's `_uuid` variant: on a schema
+    # that did not change, the database is asked (one metadata query) and
+    # the model is never reset on the request path — a reset drops its
+    # generated attribute methods while other threads use it.
+    test 'a missing name on an unchanged schema never resets the model' do
+      resets = 0
+      original = MODEL.method(:reset_column_information)
+      replace_singleton_method(MODEL, :reset_column_information) { (resets += 1) && original.call }
+      before = SchemaRead.rereads
+
+      assert_not SchemaRead.column?(MODEL, 'supplier_uuid')
+      assert_not SchemaRead.columns(MODEL, verify: true).key?('supplier_uuid')
+      assert_equal 0, resets
+      assert_equal 1, SchemaRead.rereads - before
+
+      connection.add_column(TABLE, :supplier_uuid, :string)
+      assert SchemaRead.columns(MODEL, verify: true).key?('supplier_uuid'), 'a changed schema is read again'
+      assert_equal 1, resets
+    ensure
+      MODEL.singleton_class.send(:remove_method, :reset_column_information)
+    end
+
     test 'a table created after the schema cache said it is not there is found' do
       connection.drop_table(:pf_schema_fresh_late, if_exists: true)
       assert_not connection.schema_cache.data_source_exists?('pf_schema_fresh_late'), 'the schema cache remembers "no"'
