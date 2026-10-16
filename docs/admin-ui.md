@@ -370,7 +370,7 @@ cp $(bundle show permission_forge)/app/views/permission_forge/home/index.html.er
 
 ### Database columns
 
-The privacy audit's **This is intended** button stores `resource_fields.sensitive_acknowledged_at`. New installs get it; existing installs add it with:
+The privacy audit's **This is intended** button stores `resource_fields.sensitive_acknowledged_at`. A field marked so is left out of every report of personal data in the clear: Home, `rake permission_forge:audit_masks`, the `personal_data` check of `rake permission_forge:audit` and the boot warning. New installs get it; existing installs add it with:
 
 ```bash fragment
 bin/rails generate permission_forge:upgrade

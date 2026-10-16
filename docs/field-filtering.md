@@ -35,10 +35,11 @@ PermissionForge::ResourceField.create!(resource: resource, name: 'credit_limit',
 Instead of creating fields one by one, you can auto-generate them:
 
 ```ruby fragment
-# Creates a ResourceField for every column in the Customer model
-# (except ignored fields like id, uuid, password; on a granting set
-# created_at / updated_at are at most read-only: read-only with grant_all,
-# hidden like the rest without it)
+# Creates a ResourceField for every column and virtual field of the
+# Customer model (except ignored fields like id, uuid, password; on a
+# granting set created_at / updated_at are at most read-only: read-only with
+# grant_all, hidden like the rest without it; on a Resource without Edit,
+# grant_all's rows are Read-only)
 PermissionForge::Services::ResourceFieldGenerator.call(
   resource: resource,
   grant_all: false  # Set to true to grant read+edit on all fields, unmasked
@@ -264,7 +265,7 @@ The admin helps with that under `:grant`:
 - The Fields tab lists every unconfigured virtual field as **Not configured · Editable by default**, and *Sync fields with model* adds them at a level you choose. A row that is turned off shows **Turned off · Editable by default**.
 - The privacy audit on the home page, `GdprFieldAuditor` (`:implicit_virtual_grant`) and `rake permission_forge:audit` (`implicit_virtual_personal_data`) report virtual fields that look like personal data and are still on the implicit grant, including fields whose only row is turned off.
 
-`ResourceFieldGenerator` and `Resource.grant_full_access!` create rows for virtual fields only under `:unconfigured`. Under `:grant` they leave them to the implicit entry, as before.
+`ResourceFieldGenerator` and `Resource.grant_full_access!` create rows for declared and discovered virtual fields like the admin does, under either value (since 0.15.0; before, only under `:unconfigured`): generating without `grant_all` gives them a Hidden row, which replaces the implicit entry. Generate with `grant_all: true`, or set their level afterwards, to keep them readable.
 
 ### When `extra_fields_for_permissions` raises
 
