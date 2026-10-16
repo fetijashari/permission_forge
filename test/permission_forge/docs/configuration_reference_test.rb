@@ -109,11 +109,13 @@ module PermissionForge
         generated = rendered.lines
         file = actual.lines
         differing = (0...[generated.size, file.size].max).reject { |index| generated[index] == file[index] }
-        shown = differing.first(3).map do |index|
-          "line #{index + 1}\n  generated: #{generated[index].to_s.truncate(200).inspect}\n  file:      #{file[index].to_s.truncate(200).inspect}"
-        end
+        shown = differing.first(3).map { |index| line_difference(index, generated[index], file[index]) }
         "docs/configuration.md is stale: run `bundle exec rake docs:configuration` and commit the result.\n" \
           "#{differing.size} line(s) differ (generated #{generated.size} lines, file #{file.size}); the first:\n#{shown.join("\n")}"
+      end
+
+      def line_difference(index, generated, file)
+        "line #{index + 1}\n  generated: #{generated.to_s.truncate(200).inspect}\n  file:      #{file.to_s.truncate(200).inspect}"
       end
     end
   end
