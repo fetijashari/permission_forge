@@ -660,7 +660,9 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
 # 0.14.1 "1,3" was read as one unknown id: 200, nobody assigned; through
 # 0.15.0-rc an element that was no id, "" among them, was left out without a
 # word). A JSON null in the list never reaches the API: Rails' parameter
-# parsing (deep_munge) removes it, so [1, null] reads as [1].
+# parsing (deep_munge) removes it, so [1, null] reads as [1]. A Rails form
+# built with collection_check_boxes adds a hidden blank user_ids[] entry:
+# pass include_hidden: false to it.
 
 # Bulk revoke users from a permission set
 POST /permissions/api/permission_sets/:ps_uuid/users/bulk
