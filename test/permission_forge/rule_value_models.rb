@@ -6,6 +6,13 @@ require 'test_helper'
 # (MySQL commits on DDL), so the dummy app's schema stays as it is. A top-level
 # name, like the other test models: the admin only resolves those.
 ActiveRecord::Schema.define do
+  postgres = connection.adapter_name.match?(/postgresql/i)
+  if postgres
+    # A native enum type; the table that uses it goes first.
+    drop_table :pf_rule_records, if_exists: true
+    execute 'DROP TYPE IF EXISTS pf_rule_mood'
+    execute "CREATE TYPE pf_rule_mood AS ENUM ('calm', 'angry')"
+  end
   create_table :pf_rule_records, force: true do |t|
     t.string   :label
     t.text     :notes
@@ -20,11 +27,16 @@ ActiveRecord::Schema.define do
     t.time     :opens_at
     t.integer  :status
     t.string   :tier
-    if connection.adapter_name.match?(/postgresql/i)
+    if postgres
       t.integer :codes, array: true
       t.string  :tags, array: true
+      t.text    :aliases, array: true
       t.uuid    :token
       t.column  :code, 'char(4)'
+      t.jsonb   :settings
+      t.inet    :ip
+      t.cidr    :net
+      t.column  :mood, :pf_rule_mood
     end
   end
 end
@@ -35,6 +47,8 @@ class PfRuleRecord < ApplicationRecord
   include PermissionForge::Concerns::PermissionScopedFindable
 
   belongs_to :owner, class_name: 'User', optional: true
+  # No columns: a polymorphic association no rule can join (RuleProblem :unjoinable_association).
+  belongs_to :subject, polymorphic: true, optional: true
 
   enum :status, { active: 0, archived: 1, hidden: 2 }
   enum :tier, { basic: 'B', gold: 'G' }, prefix: true

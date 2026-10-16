@@ -59,7 +59,7 @@ module PermissionForge
         using = select_policy_sql
 
         assert_includes using, "psu.permission_set_id = #{@permission_set.id}"
-        assert_includes using, 'psu.expires_at IS NULL OR psu.expires_at > now()'
+        assert_includes using, 'psu.expires_at IS NULL OR psu.expires_at >= now()'
         assert_includes using, 'NOT EXISTS'
       end
 
@@ -147,10 +147,28 @@ module PermissionForge
 
         # The granting EXISTS must require the set to have no activation
         # conditions — a consent/IP/hours-gated set granting view_all must
-        # never widen DB-level access while its condition is unmet.
-        assert_includes using, "ps.requires_session_flag IS NULL OR ps.requires_session_flag = ''"
-        assert_includes using, "ps.allowed_ips IS NULL OR ps.allowed_ips = ''"
-        assert_includes using, 'ps.allowed_hours_start IS NULL'
+        # never widen DB-level access while its condition is unmet. "No
+        # condition" has one definition, PermissionSet.unconditional's: a
+        # text of blanks is none, one hour of the two is one.
+        assert_includes using, "NOT #{PermissionSet.conditions_present_sql(table: 'ps')}"
+        assert_includes using, "ps.#{Customer.connection.quote_column_name('allowed_hours_end')} IS NOT NULL"
+        assert_includes using, 'TRIM('
+      end
+
+      test 'an assignment ending now still counts, as PermissionSetUser.active_assignments counts it' do
+        add_rule(operator: 'equal', field_value: 'current_user', include_nulls: false)
+
+        assert_includes select_policy_sql, 'psu.expires_at >= now()'
+        assert_not_includes select_policy_sql, 'psu.expires_at > now()'
+        travel_to(Time.current.change(usec: 0)) do
+          create_permission_set_user(user: create_user, permission_set: @permission_set, expires_at: Time.current)
+
+          assert_equal 2, PermissionSetUser.active_assignments.where(permission_set: @permission_set).count, 'inclusive in Ruby'
+        end
+      end
+
+      test 'the generator version names the policies of this release' do
+        assert_equal 7, RlsPolicyGenerator::GENERATOR_VERSION
       end
 
       test 'nil_user_strategy :bypass allows a missing session variable' do

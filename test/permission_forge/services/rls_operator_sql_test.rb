@@ -226,7 +226,7 @@ module PermissionForge
       end
 
       def compiled_part(policy)
-        policy[/AND \(psu\.expires_at IS NULL OR psu\.expires_at > now\(\)\) \) OR \((.*)\){6}\z/m, 1]
+        policy[/AND \(psu\.expires_at IS NULL OR psu\.expires_at >= now\(\)\) \) OR \((.*)\){6}\z/m, 1]
       end
 
       # The user_id column as SchemaRead (the one reader of a model's columns) answers it.

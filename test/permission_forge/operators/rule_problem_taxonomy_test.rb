@@ -57,16 +57,13 @@ module PermissionForge
           assert_message_in_every_locale(problem)
         end
 
-        test "#{kind}: a new rule is #{FIXTURES[kind][:refused] ? 'refused with the problem\'s message' : 'accepted, as documented'}" do
+        test "#{kind}: a new rule is refused with the problem's message" do
           rule = new_broken_rule(kind, permission_set: @set, resource: resource_for(kind))
           refused = FIXTURES.fetch(kind)[:refused]
 
-          if refused
-            assert_not rule.valid?
-            assert_includes rule.errors[refused], RuleProblem.for(rule).validation_message
-          else
-            assert rule.valid?, rule.errors.full_messages.inspect
-          end
+          assert refused, "#{kind}: every kind is refused on a new rule"
+          assert_not rule.valid?
+          assert_includes rule.errors[refused], RuleProblem.for(rule).validation_message
         end
 
         test "#{kind}: a row written before the check stays editable in its other attributes" do
@@ -90,6 +87,12 @@ module PermissionForge
 
         assert_not rule.valid?
         assert rule.errors[:join_type].any?
+
+        rule = broken_rule(:unusable_value, permission_set: @set, resource: resource_for(:unusable_value))
+        rule.field_value = '6_id'
+
+        assert_not rule.valid?
+        assert rule.errors[:field_value].any?
       end
 
       private

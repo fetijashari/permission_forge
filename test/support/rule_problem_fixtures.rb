@@ -10,10 +10,8 @@
 #   rule = broken_rule(:unknown_operator, permission_set: set, resource: resource)
 module RuleProblemFixtures
   # kind => attrs: what is written past the model to get it; refused: the
-  # attribute the model refuses a new rule on (nil: accepted on save, as
-  # documented — a value the column cannot hold is valid to save and matches
-  # nothing); model: the Resource's model (Customer unless the kind needs
-  # an association Customer does not have).
+  # attribute the model refuses a new rule on; model: the Resource's model
+  # (Customer unless the kind needs an association Customer does not have).
   FIXTURES = {
     missing_column: { attrs: { field_name: 'stauts' }, refused: :field_name },
     unknown_association: { attrs: { join_type: 'joins', field_accessor_path: 'ownr' }, refused: :field_accessor_path },
@@ -22,7 +20,7 @@ module RuleProblemFixtures
     unknown_operator: { attrs: { operator: 'regex' }, refused: :operator },
     unknown_join_type: { attrs: { join_type: 'inner', field_accessor_path: 'supplier' }, refused: :join_type },
     unknown_table: { attrs: { field_name: 'nosuch.name' }, refused: :field_name },
-    unusable_value: { attrs: { field_name: 'supplier_id', field_value: '5_id' }, refused: nil }
+    unusable_value: { attrs: { field_name: 'supplier_id', field_value: '5_id' }, refused: :field_value }
   }.freeze
 
   # The model the kind's fixture is on.
