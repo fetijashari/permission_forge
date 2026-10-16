@@ -36,8 +36,10 @@ module PermissionForge
         # The module a class's alias readers and writers live in.
         class AccessorModule < Module; end
 
-        # `id_value`, which Rails itself aliases to `id`, stays Rails': `id`
-        # is the primary key reader, not the reader of a column called id.
+        # `id_value`, which Rails itself aliases to `id` (every model up to
+        # Rails 8.1; from 8.2 only a model with a composite key, the others
+        # get a plain reader), stays Rails': `id` is the primary key reader,
+        # not the reader of a column called id.
         UNMASKED_TARGET = 'id'
 
         CREATION = Mutex.new
