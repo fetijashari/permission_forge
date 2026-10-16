@@ -3,6 +3,7 @@ en:
   permission_forge:
     api:
       errors:
+        not_null: "A required value is missing. Nothing was saved."
         action_authorization_missing: API changes need config.api_action_authorization;
           they are refused while it is unset and config.api_require_authorization
           is on
@@ -387,6 +388,7 @@ en:
         pick_resource: Pick a resource…
         who_can_see: Who can see %{field}?
     flash:
+      not_null: "A required value was missing. Nothing was changed; the page shows what is there now."
       actions:
         created: Added the action “%{action}”.
         deleted: Removed the action “%{action}”.
@@ -2310,6 +2312,10 @@ en:
       view_all: View All
     validations:
       attributes:
+        is_permitted: "Permitted"
+        is_muting: "Muting"
+        is_editable: "Editable"
+        include_nulls: "Include empty values"
         allowed_hours_end: End hour
         allowed_hours_start: Start hour
         allowed_ips: Allowed IPs

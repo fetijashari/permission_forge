@@ -3,6 +3,7 @@ sq:
   permission_forge:
     api:
       errors:
+        not_null: "Mungon një vlerë e detyrueshme. Asgjë nuk u ruajt."
         action_authorization_missing: Ndryshimet përmes API-së kërkojnë config.api_action_authorization;
           refuzohen sa kohë që nuk është vendosur dhe config.api_require_authorization
           është aktiv
@@ -397,6 +398,7 @@ sq:
         pick_resource: Zgjidh një burim…
         who_can_see: Kush mund ta shohë %{field}?
     flash:
+      not_null: "Mungonte një vlerë e detyrueshme. Asgjë nuk u ndryshua; faqja tregon çfarë ka tani."
       actions:
         created: U shtua veprimi “%{action}”.
         deleted: U hoq veprimi “%{action}”.
@@ -2367,6 +2369,10 @@ sq:
       view_all: Shiko të gjitha
     validations:
       attributes:
+        is_permitted: "I lejuar"
+        is_muting: "Heshtës"
+        is_editable: "I ndryshueshëm"
+        include_nulls: "Përfshi vlerat bosh"
         allowed_hours_end: Ora e mbarimit
         allowed_hours_start: Ora e fillimit
         allowed_ips: IP-të e lejuara

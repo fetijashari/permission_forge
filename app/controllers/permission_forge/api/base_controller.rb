@@ -59,6 +59,13 @@ module PermissionForge
                              { 'base' => [I18n.t('permission_forge.api.errors.record_not_unique')] })
       end
 
+      # A NOT NULL column no validation foresaw (ValidatesRequiredColumns
+      # refuses nil in the gem's own columns, keyed by the attribute): a
+      # host column, a trigger. The 422 envelope, never a 500.
+      rescue_from ActiveRecord::NotNullViolation do
+        render_unprocessable({ 'base' => [I18n.t('permission_forge.api.errors.not_null')] })
+      end
+
       # Field-keyed like a validation error (ResponseRenderer#render_input_error).
       rescue_from ActionController::ParameterMissing, ActionController::BadRequest do |e|
         render_input_error(e)

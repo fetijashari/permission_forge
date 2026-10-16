@@ -32,7 +32,8 @@ module PermissionForge
       attrs = group_params
       return redirect_to(permission_forge.group_path(@group), alert: t('permission_forge.errors.admin.group_blank')) if blank_name?(attrs)
 
-      @group.update!(attrs)
+      return redirect_to(permission_forge.group_path(@group), alert: PermissionForge::Admin::ErrorSentence.first(@group.errors)) unless @group.update(attrs)
+
       redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.updated')
     end
 

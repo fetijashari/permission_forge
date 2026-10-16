@@ -184,6 +184,35 @@ module PermissionForge
         assert_nil @set.reload.allowed_hours_start
       end
 
+      # R2 review, P0-2: read only while tab=audit, so the all-at-once fuzz
+      # never reached them.
+      test 'the audit tab reads a Hash or a list in days, who, type or views as no filter' do
+        [{ 'a' => '1' }, ['7', { 'b' => '2' }], "a\u0000b", '-30', '9' * 40].each do |value|
+          %w[days who type views].each do |param|
+            get @set_path, params: { tab: 'audit', param => value }
+            assert_response :ok, "#{param}=#{value.inspect}"
+            get "#{@set_path}.csv", params: { tab: 'audit', param => value }
+            assert_response :ok, "csv #{param}=#{value.inspect}"
+          end
+        end
+      end
+
+      test 'the audit tab still filters by a day count it offers' do
+        PermissionForge.configuration.audit_trail_enabled = true
+        get @set_path, params: { tab: 'audit', days: '30' }
+
+        assert_response :ok
+        assert_select 'option[selected][value="30"]'
+      end
+
+      # R2 review, P0-3: path.first(-1) raised ArgumentError (a 500).
+      test 'the rule builder reads a negative or huge remove_step as no removal' do
+        ['-1', '9' * 40, '1abc', { 'a' => '1' }, ['1']].each do |value|
+          post "#{@resource_path}/rules/refresh", params: { rule: { path: %w[orders], remove_step: value, field_name: 'name' } }
+          assert_response :ok, "remove_step=#{value.inspect}"
+        end
+      end
+
       test 'return_to with a backslash or a control character falls back to the default' do
         ['/\\evil.com', "/\tevil.com", "/\nx", '/\\/evil.com'].each do |target|
           patch "#{ROOT}/assignments/#{@assignment.id}", params: { expiry: 'extend30', return_to: target }

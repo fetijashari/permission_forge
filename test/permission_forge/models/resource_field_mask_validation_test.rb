@@ -38,9 +38,13 @@ module PermissionForge
 
     # --- mask_access: false (no validation on mask_strategy) ---
 
-    test 'mask_access false with nil mask_strategy is valid' do
+    # The column is NOT NULL: nil is refused by the column
+    # (ValidatesRequiredColumns), not by the mask rule — through 0.14.x it
+    # passed validation and the INSERT raised NotNullViolation.
+    test 'mask_access false with nil mask_strategy is refused by the column only' do
       field = build_field(read_access: true, mask_access: false, mask_strategy: nil)
-      assert field.valid?, "Errors: #{field.errors.full_messages}"
+      assert_not field.valid?
+      assert_equal [I18n.t('permission_forge.validations.blank')], field.errors[:mask_strategy]
     end
 
     test 'mask_access false with leftover email strategy is valid' do

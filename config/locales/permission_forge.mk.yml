@@ -3,6 +3,7 @@ mk:
   permission_forge:
     api:
       errors:
+        not_null: "Недостасува задолжителна вредност. Ништо не е зачувано."
         action_authorization_missing: Промените преку API бараат config.api_action_authorization;
           се одбиваат додека не е поставено и config.api_require_authorization е вклучено
         action_not_authorized: Акцијата не е авторизирана
@@ -393,6 +394,7 @@ mk:
         pick_resource: Изберете ресурс…
         who_can_see: Кој може да го види %{field}?
     flash:
+      not_null: "Недостасуваше задолжителна вредност. Ништо не е променето; страницата го покажува она што е сега."
       actions:
         created: Додадена е акцијата „%{action}“.
         deleted: Отстранета е акцијата „%{action}“.
@@ -2368,6 +2370,10 @@ mk:
       view_all: Прикажи ги сите
     validations:
       attributes:
+        is_permitted: "Дозволено"
+        is_muting: "Пригушувачки"
+        is_editable: "Уредлив"
+        include_nulls: "Вклучи празни вредности"
         allowed_hours_end: Краен час
         allowed_hours_start: Почетен час
         allowed_ips: Дозволени IP адреси
