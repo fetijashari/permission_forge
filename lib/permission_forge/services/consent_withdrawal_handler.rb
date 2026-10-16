@@ -33,7 +33,7 @@ module PermissionForge
     #     dry_run: true
     #   )
     #   # => { revoked_sets: 0, invalidated: false, affected_sets: ["Marketing Access"],
-    #   #      affected_assignment_count: 1, dry_run: true, cache: { confirmed: true, ... } }
+    #   #      affected_assignment_count: 1, dry_run: true, cache: { confirmed: nil, work: false, ... } }
     #
     # The audit log: assignments are destroyed through their callbacks (one
     # `assignment.revoked` each), then ONE `consent.withdrawn` event names the
@@ -82,7 +82,7 @@ module PermissionForge
           affected_sets = consent_gated_sets
           affected_assignments = user_assignments_for(affected_sets)
           found = found(affected_sets, affected_assignments)
-          next found.merge(revoked_sets: 0, invalidated: false, cache: PermissionForge::Cache::Report.of { nil }.to_h) if @dry_run
+          next found.merge(revoked_sets: 0, invalidated: false, cache: PermissionForge::Cache::Report.none.to_h) if @dry_run
 
           audited(actor: @actor, reason: @reason) { withdraw(affected_assignments).merge(found) }
         end

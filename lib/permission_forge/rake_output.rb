@@ -12,38 +12,45 @@ module PermissionForge
   #
   # @api private
   module RakeOutput
-    # The label of each key a service answers or an event records. The event
-    # key and the result key of one fact share a label (set_names /
-    # permission_sets), so a reader finds every event key in the output. A
-    # key without one is printed as its words.
+    # The label of each key a service answers or an event records — one
+    # table: a key whose label says a change was made carries its dry-run
+    # form as a second label ([done, would]), so a dry run never prints
+    # "Audit events deleted" (field test round 7, E#55). The event key and
+    # the result key of one fact share a label (set_names / permission_sets),
+    # so a reader finds every event key in the output. A key without one is
+    # printed as its words.
     LABELS = {
-      'assignments_removed' => 'Permission set assignments removed',
+      'assignments_removed' => ['Permission set assignments removed', 'Permission set assignments that would be removed'],
       'assignments_count' => 'Permission set assignments',
-      'group_assignments_removed' => 'Group memberships removed',
+      'group_assignments_removed' => ['Group memberships removed', 'Group memberships that would be removed'],
       'group_assignments_count' => 'Group memberships',
       'assignments_remaining_elsewhere' => 'Assignments remaining in other tenants',
       'group_assignments_remaining_elsewhere' => 'Group memberships remaining in other tenants',
       'permission_sets' => 'Permission sets', 'set_names' => 'Permission sets',
       'groups' => 'Groups', 'group_names' => 'Groups',
-      'actor_labels_cleared' => 'Audit log name labels cleared as actor',
-      'record_labels_cleared' => 'Audit log name labels cleared as subject',
+      'actor_labels_cleared' => ['Audit log name labels cleared as actor', 'Audit log name labels that would be cleared as actor'],
+      'record_labels_cleared' => ['Audit log name labels cleared as subject', 'Audit log name labels that would be cleared as subject'],
       'actor_labels_to_clear' => 'Audit log name labels to clear as actor',
       'record_labels_to_clear' => 'Audit log name labels to clear as subject',
-      'events_scrubbed' => 'Audit events with a name label cleared',
+      'events_scrubbed' => ['Audit events with a name label cleared', 'Audit events whose name label would be cleared'],
       'callback_invoked' => 'on_erasure callback',
-      'removed' => 'Expired assignments removed', 'expired_count' => 'Expired assignments',
-      'invalidated' => 'People whose cached permissions were invalidated',
+      'removed' => ['Expired assignments removed', 'Expired assignments that would be removed'],
+      'expired_count' => 'Expired assignments',
+      'invalidated' => ['People whose cached permissions were invalidated', 'People whose cached permissions would be invalidated'],
       'affected_user_ids' => 'People affected',
-      'strategy' => 'Strategy', 'users' => 'User visits invalidated', 'tenants' => 'Tenants',
-      'purged' => 'Audit events deleted', 'count' => 'Audit events deleted', 'cutoff' => 'Deleted when older than',
+      'strategy' => 'Strategy', 'users' => ['User visits invalidated', 'User visits that would be invalidated'], 'tenants' => 'Tenants',
+      'purged' => ['Audit events deleted', 'Audit events that would be deleted'],
+      'count' => ['Audit events deleted', 'Audit events that would be deleted'],
+      'cutoff' => ['Deleted when older than', 'Would delete the events older than'],
       'period' => 'Retention period', 'period_seconds' => 'Retention period',
       'retention_configured' => 'Retention configured',
-      'cache_confirmed' => 'Cached permissions removed', 'process_local' => 'Cache scope', 'in_request' => 'Ran in',
+      'cache_confirmed' => ['Cached permissions removed', 'Cached permissions that would be removed'],
+      'process_local' => 'Cache scope', 'in_request' => 'Ran in',
       'unconfirmed' => 'People the cache store did not confirm'
     }.freeze
 
-    # Keys of a result the cache lines say already.
-    SILENT = %w[cache_cleared].freeze
+    # Keys of a result the cache lines or the title say already.
+    SILENT = %w[cache_cleared dry_run].freeze
     # Keys printed as people.
     PEOPLE_KEYS = %w[affected_user_ids].freeze
     PEOPLE_SHOWN = 50
@@ -52,9 +59,11 @@ module PermissionForge
     # "Cached permissions removed", by confirmed and by the store's scope: one
     # outcome reads as one message, never as a success line contradicted by
     # the scope line.
+    # :none — an operation that did no cache work (Cache::Outcome#none?: a dry run).
     CONFIRMED = { true => 'yes (the cache store confirmed it)',
                   false => 'NO — the cache store did not confirm it; the old permissions may be served until cache_ttl',
-                  nil => 'not known yet — the invalidation follows the commit of the surrounding transaction' }.freeze
+                  nil => 'not known yet — the invalidation follows the commit of the surrounding transaction',
+                  none: 'none — no cache work was done (a dry run changes nothing)' }.freeze
     CONFIRMED_HERE = 'yes, in this process (its own store confirmed it; see Cache scope)'
     CALLBACK = { true => 'ran', false => 'none configured', nil => 'runs when the surrounding transaction commits' }.freeze
     # The "Cache scope" line of a process-local store (Cache::Outcome#process_local?) and of a shared one.
@@ -69,7 +78,8 @@ module PermissionForge
 
     # Prints the title and one line per key of `data` (a service's result,
     # symbol or string keys); `cache:` (a Cache::Outcome or its Hash) prints
-    # as the three cache lines.
+    # as the cache lines. A dry run (the result's `dry_run: true`) prints
+    # each label in its "would" form.
     #
     # @param title [String]
     # @param data [Hash]
@@ -83,15 +93,18 @@ module PermissionForge
     # @return [Array<String>] "Label: value" per key
     def lines(data)
       data = data.transform_keys(&:to_s)
+      dry_run = data['dry_run'] == true
       data.except(*SILENT).flat_map do |key, value|
-        key == 'cache' ? cache_lines(value, data) : ["#{label(key)}: #{format_value(key, value)}"]
+        key == 'cache' ? cache_lines(value, data, dry_run: dry_run) : ["#{label(key, dry_run: dry_run)}: #{format_value(key, value)}"]
       end
     end
 
     # @param key [String, Symbol]
+    # @param dry_run [Boolean] the label's "would" form, when it has one
     # @return [String]
-    def label(key)
-      LABELS.fetch(key.to_s) { key.to_s.tr('_', ' ').then { |words| words[0].to_s.upcase + words[1..].to_s } }
+    def label(key, dry_run: false)
+      labels = Array(LABELS.fetch(key.to_s) { key.to_s.tr('_', ' ').then { |words| words[0].to_s.upcase + words[1..].to_s } })
+      dry_run ? labels.last : labels.first
     end
 
     # @param user [Object, String, Integer] a host user, or an id
@@ -123,15 +136,23 @@ module PermissionForge
 
     # The outcome's lines: what the store confirmed (in this process, when
     # the store is process-local), the store's scope, where it ran, and the
-    # unconfirmed count unless the result prints its own.
-    def cache_lines(value, data)
+    # unconfirmed count unless the result prints its own — or, for an
+    # operation that did no cache work (Outcome#none?), that one line.
+    def cache_lines(value, data, dry_run: false)
       outcome = Cache::Outcome.wrap(value)
-      confirmed = outcome.confirmed? && outcome.process_local? ? CONFIRMED_HERE : CONFIRMED.fetch(outcome.confirmed)
-      lines = ["#{label('cache_confirmed')}: #{confirmed}",
+      removed = label('cache_confirmed', dry_run: dry_run)
+      return ["#{removed}: #{CONFIRMED.fetch(:none)}"] if outcome.none?
+
+      lines = ["#{removed}: #{confirmed_text(outcome)}",
                "#{label('process_local')}: #{outcome.process_local? ? PROCESS_LOCAL_NOTE : SHARED_NOTE}",
                "#{label('in_request')}: #{RAN_IN.fetch(outcome.in_request?)}"]
       lines << "#{label('unconfirmed')}: #{plain(outcome.unconfirmed)}" unless data.key?('unconfirmed')
       lines
+    end
+
+    # What the store confirmed: in this process when the store is process-local.
+    def confirmed_text(outcome)
+      outcome.confirmed? && outcome.process_local? ? CONFIRMED_HERE : CONFIRMED.fetch(outcome.confirmed)
     end
 
     # One table of value shapes.

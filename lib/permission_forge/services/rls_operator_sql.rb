@@ -61,11 +61,9 @@ module PermissionForge
       }.freeze
 
       # The operators whose app-layer strategy adds the NULL rows under
-      # include_nulls. The others ignore the flag, and so does the policy.
-      NULL_INCLUDING = [
-        Operators::Constants::EQUAL, Operators::Constants::NOT_EQUAL,
-        Operators::Constants::IN, Operators::Constants::NOT_IN
-      ].freeze
+      # include_nulls (Operators::Registry::NULL_INCLUDING, the one list). The
+      # others ignore the flag, and so does the policy.
+      NULL_INCLUDING = Operators::Registry::NULL_INCLUDING
 
       # How the session user's id is read for a comparison, by the caster the
       # column's type has in the app layer: the id itself where the column is

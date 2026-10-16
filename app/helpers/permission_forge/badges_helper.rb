@@ -99,7 +99,7 @@ module PermissionForge
 
     def pf_set_chip_body(permission_set, state)
       suffix_key = CHIP_SUFFIX_KEYS[state]
-      safe_join([content_tag(:span, "#{CHIP_PREFIXES[state]}#{permission_set.name}"),
+      safe_join([content_tag(:span, "#{CHIP_PREFIXES[state]}#{pf_record_name(permission_set)}"),
                  (content_tag(:span, pf_ui(suffix_key), class: 'pf-chip__suffix') if suffix_key)].compact, ' ')
     end
 

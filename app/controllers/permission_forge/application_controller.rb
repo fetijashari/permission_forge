@@ -75,6 +75,12 @@ module PermissionForge
 
     private
 
+    # A Permission Set's, group's or rule's name for a flash (Admin::RecordName:
+    # an install-default English name in the request's language).
+    def pf_record_name(record)
+      PermissionForge::Admin::RecordName.for(record)
+    end
+
     # Memoized per request: drives the Home badge and the home page.
     def pf_attention
       @pf_attention ||= PermissionForge::Admin::AttentionItems.new

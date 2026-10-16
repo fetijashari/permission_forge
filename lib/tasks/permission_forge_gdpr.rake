@@ -74,7 +74,7 @@ namespace :permission_forge do
 
     person = PermissionForge::RakeOutput.person(user)
     if dry_run
-      PermissionForge::RakeOutput.report("Dry run — would erase for #{person}:", result.except(:dry_run))
+      PermissionForge::RakeOutput.report("Dry run — would erase for #{person}:", result)
       puts '  (plus the name labels on the events the erasure itself writes)'
       puts "\nRun with DRY_RUN=false to execute."
     else

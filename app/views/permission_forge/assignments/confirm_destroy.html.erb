@@ -1,12 +1,12 @@
 <% person = pf_person_name(@assignment.user) %>
 <% set = @assignment.permission_set %>
-<% content_for :pf_title, t('.title', set: set.name, name: person) %>
-<%= pf_dialog_frame({ title: t('.title', set: set.name, name: person), danger: true,
+<% content_for :pf_title, t('.title', set: pf_record_name(set), name: person) %>
+<%= pf_dialog_frame({ title: t('.title', set: pf_record_name(set), name: person), danger: true,
                      breadcrumb: pf_breadcrumb([t('permission_forge.nav.people'), permission_forge.people_path], [person, permission_forge.person_path(@assignment.user_id)], t('.crumb')) }) do %>
   <p class="pf-text-2">
     <% first = pf_person(@assignment.user).first_name %>
     <% if set.is_muting %>
-      <%= t('.body_muting', name: first, set: set.name) %>
+      <%= t('.body_muting', name: first, set: pf_record_name(set)) %>
     <% elsif @lost.any? %>
       <%= t('.body', name: first, resources: pf_to_sentence(@lost)) %>
     <% else %>

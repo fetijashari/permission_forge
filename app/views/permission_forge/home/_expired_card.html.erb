@@ -15,7 +15,7 @@
         <span class="pf-eyebrow"><%= t('.dry_run') %></span>
         <ul class="pf-stack pf-stack--tight pf-fs-13">
           <% items.each do |a| %>
-            <li><%= t('.item', person: pf_person_name(a.user), set: a.permission_set.name) %>
+            <li><%= t('.item', person: pf_person_name(a.user), set: pf_record_name(a.permission_set)) %>
               <span class="pf-text-3">· <%= pf_expiry(a.expires_at).first %></span></li>
           <% end %>
         </ul>

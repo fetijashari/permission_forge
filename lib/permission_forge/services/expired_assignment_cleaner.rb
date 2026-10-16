@@ -170,7 +170,8 @@ module PermissionForge
       private_constant :SummaryData
 
       def dry_run_result(expired_count, affected_user_ids)
-        { removed: 0, invalidated: 0, expired_count: expired_count, affected_user_ids: affected_user_ids }
+        { removed: 0, invalidated: 0, expired_count: expired_count, affected_user_ids: affected_user_ids,
+          cache: PermissionForge::Cache::Report.none.to_h }
       end
 
       # Every affected user's invalidation, measured (Cache::Report): what

@@ -30,7 +30,7 @@ module PermissionForge
 
       def resources
         names = PermissionForge::ResourceChain.names_for(@resource_name).map(&:to_s)
-        PermissionForge::Resource.where(name: names).includes(:permission_set, :resource_fields)
+        PermissionForge::Resource.where(name: names).includes(:resource_fields, permission_set: :resources)
                                  .sort_by { |resource| sort_key(resource.permission_set) }
       end
 

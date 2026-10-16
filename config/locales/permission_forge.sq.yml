@@ -393,6 +393,8 @@ sq:
         group_blank: Jepi një emër grupimit.
         hours_equal: Ora e fillimit dhe e mbarimit duhet të ndryshojnë (një dritare
           nga 9 në 9 është bosh).
+        hours_incomplete: Zgjidhni edhe orën e fillimit, edhe atë të mbarimit.
+        hours_range: Zgjidhni orë ndërmjet 00:00 dhe 23:00.
         ip: 'Rreshti %{line}: “%{ip}” nuk është adresë IP ose diapazon CIDR i vlefshëm.'
         person: Zgjidh së pari një person.
         resource_model: Zgjidh një model nga lista.
@@ -611,8 +613,6 @@ sq:
       conditions_card:
         description: Këto grupe kanë një kusht që nuk mund të gjykohet (një IP që
           nuk është adresë, asnjë hyrje, ose një dritare orësh e prishur).
-        granting: Nuk plotësohet kurrë, ndaj nuk jep asgjë.
-        muting: 'Grup lejesh heshtës: vlen për çdo kërkesë.'
         open: Rregullo kushtet
         people:
           one: "%{count} person e ka këtë grup."
@@ -1042,12 +1042,19 @@ sq:
         model_missing: Ky model ose lidhje nuk ekziston më në aplikacion.
         name: Emri i rregullit
         name_placeholder: p.sh. Klientët e mi
+        notes:
+          secret_column:
+            body_html: "%{column} mban një sekret, ndaj një rregull i ri mbi të refuzohet.
+              Ky rregull ende zbatohet, por kush sheh cilin regjistrim e zbulon sekretin:
+              krahasoni një kolonë tjetër ose hiqni rregullin."
+            title: Ky rregull krahason një kolonë që mban një sekret
         operator: Kushti
         optional: opsionale
         pick_field: Zgjidh një fushë…
         pick_relationship: Zgjidh një lidhje…
         preview: Pamja paraprake
         preview_empty: Zgjidh një fushë për ta parë rregullin si fjali.
+        preview_refused: Nuk do të ruhet
         problem_fixes:
           field: Zgjidhni sërish fushën për ta korrigjuar.
           join: Zgjidhni sërish mënyrën e kombinimit, te Të avancuara, për ta korrigjuar.
@@ -2243,6 +2250,9 @@ sq:
       close: Mbyll
       conditions:
         always: Gjithmonë aktiv. Pa kushte aktivizimi.
+        effect:
+          granting: Nuk plotësohet kurrë, ndaj nuk jep asgjë.
+          muting: 'Grup lejesh heshtës: vlen për çdo kërkesë.'
         flag_generic: kur %{flag} është vendosur
         flags:
           marketing_consent: kur është dhënë pëlqimi për marketing
@@ -2252,10 +2262,25 @@ sq:
         hours: ndërmjet %{from} dhe %{to}
         hours_broken: ndërmjet %{from} dhe %{to} (një dritare që askush s'mund ta
           gjykojë — rregullojeni te skeda Kushtet)
+        hours_broken_here: ndërmjet %{from} dhe %{to} (një dritare që askush s'mund
+          ta gjykojë)
         hours_overnight: ndërmjet %{from} dhe %{to} (gjatë natës)
+        ips_broken: nga %{ips} (një listë që askush s'mund ta gjykojë — rregullojeni
+          te skeda Kushtet)
+        ips_broken_here: nga %{ips} (një listë që askush s'mund ta gjykojë)
         no_hour: pa orë
         only_works: Funksionon vetëm %{parts}.
         or: " ose "
+        problems:
+          flag_unusable_html: Flamuri i sesionit %{flag} përmban një karakter kontrolli,
+            ndaj asnjë kërkesë nuk e mbart.
+          hours_equal: Ora e fillimit dhe e mbarimit janë të njëjta, ndaj dritarja
+            është bosh.
+          hours_incomplete: Është vendosur vetëm njëra nga dy orët.
+          hours_range: Një orë është jashtë 00:00–23:00.
+          ip_empty: Lista e IP-ve ka vetëm ndarës, asnjë hyrje.
+          ip_entry_html: "%{entry} nuk është adresë IP ose diapazon CIDR."
+        problems_title: Këto kushte nuk mund të gjykohen
       dates:
         days_ago:
           one: "%{count} ditë më parë"
@@ -2358,6 +2383,8 @@ sq:
         and: dhe
         current_user: përdoruesi aktual
         matches_nothing: Nuk përputhet me asgjë
+        notes:
+          secret_column: Kolonë sekrete
         only_show: Shfaq vetëm
         or_empty: ose %{field} është bosh
         problems:
@@ -2424,6 +2451,10 @@ sq:
         mask_all: I maskuar plotësisht
         pass_through: Kalon pa maskim
         warn: Kalon dhe regjistrohet
+      untitled:
+        permission_set: Grup lejesh pa emër
+        permission_set_group: Grupim grupesh lejesh pa emër
+        permission_set_rule: Rregull pa emër
       view_all: Shiko të gjitha
     validations:
       attributes:

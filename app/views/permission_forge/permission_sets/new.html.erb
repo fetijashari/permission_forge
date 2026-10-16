@@ -38,7 +38,7 @@
         <select id="pf-new-set-from-<%= kind %>" name="start_from_<%= kind %>" class="pf-select">
           <option value=""><%= t('.blank') %></option>
           <% options.each do |ps| %>
-            <option value="<%= ps.id %>" <%= 'selected' if @start_from == ps.id.to_s %>><%= t('.copy_of', name: ps.name) %></option>
+            <option value="<%= ps.id %>" <%= 'selected' if @start_from == ps.id.to_s %>><%= t('.copy_of', name: pf_record_name(ps)) %></option>
           <% end %>
         </select>
       </div>
@@ -48,7 +48,7 @@
       <label class="pf-label" for="pf-new-set-group"><%= t('.group') %></label>
       <select id="pf-new-set-group" name="permission_set_group_id" class="pf-select">
         <option value=""><%= t('permission_forge.ui.no_group') %></option>
-        <% @groups.each do |g| %><option value="<%= g.id %>" <%= 'selected' if @group_id == g.id.to_s %>><%= g.name %></option><% end %>
+        <% @groups.each do |g| %><option value="<%= g.id %>" <%= 'selected' if @group_id == g.id.to_s %>><%= pf_record_name(g) %></option><% end %>
       </select>
     </div>
 

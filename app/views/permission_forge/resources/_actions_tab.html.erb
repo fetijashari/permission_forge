@@ -27,7 +27,7 @@
       <div class="pf-card__row">
         <div class="pf-stack pf-stack--tight pf-grow">
           <span class="pf-row pf-row--tight">
-            <b data-pf-host-data><%= row.label %></b>
+            <% unless row.verbatim? %><b data-pf-host-data><%= row.label %></b><% end %>
             <code class="pf-mono-key"><%= row.name %></code>
             <%= pf_off_badge unless action.is_active %>
             <% if row.unlinked %><%= pf_badge("– #{t('.unlinked')}", title: t('.unlinked_title')) %><% end %>
@@ -53,7 +53,7 @@
       <div class="pf-card__row">
         <div class="pf-stack pf-stack--tight pf-grow">
           <span class="pf-row pf-row--tight">
-            <b data-pf-host-data><%= row.label %></b>
+            <% unless row.verbatim? %><b data-pf-host-data><%= row.label %></b><% end %>
             <code class="pf-mono-key"><%= row.name %></code>
             <%= pf_badge(pf_state(:action, :none).word, variant: :unconfigured) %>
           </span>

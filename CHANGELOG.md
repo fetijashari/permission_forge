@@ -8,10 +8,20 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [0.15.0] - 2026-10-16
 
-Before upgrading, run `bin/rails permission_forge:audit`: it lists the stored rows this release reads differently (rules
-that match nothing, broken activation conditions, variant rows, unknown mask strategies). The
-[migration guide](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015) has the steps, the behaviour changes with their opt-outs
-and the RLS re-sync.
+Upgrading from 0.14 is the three steps of the
+[migration guide's checklist](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015):
+no generator to run (`permission_forge:upgrade` is for installs older than 0.13), `bin/rails permission_forge:audit`
+before the deploy — it lists the stored rows this release reads differently (rules that match nothing, broken
+activation conditions, variant rows, unknown mask strategies) — and an RLS re-sync after it. From 0.13, see
+[From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013). Most Changed
+entries need nothing from you. These may need a change in your app or its clients: **An unrescued denial answers 403
+Forbidden instead of 500.** (add `public/403.html`, or rescue the errors), **RLS: `RlsPolicyGenerator::GENERATOR_VERSION`
+is 7** (run `permission_forge:rls:sync` after the deploy), **`include_nulls` is off unless asked for — in code, through
+the JSON API and in the admin's rule builder alike.** (pass `include_nulls: true` where a rule should let empty values
+through), **A refusing `api_auth` answers 401 Unauthorized instead of 403.** and **API: a value of the wrong shape for
+its attribute is a 422 keyed by it, never dropped or cast.** (API clients), **A Permission Set, a group or a rule
+created without a name is refused, and a rule created without a blocked message stores none.** (code and API clients
+that create without a name), and **More warnings are SECURITY warnings.** (log alerts that match the warning text).
 
 ### Added
 
@@ -769,16 +779,17 @@ and the RLS re-sync.
   nothing is enforced differently.
   <!-- pin: test/permission_forge/html/labels_and_attention_admin_test.rb#Settings never says the settings look good while Home lists items that need attention -->
   <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#Settings warns about automatic query scoping while Home lists rules it leaves out -->
-- **A host model, column, association or action without a translation is named as stored, never inflected into
-  English.** "Full address", "Created at", "Customers", "Archive" and "Supplier" on a Macedonian or Albanian page read
-  `full_address`, `created_at`, "Customer records" (`permission_forge.ui.resource_plural`), `archive`, `supplier` — in
-  English too, in every admin screen and in `Admin::ModelCatalog`'s labels (the rule builder, Sync, "Add resource").
-  `ResourceAction#display_name` without a label is the key. **Opt out:** translate your models and columns
-  (`activerecord.models.<model>` with `one`/`other`, `activerecord.attributes.<model>.<name>`,
-  [docs/i18n.md](docs/i18n.md#your-models-and-columns-in-the-admin)) or give the row a label; there is no switch back
-  to `humanize`, which is English whatever the locale.
+- **A host model, column, association or action without a translation is never inflected into English on a page in
+  another language.** "Full address", "Created at", "Customers", "Archive" and "Supplier" on a Macedonian or Albanian
+  page read `full_address`, `created_at`, "Customer records" (`permission_forge.ui.resource_plural`), `archive`,
+  `supplier`, in every admin screen and in `Admin::ModelCatalog`'s labels (the rule builder, Sync, "Add resource"); an
+  English page keeps Rails' own English for a column or action name ("Created at", `human_attribute_name`), and names
+  a model by its constant. `ResourceAction#display_name` without a label is the key (Rails' English on an English
+  page). **Opt out:** translate your models and columns (`activerecord.models.<model>` with `one`/`other`,
+  `activerecord.attributes.<model>.<name>`, [docs/i18n.md](docs/i18n.md#your-models-and-columns-in-the-admin)) or give
+  the row a label; there is no switch back to `humanize` on a page that is not English.
   <!-- pin: test/permission_forge/admin/labels_test.rb#a model is labelled by the Resource row, else the host translation, else the constant name; the plural likewise -->
-  <!-- pin: test/permission_forge/admin/services_test.rb#labels are the host translation, else the stored name verbatim -->
+  <!-- pin: test/permission_forge/admin/services_test.rb#labels are the host translation, else the stored name verbatim (Rails' English on an English page) -->
 - **Every validation message of the gem's models is the gem's own, in the request's locale.** Rails' default messages
   (`uniqueness`, `length`, `numericality`, `presence`, `ValidatesDependency`, `HasUuid`) and the messages that were
   translated once at class load read from `permission_forge.validations.*` at validation time: `blank`, `taken`,
@@ -1221,6 +1232,51 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/audit/generated_codes_test.rb#an API client nobody names and the boot are stored as codes and named in the locale -->
   <!-- pin: test/permission_forge/admin/audit_log_test.rb#who holds what names an actor stored as a code in the language of the export -->
 
+- **A label the gem generated is shown as no label, and an English page keeps Rails' English.** A field or action row
+  labelled with its own name, the name in English ("Created at", what the generator stored through 0.14) or "Untitled
+  Field" read on a Macedonian or Albanian page as written — "Created at created_at" on the Fields tab (field test
+  round 7, A#127) — and a column with a row and one without carried two names on one grid ("Api token" against
+  `api_token`, B#26). `Admin::FieldLabel` and `Admin::ActionLabel` treat a generated label as none
+  (`PermissionForge::GeneratedText.label?`) and fall back to the host's translation, then — only while `I18n.locale` is
+  English — Rails' own English for the name (`human_attribute_name`: "Created at", what an English host saw before),
+  then the name in `<code>`, shown once (the grid no longer reads "api_token api_token"); a label an admin wrote still
+  wins. The field drawer, the action form, a set's and a group's name and the rule builder pre-fill no generated text
+  (`Admin::Prefill`), and a Permission Set, group or rule stored under an install-default English name ("Untitled
+  Rule") is named in the page's language wherever the admin shows it (`Admin::RecordName`, `pf_record_name`; the
+  locale-leak walk stores those defaults on the walked records). **Opt out:** write a label or a name of your own, or
+  translate the column (`activerecord.attributes.<model>.<column>`).
+  <!-- pin: test/permission_forge/admin/generated_text_display_test.rb#a generated field label is no label: Rails English on an English page, the name verbatim elsewhere -->
+  <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#a generated label and no row read the same on a muting set, in every language (B#26) -->
+  <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#the field drawer pre-fills no generated label, and keeps an admin label -->
+  <!-- pin: test/permission_forge/admin/generated_text_display_test.rb#a set, group or rule stored under an install default name is named in the page language -->
+  <!-- pin: test/permission_forge/html/locale_leak_test.rb#every screen shows only translated words and host data -->
+- **The rule builder's preview says what the save would say.** It runs the save path in memory — the builder's own
+  checks, then the model's validations on the attributes the sentence shows — and shows the first refusal
+  (`Admin::RulePreview`): an "is between" with one end typed read "a, is not a value status of Customer can hold"
+  (field test round 7, B#87), and now reads "⚠ Will not save Enter both ends of the range.", as the save does; a rule
+  the save would take shows its sentence. A preview before a value is entered names the missing value instead of
+  "…". **No opt-out:** the preview only words what the save already refuses.
+  <!-- pin: test/permission_forge/html/rule_preview_property_test.rb#the preview says the first error the save would show, or none when the save goes through -->
+  <!-- pin: test/permission_forge/html/rule_preview_property_test.rb#B#87: an "is between" with one end says the range needs both ends -->
+- **The rule builder's checkboxes are read as every admin flag is.** `current_user`, `include_nulls` and `is_active`
+  were compared with `"1"`, so `"true"` or `"on"` read as false; they go through `ParamShapes.flag` now (`true`, `on`,
+  `1`, `t` in any case; an unchecked box keeps its default), and a value that is no boolean goes back with the
+  `flash.invalid_param` message, nothing saved. **No opt-out:** the admin's own forms post `1` and `0`, which read as
+  before.
+  <!-- pin: test/permission_forge/html/rule_form_flags_test.rb#the builder reads "true", "on", "off" as the one boolean reading does -->
+  <!-- pin: test/permission_forge/html/rule_form_flags_test.rb#a include_nulls the admin cannot read goes back with the flash, nothing saved -->
+- **Dry runs say "would", and answer that they did no cache work.** `rake permission_forge:audit_events:purge` with
+  `DRY_RUN=1` printed "Would delete 3 audit event(s)" above "Audit events deleted: 3" (field test round 7, E#55); every
+  label of `RakeOutput` that says a change was made has its dry-run form in the same table ("Audit events that would
+  be deleted"). The dry runs of `ConsentWithdrawalHandler`, `DataSubjectErasure` and `ExpiredAssignmentCleaner` answer
+  `cache: { confirmed: nil, ..., work: false }` (`Cache::Outcome.none`, `Cache::Report#none`; the consent dry run
+  answered `confirmed: true`, the other two had no `cache`), and the rake line reads "none — no cache work was done".
+  An outcome of real cache work keeps its four keys. **No opt-out:** a script that read a dry run's `cache[:confirmed]`
+  reads `work`.
+  <!-- pin: test/permission_forge/tasks/dry_run_output_test.rb#every label that says a change was made has its "would" form -->
+  <!-- pin: test/permission_forge/tasks/dry_run_output_test.rb#the purge's dry run says would on every line -->
+  <!-- pin: test/permission_forge/tasks/dry_run_output_test.rb#the consent withdrawal's dry run did no cache work, and says so -->
+  <!-- pin: test/permission_forge/tasks/dry_run_output_test.rb#every dry run answers no cache work -->
 ### Deprecated
 
 - **An `api_auth` that sets `@admin = true` on the controller to open `GET /api/stats`.** Set
@@ -1243,8 +1299,9 @@ and the RLS re-sync.
 - **The removal of 0.13's cache keys.** Through 0.14 every invalidation also removed the bare keys 0.13 wrote
   (`user_<id>`, `tenant_<t>_user_<id>`), so that a rolling deploy from 0.13 reached both versions' entries;
   `Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES` is now empty and an invalidation removes this version's (`v2:`) entries
-  only. An application still on 0.13 upgrades through 0.14, or runs `bin/rails permission_forge:cache:clear` once its
-  0.13 processes are gone (as the 0.14 notes asked).
+  only. An application still on 0.13 follows the one path of
+  [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013) (it ends with
+  `bin/rails permission_forge:cache:clear` once its 0.13 processes are gone).
   <!-- pin: test/permission_forge/cache/user_keys_test.rb#an invalidation names the stamp and the v2 keys, and no bare key of 0.13 -->
   <!-- pin: test/permission_forge/cache/user_keys_test.rb#the entries live under one namespace, the previous ones are gone -->
 
@@ -1853,6 +1910,43 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/concerns/validates_required_columns_test.rb#a column that already has an error gets no second one, whatever the order of the validators -->
   <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#POST create without a name or a value names each once -->
 
+- **The Conditions tab explains a condition with the definition that judges it.** A window from 9 to 9 read "☾
+  Overnight: active from 09:00 until 09:00 the next morning" under its own error, and the tab's summary sent the reader
+  "to the Conditions tab" they were on (field test round 7, E#32): the tab asks `ActivationConditions::HoursWindow`
+  (`set?`, `wraps?`, `broken?`), and its summary has an on-tab form. An IP list with an entry that is no address read
+  "Only works from office-network." (B#48a): the summary says the list cannot be judged, and one banner lists every
+  problem `ActivationConditions#condition_problems` names, with the effect Home's card names (a granting set grants
+  nothing, a muting set applies to every request; one key for both, `ui.conditions.effect`). The form refuses what
+  the model refuses for the same reason (`HoursWindow#problem`, an hour outside 0–23 included;
+  `ActivationConditions.ip_range`).
+  <!-- pin: test/permission_forge/html/conditions_explanations_test.rb#a window from an hour to the same hour is never shown as overnight, nor sent to the tab it is on -->
+  <!-- pin: test/permission_forge/html/conditions_explanations_test.rb#a granting set's list with an entry that is no address shows one banner with Home's effect -->
+  <!-- pin: test/permission_forge/html/conditions_explanations_test.rb#the form refuses an hour outside the day for the reason the model has -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: an hour window: set, overnight, broken (ActivationConditions::HoursWindow) -->
+- **A stored rule on a secret column says so where Home's "Fix rule" leads.** The builder opened with no banner and a
+  preview that read as fine (field test round 7, B#48b). `Admin::RuleNotes.for(rule)` is the one list of what is said
+  beside a stored rule — why it matches nothing (`RuleProblem`), then a secret column (refused for a new rule; this one
+  still applies) — drawn by the builder's banner, the preview and a badge on the Rules tab's row. The builder no
+  longer offers a column declared with `encrypts`, beside the secret ones, except the one a stored rule names.
+  <!-- pin: test/permission_forge/html/rule_notes_test.rb#Home's Fix rule opens a builder that says the rule compares a secret column -->
+  <!-- pin: test/permission_forge/html/rule_notes_test.rb#the preview of that rule says it too, and the Rules tab badges the row -->
+  <!-- pin: test/permission_forge/html/rule_notes_test.rb#the builder offers no encrypted column, but keeps the one a stored rule names -->
+- **A rule's sentence reads its operators from the definitions that decide.** "The current user" is said only where
+  the user's id is substituted (one value compared, `ValueTyping.current_user?`), not in a list, where the word is
+  compared as written; a range's ends are split as `ValueTyping.split` splits them; "or empty" follows
+  `Operators::Registry::NULL_INCLUDING`, the list the RLS policy reads too. `SentencesHelper` keeps no operator list of
+  its own.
+  <!-- pin: test/permission_forge/helpers/rule_sentence_operators_test.rb#"the current user" is said only where one value is compared -->
+  <!-- pin: test/permission_forge/helpers/rule_sentence_operators_test.rb#the operators that add the NULL rows are the strategies that do, and the policy reads the same list -->
+- **A Permission Set with two Resources of one single-table-inheritance chain is named with the Resource.** The field
+  drawer's "Across all Permission Sets" showed "Sales rep ∅ Hidden" and "Sales rep ◉ Read-only" side by side, and a
+  person's effective access "from Sales rep" (field test round 7, B#35); such a row reads "Sales rep · VipCustomer",
+  the model marked as host data (`Admin::ChainEntries`, `pf_set_entry_name`).
+  <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#the drawer's rows name the Resource when the set holds more than one of the chain -->
+  <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#a person's effective access names the Resource the same way -->
+- **Home counts people with one Macedonian noun.** "1 лице го има овој сет" stood beside "1 корисник" (field test round
+  7, C#92); every count of people on Home uses the noun of `ui.people_count`, in every locale (a glossary test).
+  <!-- pin: test/permission_forge/locale_glossary_test.rb#mk: Home counts people with the noun of ui.people_count -->
 ### Documentation
 
 - [Migration guide](docs/migration-guide.md#upgrading-to-015): "Upgrading to 0.15" — run `rake
@@ -1970,6 +2064,13 @@ and the RLS re-sync.
   every operation reports, the `RecordNotUnique` 422, the pagination rule, the raw reader table of masked attributes,
   and phone width.
   <!-- pin: test/permission_forge/docs/references_test.rb#every relative link and anchor in the docs resolves -->
+- **Upgrading to 0.15 opens with a three-step checklist**, and the 0.13 path is stated once
+  ([From 0.13](docs/migration-guide.md#from-013)): `permission_forge:upgrade` is for installs older than 0.13, the
+  audit runs before the deploy and RLS is re-synced after it; the README, this section's intro and its Removed entry
+  link there (field test round 7, A#131). `docs/i18n.md` says what an English page shows for a host name without a
+  translation ([Your Models and Columns in the Admin](docs/i18n.md#your-models-and-columns-in-the-admin)).
+  <!-- pin: test/permission_forge/docs/upgrade_notes_test.rb#Upgrading to 0.15 opens with the three-step checklist -->
+  <!-- pin: test/permission_forge/docs/upgrade_notes_test.rb#the 0.13 path is stated once, in From 0.13, and the rest link to it -->
 
 ## [0.14.1] - 2026-10-14
 

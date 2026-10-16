@@ -7,7 +7,7 @@
     <div class="pf-option">
       <span class="pf-option__main"><span class="pf-row pf-row--tight">
         <% if set.is_muting %><span class="pf-text-restrict" aria-hidden="true">⊘</span><% end %>
-        <span class="pf-fw-600"><%= set.name %></span>
+        <span class="pf-fw-600"><%= pf_record_name(set) %></span>
         <%= pf_off_badge unless row[:in_effect] %>
       </span></span>
       <%# The row's state, worded as the action page's "Right now" badge (Admin::StateLabel, kind :action). %>

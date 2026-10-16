@@ -1,7 +1,7 @@
 <% set = @permission_set %>
 <% locked = pf_locked?(set) %>
-<% content_for :pf_title, set.name %>
-<%= pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path], set.name) %>
+<% content_for :pf_title, pf_record_name(set) %>
+<%= pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path], pf_record_name(set)) %>
 
 <%= render 'permission_forge/shared/mode_banners', record: set, muting: set.is_muting,
            duplicate_path: permission_forge.duplicate_permission_set_path(set) %>

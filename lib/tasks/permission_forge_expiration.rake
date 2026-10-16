@@ -28,7 +28,7 @@ namespace :permission_forge do
     else
       PermissionForge::RakeOutput.report(
         "Dry run — would remove #{result[:expired_count]} expired assignment(s) affecting #{result[:affected_user_ids].size} person(s):",
-        result.slice(:expired_count, :affected_user_ids)
+        result.slice(:expired_count, :affected_user_ids, :cache).merge(dry_run: true)
       )
       puts 'Run `rake permission_forge:cleanup_expired_assignments` to remove them.'
     end

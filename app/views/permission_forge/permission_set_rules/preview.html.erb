@@ -1,10 +1,10 @@
 <%# The preview fragment for pf_admin.js; without JS, a page of its own with the way back. %>
 <% if pf_fragment? %>
-  <%= render 'preview', form: @form, resource: @resource %>
+  <%= render 'preview', preview: @preview, resource: @resource %>
 <% else %>
   <% content_for :pf_title, t('.title', resource: pf_resource_label(@resource)) %>
   <%= pf_dialog_frame({ title: t('.title', resource: pf_resource_label(@resource)), role: 'dialog' }) do %>
-    <div class="pf-panel pf-panel--muted pf-stack pf-stack--tight"><%= render 'preview', form: @form, resource: @resource %></div>
+    <div class="pf-panel pf-panel--muted pf-stack pf-stack--tight"><%= render 'preview', preview: @preview, resource: @resource %></div>
     <div class="pf-actions pf-row--right">
       <%= link_to t('.back'), permission_forge.permission_set_resource_path(@permission_set, @resource.name, tab: 'rules'), class: 'pf-btn' %>
     </div>

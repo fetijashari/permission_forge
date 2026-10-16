@@ -170,6 +170,12 @@ module PermissionForge
         together ? together.call(bounds) : all_typed(bounds, typed)
       end
 
+      # The elements of a list or a range as written: the text split at every
+      # comma, each stripped (a trailing comma adds none). The rule's
+      # sentence splits them the same way.
+      #
+      # @param value [Object]
+      # @return [Array<String>]
       def split(value)
         value.to_s.split(',').map(&:strip)
       end
@@ -179,7 +185,7 @@ module PermissionForge
         typed.include?(UNUSABLE) ? UNUSABLE : typed
       end
 
-      private_class_method :caster, :single, :pattern, :list, :pair, :split, :all_typed
+      private_class_method :caster, :single, :pattern, :list, :pair, :all_typed
     end
   end
 end

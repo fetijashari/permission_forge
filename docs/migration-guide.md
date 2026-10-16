@@ -2,7 +2,23 @@
 
 ## Upgrading to 0.15
 
-**What an existing 0.14 install must run:** nothing for the database — 0.15 adds no table and no column, and `bin/rails generate permission_forge:upgrade` adds no migration a 0.14 install does not have. Run the audit before you deploy, re-sync RLS policies after (PostgreSQL only), and read the behaviour changes below. An app still on 0.13 upgrades to 0.14 first ([below](#upgrading-from-013-to-014)).
+1. **No generator to run from 0.14:** 0.15 adds no table and no column, and `bin/rails generate permission_forge:upgrade` is for installs older than 0.13 (its migrations — the resource-field unique index, the admin-UI columns, the audit log — are all in a 0.13 or 0.14 install). Coming from 0.13: [From 0.13](#from-013).
+2. **Before the deploy, run `bin/rails permission_forge:audit`** and fix what it lists ([below](#before-the-deploy-run-the-audit)).
+3. **After the deploy, re-sync RLS** if you use PostgreSQL row-level security: `bin/rails permission_forge:rls:sync` ([below](#after-the-deploy-rls-postgresql)).
+
+Then read the [behaviour changes](#behaviour-changes): each says how to opt out, or why there is no opt-out. The [CHANGELOG](../CHANGELOG.md) has every change.
+
+### From 0.13
+
+One path, straight to 0.15 (0.14 adds no migration, so there is no stop to make on the way):
+
+1. Go through [Upgrading from 0.13 to 0.14](#upgrading-from-013-to-014) — its stricter defaults apply to you too — then the checklist above.
+2. Deploy 0.15. During a rolling deploy a permission change made by a 0.13 process does not reach the entries 0.15 caches: 0.13 removes its own bare keys (`user_<id>`, `tenant_<t>_user_<id>`), 0.15 keeps its entries under `pf:v2:` (`Cache::UserKeys`) and, since 0.15, no longer removes 0.13's keys either.
+3. Once **the last 0.13 process is gone**, run `bin/rails permission_forge:cache:clear` (running it earlier does not help: an invalidation a 0.13 process makes afterwards misses the new entries again). 0.13's own entries are never read again and expire with `cache_ttl`.
+
+```bash fragment
+ACTOR="ops: deploy" REASON="deploy 0.15" bin/rails permission_forge:cache:clear
+```
 
 ### Before the deploy: run the audit
 
@@ -53,6 +69,10 @@ Each with its opt-out, or why there is none. The [CHANGELOG](../CHANGELOG.md) ha
 20. **The audit log's own words are codes.** The reason the expired-assignment cleanup records (`expired`) is shown in the page's language, and an API change nobody names is stored with the actor label `api_client` (was "API client") and shown as "API client" in the page's language; the CSV export and the API return the stored values. **Opt out:** set `config.audit_actor_resolver`, so API changes name their client.
 21. **API: a value of the wrong shape for its attribute is a 422 keyed by it** — a list or an object for a scalar (it was dropped: `{"is_active": [false]}` answered 200 with nothing changed), `true` or a number for text (a name became `"t"`), a word that is not a boolean (`"nope"` was `true`), a copy `name` that is not text, a `user_ids` element that is no id. A boolean takes `true`/`false`/`1`/`0` and the words `true`, `false`, `t`, `f`, `on`, `off` in any case; a rule's `field_value` takes a JSON number or boolean (stored as its text) and, under `in` / `not_in` / `between`, a list (stored joined with commas). The admin goes back with a message for a flag it cannot read. **No opt-out:** send each attribute in its shape ([Attribute shapes](admin-api.md#attribute-shapes)); a dropped or miscast value was a silent no-op or an inverted flag.
 22. **The admin and API boot warnings stay in the log outside a server process.** HTTP Basic auth without credentials, a shared Basic-auth login without `audit_actor_resolver`, an API-only host missing the admin's middlewares, tenantless admin access and the API without its authorization lambdas are no longer printed by `bin/rails runner`, rake tasks, consoles or job workers (the log still has them); a server process prints them as before. Unicorn, Passenger, Falcon and Pitchfork now count as servers, so in production their processes write the warnings to the log only, as Puma's do. **No opt-out:** the log keeps every warning; see [Where warnings appear](configuration.md#where-warnings-appear).
+23. **A label the gem generated is shown as no label.** A field or action row labelled with its own name, the name in English ("Created at", what the generator stored through 0.14) or "Untitled Field", and a column with no row at all, read the host's translation, else — on an English page — Rails' English for the name (`human_attribute_name`: "Created at", as before), else the name in `<code>` (`created_at` on an Albanian or Macedonian page); a label an admin wrote still wins, and the field drawer and the action form no longer pre-fill a generated one. A Permission Set, group or rule stored under the install migration's English name ("Untitled Rule") is named in the page's language, and the admin does not pre-fill it as the name. **Opt out:** write a label or name of your own, or translate the column (`activerecord.attributes.<model>.<column>`). See [i18n.md](i18n.md#your-models-and-columns-in-the-admin).
+24. **The rule builder's preview says what the save would say.** It runs the save's checks in memory and shows the first refusal ("Enter both ends of the range.") before the rule's sentence; the builder no longer offers a column declared with `encrypts` (only the one a stored rule names), and a stored rule on a secret column is flagged on its edit page, in the preview and on the Rules tab. The builder's checkboxes (`current_user`, `include_nulls`, `is_active`) are read as every admin flag is (`true`, `on`, `1`, ...; a value that is no boolean goes back with a message). **No opt-out:** wording and the same refusals the save already made.
+25. **Dry runs say "would" and did no cache work.** `rake permission_forge:audit_events:purge DRY_RUN=1` prints "Audit events that would be deleted" (it printed "Audit events deleted"); the dry runs of `ConsentWithdrawalHandler`, `DataSubjectErasure` and `ExpiredAssignmentCleaner` answer `cache: { confirmed: nil, ..., work: false }` (the consent dry run answered `confirmed: true`; the other two had no `cache`). **No opt-out:** a script that read `cache[:confirmed]` of a dry run reads `work` instead.
+26. **A Permission Set holding two Resources of one single-table-inheritance chain is named with the Resource** on the field drawer's "Across all Permission Sets" and a person's effective access ("Sales rep · VipCustomer"). **No opt-out:** wording.
 
 ### If you override the gem's locale keys
 
@@ -69,6 +89,7 @@ The gem's own locales are complete. Only a host whose locale files override one 
 | `settings.row.default`, `settings.row.docs` | `settings.row.default_html`, `settings.row.docs_html` |
 | `permission_set_rules.builder.message_placeholder` | `permission_set_rules.builder.message_help` (a hint under the field, not a placeholder) |
 | `home.index.search_placeholder` (the long sentence) | `home.index.search_placeholder` is now "Name or email"; the sentence moved to `home.index.search_help` |
+| `home.conditions_card.granting`, `home.conditions_card.muting` | `ui.conditions.effect.granting`, `.muting` (Home's card and the Conditions tab's banner say the same) |
 
 Removed without a replacement: `ui.levels.muted`, `ui.badges.not_configured`, `ui.audit.system`, `people.effective_tab.legend_muted`, `people.effective_tab.legend_none`, `shared.across_sets.muted_hidden`. See [i18n.md](i18n.md#overriding-translations).
 
@@ -77,7 +98,7 @@ Removed without a replacement: `ui.levels.muted`, `ui.badges.not_configured`, `u
 Removed in 0.15:
 
 - `PermissionForge::Engine.apply_masked_attributes_to_managed_models` — call `PermissionForge::MaskedModels.apply(only:)`.
-- The 0.13 cache keys (`user_<id>`, `tenant_<t>_user_<id>`) are no longer removed by an invalidation. An app still on 0.13 upgrades through 0.14, or deploys 0.15 and runs `bin/rails permission_forge:cache:clear` once its 0.13 processes are gone (a 0.13 process's invalidation cannot reach the 0.15 entries).
+- The 0.13 cache keys (`user_<id>`, `tenant_<t>_user_<id>`) are no longer removed by an invalidation. An app still on 0.13: [From 0.13](#from-013).
 
 Deprecated in 0.15, removed in 0.16 (each warns through `PermissionForge.deprecator`):
 
@@ -155,7 +176,7 @@ ACTOR="ops: deploy" REASON="deploy 0.14" bin/rails permission_forge:cache:clear
 - Running it before the last 0.13 process stops does not help: an invalidation that process makes afterwards misses the new entries again.
 - The cache is cold afterwards: each user rebuilds once, on their next request. Expect that load right after.
 - It is recorded as `cache.cleared` (one event per tenant plus one without a tenant; see [audit-log.md](audit-log.md)).
-- 0.15 no longer removes the 0.13 keys on invalidation: an app still on 0.13 upgrades through 0.14 (see [Upgrading to 0.15](#upgrading-to-015)).
+- 0.15 no longer removes the 0.13 keys on invalidation: an app still on 0.13 follows [From 0.13](#from-013).
 
 ## Upgrading to 0.13: the audit log
 

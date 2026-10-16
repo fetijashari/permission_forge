@@ -45,7 +45,16 @@ module PermissionForge
       def problem
         return @problem if defined?(@problem)
 
-        @problem = (PermissionForge::Operators::RuleProblem.for(@rule) if @rule&.persisted? && !@rule.changed?)
+        @problem = notes.find(&:matches_nothing?)&.problem
+      end
+
+      # What is said beside the saved rule (Admin::RuleNotes: why it matches
+      # nothing, then a secret column), for the rule as it is stored; a
+      # change that did not save shows the model's own errors.
+      #
+      # @return [Array<RuleNotes::Note>]
+      def notes
+        @notes ||= @rule&.persisted? && !@rule.changed? ? RuleNotes.for(@rule) : []
       end
 
       # The saved rule's path and field name as stored ("ownr.owner_id"),
@@ -63,7 +72,23 @@ module PermissionForge
       # The model's refusals, each named with the builder's label for its field:
       # "Relationship names ownr, which is not an association of Customer".
       def model_errors
-        @model_errors.map { |error| error.respond_to?(:attribute) ? model_error_text(error) : error.to_s }
+        @model_errors.map { |error| RuleBuilder.error_text(error) }
+      end
+
+      # A model error as the builder words it: its message, named with the
+      # builder's label for its field (ERROR_LABELS) — the footer of a
+      # refused save and the preview (RulePreview) say the same.
+      #
+      # @param error [ActiveModel::Error, #to_s] a message given as text is shown as it is
+      # @return [String]
+      def self.error_text(error)
+        return error.to_s unless error.respond_to?(:attribute)
+
+        key = ERROR_LABELS[error.attribute.to_sym]
+        return error.message unless key
+
+        I18n.t('permission_forge.permission_set_rules.builder.model_error',
+               field: I18n.t("permission_forge.permission_set_rules.#{key}"), message: error.message)
       end
 
       def steps = form.path_steps
@@ -102,16 +127,6 @@ module PermissionForge
 
       def field_selected?(column) = column.name == form.field_name
       def operator_selected?(operator) = operator == form.operator
-
-      private
-
-      def model_error_text(error)
-        key = ERROR_LABELS[error.attribute.to_sym]
-        return error.message unless key
-
-        I18n.t('permission_forge.permission_set_rules.builder.model_error',
-               field: I18n.t("permission_forge.permission_set_rules.#{key}"), message: error.message)
-      end
     end
   end
 end

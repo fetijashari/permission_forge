@@ -43,6 +43,29 @@ module PermissionForge
       setup do
         PseudoLocale.install!
         PermissionForge.configuration.available_locales = [:en, PseudoLocale::LOCALE]
+        store_generated_text
+      end
+
+      # Round 7 (S4): text the gem generated, stored the way installs made
+      # before 0.15 stored it (past the model, as an API create or a
+      # generated row left it), on records every walk shows: the walked set,
+      # its group, rule, field and action. None of it is host data
+      # (GeneratedText): a screen that prints it as stored leaks it.
+      GENERATED = { set: 'Untitled Permission Set', group: 'Untitled Permission Set Group', rule: 'Untitled Rule',
+                    message: 'You do not have permission to perform this action.', label: 'Email', action_label: 'Export' }.freeze
+
+      def store_generated_text
+        @set.update_columns(name: GENERATED[:set])
+        @group.update_columns(name: GENERATED[:group])
+        @set.update_columns(permission_set_group_id: @group.id)
+        @rule.update_columns(name: GENERATED[:rule], failure_message: GENERATED[:message])
+        @email.update_columns(label: GENERATED[:label])
+        @action.update_columns(label: GENERATED[:action_label])
+      end
+
+      # A generated text is never host data, whichever row holds it.
+      def generated?(text)
+        PermissionForge::GeneratedText.install_defaults.include?(text.to_s.strip)
       end
 
       teardown do
@@ -126,7 +149,9 @@ module PermissionForge
         assert_equal %w[Name], leaks_in(render_inline("<p><%= 'name'.humanize %></p>"))
         assert_equal %w[Access denied], leaks_in(render_inline('<table><tr><th>Access denied</th></tr></table>'))
         assert_equal %w[Export], leaks_in(render_inline('<button>Export</button>'))
-        assert_empty leaks_in(render_inline('<b data-pf-host-data>Export</b> <a aria-label="Export">x</a>'))
+        assert_empty leaks_in(render_inline('<b data-pf-host-data>Export</b> <a aria-label="Access denied by test rule">x</a>'))
+        # A label the gem generated is no host data (round 7): the stored "Export" of the action `export`.
+        assert_equal %w[Export], leaks_in(render_inline('<a aria-label="Export">x</a>'))
         assert_empty leaks_in(render_inline("<p><%= t('permission_forge.ui.audit.who_when', who: 'Access denied by test rule', when: 1) %></p>"))
       end
 
@@ -171,8 +196,14 @@ module PermissionForge
       def host_values
         @host_values ||= begin
           keys = PermissionForge::Admin::ControllerCatalog.new.entries.map { |entry| entry.key.to_s }
-          (stored_strings + model_words + keys).to_set(&:strip)
+          (stored_strings.reject { |text| generated?(text) || generated_label?(text) } + model_words + keys).to_set(&:strip)
         end
+      end
+
+      # A stored field or action label the gem made up (GeneratedText.label?).
+      def generated_label?(text)
+        labelled = PermissionForge::ResourceField.unscoped.pluck(:name, :label) + PermissionForge::ResourceAction.unscoped.pluck(:name, :label)
+        labelled.any? { |name, label| label == text && name != text && PermissionForge::GeneratedText.label?(label, name) }
       end
 
       def render_inline(template)
@@ -197,7 +228,7 @@ module PermissionForge
       end
 
       def identity_strings
-        IDENTITY.flat_map { |model, columns| model.constantize.unscoped.pluck(*columns).flatten.compact }
+        IDENTITY.flat_map { |model, columns| model.constantize.unscoped.pluck(*columns).flatten.compact }.reject { |text| generated?(text) }
       end
 
       def model_names

@@ -8,7 +8,7 @@
     <%= link_to t('permission_forge.ui.cancel'), back, class: 'pf-btn', data: { pf_close: true } %>
     <button type="submit" class="pf-btn pf-btn--primary"><%= t('.add') %></button>
   <% end %>
-  <%= pf_sheet_frame({ title: t('.title', resource: pf_resource_label(@resource)), subtitle: @permission_set.name, close_path: back, footer: footer }) do %>
+  <%= pf_sheet_frame({ title: t('.title', resource: pf_resource_label(@resource)), subtitle: pf_record_name(@permission_set), close_path: back, footer: footer }) do %>
     <p class="pf-fs-13 pf-text-2"><%= t('.intro') %></p>
     <% if rows.discovery? %>
       <%= render 'managed_note' %>

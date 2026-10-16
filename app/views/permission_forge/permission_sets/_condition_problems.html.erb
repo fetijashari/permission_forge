@@ -1,0 +1,15 @@
+<%# Why the stored conditions cannot be judged (ActivationConditions#condition_problems), one banner, with
+    the effect Home's card names: a granting set never passes, a muting set applies to every request. %>
+<% problems = set.condition_problems %>
+<% if problems.any? %>
+  <div class="pf-banner pf-banner--warn" role="note" data-pf-condition-problems>
+    <span class="pf-banner__glyph" aria-hidden="true">⚠</span>
+    <div class="pf-banner__body">
+      <span class="pf-banner__title"><%= t('permission_forge.ui.conditions.problems_title') %></span>
+      <ul class="pf-stack pf-stack--tight">
+        <% problems.each do |kind, value| %><li><%= pf_condition_problem(kind, value) %></li><% end %>
+      </ul>
+      <span><%= pf_condition_effect(set) %></span>
+    </div>
+  </div>
+<% end %>

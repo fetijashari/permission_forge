@@ -36,6 +36,9 @@ module PermissionForge
     INFLECTION_ALLOWLIST = [
       ['lib/permission_forge/generated_text.rb', /name\.to_s\.humanize/,
        'recognises the label 0.15 and earlier stored (`name.humanize`) as generated; it writes and shows nothing'],
+      ['lib/permission_forge/admin/field_label.rb', /ActiveSupport::Inflector\.humanize\(name\)/,
+       'Rails\' English for an action key, asked only while I18n.locale is English (FieldLabel.english, round 7 ' \
+       'critique 28): what an English host saw before 0.15; any other page shows the key verbatim'],
       ['app/helpers/permission_forge/application_helper.rb', /module_parent_name\.to_s\.titleize/,
        'the host application\'s constant name (admin_app_name overrides it); the same in every locale']
     ].freeze

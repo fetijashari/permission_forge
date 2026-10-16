@@ -22,7 +22,7 @@ namespace :permission_forge do
         puts 'Retention is not configured (config.audit_retention_period is nil): nothing was deleted.'
       elsif dry_run
         PermissionForge::RakeOutput.report("Dry run — would delete #{result[:purged]} audit event(s) older than " \
-                                           "#{result[:cutoff].iso8601}:", result.except(:dry_run))
+                                           "#{result[:cutoff].iso8601}:", result)
       else
         PermissionForge::RakeOutput.report("Deleted #{result[:purged]} audit event(s) older than #{result[:cutoff].iso8601}:",
                                            result.except(:dry_run))

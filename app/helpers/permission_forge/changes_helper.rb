@@ -64,7 +64,7 @@ module PermissionForge
       when 'is_active' then pf_ui(change.to ? 'changes.set_on' : 'changes.set_off')
       when 'permission_set_group_id'
         group = change.to && PermissionForge::PermissionSetGroup.find_by(id: change.to)
-        group ? pf_ui('changes.set_group', group: group.name) : pf_ui('changes.set_no_group')
+        group ? pf_ui('changes.set_group', group: pf_record_name(group)) : pf_ui('changes.set_no_group')
       else pf_ui('changes.set_text', attribute: pf_ui("changes.attributes.#{change.attribute}"))
       end
     end
@@ -106,15 +106,17 @@ module PermissionForge
       %w[masked mask].include?(level) && strategy ? "#{text} (#{pf_mask_strategy_label(strategy)})" : text
     end
 
+    # A field row named as everywhere else (Admin::FieldLabel: a label the
+    # gem generated is no label).
     def pf_change_field_name(field)
-      field.label.presence || field.name
+      pf_field_label_text(field.resource&.name, field.name, row: field)
     end
 
     def pf_field_attr_change(change)
       field = change.record
       if change.attribute == 'is_active'
         return pf_ui(change.to ? 'changes.field_on' : 'changes.field_off', resource: pf_resource_label(change.resource),
-                                                                           field: field.label.presence || field.name)
+                                                                           field: pf_change_field_name(field))
       end
 
       pf_ui('changes.field_text', resource: pf_resource_label(change.resource), field: field.name,

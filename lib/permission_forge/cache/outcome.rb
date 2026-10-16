@@ -23,12 +23,34 @@ module PermissionForge
     #   rake task, a runner, a console or a job process, where every other
     #   process kept theirs;
     # - `unconfirmed`: how many users the store did not confirm (nil when not
-    #   known yet).
+    #   known yet);
+    # - `work`: false when the operation did no cache work at all — a dry run
+    #   (.none: `confirmed` nil, `unconfirmed` 0); true otherwise. Only an
+    #   outcome without work carries the key in #to_h (`work: false`), so
+    #   every answer of an operation that did its work keeps its four keys.
+    #   A dry run used to answer `confirmed: true` for work it never did
+    #   (field test round 7, E#55).
     #
     # Made by Cache::Report, the one way a service measures an invalidation.
     #
     # @api private
-    Outcome = Data.define(:confirmed, :process_local, :unconfirmed, :in_request) do
+    Outcome = Data.define(:confirmed, :process_local, :unconfirmed, :in_request, :work) do
+      # @param work [Boolean] false only for an operation that did no cache work (.none)
+      def initialize(confirmed:, process_local:, unconfirmed:, in_request:, work: true)
+        super
+      end
+
+      # The outcome of an operation that did no cache work (every dry run):
+      # nothing asked of the store, so nothing confirmed and nobody left
+      # unconfirmed; the store's scope and the origin as measured.
+      #
+      # @param process_local [Boolean]
+      # @param in_request [Boolean]
+      # @return [Outcome]
+      def self.none(process_local:, in_request:)
+        new(confirmed: nil, process_local: process_local, unconfirmed: 0, in_request: in_request, work: false)
+      end
+
       # The outcome before the cache work has run, or where its result is not
       # known: nothing confirmed yet, the store's scope and the origin known
       # already.
@@ -50,7 +72,7 @@ module PermissionForge
 
         hash = value.to_h.transform_keys(&:to_sym)
         new(confirmed: hash[:confirmed], process_local: hash[:process_local] == true, unconfirmed: hash[:unconfirmed],
-            in_request: hash[:in_request] == true)
+            in_request: hash[:in_request] == true, work: hash[:work] != false)
       end
 
       # What a summary event records (string keys, as event data is stored).
@@ -63,6 +85,16 @@ module PermissionForge
       def process_local? = process_local == true
       def in_request? = in_request == true
       def confirmed? = confirmed == true
+      # No cache work was done (.none: a dry run).
+      def none? = work == false
+
+      # The outcome as a service answers it: the four keys, and `work: false`
+      # for an operation that did no cache work (#none?).
+      #
+      # @return [Hash]
+      def to_h
+        none? ? super : super.except(:work)
+      end
 
       # A flash: an alert only when the store said no; a confirmation that is
       # not known yet is not a failure to announce.

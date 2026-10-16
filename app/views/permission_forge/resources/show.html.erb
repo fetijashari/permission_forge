@@ -6,14 +6,14 @@
 <% label = pf_resource_label(resource) %>
 <% plural = pf_resource_plural(resource.name) %>
 <% base = "pf[resources][#{resource.id}]" %>
-<% content_for :pf_title, "#{label} · #{set.name}" %>
+<% content_for :pf_title, "#{label} · #{pf_record_name(set)}" %>
 <%= pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
-                  [set.name, permission_forge.permission_set_path(set)], label) %>
+                  [pf_record_name(set), permission_forge.permission_set_path(set)], label) %>
 
 <% if muting %>
   <div class="pf-banner pf-banner--muting" role="note">
     <span class="pf-banner__glyph" aria-hidden="true">⊘</span>
-    <div class="pf-banner__body"><span><b><%= t('permission_forge.ui.badges.muting') %>.</b> <%= t('.muting_note', set: set.name) %></span></div>
+    <div class="pf-banner__body"><span><b><%= t('permission_forge.ui.badges.muting') %>.</b> <%= t('.muting_note', set: pf_record_name(set)) %></span></div>
   </div>
 <% end %>
 <%= render 'permission_forge/shared/mode_banners', record: resource, muting: false,

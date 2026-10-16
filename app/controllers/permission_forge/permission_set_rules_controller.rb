@@ -34,24 +34,26 @@ module PermissionForge
       render(@rule ? :edit : :new)
     end
 
-    # The sentence the rule being built will show once saved (SentencesHelper,
-    # the same helper the Rules tab draws it with): the fragment pf_admin.js
-    # fetches as the value inputs change; without JS a page of its own.
-    # Changes nothing.
+    # The rule being built as the save would answer it (Admin::RulePreview:
+    # the first error the save would show, else the sentence the Rules tab
+    # draws): the fragment pf_admin.js fetches as the value inputs change;
+    # without JS a page of its own. Changes nothing.
     def preview
       @form = PermissionForge::Admin::RuleForm.new(resource: @resource, params: rule_params)
+      stored = @resource.permission_set_rules.find_by(id: params[:rule_id]) if params[:rule_id].present?
+      @preview = PermissionForge::Admin::RulePreview.new(form: @form, resource: @resource, stored: stored)
     end
 
     def toggle
       @rule.update!(is_active: !@rule.is_active)
       key = @rule.is_active ? 'turned_on' : 'turned_off'
-      redirect_to rules_path, notice: t("permission_forge.flash.rules.#{key}", rule: @rule.name)
+      redirect_to rules_path, notice: t("permission_forge.flash.rules.#{key}", rule: pf_record_name(@rule))
     end
 
     def confirm_destroy; end
 
     def destroy
-      name = @rule.name
+      name = pf_record_name(@rule)
       @rule.destroy!
       redirect_to rules_path, notice: t('permission_forge.flash.rules.deleted', rule: name)
     end
@@ -96,7 +98,7 @@ module PermissionForge
 
       @rule.assign_attributes(@form.attributes)
       if @rule.save
-        redirect_to rules_path, notice: t("permission_forge.flash.rules.#{flash_key}", rule: @rule.name)
+        redirect_to rules_path, notice: t("permission_forge.flash.rules.#{flash_key}", rule: pf_record_name(@rule))
       else
         @model_errors = @rule.errors
         render template, status: :unprocessable_entity

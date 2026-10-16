@@ -1,7 +1,7 @@
 <% content_for :pf_title, t('.title') %>
 <% errors = @errors || {} %>
 <% title = if @person then t('.title_person', name: pf_person_name(@person))
-           elsif @preset_set then t('.title_set', set: @preset_set.name)
+           elsif @preset_set then t('.title_set', set: pf_record_name(@preset_set))
            else t('.title') end %>
 <% close_path = pf_back_or(@person ? permission_forge.person_path(@person) : permission_forge.people_path) %>
 <%= form_with url: permission_forge.assignments_path, method: :post, id: 'pf-assign-form' do %>
@@ -69,7 +69,7 @@
               <input type="checkbox" name="set_ids[]" value="<%= set.id %>" <%= 'checked' if @selected_ids.include?(set.id) && !has && !locked %> <%= 'disabled' if has || locked %>>
               <span class="pf-option__main">
                 <span class="pf-row pf-row--tight">
-                  <span class="pf-fw-600"><%= set.name %></span>
+                  <span class="pf-fw-600"><%= pf_record_name(set) %></span>
                   <% if has %><%= pf_badge(t('.already')) %><% end %>
                   <% if locked %><%= pf_lock_badge %><% end %>
                   <% if set.is_muting %><%= pf_badge("⊘ #{t('permission_forge.ui.badges.muting')}", variant: :muting) %><% end %>

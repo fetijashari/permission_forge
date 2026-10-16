@@ -18,6 +18,12 @@ module PermissionForge
     #
     # @api public
     module Registry
+      # The operators whose strategy adds the NULL rows under a rule's
+      # `include_nulls` ("…, or empty"); the others ignore the flag. The one
+      # list: the RLS policy (Services::RlsOperatorSql), the rule builder and
+      # the rule's sentence read it (a test compares it with the strategies).
+      NULL_INCLUDING = [Constants::EQUAL, Constants::NOT_EQUAL, Constants::IN, Constants::NOT_IN].freeze
+
       module_function
 
       # @param name [String] operator constant from PermissionSetRule (e.g., 'equal')

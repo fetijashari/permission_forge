@@ -24,6 +24,8 @@ module PermissionForge
         delegate :effect, :permitted_by, to: :standing
 
         def configured? = !action.nil?
+        # The label is the key itself (ActionLabel): drawn once, in <code>.
+        def verbatim? = label == name
       end
 
       # What one action means right now for people with this set, and which

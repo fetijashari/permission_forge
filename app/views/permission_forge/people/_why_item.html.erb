@@ -9,7 +9,7 @@
         <span class="pf-stack pf-stack--tight">
           <span><%= text %></span>
           <% if set %>
-            <%= link_to t('.open_set', set: set.name), permission_forge.permission_set_path(set), class: 'pf-fs-12' %>
+            <%= link_to t('.open_set', set: pf_record_name(set)), permission_forge.permission_set_path(set), class: 'pf-fs-12' %>
           <% end %>
         </span>
       </li>

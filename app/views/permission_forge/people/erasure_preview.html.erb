@@ -10,7 +10,7 @@
                        groups: t('.groups', count: @preview[:group_assignments_count].to_i)) %>
     </span>
     <% if @preview[:permission_sets].present? %>
-      <ul class="pf-confirm__list"><% @preview[:permission_sets].each do |name| %><li><%= name %></li><% end %></ul>
+      <ul class="pf-confirm__list"><% @preview[:permission_sets].each do |name| %><li><%= pf_record_name_text(name, :permission_set) %></li><% end %></ul>
     <% end %>
     <span class="pf-fs-12 pf-text-3"><%= t('.untouched') %></span>
   </div>

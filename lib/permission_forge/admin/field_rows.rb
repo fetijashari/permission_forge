@@ -4,7 +4,10 @@ module PermissionForge
   module Admin
     # One row per field on a Resource page: configured ResourceFields, model
     # columns nobody configured yet, and virtual fields — with the flags the
-    # UI needs (sensitive, virtual, column missing, level).
+    # UI needs (sensitive, virtual, column missing, level). A row's label is
+    # Admin::FieldLabel's, the same for a configured row and a column with
+    # none (field test round 7, B#26): the host's translation, else the
+    # admin's label, else Rails' English on an English page, else the name.
     class FieldRows
       # `declared` — a virtual field the model lists in extra_fields_method
       # (a virtual row that is not declared was discovered). `implicit_grant` —
@@ -15,6 +18,10 @@ module PermissionForge
                        keyword_init: true) do
         def configured? = !field.nil?
         def sensitive? = !match.nil?
+        # The label is the name itself (FieldLabel: no translation, no label
+        # of the admin's, a page that is not English): the grid shows the
+        # name once, in <code>.
+        def verbatim? = label == name
         # Locked when the row, its Resource or its Permission Set is (EditableLock).
         def locked? = !field.nil? && EditableLock.locked?(field)
         def active? = field.nil? || field.is_active
@@ -104,7 +111,7 @@ module PermissionForge
       def configured_row(field)
         name = field.name
         virtual = virtual?(name)
-        Row.new(name: name, label: human(name, field), field: field, match: @sensitive.match(name),
+        Row.new(name: name, label: FieldLabel.for(@model, name, row: field).text, field: field, match: @sensitive.match(name),
                 virtual: virtual, missing: @model.present? && !virtual && !@model.column?(name),
                 level: FieldLevel.level_of(field, muting: @muting), declared: declared?(name),
                 implicit_grant: !field.is_active && implicit_grant?(name))
@@ -113,7 +120,7 @@ module PermissionForge
       def unconfigured_rows
         level = FieldLevel.unconfigured_level(muting: @muting)
         new_columns.map do |name|
-          Row.new(name: name, label: human(name), field: nil, match: @sensitive.match(name), virtual: virtual?(name),
+          Row.new(name: name, label: FieldLabel.for(@model, name).text, field: nil, match: @sensitive.match(name), virtual: virtual?(name),
                   missing: false, level: level, declared: declared?(name), implicit_grant: implicit_grant?(name))
         end
       end
@@ -130,12 +137,6 @@ module PermissionForge
 
       def declared?(name)
         @model.present? && @model.declared_virtual_field_names.include?(name)
-      end
-
-      # The label of a field name (Admin::FieldLabel): the host's
-      # translation, else the row's label, else the name as stored.
-      def human(name, row = nil)
-        FieldLabel.for(@model, name, row: row).text
       end
 
       def match_filter?(row, filter)

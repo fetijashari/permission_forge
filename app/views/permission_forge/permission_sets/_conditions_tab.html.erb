@@ -1,19 +1,22 @@
 <% errors = @condition_errors || {} %>
 <% form = @conditions_form %>
-<% hours_on = set.allowed_hours_start.present? && set.allowed_hours_end.present? %>
-<% hours_on = form.hours_enabled? if form %>
-<% from = form&.submitted_hour(:allowed_hours_start) || set.allowed_hours_start || 8 %>
-<% to = form&.submitted_hour(:allowed_hours_end) || set.allowed_hours_end || 18 %>
+<%# The hours shown, as ActivationConditions reads them (HoursWindow: set?, wraps?, broken?). %>
+<% conditions = PermissionForge::Admin::ConditionsForm %>
+<% window = conditions.window(set, form) %>
+<% hours_on = conditions.hours_on?(set, form) %>
+<% from = window.from || conditions::DEFAULT_HOURS[:from] %>
+<% to = window.to || conditions::DEFAULT_HOURS[:to] %>
 <% flag = params.key?(:requires_session_flag) ? params[:requires_session_flag].to_s : set.requires_session_flag.to_s %>
 <div class="pf-card">
   <%= form_with url: permission_forge.conditions_permission_set_path(set), method: :patch, class: 'pf-card__body pf-stack pf-stack--xl' do %>
     <div class="pf-stack pf-stack--tight">
       <div class="pf-row">
-        <strong><%= pf_condition_sentence(set) %></strong>
+        <strong><%= pf_condition_sentence(set, here: true, markup: true) %></strong>
         <%= pf_fail_open_badge(long: true) if set.conditional? && pf_fail_open? %>
       </div>
       <p class="pf-fs-13 pf-text-2"><%= t('.intro') %></p>
     </div>
+    <%= render 'permission_forge/permission_sets/condition_problems', set: set %>
 
     <div class="pf-field">
       <label class="pf-label" for="pf-ips"><%= t('.ips') %> <span class="pf-fs-12 pf-text-3 pf-fw-500"><%= t('.one_per_line') %></span></label>
@@ -44,7 +47,7 @@
         <span class="pf-fs-12 pf-text-3"><%= t('.server_time', zone: Time.zone.name) %></span>
       </div>
       <% if errors[:hours] %><p class="pf-error" id="pf-hours-error" role="alert"><%= errors[:hours] %></p><% end %>
-      <% if hours_on && to <= from %>
+      <% if hours_on && window.wraps? && !window.broken? %>
         <span class="pf-fs-13 pf-text-2">☾ <%= t('.overnight', from: pf_hour(from), to: pf_hour(to)) %></span>
       <% end %>
     </fieldset>

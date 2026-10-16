@@ -43,12 +43,17 @@ module PermissionForge
         assert_not_includes body, '….'
       end
 
-      test 'the rule preview before a value is entered ends in an ellipsis, not "…."' do
+      # Round 7 (B#87): the preview is the save path, so before a value is
+      # entered it says what the save would say first; the sentence of a
+      # rule with no value still ends in a single ellipsis.
+      test 'the rule preview before a value is entered says what the save would, never "…."' do
         post pf("#{rules_base}/refresh"), params: { rule: { name: 'Own', path: ['supplier'], field_name: 'owner_id',
                                                             operator: 'equal' } }
 
-        assert_select '[data-pf-rule-preview] .pf-token--value', text: '…'
+        assert_select '[data-pf-rule-preview] [data-pf-rule-preview-error]', text: /#{Regexp.escape(t('permission_set_rules.builder.errors.value'))}/
         assert_not_includes body, '….'
+        rule = PermissionForge::PermissionSetRule.new(field_name: 'owner_id', operator: 'equal', field_value: '')
+        assert_equal '…', PermissionForge::ApplicationController.helpers.pf_rule_value_text(rule)
       end
 
       test 'a list operator is previewed live too, by the server (WP-12: one string from one helper)' do
@@ -84,7 +89,7 @@ module PermissionForge
         get pf("/people/#{@ana.id}"), params: { tab: 'effective', locale: 'en' }
 
         assert_response :success
-        assert_select '.pf-state--records .pf-state__summary', text: /owner_id is the current user\z/
+        assert_select '.pf-state--records .pf-state__summary', text: /Owner is the current user\z/
         assert_select '.pf-state--records .pf-ellipsis', count: 0
       end
 

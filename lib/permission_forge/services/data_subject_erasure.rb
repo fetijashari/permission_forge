@@ -335,6 +335,7 @@ module PermissionForge
           group_assignments_count: group_assignments.count,
           permission_sets: permission_set_assignments.includes(:permission_set).filter_map { |psu| psu.permission_set&.name },
           **LABELS.keys.to_h { |kind| [:"#{kind}_to_clear", table ? labelled(kind).count : 0] },
+          cache: PermissionForge::Cache::Report.none.to_h,
           dry_run: true
         }
       end

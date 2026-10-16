@@ -15,10 +15,11 @@
     <div class="pf-card__row pf-card__row--top">
       <div class="pf-stack pf-stack--tight pf-grow">
         <div class="pf-row pf-row--tight">
-          <strong><%= set.name %></strong>
+          <strong><%= pf_record_name(set) %></strong>
           <%= pf_set_badges(set) %>
         </div>
-        <span class="pf-fs-13 pf-text-2"><%= set.is_muting ? t('.muting') : t('.granting') %></span>
+        <%# The effect as the set's Conditions tab words it (pf_condition_effect). %>
+        <span class="pf-fs-13 pf-text-2"><%= pf_condition_effect(set) %></span>
         <span class="pf-fs-13 pf-text-2"><%= t('.people', count: item.people_count) %></span>
       </div>
       <%= link_to t('.open'), permission_forge.permission_set_path(set, tab: 'conditions'), class: 'pf-btn pf-btn--sm' %>

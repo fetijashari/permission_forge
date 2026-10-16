@@ -12,7 +12,7 @@
           <div class="pf-row pf-row--tight"><%= pf_set_chip(set, large: true, expired: assignment.expired?) %></div>
           <% if set.description.present? %><span class="pf-fs-13 pf-text-2" data-pf-host-data><%= set.description %></span><% end %>
           <% if set.conditional? %>
-            <span class="pf-row pf-row--tight pf-fs-13 pf-text-accent">◷ <%= pf_condition_sentence(set) %> <%= pf_fail_open_badge if pf_fail_open? %></span>
+            <span class="pf-row pf-row--tight pf-fs-13 pf-text-accent">◷ <%= pf_condition_sentence(set, markup: true) %> <%= pf_fail_open_badge if pf_fail_open? %></span>
           <% end %>
           <% unless set.is_active %>
             <span class="pf-fs-13 pf-text-3">○ <%= t('.set_off') %></span>
@@ -59,7 +59,7 @@
   </div>
   <% if @groups.any? %>
     <p class="pf-fs-13 pf-text-2">
-      <%= t('.groups_html', groups: safe_join(@groups.map { |g| link_to(g.permission_set_group.name, permission_forge.group_path(g.permission_set_group)) }, ', ')) %>
+      <%= t('.groups_html', groups: safe_join(@groups.map { |g| link_to(pf_record_name(g.permission_set_group), permission_forge.group_path(g.permission_set_group)) }, ', ')) %>
     </p>
   <% end %>
 </div>

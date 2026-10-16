@@ -1,9 +1,9 @@
 <% set = @permission_set %>
 <% key = set.is_muting ? 'to_granting' : 'to_muting' %>
-<% content_for :pf_title, t(".#{key}.title", name: set.name) %>
-<%= pf_dialog_frame({ title: t(".#{key}.title", name: set.name), danger: true,
+<% content_for :pf_title, t(".#{key}.title", name: pf_record_name(set)) %>
+<%= pf_dialog_frame({ title: t(".#{key}.title", name: pf_record_name(set)), danger: true,
                      breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
-                                               [set.name, permission_forge.permission_set_path(set)], t(".#{key}.title", name: set.name)) }) do %>
+                                               [pf_record_name(set), permission_forge.permission_set_path(set)], t(".#{key}.title", name: pf_record_name(set))) }) do %>
   <p class="pf-text-2"><%= t(".#{key}.body", people: pf_people_text(@people_count)) %></p>
   <%= form_with url: permission_forge.switch_mode_permission_set_path(set), method: :patch, class: 'pf-confirm-form' do %>
     <%= render 'permission_forge/shared/reason_field' %>

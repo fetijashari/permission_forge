@@ -44,6 +44,16 @@ module PermissionForge
       rules.partition { |rule| pf_rule_problem(rule) }.flatten.first
     end
 
+    # A badge per note on a stored rule (Admin::RuleNotes, most severe
+    # first): "⊘ Matches nothing", "⚠ Secret column" — the Rules tab's row.
+    def pf_rule_note_badges(rule)
+      notes = PermissionForge::Admin::RuleNotes.for(rule)
+      safe_join(notes.map do |note|
+        word = note.matches_nothing? ? "⊘ #{pf_ui('rules.matches_nothing')}" : "⚠ #{pf_ui("rules.notes.#{note.kind}")}"
+        content_tag(:span, pf_badge(word, variant: note.matches_nothing? ? :block : :warn), data: { pf_rule_note: note.kind })
+      end, ' ')
+    end
+
     # ◷ for a rule, ⊘ for one that matches nothing.
     def pf_rule_glyph(rule)
       pf_rule_problem(rule) ? '⊘' : '◷'
@@ -52,7 +62,7 @@ module PermissionForge
     # [⊘ Matches nothing] Stauts is not a column of Customer  `stauts equal active`
     def pf_rule_problem_sentence(rule, problem)
       operator = rule.operator
-      value = rule.field_value unless SentencesHelper::NO_VALUE_OPERATORS.include?(operator)
+      value = rule.field_value unless PermissionForge::Operators::Validations.valueless?(operator)
       written = [PermissionForge::Operators::RuleProblem.written_field(rule), operator, value]
       content_tag(:p, safe_join([pf_badge("⊘ #{pf_ui('rules.matches_nothing')}", variant: :block),
                                  content_tag(:span, pf_rule_problem_text(problem)),
