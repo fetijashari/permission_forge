@@ -38,6 +38,18 @@ module PermissionForge
     # inside the scope suspension (an actor resolver may query).
     around_action :pf_audit_request
 
+    # The uniqueness race (two requests passed the uniqueness validation
+    # together; the unique index refused this one's INSERT): back to the
+    # page the form was on (the admin's home without a Referer, never
+    # another host) with the validation's message for the index the error
+    # names (UniqueConflict), or the generic one. 303: the browser follows
+    # with a GET whatever the form's method was. Through 0.14.1 a 500.
+    rescue_from ActiveRecord::RecordNotUnique do |error|
+      detail = PermissionForge::UniqueConflict.sentence(error)
+      alert = detail ? t('permission_forge.flash.record_not_unique_detail', detail: detail) : t('permission_forge.flash.record_not_unique')
+      redirect_back_or_to permission_forge.root_path, alert: alert, allow_other_host: false, status: :see_other
+    end
+
     helper PermissionForge::ApplicationHelper unless self < PermissionForge::ApplicationHelper
     helper_method :pf_fragment?, :pf_theme, :pf_help_visible?, :pf_current_admin,
                   :pf_attention, :pf_settings_catalog, :pf_back_or

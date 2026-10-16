@@ -49,6 +49,16 @@ module PermissionForge
         render_validation_errors(e.record)
       end
 
+      # The uniqueness race: two requests passed the uniqueness validation
+      # together and the unique index refused this one's INSERT. The
+      # validation's own 422, keyed by the attribute, from the index the
+      # error names (UniqueConflict); `base` when it names none. Through
+      # 0.14.1 a 500.
+      rescue_from ActiveRecord::RecordNotUnique do |e|
+        render_unprocessable(PermissionForge::UniqueConflict.messages(e) ||
+                             { 'base' => [I18n.t('permission_forge.api.errors.record_not_unique')] })
+      end
+
       # Field-keyed like a validation error (ResponseRenderer#render_input_error).
       rescue_from ActionController::ParameterMissing, ActionController::BadRequest do |e|
         render_input_error(e)

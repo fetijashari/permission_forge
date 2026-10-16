@@ -25,6 +25,8 @@ en:
         not_editable: This record is not editable
         not_found: Record not found
         not_iso8601_time: is not an ISO 8601 date or time
+        record_not_unique: Another request saved the same record a moment ago; it
+          already exists
         resource_names_no_model: names no model this app can load
         route_not_found: No API endpoint answers this path and method
         section_missing: is missing, empty or not an object
@@ -487,6 +489,10 @@ en:
           other: Saved %{count} changes. They apply to %{people} now.
         switched_granting: "“%{name}” now grants access."
         switched_muting: "“%{name}” is now a Muting Permission Set."
+      record_not_unique: Another request saved the same thing a moment ago. Nothing
+        was changed; the page shows what is there now.
+      record_not_unique_detail: "%{detail} — another request saved it a moment ago.
+        Nothing was changed; the page shows what is there now."
       resources:
         added:
           one: Added %{resource} with %{count} field.

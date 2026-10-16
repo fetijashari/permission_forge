@@ -46,6 +46,25 @@ module PermissionForge
     # @return [ActiveSupport::TimeWithZone, nil] nil for anything else
     def self.time(value) = IsoTime.parse(value)
 
+    # What a whole-number parameter is read from: digits with an optional
+    # minus sign, as a String or a JSON number. "2abc", "1.5", "+7" and ""
+    # are not one.
+    WHOLE_NUMBER = /\A-?\d+\z/
+
+    # The whole number `value` holds when it is inside `range`, else
+    # `default`: see #pf_integer_param.
+    #
+    # @param range [Range] of Integers, endless for an upper bound the
+    #   caller clamps itself (`1..`)
+    # @return [Integer, Object] the number, or `default`
+    def self.integer(value, default:, range:)
+      text = value.to_s.strip if value.is_a?(String) || value.is_a?(Integer)
+      return default unless text&.match?(WHOLE_NUMBER)
+
+      number = Integer(text, 10)
+      range.cover?(number) ? number : default
+    end
+
     # `value` with NUL bytes removed from every String in it, however deep.
     #
     # @return [Object] a new Parameters / Array, or the value itself
@@ -90,6 +109,20 @@ module PermissionForge
     def pf_tab_param(tabs)
       tab = params[:tab]
       tab if tabs.include?(tab)
+    end
+
+    # params[key] when it is a whole number (digits, or a JSON number)
+    # inside `range`, else `default`. For a page, a page size, a count: a
+    # value that cannot be read is the default (`per_page=abc` lists the
+    # default page size), never 0, 1 or a 500 — a typo in a paging
+    # parameter must not refuse the page. A parameter whose misreading must
+    # refuse the request is read by a strict reader (pf_boolean_param,
+    # pf_time_param: InvalidParam).
+    #
+    #   pf_integer_param(:per_page, default: 25, range: 1..)
+    #   pf_integer_param(:hour, default: nil, range: 0..23)
+    def pf_integer_param(key, default:, range:)
+      ParamShapes.integer(params[key], default: default, range: range)
     end
 
     # The Integer ids in params[key] (one value or a list); anything that is

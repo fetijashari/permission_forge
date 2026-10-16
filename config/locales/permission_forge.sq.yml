@@ -25,6 +25,8 @@ sq:
         not_editable: Ky regjistrim nuk mund të redaktohet
         not_found: Regjistrimi nuk u gjet
         not_iso8601_time: nuk është datë ose kohë ISO 8601
+        record_not_unique: Një kërkesë tjetër e ruajti të njëjtin regjistrim një çast
+          më parë; ai ekziston tashmë
         resource_names_no_model: nuk emërton asnjë model që ky aplikacion mund ta
           ngarkojë
         route_not_found: Asnjë pikë fundore e API-së nuk i përgjigjet këtij shtegu
@@ -496,6 +498,10 @@ sq:
           other: U ruajtën %{count} ndryshime. Tani vlejnë për %{people}.
         switched_granting: "“%{name}” tani jep qasje."
         switched_muting: "“%{name}” tani është Grup lejesh heshtës."
+      record_not_unique: Një kërkesë tjetër e ruajti të njëjtën gjë një çast më parë.
+        Asgjë nuk u ndryshua; faqja tregon gjendjen e tanishme.
+      record_not_unique_detail: "%{detail} — një kërkesë tjetër e ruajti një çast
+        më parë. Asgjë nuk u ndryshua; faqja tregon gjendjen e tanishme."
       resources:
         added:
           one: U shtua %{resource} me %{count} fushë.
