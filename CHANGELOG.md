@@ -311,10 +311,13 @@ and the RLS re-sync.
   documentation app executes, `# => literal` asserted), `file=<path>` (a complete file written into that app) or
   `fragment`. A ruby block that rescues a denial error is held to the handler that works in a Rails 8 Turbo app.
   <!-- pin: test/permission_forge/docs/doc_blocks_test.rb#every ruby, erb and bash block in README.md and docs/ carries a marker and follows the rules -->
-- **The documentation names only what exists** (`docs/references_test.rb`): links and anchors, `config.<name>`
-  options, `permission_forge:<task>` names (every task documented with the environment variables it reads),
-  `PermissionForge::…` constants, and the defaults a sentence states.
+- **The documentation names only what exists** (`docs/references_test.rb`): links and anchors (GitHub links to
+  this repository too, also those the code prints), options (`config.<name>`, `name = value`, a bare name shaped like
+  one), `permission_forge:<task>` names (each documented with the environment variables it reads, `ACTOR` / `REASON`
+  included), `PermissionForge::…` constants, and the defaults a sentence states.
   <!-- pin: test/permission_forge/docs/references_test.rb#every defined rake task is documented, with the environment variables it reads -->
+  <!-- pin: test/permission_forge/docs/references_test.rb#every link to this repository the code prints names a file and anchor of it -->
+  <!-- pin: test/permission_forge/docs/references_test.rb#every option the docs write as `name = value`, or as a bare `name` shaped like an option, is one -->
 - **`bundle exec rake docs:configuration`** regenerates the Option reference of `docs/configuration.md` from the code
   (the Settings catalog's sections and order, `Configuration.new`'s defaults, `StrategyValues`' values; every public
   option has an entry); the suite fails while it is stale. Gem development only.
@@ -1459,8 +1462,9 @@ and the RLS re-sync.
   deprecations, and the RLS re-sync (`GENERATOR_VERSION` 7).
   <!-- pin: docs/migration-guide.md#upgrading-to-015 -->
 - Every `run` and `file=` block of README.md and docs/*.md executes in a generated Rails 8.1 app (`bin/rails generate
-  authentication` + a scaffold `Customer`, PermissionForge installed by the README's own install lines) on every test
-  run, one console per document, with `# => literal` comments asserted; the denial flows of "Handling Denials" (a
+  authentication` + a scaffold `Customer` as generated, PermissionForge installed by the README's own install lines)
+  on every test run, one console per document where nobody holds a set yet, with `# => literal` comments asserted;
+  the denial flows of "Handling Denials" (a
   Turbo sign-in with no Permission Set, Reload, Sign out, the public index with and without `resume_session`, the
   sign-in page under the guard, README step 4 after an admin-made set, seeds under `:strict`) are driven as requests,
   and in Chrome with Turbo in the `browser` CI job (`test/browser/docs_flows.spec.js`).
