@@ -253,7 +253,8 @@ module PermissionForge
       PermissionForge.configuration.http_basic_auth_user = nil
       PermissionForge.configuration.http_basic_auth_password = nil
 
-      log = capture_rails_log { hook.call(Rails.application) }
+      log = nil
+      capture_io { log = capture_rails_log { hook.call(Rails.application) } } # production, no server: standard error too
 
       assert_match(/in-process permission cache in production/, log)
       assert_match(BASIC_AUTH_WARNING, log)

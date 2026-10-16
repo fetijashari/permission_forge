@@ -162,8 +162,9 @@ module PermissionForge
       def warn_unknown(setting, name)
         return if unmaskable_warned.put_if_absent("#{setting}=#{name}", true)
 
-        Rails.logger&.warn("[PermissionForge] SECURITY warning: '#{name}' is listed in config.#{setting} but is no " \
-                           'model in this process: nothing is masked for it. It is tried again at the next request or job.')
+        Warnings.emit("masked_models.unknown_listed.#{setting}=#{name}",
+                      "'#{name}' is listed in config.#{setting} but is no model in this process: nothing is " \
+                      'masked for it. It is tried again at the next request or job.', severity: :security)
       end
 
       # Every tenant's rows: a model is masked for the whole process.
@@ -203,13 +204,14 @@ module PermissionForge
         false
       end
 
-      # Logs once per model and process (MaskingSync retries every request).
+      # Warns once per model and process (MaskingSync retries every request).
       def warn_unmaskable(klass, why)
         name = klass.to_s
         return if unmaskable_warned.put_if_absent(name, true)
 
-        Rails.logger&.warn("[PermissionForge] SECURITY warning: #{name} has a Resource row but #{why}: its columns " \
-                           'are NOT masked in this process. It is tried again at the next request or job.')
+        Warnings.emit("masked_models.unmaskable.#{name}",
+                      "#{name} has a Resource row but #{why}: its columns are NOT masked in this process. " \
+                      'It is tried again at the next request or job.', severity: :security)
       end
 
       # The models (and unknown listed names) whose warning this process has logged.
