@@ -179,16 +179,23 @@ module PermissionForge
         end
       end
 
-      # Review of round 7 (P2-7): "" among the ids was dropped without a
-      # word (200, and missing from `skipped`). A JSON null among them never
+      # Review of the round-7 fixes (P2-9, reversing P4's 422): a blank
+      # string among the ids is ignored, as Rails' own collection_singular_ids=
+      # ignores it (`compact_blank`) — a Rails form built with
+      # collection_check_boxes sends one with every submit. Any other element
+      # that is no id stays a 422 (above). A JSON null among them never
       # reaches the controller: Rails' deep_munge removes it (docs/admin-api.md).
-      test 'a bulk user_ids holding a blank string beside an id is a 422 keyed by user_ids, and nobody is assigned' do
+      test 'a bulk user_ids holding a blank string beside an id ignores the blank, as Rails does' do
         [[@user.id, ''], [@user.id.to_s, ' ']].each do |value|
-          assert_no_difference(-> { PermissionForge::PermissionSetUser.count }) do
-            post "#{API}/permission_sets/#{@set.uuid}/users/bulk", params: { bulk_action: 'assign', user_ids: value }, as: :json
-          end
-          assert_keyed_refusal('user_ids', I18n.t('permission_forge.api.errors.user_ids_not_list'), value)
+          PermissionForge::PermissionSetUser.where(permission_set: @set).destroy_all
+          post "#{API}/permission_sets/#{@set.uuid}/users/bulk", params: { bulk_action: 'assign', user_ids: value }, as: :json
+
+          assert_response :ok, value.inspect
+          assert_equal [1, []], JSON.parse(response.body)['data'].values_at('assigned', 'skipped'), value.inspect
+          assert PermissionForge::PermissionSetUser.exists?(user_id: @user.id, permission_set: @set)
         end
+        post "#{API}/permission_sets/#{@set.uuid}/users/bulk", params: { bulk_action: 'assign', user_ids: ['', ' '] }, as: :json
+        assert_keyed_refusal('user_ids', I18n.t('permission_forge.api.errors.user_ids_missing'), ['', ' '])
       end
 
       test 'a bulk_action that is not one of the words is a 422 keyed by bulk_action' do
