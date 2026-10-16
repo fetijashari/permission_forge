@@ -1160,7 +1160,9 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   loaded model is on counts as encrypted when any model along the rule's path encrypts a column of that name) — and
   under single-table inheritance (a column is encrypted when the
   class, its base class or any loaded class of the hierarchy on the same table encrypts it — a subclass's `encrypts`
-  also refuses a rule on its parent, and Rails' own answer for the parent depends on load order). Under
+  also refuses a rule on its parent, and Rails' own answer for the parent depends on load order; a class not loaded yet
+  is not seen, so `rake permission_forge:audit`, which runs without eager loading, loads the application's models
+  first, through the admin's model list's one definition, `Admin::ModelCatalog.eager_load_app_models`). Under
   `support_unencrypted_data` such a rule used to match the rows still stored in plaintext; it no longer does.
   **Opt out:** compare a deterministically encrypted attribute through a custom operator whose strategy calls
   `query.where(attribute => value)` (a custom operator gets the value as written).
@@ -1173,6 +1175,7 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#an alias that cannot be resolved counts as encrypted when a model along the path encrypts the column -->
   <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a stored one on the join table matches nothing, never the row it should hide, and is reported -->
   <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a table a default scope joins is seen by the applier: the rule matches nothing -->
+  <!-- pin: test/permission_forge/tasks/audit_rake_tasks_test.rb#the audit loads the application models before it reviews -->
   <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a rule on the base class is refused, and a stored one matches nothing for the base and the subclass -->
 - **The default `profile_builder` leaves out an attribute the user model encrypts.** The profile is cached with each
   person's permission hash, in the cache store (Redis, Solid Cache, a file or memory store). With `encrypts :email` (or
