@@ -6,8 +6,6 @@ module PermissionForge
   #
   # @api private
   module UiHelper
-    STATE_GLYPHS = { granted: '✓', blocked: '⊘', none: '–' }.freeze
-
     # --- assets ---------------------------------------------------------------
 
     def pf_asset_url(file)
@@ -85,11 +83,39 @@ module PermissionForge
       format('%02d:00', hour.to_i)
     end
 
+    # --- states (Admin::StateLabel: one registry of glyphs and words) -----------
+
+    # The word of a state: pf_state_word(:field_level, :none) → "Not configured".
+    def pf_state_word(kind, state)
+      PermissionForge::Admin::StateLabel.word(kind, state)
+    end
+
+    # Glyph and word: pf_state_label(:effective, :blocked) → "⊘ Blocked".
+    def pf_state_label(kind, state)
+      PermissionForge::Admin::StateLabel.for(kind, state).to_s
+    end
+
+    def pf_state_glyph(kind, state)
+      PermissionForge::Admin::StateLabel.glyph(kind, state)
+    end
+
+    # A state as a badge (pf_badge options: variant:, href:, title:, square:, extra:).
+    def pf_state_badge(kind, state, **)
+      pf_badge(pf_state_label(kind, state), **)
+    end
+
+    # The glyph (hidden from assistive technology) and the word of a state,
+    # for a cell or a legend that styles the glyph itself.
+    def pf_state_parts(kind, state, glyph_class: 'pf-cell__glyph', glyph_tag: :span)
+      label = PermissionForge::Admin::StateLabel.for(kind, state)
+      safe_join([content_tag(glyph_tag, label.glyph, class: glyph_class, 'aria-hidden': true), label.word])
+    end
+
     # Read-only state cell (effective access grid, across-sets lists).
     def pf_state_cell(state, aria:, href: nil, why: nil, current: false)
       state = state.to_sym
-      label = pf_ui("states.#{state}")
-      content = safe_join([content_tag(:span, STATE_GLYPHS.fetch(state), class: 'pf-cell__glyph', 'aria-hidden': true),
+      label = pf_state_word(:effective, state)
+      content = safe_join([content_tag(:span, pf_state_glyph(:effective, state), class: 'pf-cell__glyph', 'aria-hidden': true),
                            content_tag(:span, label)], ' ')
       opts = { class: "pf-state pf-state--#{state}", 'aria-label': "#{aria}: #{label}" }
       opts[:'aria-current'] = 'true' if current

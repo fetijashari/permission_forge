@@ -4,8 +4,13 @@ module PermissionForge
   #
   # @api private
   module BadgesHelper
-    LEVEL_GLYPHS = { 'hidden' => '∅', 'masked' => '••', 'read' => '◉', 'edit' => '✎', 'leave' => '–',
-                     'mask' => '••', 'hide' => '⊘', 'muted' => '⊘', 'none' => '–' }.freeze
+    # The level-badge colour of a state that is not a field level
+    # (Admin::StateLabel kinds :effective and :action), by its kind.
+    LEVEL_BADGE_CSS = {
+      effective: { 'hidden_by_muting' => 'muted' },
+      action: { 'permitted' => 'edit', 'not_permitted' => 'none', 'blocked' => 'muted', 'unchanged' => 'leave',
+                'none' => 'none' }
+    }.freeze
 
     MASK_SAMPLES = [
       [/email/, 'james.walker@acme.com'],
@@ -40,7 +45,7 @@ module PermissionForge
     def pf_lock_badge(record = nil, title: pf_ui('locked.title'))
       return if !record.nil? && !pf_locked?(record)
 
-      pf_badge([pf_lock_icon, pf_ui('badges.locked')], title: title)
+      pf_badge([pf_lock_icon, pf_state_word(:lock, :locked)], title: title)
     end
 
     # Whether a record is locked: itself, its Resource, its Permission Set or
@@ -98,31 +103,45 @@ module PermissionForge
                  (content_tag(:span, pf_ui(suffix_key), class: 'pf-chip__suffix') if suffix_key)].compact, ' ')
     end
 
-    # A field's level on the Effective access tab (an EffectiveAccess::FieldOutcome),
-    # the same in its row and its Why panel: hidden by a Muting Permission Set reads
-    # "⊘ Hidden by muting", never the neutral "∅ Hidden" of a field no set grants.
-    # `sample: true` adds a masked value's preview (the Why panel).
+    # A field's level for one person (an EffectiveAccess::FieldOutcome), the
+    # same in their Effective access row, its Why panel and the field
+    # drawer's "Explain for": hidden by a Muting Permission Set reads
+    # "⊘ Hidden by muting", never the neutral "∅ Hidden" of a field no set
+    # grants. `sample: true` adds a masked value's preview (the Why panel).
     def pf_effective_field_badge(field, sample: false)
-      muted = field.hidden_by_muting?
-      return pf_level_badge('muted', label: t('permission_forge.people.effective_tab.hidden_by_muting')) if muted
+      return pf_level_badge('hidden_by_muting', kind: :effective) if field.hidden_by_muting?
 
       masked = field.level == 'masked'
       pf_level_badge(field.level, strategy: (field.mask_strategy if masked), sample_for: (field.name if masked && sample))
     end
 
-    # Effective/configured field level badge ("•• Masked · j***@acme.com").
-    def pf_level_badge(level, strategy: nil, sample_for: nil, label: nil)
-      level = level.to_s
-      text = label || pf_level_label(level)
-      if %w[masked mask].include?(level) && strategy.present?
+    # A level as a badge ("•• Masked (Email) · j***@acme.com"): a field level
+    # by default, or a state of another kind (Admin::StateLabel) drawn the
+    # same way — an effective outcome, an action state.
+    def pf_level_badge(level, strategy: nil, sample_for: nil, kind: :field_level)
+      label = PermissionForge::Admin::StateLabel.for(kind, level)
+      text = label.word
+      if %w[masked mask].include?(label.state) && strategy.present?
         text = "#{text} (#{pf_mask_strategy_label(strategy)})"
         text = "#{text} · #{pf_mask_preview(sample_for, strategy)}" if sample_for
       end
-      content_tag(:span, "#{LEVEL_GLYPHS.fetch(level, '–')} #{text}", class: "pf-level-badge pf-level-badge--#{level}")
+      css = LEVEL_BADGE_CSS.fetch(kind.to_sym, {}).fetch(label.state, label.state)
+      content_tag(:span, "#{label.glyph} #{text}", class: "pf-level-badge pf-level-badge--#{css}")
     end
 
+    # The word of a field level (Admin::StateLabel, kind :field_level).
     def pf_level_label(level)
-      pf_ui("levels.#{level}")
+      pf_state_word(:field_level, level)
+    end
+
+    # The caption of a Fields tab filter: a level's word, Sensitive, or "All".
+    def pf_field_filter_label(filter)
+      case filter.to_s
+      when 'all' then t('permission_forge.resources.fields_tab.filters.all')
+      when 'sensitive' then pf_ui('badges.sensitive')
+      when 'unconfigured' then pf_state_word(:field_level, :none)
+      else pf_level_label(filter)
+      end
     end
 
     def pf_mask_strategy_label(strategy)
