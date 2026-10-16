@@ -1,4 +1,5 @@
 require 'test_helper'
+require_relative '../sti_models'
 
 module PermissionForge
   module Services
@@ -131,7 +132,6 @@ module PermissionForge
       # is per table, so they hold at the application layer only — and are
       # reported, never silently left out.
       test 'rules on a Resource named after an STI subclass are reported as skipped' do
-        require_relative '../sti_models'
         subclass = create_resource(permission_set: @permission_set, name: 'PfStiBugTicket')
         create_permission_set_rule(permission_set: @permission_set, resource: subclass, name: 'Open only', field_name: 'status',
                                    operator: 'equal', field_value: 'open')
@@ -251,6 +251,47 @@ module PermissionForge
 
         assert_equal RlsPolicyGenerator.call(model_class: Customer)[:digest],
                      RlsPolicyGenerator.call(model_class: Customer)[:digest]
+      end
+
+      # The read-access gate follows config.no_read_access_strategy, read when
+      # the policy is generated (parity on PostgreSQL:
+      # test/rls/rls_read_access_parity_test.rb).
+      test 'no_read_access_strategy :rules_only adds no read-access gate; :deny gates the signed-in branch on read' do
+        PermissionForge.configuration.no_read_access_strategy = :rules_only
+        rules_only = select_policy_sql
+
+        assert_not_includes rules_only, 'r.read_access'
+
+        PermissionForge.configuration.no_read_access_strategy = :deny
+        deny = select_policy_sql
+
+        assert_includes deny, "r.name IN ('Customer') AND r.is_active = TRUE"
+        assert_includes deny, 'r.read_access = TRUE'
+        assert_includes deny, 'ps.is_muting = TRUE'
+        assert_includes deny, "NOT #{PermissionSet.conditions_present_sql(table: 'ps')} AND r.read_access = TRUE",
+                        'only an unconditional set grants read'
+        assert_operator deny.length, :>, rules_only.length
+      end
+
+      test 'the digest follows no_read_access_strategy, so rls:status reports the policy stale after it changes' do
+        PermissionForge.configuration.no_read_access_strategy = :rules_only
+        rules_only = RlsPolicyGenerator.new(model_class: Customer).digest
+        PermissionForge.configuration.no_read_access_strategy = :deny
+
+        assert_not_equal rules_only, RlsPolicyGenerator.new(model_class: Customer).digest
+        assert_equal RlsPolicyGenerator.new(model_class: Customer).digest, RlsPolicyGenerator.call(model_class: Customer)[:digest]
+      end
+
+      test 'under :deny a row of an STI subclass also needs the subclass entries to grant read' do
+        PermissionForge.configuration.no_read_access_strategy = :deny
+        sql = RlsPolicyGenerator.call(model_class: PfStiTicket)[:statements].find { |s| s.include?('FOR SELECT') }
+        type = "#{Customer.connection.quote_table_name('pf_sti_tickets')}.#{Customer.connection.quote_column_name('type')}"
+
+        assert_includes sql, "#{type} IS DISTINCT FROM 'PfStiBugTicket'"
+        assert_includes sql, "#{type} IS DISTINCT FROM 'PfStiUrgentBugTicket'"
+        assert_not_includes sql, 'PfStiArchivedTicket', 'a table of its own'
+        assert_includes sql, "r.name IN ('PfStiUrgentBugTicket', 'PfStiBugTicket', 'PfStiTicket')", 'a muted ancestor reaches the subclass'
+        assert_not_includes RlsPolicyGenerator.call(model_class: Customer)[:statements].join, 'IS DISTINCT FROM', 'no STI, no type check'
       end
 
       private

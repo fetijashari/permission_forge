@@ -74,7 +74,7 @@ Under `:deny`, for a signed-in user whose entries for the model's Resource (and,
 - `find_by` and `find_by!` raise `NotAuthorizedError` for a record that exists, with one `failure_messages` entry ("You do not have permission to read Customer records.", `permission_forge.denials.no_read_access` in every locale), and return `nil` / raise `RecordNotFound` for one that does not;
 - each denial is an `access.denied` event with reason `no_read_access`.
 
-View All and Modify All skip the rules of an entry that grants read; they never stand in for it. With nobody signed in `nil_user_strategy` decides, as before. The check is lifted where the rules are: `without_permission_scope` lifts the default scope, and a signed-in user's `find_by` and `permission_scoped` keep both inside it. The generated RLS policies apply the rules only.
+View All and Modify All skip the rules of an entry that grants read; they never stand in for it. With nobody signed in `nil_user_strategy` decides, as before. The check is lifted where the rules are: `without_permission_scope` lifts the default scope, and a signed-in user's `find_by` and `permission_scoped` keep both inside it. The generated RLS policies follow the option as well: under `:deny` a session user without read access to the table's Resource chain sees no row in PostgreSQL either (re-sync the policies after switching it; see [Read access in a policy](query-scoping.md#read-access-in-a-policy)).
 
 ## Step 1: Include the Concern
 

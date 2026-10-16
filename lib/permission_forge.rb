@@ -412,6 +412,7 @@ require_relative 'permission_forge/rake_dry_run'
 require_relative 'permission_forge/services/resource_field_generator'
 require_relative 'permission_forge/services/unscoped_query_detector'
 require_relative 'permission_forge/services/rls_operator_sql'
+require_relative 'permission_forge/services/rls_read_access_sql'
 require_relative 'permission_forge/services/rls_policy_generator'
 require_relative 'permission_forge/rls'
 
