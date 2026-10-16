@@ -14,8 +14,15 @@ module PermissionForge
     # shared/_crud_cell resolves to shared.crud_cell.muted). A template that
     # did would be a second rendering of the state, free to drift (R4 #52:
     # "⊘ Hidden by muting" on one page, "∅ Hidden" on the next).
+    #
+    # The full-name scan also covers the helpers, the controllers and the
+    # admin read models (review R4 P2-2): a helper that looked a state key
+    # up would be the same second rendering. Admin::StateLabel is the one
+    # file that names the namespaces (CANONICAL).
     class StateKeyGuardTest < ActiveSupport::TestCase
       GLOBS = %w[app/views/**/*.erb].freeze
+      CODE_GLOBS = %w[app/views/**/*.erb app/helpers/**/*.rb app/controllers/**/*.rb lib/permission_forge/admin/**/*.rb].freeze
+      CANONICAL = %w[lib/permission_forge/admin/state_label.rb].freeze
       NAMESPACES = %w[ui.levels ui.states shared.crud_cell resource_actions.states].freeze
       NEEDLE = /\b(?:#{NAMESPACES.map { |namespace| Regexp.escape(namespace) }.join('|')})\b/
       LAZY_KEY = /\bt\(\s*['"](\.[\w.]+)['"]/
@@ -43,8 +50,8 @@ module PermissionForge
         end
       end
 
-      test 'no template names a state key: states render through Admin::StateLabel' do
-        hits = StaticGuard.scan(globs: GLOBS, needle: NEEDLE, strings: :keep)
+      test 'no template, helper, controller or admin read model names a state key: states render through Admin::StateLabel' do
+        hits = StaticGuard.scan(globs: CODE_GLOBS, needle: NEEDLE, canonical: CANONICAL, strings: :keep)
 
         assert_empty hits.map(&:to_s), 'render the state with pf_state_badge / pf_state_word (Admin::StateLabel)'
       end
@@ -67,6 +74,8 @@ module PermissionForge
                      self.class.lazy_hits_in(crud_cell, [%(<span><%= t('.muted') %></span>)])
         assert_empty self.class.lazy_hits_in(crud_cell, [%(<%# t('.muted') %>)])
         assert_empty self.class.lazy_hits_in('app/views/permission_forge/home/index.html.erb', [%(<%= t('.title') %>)])
+        assert_match NEEDLE, StaticGuard.code_of(%(t("permission_forge.ui.states.field_level.\#{level}")), strings: :keep)
+        assert(StaticGuard.all_hits(globs: CANONICAL, needle: NEEDLE, strings: :keep).any?, 'the canonical file names the namespaces')
       end
     end
   end

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Layout at phone width, measured in a browser (plan class LY). Reads the
 // screens the preview app prints (test/support/preview_app.rb: paths, error
-// states, flows), renders each at every width in every locale under the
+// states, flows, posted pages), renders each at every width in every locale under the
 // system Chrome (channel: 'chrome', nothing downloaded) and fails a load when:
 //   - the document scrolls sideways (documentElement.scrollWidth > clientWidth);
 //   - a visible element's right edge passes the viewport outside a scroll
@@ -158,6 +158,7 @@ const slug = (text) => text.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').s
     ...preview.paths.map((p) => ({ label: `GET ${p}`, verb: 'get', path: p, params: {}, status: 200 })),
     ...preview.error_states.filter((s) => s.renders !== false).map((s) => ({ label: `${s.verb.toUpperCase()} ${s.path}`, ...s })),
     ...preview.flows.map((s) => ({ label: `${s.verb.toUpperCase()} ${s.path}`, ...s })),
+    ...(preview.posted_pages || []).map((s) => ({ label: `${s.verb.toUpperCase()} ${s.path}`, ...s })),
   ];
   const browser = await chromium.launch({ channel: 'chrome' });
   const results = [];

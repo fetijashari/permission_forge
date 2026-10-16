@@ -67,17 +67,24 @@ module PseudoLocale
   end
 
   # `text` without the words of any wrapped segment, innermost first: what
-  # a translation interpolated (⟨…⟩) is kept, its own words are dropped.
-  def remainder(text)
+  # a translation interpolated (⟨…⟩) is kept, its own words are dropped —
+  # and an interpolated value that is, whole, one of `host` (stored host
+  # data: a label, a description) is dropped too. A segment is a word
+  # boundary: "Bo Berisha⟦ and ⟧Ana" leaves "Bo Berisha Ana".
+  def remainder(text, host: Set.new)
     rest = text.to_s.dup
-    rest.gsub!(INNERMOST) { Regexp.last_match(1).scan(HOLE).flatten.join(' ') } while rest.match?(INNERMOST)
+    while rest.match?(INNERMOST)
+      rest.gsub!(INNERMOST) do
+        " #{Regexp.last_match(1).scan(HOLE).flatten.reject { |value| host.include?(value.strip) }.join(' ')} "
+      end
+    end
     rest.delete(HOLE_OPEN + HOLE_CLOSE + OPEN + CLOSE)
   end
 
   # The prose words of `text` (see PROSE) not in `vocabulary` (a Set of
-  # tokens, see .tokens): the leaks.
-  def leaks(text, vocabulary)
-    tokens(remainder(text)).select { |word| word.match?(PROSE) && word.match?(LOWER) && !vocabulary.include?(word) }.uniq
+  # tokens, see .tokens): the leaks. `host`: see .remainder.
+  def leaks(text, vocabulary, host: Set.new)
+    tokens(remainder(text, host: host)).select { |word| word.match?(PROSE) && word.match?(LOWER) && !vocabulary.include?(word) }.uniq
   end
 
   def tokens(text)

@@ -814,6 +814,7 @@ en:
         action_granted: "%{set} permits this action."
         action_muted: "%{set} blocks this action."
         action_none: No Permission Set permits this action.
+        action_title: "%{action} · %{resource}"
         field_base_unreadable: 'Hidden: it inherits from %{resource}, which doesn''t
           allow Read.'
         field_capped: Shown as Read-only because Edit isn't allowed on this resource.
@@ -821,6 +822,7 @@ en:
           setting along the inheritance wins.'
         field_none: No Permission Set shows this field.
         field_own_unreadable: Hidden because Read isn't allowed on this resource.
+        field_title: "%{resource} › %{field}"
         field_unconfigured: 'No set configures this column: %{behaviour}.'
         field_variant: Follows the setting of %{base}.
         field_virtual: Virtual field from the model, readable unless a set configures
@@ -828,6 +830,7 @@ en:
         flag_granted: "%{set} gives %{flag}."
         flag_muted: "%{set} mutes %{flag}."
         flag_none: No Permission Set gives %{flag}.
+        flag_title: "%{flag} %{resource}"
         no_rules: No record rules, so every record is shown.
         note_add_up: 'Permission Sets add up: one grant is enough.'
         note_fields: If several sets show a field, the most open setting wins.

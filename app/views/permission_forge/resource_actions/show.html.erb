@@ -12,7 +12,7 @@
     <%= link_to t('permission_forge.ui.close'), back, class: 'pf-btn', data: { pf_close: true } %>
     <% unless locked %><button type="submit" class="pf-btn pf-btn--primary"><%= t('permission_forge.resource_fields.show.save') %></button><% end %>
   <% end %>
-  <%= pf_sheet_frame({ title: name, subtitle: "#{set.name} › #{@resource.name}", close_path: back, footer: footer }) do %>
+  <%= pf_sheet_frame({ title: pf_host_data(name), subtitle: "#{set.name} › #{@resource.name}", close_path: back, footer: footer }) do %>
     <fieldset class="pf-stack" <%= 'disabled' if locked %>>
       <%= render 'form', action: @action_record %>
     </fieldset>

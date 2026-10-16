@@ -57,7 +57,7 @@
         <% end %>
         <%= pf_modal_link detail, kind: 'drawer', class: 'pf-fields__name', 'aria-label': t('.details_aria', field: row.label) do %>
           <span class="pf-row pf-row--tight">
-            <span class="pf-fields__label"><%= row.label %></span>
+            <span class="pf-fields__label" data-pf-host-data><%= row.label %></span>
             <code class="pf-mono-key"><%= row.name %></code>
             <%= pf_badge(t('permission_forge.ui.badges.sensitive'), variant: :sensitive) if row.sensitive? %>
             <%= pf_badge(t('permission_forge.ui.badges.virtual')) if row.virtual %>

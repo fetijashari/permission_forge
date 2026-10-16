@@ -24,6 +24,21 @@ module PermissionForge
       test 'no inline handlers are ever attached through attributes' do
         assert_no_match(/setAttribute\(\s*['"]on/i, code)
       end
+
+      # Review R4 P2-10: the rule preview aborts the request a newer input
+      # replaces (a late answer never overwrites a newer one) and never puts
+      # a redirect's page or a whole document into the panel.
+      test 'the rule preview aborts a stale request and injects fragments only' do
+        preview = code[/function previewRule\(form\) \{.*?\n  \}\n/m]
+
+        assert preview, 'previewRule is where it was'
+        assert_includes preview, 'new AbortController()'
+        assert_includes preview, '.abort()'
+        assert_includes preview, 'signal:'
+        assert_includes preview, 'res.redirected'
+        assert_match(/<html/, preview, 'a whole document is not a fragment')
+        assert_includes preview, 'setContent(panel'
+      end
     end
   end
 end

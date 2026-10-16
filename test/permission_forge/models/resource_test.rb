@@ -73,7 +73,7 @@ module PermissionForge
         name: 'Test', read_access: false, edit_access: true
       )
       assert_not resource.valid?
-      assert_includes resource.errors[:edit_access], 'requires read_access to be enabled'
+      assert_includes resource.errors[:edit_access], 'requires Read to be enabled'
     end
 
     test 'delete_access requires read_access' do
@@ -82,7 +82,7 @@ module PermissionForge
         name: 'Test', read_access: false, delete_access: true
       )
       assert_not resource.valid?
-      assert_includes resource.errors[:delete_access], 'requires read_access to be enabled'
+      assert_includes resource.errors[:delete_access], 'requires Read to be enabled'
     end
 
     test 'modify_all requires view_all' do
@@ -91,7 +91,21 @@ module PermissionForge
         name: 'Test', read_access: true, view_all: false, modify_all: true
       )
       assert_not resource.valid?
-      assert_includes resource.errors[:modify_all], 'requires view_all to be enabled'
+      assert_includes resource.errors[:modify_all], 'requires View All to be enabled'
+    end
+
+    # Review R4 P2-7: the message names the prerequisite by its label, in the page's language.
+    test 'the dependency message names the prerequisite by its label in every locale' do
+      resource = PermissionForge::Resource.new(uuid: SecureRandom.uuid, permission_set: @permission_set, name: 'Test',
+                                               read_access: false, edit_access: true)
+      %i[sq mk].each do |locale|
+        I18n.with_locale(locale) do
+          resource.valid?
+          read = I18n.t('permission_forge.validations.attributes.read_access')
+          assert_includes resource.errors[:edit_access], I18n.t('permission_forge.validations.requires', requires: read)
+          assert_not_includes resource.errors[:edit_access].join, 'read_access'
+        end
+      end
     end
 
     test 'valid when edit_access true and read_access true' do

@@ -20,8 +20,8 @@ module PermissionForge
   # A condition nobody can judge — an entry that is not an address, a list
   # of separators alone, one hour of the two, the same hour twice, an hour
   # outside 0..23 — is *broken* (#conditions_broken?): a granting set never
-  # passes on it and a muting set always applies (ConditionalSets::Member),
-  # in every mode. The condition can only be written past the model.
+  # passes on it, with or without a request context, and a muting set always
+  # applies (ConditionalSets::Member), in every mode. The condition can only be written past the model.
   #
   # @api private
   module ActivationConditions
@@ -162,6 +162,15 @@ module PermissionForge
     # @return [Boolean]
     def conditions_broken?
       ip_list_broken? || hours_window.broken?
+    end
+
+    # A granting set whose condition nobody can judge: it never applies, with
+    # a request context or without one (ConditionalSets, Admin::EffectiveAccess).
+    # For an includer that answers `muting?` (PermissionSet, ConditionalSets::Member).
+    #
+    # @return [Boolean]
+    def never_grants?
+      !muting? && conditions_broken?
     end
 
     # What the validations refuse about the row's conditions, for a stored

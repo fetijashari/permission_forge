@@ -183,10 +183,10 @@ module PermissionForge
     def pf_audit_value(value)
       case value
       when nil then t('permission_forge.audit_log.no_value')
-      when String then value.empty? ? t('permission_forge.audit_log.empty_text') : value
+      when String then value.empty? ? t('permission_forge.audit_log.empty_text') : pf_host_data(value)
       when true, false then t("permission_forge.audit_log.boolean.#{value}")
       when Numeric then value.to_s
-      else ActiveSupport::JSON.encode(value)
+      else pf_host_data(ActiveSupport::JSON.encode(value))
       end
     end
 

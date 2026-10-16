@@ -409,6 +409,30 @@ module PermissionForge
         in_context({}) { assert_not reader.can_delete?(:Customer) }
       end
 
+      # Review R4 P1-1: a granting set whose condition nobody can judge
+      # (ActivationConditions#conditions_broken?) never applies, with a
+      # context or without one, strict mode or not; a muting one always does.
+      test 'a granting set with a broken condition grants nothing, not even without a context' do
+        grant(allowed_hours_start: 9, allowed_hours_end: 17)
+        @conditional.update_columns(allowed_hours_start: 9, allowed_hours_end: 9)
+        assert @conditional.reload.conditions_broken?
+
+        [false, true].each do |strict|
+          PermissionForge.configuration.conditional_sets_strict_mode = strict
+          [nil, {}, { ip: '10.1.2.3', session_flags: [], time: Time.current.change(hour: 9) }].each do |context|
+            in_context(context) { assert_not reader.can_read?(:Customer), "strict=#{strict} context=#{context.inspect}" }
+          end
+        end
+      end
+
+      test 'a muting set with a broken condition still mutes without a context' do
+        unconditional_grant
+        lockdown = mute(allowed_ips: '10.0.0.0/8')
+        lockdown.permission_set.update_columns(allowed_ips: 'office')
+
+        [nil, {}].each { |context| in_context(context) { assert_not reader.can_delete?(:Customer) } }
+      end
+
       # --- what an invalidation removes (review MAJOR-1, probe R15) ----------------------
 
       # Q9 (was: "invalidate_permissions removes every cached variant along

@@ -439,7 +439,7 @@ sq:
         i mbajnë lejet e tyre të ruajtura derisa të rinisen ose derisa hyrjet të skadojnë.'
       copy_refused:
         kinds:
-          permission_set: Permission Set “%{name}”
+          permission_set: Grupi i lejeve “%{name}”
           permission_set_group: Permission Set Group “%{name}”
           permission_set_rule: rregulli “%{name}”
           record: një rresht
@@ -829,6 +829,7 @@ sq:
         action_granted: "%{set} e lejon këtë veprim."
         action_muted: "%{set} e bllokon këtë veprim."
         action_none: Asnjë Grup lejesh nuk e lejon këtë veprim.
+        action_title: "%{action} · %{resource}"
         field_base_unreadable: 'E fshehur: trashëgon nga %{resource}, ku Lexo nuk
           lejohet.'
         field_capped: Shfaqet si Vetëm lexim sepse Ndrysho nuk lejohet për këtë burim.
@@ -836,6 +837,7 @@ sq:
           më i rreptë përgjatë trashëgimisë.'
         field_none: Asnjë Grup lejesh nuk e shfaq këtë fushë.
         field_own_unreadable: E fshehur sepse Lexo nuk lejohet për këtë burim.
+        field_title: "%{resource} › %{field}"
         field_unconfigured: 'Asnjë grup nuk e konfiguron këtë kolonë: %{behaviour}.'
         field_variant: Ndjek cilësimin e %{base}.
         field_virtual: Fushë virtuale nga modeli, e lexueshme përveç nëse një grup
@@ -843,6 +845,7 @@ sq:
         flag_granted: "%{set} jep %{flag}."
         flag_muted: "%{set} hesht %{flag}."
         flag_none: Asnjë Grup lejesh nuk jep %{flag}.
+        flag_title: "%{flag} %{resource}"
         no_rules: Nuk ka rregulla regjistrimesh, prandaj shfaqet çdo regjistrim.
         note_add_up: 'Grupet e lejeve mblidhen: mjafton një leje.'
         note_fields: Nëse disa grupe e shfaqin një fushë, fiton cilësimi më i hapur.
@@ -1943,7 +1946,7 @@ sq:
           vetëm te kërkimet find_by dhe permission_scoped: pyetjet e tjera kthejnë
           çdo regjistrim.'
         conditional_sets_strict_mode: Grupet me kushte trajtohen si aktive kur mungojnë
-          informacionet e kërkesës (fail-open).
+          informacionet e kërkesës (mungesa e tyre e lë aksesin të hapur).
         http_basic_auth_enabled: Këto ekrane janë ose të bllokuara (kërkesa për fjalëkalim
           aktive, por pa kredenciale) ose të pambrojtura (pa fjalëkalim dhe pa kontrollues
           admini të personalizuar).
@@ -1959,7 +1962,8 @@ sq:
         secure: I sigurt
         snippet_current: Fragmenti tregon vlerën aktuale.
         snippet_recommended: Fragmenti tregon vlerën e rekomanduar.
-        step_deploy: Bëj commit dhe deploy (ose rinis serverin lokalisht).
+        step_deploy: Ruaj ndryshimin në kod dhe publiko aplikacionin (ose rinis serverin
+          lokalisht).
         step_edit: Ndrysho skedarin më lart.
         step_reload: Rifresko këtë faqe për ta konfirmuar.
       sections:
@@ -2469,12 +2473,12 @@ sq:
         value_not_expected: nuk kërkon vlerë për këtë operator
         value_required: nuk duhet të jetë bosh për këtë operator
       permission_set_user:
-        taken: e ka tashmë këtë Permission Set
+        taken: e ka tashmë këtë Grup lejesh
       requires: kërkon që %{requires} të jetë e aktivizuar
       resource:
         invalid_name: duhet të jetë emër i vlefshëm klase modeli (p.sh. Customer ose
           Admin::Report)
-        name_taken: ekziston tashmë në këtë Permission Set
+        name_taken: ekziston tashmë në këtë Grup lejesh
       resource_field:
         invalid_mask_strategy: nuk është strategji e vlefshme maskimi
         mask_strategy_required: duhet të jetë e pranishme kur aksesi i maskimit është

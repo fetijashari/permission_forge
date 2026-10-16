@@ -280,6 +280,14 @@ module PermissionForge
     # value there is a second name for one state that can drift (R3 #38:
     # "Unchanged 0 · Not configured 8" for one state). Two namespaces keep
     # their own words until the 0.16 merge; the allow-list says why.
+    #
+    # Left out on purpose (review R4 P2-2), though a word of theirs equals a
+    # state's: the list filters (people.index.filters, permission_sets.index
+    # .filters: "Muting", "Expired" name a query whose rows carry the badge,
+    # not a second label of it), the audit log's boolean values (audit_log
+    # .boolean: "No" is a stored false, not an outcome), the new-Resource
+    # presets (resources.new.presets: "Read-only" names a preset, with its
+    # description) and column headings ("Person"). None renders a state.
 
     LABEL_NAMESPACES = %w[ui.states ui.levels ui.badges shared.crud_cell resource_actions.states
                           resources.fields_tab.filters audit_log.actor_types].freeze
@@ -321,6 +329,36 @@ module PermissionForge
         assert en_values.keys.any? { |key| key.start_with?("permission_forge.#{namespace}.") },
                "stale allow-list entry #{namespace}: the namespace is gone (merged), remove it"
       end
+    end
+
+    # ── N. Words left behind (review R4 P2-7) ──
+    #
+    # A translated value keeps no English term the file has its own word
+    # for (Permission Set is "Grup lejesh" / "сет на дозволи"; commit,
+    # deploy, fail-open), and no word typed twice ("кој кој"). Albanian
+    # doubles its particles on purpose ("të të kërkohet", "SSO-së së").
+
+    LEFT_BEHIND = /fail-open|\bcommit\b|\bdeploy\b|Permission Set(?! Group)/
+    DOUBLED = /(?<!\p{L})(\p{L}{2,}) \1(?!\p{L})/i
+    PARTICLES = %w[të së].freeze
+
+    def left_behind(values)
+      values.select do |_, value|
+        next false unless value.is_a?(String)
+
+        value.match?(LEFT_BEHIND) || value.scan(DOUBLED).flatten.any? { |word| !PARTICLES.include?(word.downcase) }
+      end.keys
+    end
+
+    SUPPORTED_LOCALES.reject { |l| l == :en }.each do |locale|
+      test "#{locale} keeps no English term and no doubled word" do
+        assert_empty left_behind(raw_values(locale))
+      end
+    end
+
+    test 'the left-behind lint bites' do
+      assert_equal %w[a b c], left_behind('a' => 'e ka tashmë këtë Permission Set', 'b' => 'но кој кој запис', 'c' => '(fail-open)',
+                                          'd' => 'të të kërkohet', 'e' => 'Grup lejesh')
     end
 
     # ── L. Locale switcher helper ──

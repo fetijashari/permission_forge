@@ -58,7 +58,7 @@
     <div class="pf-card__row">
       <span class="pf-stack pf-stack--tight pf-grow">
         <span><%= pf_set_chip(ps) %></span>
-        <% if ps.description.present? %><span class="pf-fs-13 pf-text-2"><%= ps.description %></span><% end %>
+        <% if ps.description.present? %><span class="pf-fs-13 pf-text-2" data-pf-host-data><%= ps.description %></span><% end %>
       </span>
       <span class="pf-fs-13 pf-text-3"><%= pf_people_text(@people_counts.fetch(ps.id, 0)) %></span>
       <% unless locked %>

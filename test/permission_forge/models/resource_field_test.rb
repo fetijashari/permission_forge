@@ -59,7 +59,7 @@ module PermissionForge
         name: 'test', label: 'Test', read_access: false, edit_access: true
       )
       assert_not field.valid?
-      assert_includes field.errors[:edit_access], 'requires read_access to be enabled'
+      assert_includes field.errors[:edit_access], 'requires Read to be enabled'
     end
 
     test 'mask_access requires read_access' do
@@ -68,7 +68,7 @@ module PermissionForge
         name: 'test', label: 'Test', read_access: false, mask_access: true
       )
       assert_not field.valid?
-      assert_includes field.errors[:mask_access], 'requires read_access to be enabled'
+      assert_includes field.errors[:mask_access], 'requires Read to be enabled'
     end
 
     test 'valid when edit_access true and read_access true' do

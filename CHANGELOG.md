@@ -553,13 +553,14 @@ and the RLS re-sync.
 - **A broken activation condition is unjudgeable in every mode.** An IP entry that is not an address, a list of
   separators, one hour of the two, the same hour twice, or an hour outside 0–23 (stored past the validation) now makes
   a **muting** set apply to every request (it never applied: a lockdown written with newlines through the API muted
-  nothing) and a **granting** set never pass. Called out: a granting set with **one hour of the two** used to pass (the
+  nothing) and a **granting** set never pass, with or without a request context (a blank one let it grant). Called out: a granting set with **one hour of the two** used to pass (the
   hours were ignored) and now never does; a granting set with `start == end` never passed before either. IP lists
   written with newlines or spaces are now read entry by entry (they used to be one invalid entry). The audit's
   `incomplete_conditions` lists every such set — run `rake permission_forge:audit` before upgrading; the admin's
-  Conditions tab and the API normalise the list on the next save. **No opt-out:** a lockdown that never locked is the
-  defect.
+  Conditions tab and the API normalise the list on the next save. **No opt-out:** fix the condition on the set's
+  Conditions tab.
   <!-- pin: test/permission_forge/conditional_sets_test.rb#a muting set with a broken condition applies in every mode; a granting one never passes -->
+  <!-- pin: test/permission_forge/concerns/conditional_sets_per_context_test.rb#a granting set with a broken condition grants nothing, not even without a context -->
 - **A Permission Set's activation conditions are validated on a new row or a changed condition**: an `allowed_ips`
   entry that is not an IP address or CIDR range, a window whose start equals its end, one hour of the two (en/sq/mk
   messages); the stored list is normalised to commas on save, a text of whitespace alone (any Unicode space) to nil (a
@@ -1020,6 +1021,24 @@ and the RLS re-sync.
 
 ### Fixed
 
+- **The rule builder's live sentence keeps up with typing**: a newer input aborts the request before it, so a late
+  answer no longer overwrites the newer sentence, and a redirect (a lapsed session) or a whole page is never put into
+  the panel.
+  <!-- pin: test/permission_forge/html/admin_script_hygiene_test.rb#the rule preview aborts a stale request and injects fragments only -->
+- **The dependency validation names the prerequisite by its label** ("requires Read to be enabled", in the request's
+  language) instead of the column (`read_access`); sq and mk no longer say "Permission Set", "commit and deploy" or
+  "fail-open" in English, and the Effective access action pills word their state, not only a glyph.
+  <!-- pin: test/permission_forge/models/resource_test.rb#the dependency message names the prerequisite by its label in every locale -->
+  <!-- pin: test/permission_forge/i18n_test.rb#the left-behind lint bites -->
+  <!-- pin: test/permission_forge/html/state_rendering_test.rb#an action pill on Effective access words its state, not only its glyph -->
+- **A toast no longer covers the sidebar's language and theme switch at desktop widths** (1024px): toasts centre over
+  the main column (`--pf-sidebar-width`). The browser layout check now also runs at 390 and 1024px.
+  <!-- pin: test/permission_forge/html/layout_lint_test.rb#every scroll container in the stylesheet is a containing block, and the frame paints its cue -->
+- **"Review and save" titled the browser tab with a raw value** (`{one: "Review %{count} change", …}`) in every locale:
+  the page title now counts the changes. Every admin template is now rendered by the whole-UI walks (the reviews,
+  previews, Home cards, the audit log off or refused), so their lints cover it.
+  <!-- pin: test/permission_forge/html/admin_page_paths_test.rb#every POST answered with a page renders it -->
+  <!-- pin: test/permission_forge/html/admin_page_paths_test.rb#every template under app/views is rendered by a walked screen -->
 - **A stored rule never raises at read time.** A rule row with an operator this version does not know (`regex`) raised
   `ArgumentError`, one with a join type that is none (`inner`) raised `ConfigurationError` — from `permission_scoped`,
   `find_by`, `find_by!`, and under `auto_query_scoping = :filter_only` from `Customer.count` and every other query —
@@ -1167,7 +1186,8 @@ and the RLS re-sync.
   masks or hides a field no set shows made the panel read "⊘ Hidden by muting" and "Contractors forces this field
   masked." for a field that was hidden because nobody granted it; a muting row that takes editing away was listed for
   a field nobody could edit; with two mutes the weaker one was named first; two masking sets were listed in an
-  unstable order, so the first strategy named could differ from the one applied. The badge and the first reason now
+  unstable order, so the first strategy named could differ from the one applied; a mask on a field already masked, or
+  a mute on a subclass field its base's grants already hide, was credited too. The badge and the first reason now
   always word the entry's level (and strategy).
   <!-- pin: test/permission_forge/html/admin_view_models_test.rb#every WHY level word equals the level the hash entry gives, for every state -->
 - **Effective access says how each Permission Set shows a field.** The WHY panel of a field said "✓ Sales rep shows

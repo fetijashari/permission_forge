@@ -35,7 +35,7 @@
     <div class="pf-card__row pf-card__row--top">
       <div class="pf-stack pf-stack--tight pf-grow">
         <div class="pf-row pf-row--tight">
-          <% unless field_label.verbatim? %><strong><%= field_label.text %></strong><% end %>
+          <% unless field_label.verbatim? %><strong data-pf-host-data><%= field_label.text %></strong><% end %>
           <code class="pf-mono-key"><%= finding.name %></code>
           <%# A row that is turned off is not "not configured": the engine skips it, and Fix opens it. %>
           <% if finding.turned_off? %>

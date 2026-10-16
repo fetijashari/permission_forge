@@ -14,7 +14,7 @@ module PermissionForge
     #
     #   resource = Resource.new(edit_access: true, read_access: false)
     #   resource.valid? # => false
-    #   resource.errors[:edit_access] # => ["requires read_access to be enabled"]
+    #   resource.errors[:edit_access] # => ["requires Read to be enabled"]
     #
     # @api private
     module ValidatesDependency
@@ -46,8 +46,8 @@ module PermissionForge
 
             return unless send(field) && !send(requires)
 
-            errors.add(field, :requires,
-                       message: I18n.t('permission_forge.validations.requires', requires: requires))
+            label = I18n.t("permission_forge.validations.attributes.#{requires}", default: requires.to_s)
+            errors.add(field, :requires, message: I18n.t('permission_forge.validations.requires', requires: label))
           end
           private method_name
         end

@@ -1,4 +1,5 @@
 require 'test_helper'
+require_relative '../sti_models'
 
 module PermissionForge
   module Html
@@ -110,6 +111,7 @@ module PermissionForge
       # name => [[:grant | :mute, level, options]] for the Customer email field.
       # A muting level nil adds the Resource row only; :no_edit is the row
       # with Edit alone (API / console).
+      STI = 'PfStiBugTicket'.freeze
       WHY_STATES = {
         'hidden' => [[:grant, 'hidden']],
         'masked' => [[:grant, 'masked', { strategy: 'email' }]],
@@ -130,7 +132,25 @@ module PermissionForge
         'muted: hide on a field nobody shows' => [[:grant, 'hidden'], [:mute, 'hide']],
         'muted: mask, then hide' => [[:grant, 'edit'], [:mute, 'mask'], [:mute, 'hide']],
         'muted: no edit, then mask' => [[:grant, 'edit'], %i[mute no_edit], [:mute, 'mask']],
-        'not configured' => [[:grant, nil]]
+        'not configured' => [[:grant, nil]],
+        # Single-table inheritance (review R4 P1-2): the subclass's field is
+        # composed with its base's (ResourceChain); `on:` names the Resource
+        # of a row (default: the subclass). A mute is credited only when the
+        # granting sets alone would show the field.
+        'sti: base hidden, subclass read, hidden by a mute on the subclass' =>
+          [[:grant, 'hidden', { on: 'PfStiTicket' }], [:grant, 'read', { on: STI }], [:mute, 'hide', { on: STI }]],
+        'sti: muted base read, the subclass field hidden by its own grant' =>
+          [[:grant, 'read', { on: 'PfStiTicket' }], [:grant, 'hidden', { on: STI }],
+           [:mute, nil, { on: 'PfStiTicket', resource: { read_access: true } }]],
+        'sti: both read, hidden by a mute on the subclass' =>
+          [[:grant, 'read', { on: 'PfStiTicket' }], [:grant, 'read', { on: STI }], [:mute, 'hide', { on: STI }]],
+        'sti: muted base read reaches a readable subclass field' =>
+          [[:grant, 'read', { on: 'PfStiTicket' }], [:grant, 'read', { on: STI }],
+           [:mute, nil, { on: 'PfStiTicket', resource: { read_access: true } }]],
+        'sti: base read-only, subclass editable, no edit muted on the subclass' =>
+          [[:grant, 'read', { on: 'PfStiTicket' }], [:grant, 'edit', { on: STI }], [:mute, :no_edit, { on: STI }]],
+        'sti: base masked, subclass read' =>
+          [[:grant, 'masked', { on: 'PfStiTicket', strategy: 'email' }], [:grant, 'read', { on: STI }]]
       }.freeze
 
       test 'every WHY level word equals the level the hash entry gives, for every state' do
@@ -138,7 +158,7 @@ module PermissionForge
           user = create_user
           sets = rows.each_with_index.map { |row, index| why_set(state, index, *row) }
           sets.each { |set| create_permission_set_user(user: user, permission_set: set) }
-          why_failures(state, user, sets)
+          why_failures(state, user, sets, rows.any? { |row| row[2]&.key?(:on) } ? STI : 'Customer')
         end
 
         assert_empty failures, failures.join("\n")
@@ -148,8 +168,8 @@ module PermissionForge
 
       def why_set(state, index, kind, level, options = {})
         set = create_permission_set(name: "#{state} #{index}", is_muting: kind == :mute, created_at: (10 - index).minutes.ago)
-        resource = create_resource(permission_set: set, name: 'Customer', read_access: kind == :grant, edit_access: kind == :grant,
-                                   **options.fetch(:resource, {}))
+        resource = create_resource(permission_set: set, name: options.fetch(:on, 'Customer'), read_access: kind == :grant,
+                                   edit_access: kind == :grant, **options.fetch(:resource, {}))
         flags = why_flags(kind, level)
         create_resource_field(resource: resource, name: 'email', mask_strategy: options.fetch(:strategy, 'full'), **flags) if flags
         set
@@ -162,23 +182,31 @@ module PermissionForge
         PermissionForge::FieldLevel.flags_for(level, muting: kind == :mute)
       end
 
-      # The engine's resource entry for the sets, in the order a request merges them.
-      def why_engine(user, sets)
+      # The engine's resource entry for the sets, in the order a request
+      # merges them; for a subclass, its field composed along the chain as
+      # the attribute guard composes it (ResourceChain.compose_field).
+      def why_engine(user, sets, name) # rubocop:disable Metrics/AbcSize -- the hash, then the chain's composition
         ordered = PermissionForge::PermissionSet.where(id: sets.map(&:id)).in_hash_order.to_a
-        PermissionForge::Services::PermissionHashBuilder.call(user: user, permission_sets: ordered)[:resources]['Customer']
+        resources = PermissionForge::Services::PermissionHashBuilder.call(user: user, permission_sets: ordered)[:resources]
+        return resources[name] if name == 'Customer'
+
+        resources = resources.deep_symbolize_keys # as the stored hash the guard reads
+        entries = PermissionForge::ResourceChain.names_for(name).filter_map { |chain_name| resources[chain_name].presence }
+        email = PermissionForge::ResourceChain.compose_field(entries, :email)
+        { permissions: resources.dig(name.to_sym, :permissions) || {}, fields: email ? { 'email' => email } : {} }
       end
 
-      def why_field(user)
-        PermissionForge::Admin::EffectiveAccess.call(user: user).find { |res| res.name == 'Customer' }
+      def why_field(user, name)
+        PermissionForge::Admin::EffectiveAccess.call(user: user).find { |res| res.name == name }
                                                .fields.find { |outcome| outcome.name == 'email' }
       end
 
-      def why_failures(state, user, sets)
-        engine = why_engine(user, sets)
-        field = why_field(user)
+      def why_failures(state, user, sets, name)
+        engine = why_engine(user, sets, name)
+        field = why_field(user, name)
         return (field.unconfigured ? [] : ["#{state}: configured, the engine has no entry"]) unless engine[:fields]['email']
 
-        before = why_engine(user, sets.reject(&:is_muting))[:fields]['email']
+        before = why_engine(user, sets.reject(&:is_muting), name)[:fields]['email']
         WhyCheck.new(field, engine, before).problems.map { |problem| "#{state}: #{problem}" }
       end
 
@@ -250,10 +278,10 @@ module PermissionForge
           @field.mutes.reject { |mute| changed?(mute.level) }.map { |mute| "mute #{mute.level} changed nothing" }
         end
 
-        def changed?(mute_level)
+        def changed?(mute_level) # rubocop:disable Metrics/CyclomaticComplexity -- one rule per mute level
           case mute_level
           when 'hide' then @before[:read_access] && @level == 'hidden'
-          when 'mask' then @level == 'masked'
+          when 'mask' then LEVEL.effective_level(@before) != 'masked' && @level == 'masked'
           when 'no_edit' then @before[:edit_access] && @level != 'hidden' && !@entry[:edit_access]
           end
         end

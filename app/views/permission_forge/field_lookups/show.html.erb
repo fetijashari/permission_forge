@@ -7,7 +7,7 @@
       <select id="pf-lookup-resource" name="resource" class="pf-select" data-pf-autosubmit>
         <option value=""><%= t('.pick_resource') %></option>
         <% @resource_names.each do |name| %>
-          <option value="<%= name %>" <%= 'selected' if name == @resource_name %>><%= pf_resource_label(name) %> (<%= name %>)</option>
+          <option value="<%= name %>" <%= 'selected' if name == @resource_name %> data-pf-host-data><%= pf_resource_label(name) %> (<%= name %>)</option>
         <% end %>
       </select>
     </div>
@@ -16,7 +16,7 @@
       <select id="pf-lookup-field" name="field" class="pf-select" data-pf-autosubmit <%= 'disabled' unless @resource_name %>>
         <option value=""><%= t('.pick_field') %></option>
         <% @field_options.each do |name, label| %>
-          <option value="<%= name %>" <%= 'selected' if name == @field %>><%= label %> (<%= name %>)</option>
+          <option value="<%= name %>" <%= 'selected' if name == @field %> data-pf-host-data><%= label %> (<%= name %>)</option>
         <% end %>
       </select>
     </div>

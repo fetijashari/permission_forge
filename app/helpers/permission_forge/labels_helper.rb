@@ -18,6 +18,14 @@ module PermissionForge
       label.verbatim? ? tag.code(label.text, class: 'pf-mono-key') : label.text
     end
 
+    # Text of the host (a label, a description, a stored value) drawn as it
+    # is, marked so the locale-leak test tells it from the gem's own words.
+    #
+    # @return [ActiveSupport::SafeBuffer]
+    def pf_host_data(text, tag_name = :span)
+      content_tag(tag_name, text, data: { pf_host_data: true })
+    end
+
     # The same label as plain text (an attribute, a title, an option).
     def pf_field_label_text(model, name, row: nil)
       pf_field_label_for(model, name, row: row).text
