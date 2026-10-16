@@ -110,8 +110,11 @@ and the RLS re-sync.
 - **A boot warning for an API-only application that mounts the engine** (`config.api_only = true`): it names the
   middlewares its admin screens need (`ActionDispatch::Cookies`, `ActionDispatch::Session::CookieStore`,
   `ActionDispatch::Flash`) and the lines to add — without them every admin page that renders a form is a 500; the
-  JSON API works without them.
+  JSON API works without them. Checked once the routes are drawn (it never draws them); an app that uses only the
+  API sets `config.api_only_admin_warning = false`.
   <!-- pin: test/permission_forge/boot_checks_api_only_test.rb#the warning goes through the emitter and names the middlewares and the lines to add -->
+  <!-- pin: test/permission_forge/boot_checks_api_only_test.rb#the warning comes when the routes are drawn, which the check never does itself -->
+  <!-- pin: test/permission_forge/boot_checks_api_only_test.rb#config.api_only_admin_warning = false silences the warning (an app that uses only the JSON API) -->
 - **One cache outcome for every operation that clears cached permissions.** `PermissionForge::Cache::Outcome`
   (`confirmed`, `process_local`, `in_request`, `unconfirmed`), measured by `Cache::Report`, is what the terminal, the
   admin flash, the API body and the summary audit event report: `PermissionCacheClearer`, `DataSubjectErasure`,

@@ -33,7 +33,7 @@ module PermissionForge
         definitions = Admin::SettingsCatalog::DEFINITIONS
         catalog = Admin::SettingsCatalog::SECTIONS.flat_map { |section| definitions.select { |d| d.section == section }.map(&:key) }
         assert_equal catalog, headings.first(catalog.size), 'the catalog options come first, section by section as the Settings page shows them'
-        assert_equal writers - catalog, headings.drop(catalog.size), 'the options the Settings page does not show follow'
+        assert_equal (writers - catalog).sort, headings.drop(catalog.size), 'the options the Settings page does not show follow, by name'
       end
 
       test 'every entry has a default line and a text' do

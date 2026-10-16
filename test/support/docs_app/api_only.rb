@@ -18,8 +18,9 @@ module DocsApp
       User.create!(email_address: Fixtures.email(:alice), password_digest: 'none', name: 'Alice Admin', admin: true)
       install = Install.from_readme!
       configure!
+      checks = api_checks.merge(admin_checks) # the first request draws the routes (lazily in test): the warning comes then
       { mode: 'api_only', rails: Rails.version, api_only: Rails.application.config.api_only, install: install,
-        boot_warning: boot_warning }.merge(api_checks, admin_checks)
+        boot_warning: boot_warning }.merge(checks)
     end
 
     def configure!
@@ -33,7 +34,7 @@ module DocsApp
       end
     end
 
-    # The api_only_admin warning, as the log got it at boot.
+    # The api_only_admin warning, as the log got it once the routes were drawn.
     def boot_warning
       File.readlines(Application.log).find { |line| line.include?('config.api_only') }&.strip
     end

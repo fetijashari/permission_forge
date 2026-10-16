@@ -145,14 +145,29 @@ module PermissionForge
 
       # The admin screens in a `rails new --api` application: without the
       # cookies, session and flash middlewares every admin page that renders
-      # a form is a 500 (ApiOnlyAdmin says which ones to add).
+      # a form is a 500 (ApiOnlyAdmin says which ones to add). Skipped when
+      # config.api_only_admin_warning is false.
       #
       # @param application [Rails::Application]
-      def warn_api_only_admin(application = Rails.application)
+      # @param config [Configuration]
+      def warn_api_only_admin(application = Rails.application, config: PermissionForge.configuration)
+        return unless config.api_only_admin_warning
+
         missing = ApiOnlyAdmin.missing_middlewares(application)
         return if missing.empty?
 
         Warnings.emit(:api_only_admin, ApiOnlyAdmin.message(missing), severity: :config)
+      end
+
+      # The engine's after_routes_loaded hook: the api_only_admin warning,
+      # once per process (a development reload draws the routes again).
+      #
+      # @param application [Rails::Application]
+      def routes_loaded(application)
+        return if @routes_checked
+
+        @routes_checked = true
+        warn_api_only_admin(application)
       end
 
       private
@@ -191,7 +206,6 @@ module PermissionForge
         warn_api_authorization_gap(config)
         config.tenantless_admin_warning&.then { |message| warn_tenantless_admin(message) }
         QueryScopingWarnings.warn_unscoped_detection_raise_in_production(config)
-        warn_api_only_admin
       end
 
       # AdminUiSettings#tenantless_admin_warning composes the whole line; the

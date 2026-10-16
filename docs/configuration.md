@@ -1313,6 +1313,12 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 ### Other options
 
+#### api_only_admin_warning
+
+**Default:** `true`
+
+**API-only boot warning.** In an application with `config.api_only = true` that mounts the engine, the log says which middlewares the admin screens need (cookies, session, flash; see [Admin UI](admin-ui.md#api-only-applications)) once the routes are drawn: at boot, or at the first request where Rails 8 draws them lazily (development and test). Set it to `false` in an app that uses only the JSON API and never opens the admin screens.
+
 #### nested_attributes_parent_fallback
 
 **Default:** `false`

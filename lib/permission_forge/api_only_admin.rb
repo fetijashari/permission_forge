@@ -9,7 +9,9 @@ module PermissionForge
   # ActionDispatch::Request::Session::DisabledSessionError for the CSRF
   # token. The JSON API needs none of them. BootChecks warns through
   # Warnings.emit (:api_only_admin), naming the middlewares
-  # config/application.rb must add, when the engine is mounted.
+  # config/application.rb must add, when the engine is mounted — once the
+  # routes are drawn (the engine's config.after_routes_loaded), and not when
+  # config.api_only_admin_warning is false (an app that uses only the API).
   #
   # @api private
   module ApiOnlyAdmin
@@ -61,12 +63,12 @@ module PermissionForge
       nil
     end
 
-    # Whether the engine is mounted. Rails 7.2+ draws the routes lazily when
-    # eager_load is off, so at boot they are still empty and are drawn first
-    # (reload_routes!, canary :lazy_routes); when they cannot be read, yes (a
-    # warning too many beats a 500 nobody was told about).
+    # Whether the engine is mounted in the routes as drawn. Asked once they
+    # are (after_routes_loaded: at boot, or at their first use where Rails 8
+    # draws them lazily); it never draws them itself — a draw at boot is
+    # undone and drawn again at the first request. When they cannot be read,
+    # yes (a warning too many beats a 500 nobody was told about).
     def mounted?(application)
-      application.reload_routes! if application.routes.routes.empty?
       application.routes.routes.any? { |route| engine?(route.app) }
     rescue StandardError
       true
