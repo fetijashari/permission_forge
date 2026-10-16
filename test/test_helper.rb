@@ -45,6 +45,11 @@ require 'rails/test_help'
 # Load schema
 ActiveRecord::Schema.verbose = false
 load File.expand_path('dummy/db/schema.rb', __dir__)
+# Column information read while the app booted (before the load above) is
+# that of the tables a previous run left in a database that persists
+# (PostgreSQL, MySQL): forget it, so every model reads the schema just loaded.
+ActiveRecord::Base.connection.schema_cache.clear!
+ActiveRecord::Base.descendants.each { |model| model.reset_column_information unless model.abstract_class? }
 
 # Configure PermissionForge for tests: the suite's base configuration, which
 # every test starts from (ConfigurationSnapshot below). Options not set here
