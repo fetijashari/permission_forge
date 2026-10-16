@@ -150,7 +150,7 @@ module PermissionForge
         return operator if operator.is_a?(String)
         return record.operator if record.respond_to?(:operator)
 
-        model.column_defaults['operator'] if model.column_names.include?('operator')
+        model.column_defaults['operator']
       end
 
       def whole_number?(value)
