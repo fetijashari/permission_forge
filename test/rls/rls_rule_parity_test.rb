@@ -308,6 +308,24 @@ class RlsRuleParityTest < ActiveSupport::TestCase
 
   # The bypass is dynamic, so it needs no resync; it stops with the row's
   # is_active in both layers (pre-release review core-security #6).
+  # Review R1 #3: Modify All without View All (written past the validation)
+  # bypasses nothing in the app layer (PermissionHashBuilder.granted_flags);
+  # the policy's granting EXISTS read either flag and bypassed the rules.
+  test 'a granting row with Modify All and no View All bypasses the rules in neither layer' do
+    rules = [{ field_name: 'owner_id', operator: 'equal', field_value: 'current_user' }]
+    create_rules(rules)
+    PermissionForge::RLS.sync!
+    grant_app_role
+    set = create_permission_set(name: 'Modify only')
+    create_permission_set_user(user: @user, permission_set: set)
+    create_resource(permission_set: set, name: 'PfRuleRecord', view_all: true, modify_all: true)
+                   .update_columns(view_all: false)
+    Current.user = @user
+
+    assert_equal %w[current_user five], app_layer_scoped_labels
+    assert_equal %w[current_user five], policy_labels
+  end
+
   test 'a switched-off view_all resource bypasses the rules in neither layer' do
     rules = [{ field_name: 'owner_id', operator: 'equal', field_value: 'current_user' }]
     create_rules(rules)

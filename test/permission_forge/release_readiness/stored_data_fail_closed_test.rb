@@ -55,7 +55,10 @@ module PermissionForge
       # no longer fails fails this test.
       PENDING_ON_WP1 = {}.freeze
 
-      STRINGS = ['', 'zzz', 'a..b', 'nosuch.col', 'Kernel', 'regex', 'inner', 'gone',
+      # 'supplier_id.id': a qualifier the join rule's ON clause mentions as a
+      # column (review R1 #1); 'suppliers.name': another model's table on a
+      # filter rule (review R1 #2).
+      STRINGS = ['', 'zzz', 'a..b', 'nosuch.col', 'supplier_id.id', 'suppliers.name', 'Kernel', 'regex', 'inner', 'gone',
                  "10.0.0.0/8\n192.168.0.0/16", 'office', "x\u0000y", 'ü' * 300]
                 # PostgreSQL stores no NUL byte at all (the driver refuses the
                 # string), so no such value can be read back there.
@@ -280,6 +283,7 @@ module PermissionForge
       REPORT_PATHS = {
         effective: -> { effective_levels },
         rls: -> { PermissionForge::Services::RlsPolicyGenerator.call(model_class: Customer).fetch(:statements).join("\n") },
+        rls_bypass: -> { policy_bypass? },
         generate: -> { rolled_back { PermissionForge::Services::ResourceFieldGenerator.call(resource: @resource.reload).size } },
         clone: lambda {
           rolled_back { PermissionForge::Services::PermissionSetCloner.call(permission_set: @granting.reload, attrs: { name: 'Clone' }).persisted? }
@@ -287,7 +291,7 @@ module PermissionForge
       }.freeze
       PATHS = PERMISSION_PATHS.merge(RECORD_PATHS, REPORT_PATHS).freeze
 
-      REPORTS = %i[effective rls generate clone].freeze
+      REPORTS = %i[effective rls rls_bypass generate clone].freeze
       # A smaller answer than the baseline's: a subset of rows, a false, a
       # masked or hidden value, fewer keys, a lower level.
       SUBSETS = %i[scoped filter_all permitted].freeze
@@ -391,13 +395,16 @@ module PermissionForge
 
       # --- assertions per poisoning ------------------------------------------------
 
-      def check(record, attrs, failures)
+      # `refused` is judged on the clean row, before it is poisoned: judged
+      # after, the "clean" copy would carry the poisoned value too and no
+      # poisoning would ever count as refused.
+      def check(record, attrs, failures, refused)
         fail_on = failure_recorder(record, attrs, failures)
-        refused = refused?(record, attrs)
         results = results_for(refused)
         results.each { |path, outcome| fail_on.call(path, "raised #{outcome.error.class}: #{outcome.error.message[0, 160]}") if outcome.error }
         return unless refused
 
+        assert_policy_bypass_not_wider(results, fail_on)
         assert_not_widened(results, fail_on)
         assert_named(record, attrs, fail_on) if changed?(results) && named_by_audit?(record, attrs)
       end
@@ -428,6 +435,31 @@ module PermissionForge
           base = @baseline[path].value
           fail_on.call(path, "widened: #{base.inspect[0, 120]} -> #{outcome.value.inspect[0, 120]}") if widening?(path, outcome.value, base)
         end
+      end
+
+      # The RLS policy's view_all bypass is never wider than the app layer's
+      # (review R1 #3: a Resource row with Modify All and no View All
+      # bypassed the rules in the policy only).
+      def assert_policy_bypass_not_wider(results, fail_on)
+        policy = results[:rls_bypass]
+        return unless policy && policy.error.nil? && policy.value == true
+        return if results[:can_view_all]&.value == true
+
+        fail_on.call(:rls_bypass, 'the policy bypasses the rules where the app layer does not')
+      end
+
+      # The policy's bypass (RlsPolicyGenerator#view_all_bypass_sql) for the
+      # user on the customer's row, evaluated on this database: the session
+      # variable read as the user's id, now() as CURRENT_TIMESTAMP, the row
+      # in the granting Resource's tenant (the bypass is tied to it).
+      def policy_bypass?
+        generator = PermissionForge::Services::RlsPolicyGenerator.new(model_class: Customer)
+        sql = generator.send(:view_all_bypass_sql).gsub(generator.send(:uid_sql), @user.id.to_s).gsub('now()', 'CURRENT_TIMESTAMP')
+        tenant = @customer.reload.account_id
+        @customer.update_columns(account_id: @resource.reload.account_id)
+        Customer.unscoped.where(id: @customer.id).where(sql).exists?
+      ensure
+        @customer.update_columns(account_id: tenant)
       end
 
       def widening?(path, value, base)
@@ -496,7 +528,8 @@ module PermissionForge
           rows_of(model).each do |record|
             columns.each do |column|
               values_for(model, column).each do |attrs|
-                poison(record, attrs) { check(record, attrs, failures) }
+                refused = refused?(record, attrs)
+                poison(record, attrs) { check(record, attrs, failures, refused) }
               end
             end
           end
@@ -529,6 +562,21 @@ module PermissionForge
         grouped = real.group_by { |failure| [failure.key, failure.path, failure.message[0, 90]] }
         lines = grouped.map { |(key, path, message), list| "#{key} (#{list.size}×, e.g. #{list.first.value.inspect[0, 40]}): #{path} — #{message}" }
         assert_empty lines.first(60), "#{name}: #{real.size} failures in #{grouped.size} groups (first 60 shown)"
+      end
+
+      # The policy's bypass is read for real (negative fixture of
+      # assert_policy_bypass_not_wider): View All bypasses in both layers,
+      # Modify All without View All in neither.
+      test 'the policy bypass check bites: View All bypasses, Modify All alone does not' do
+        assert_not policy_bypass?
+        @resource.update_columns(view_all: true)
+
+        assert policy_bypass?
+        @resource.update_columns(view_all: false, modify_all: true)
+        reset_reads
+
+        assert_not fresh_user.can_view_all?(:Customer)
+        assert_not policy_bypass?, 'Modify All without View All grants no bypass in the app layer, nor in the policy'
       end
 
       test 'SKIP names columns that exist' do

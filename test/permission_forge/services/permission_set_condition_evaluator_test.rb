@@ -252,6 +252,17 @@ module PermissionForge
         assert_not evaluate(ps, context)
       end
 
+      # Review R1 #11: a dual-stack server reports an IPv4 client as
+      # ::ffff:10.0.0.5, which never matched an IPv4 entry.
+      test 'an IPv4-mapped IPv6 request address matches the IPv4 entries' do
+        ps = stored(allowed_ips: '10.0.0.0/8')
+
+        assert evaluate(ps, ip: '::ffff:10.0.0.5')
+        assert evaluate(ps, ip: IPAddr.new('::ffff:10.0.0.5'))
+        assert_not evaluate(ps, ip: '::ffff:192.168.0.5')
+        assert evaluate(stored(allowed_ips: '2001:db8::/32'), ip: '2001:db8::1'), 'a native IPv6 address is read as it is'
+      end
+
       private
 
       def evaluate(permission_set, context)

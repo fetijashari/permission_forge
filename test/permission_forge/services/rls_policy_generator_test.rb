@@ -63,12 +63,18 @@ module PermissionForge
         assert_includes using, 'NOT EXISTS'
       end
 
+      # Review R1 #3: the app layer grants Modify All only with View All
+      # (PermissionHashBuilder.granted_flags), so a granting row's bypass is
+      # its View All; a muting row cancels the bypass with either flag (narrower).
       test 'view_all bypass branch checks granting and muting sets' do
         using = select_policy_sql
+        granting, muting = using.split('AND NOT EXISTS', 2)
 
-        assert_includes using, 'r.view_all = TRUE OR r.modify_all = TRUE'
-        assert_includes using, 'ps.is_muting = TRUE'
-        assert_includes using, 'ps.is_muting = FALSE'
+        assert_includes granting, 'ps.is_muting = FALSE'
+        assert_includes granting, 'r.view_all = TRUE )'
+        assert_not_includes granting, 'modify_all'
+        assert_includes muting, 'ps.is_muting = TRUE'
+        assert_includes muting, '(r.view_all = TRUE OR r.modify_all = TRUE)'
       end
 
       # Pre-release review core-security #6: the EXISTS ignored

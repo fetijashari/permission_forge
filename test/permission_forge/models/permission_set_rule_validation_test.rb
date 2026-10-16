@@ -306,6 +306,23 @@ module PermissionForge
       assert rule.valid?
     end
 
+    # Review R1 #8: the format check ran on every save, so a stored rule
+    # with a control character in its field name could not be switched off.
+    test 'a stored field name the format refuses stays editable in its other attributes, refused when it changes' do
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
+      rule.update_columns(field_name: "supplier_id\n")
+      rule.reload
+
+      rule.is_active = false
+
+      assert rule.valid?, rule.errors.full_messages.inspect
+      assert rule.save
+      rule.field_name = "supplier\tid"
+
+      assert_not rule.valid?
+      assert rule.errors[:field_name].any?
+    end
+
     private
 
     def valid_rule_attrs(overrides = {})

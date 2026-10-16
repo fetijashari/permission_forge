@@ -126,6 +126,24 @@ module PermissionForge
         end
       end
 
+      # Review R1 #12: `[]` or `[""]` cleared the condition without a word;
+      # null (or "") is how a client clears it.
+      test 'an IP list with no entry is a 422 saying null clears the condition' do
+        set = create_permission_set(name: 'Office only', allowed_ips: '203.0.113.0/24')
+        [[], [''], [' ', ','], ' , '].each do |list|
+          patch "/permission_forge/api/permission_sets/#{set.uuid}", params: { permission_set: { allowed_ips: list } }.to_json,
+                                                                     headers: HEADERS
+
+          assert_response :unprocessable_content, list.inspect
+          assert_match(/null/, json.dig('error', 'messages', 'allowed_ips').join, list.inspect)
+          assert_equal '203.0.113.0/24', set.reload.allowed_ips, list.inspect
+        end
+        patch "/permission_forge/api/permission_sets/#{set.uuid}", params: { permission_set: { allowed_ips: nil } }.to_json, headers: HEADERS
+
+        assert_response :ok
+        assert_nil set.reload.allowed_ips
+      end
+
       test 'the recorded scenario: an office-only granting set written as an array grants from the office only' do
         post '/permission_forge/api/permission_sets',
              params: { permission_set: { name: 'Office only', allowed_ips: ['10.0.0.0/8'] } }.to_json, headers: HEADERS
