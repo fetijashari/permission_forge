@@ -36,6 +36,10 @@ module PermissionForge
       return if auth_check.call(self)
 
       audit_api_auth_failure('api_auth_denied', 401)
+      # Runs before the request's locale is assigned (set_api_locale is a
+      # later callback): the 401 says it in the request's language too
+      # (through 0.14.1 always in the default locale).
+      set_api_locale
       render json: { error: { status: 401, messages: I18n.t('permission_forge.api.errors.unauthorized') } }, status: :unauthorized
     end
 
