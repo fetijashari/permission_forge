@@ -175,7 +175,7 @@ module PermissionForge
                                                                       events: %w[group_membership.added] },
         'permission_forge/api/permission_set_group_users#destroy' => { verbs: %w[DELETE], drive: :api_member_remove,
                                                                        events: %w[group_membership.removed] },
-        'permission_forge/api/unmatched_routes#show' => { verbs: %w[POST PUT PATCH DELETE], drive: :api_unmatched,
+        'permission_forge/api/unmatched_routes#show' => { verbs: %w[POST PUT PATCH DELETE OPTIONS TRACE], drive: :api_unmatched,
                                                           none: 'no endpoint at this path and method: the JSON 404' }
       }.freeze
 
