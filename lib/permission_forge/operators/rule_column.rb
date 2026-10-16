@@ -24,8 +24,9 @@ module PermissionForge
     # appears in a join condition): a name the join gives that is no model
     # table (`parents_customers` on a self-join) is {UNKNOWN} and left to the
     # database — unless the column it names holds ciphertext
-    # ({EncryptedAlias}: the alias is resolved to the table it stands for and
-    # the models along the path on that table; one that cannot be resolved
+    # ({EncryptedAlias}: the name is resolved to the table it stands for and
+    # every loaded model on that table — a `has_many :through`'s join table
+    # and a table a default scope joins too; one that cannot be resolved
     # counts as encrypted when any model along the path encrypts a column of
     # that name), when it is that model's column, {#encrypted?}; a real table
     # that is none of the rule's is {FOREIGN} (a filter
@@ -295,7 +296,7 @@ module PermissionForge
 
       # Whether the column holds ciphertext: an attribute of {#model} — the
       # class the rule is applied to (the applier's model class), one along
-      # its path, or the one an alias of its query joins (EncryptedAlias) —
+      # its path, or one on a table its query joins (EncryptedAlias) —
       # declared with `encrypts` by it or a class of its hierarchy on its
       # table (PermissionForge::EncryptedAttributes). Asked with the column's
       # own name (a field name written in another case resolves to it).

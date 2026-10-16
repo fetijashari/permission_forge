@@ -33,8 +33,8 @@ module PermissionForge
       Current.user = nil
     end
 
-    def encrypted_message(model)
-      I18n.t('permission_forge.validations.permission_set_rule.encrypted_column', name: 'body', model: model)
+    def encrypted_message(model, name = 'body')
+      I18n.t('permission_forge.validations.permission_set_rule.encrypted_column', name: name, model: model)
     end
 
     def new_rule(resource, **attrs)
@@ -151,7 +151,7 @@ module PermissionForge
       rule = new_rule(resource, **through_attrs)
 
       assert_not rule.valid?
-      assert_includes rule.errors[:field_name], encrypted_message('PfEncryptedLink')
+      assert_includes rule.errors[:field_name], encrypted_message('PfEncryptedLink', 'note')
       assert new_rule(resource, **through_attrs, operator: 'is_not_null', field_value: '').valid?, 'a null check is no comparison'
       assert new_rule(resource, **through_attrs, field_name: "#{LINKS}.owner_id", field_value: '1').valid?,
              'a plain column of the join table'

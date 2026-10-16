@@ -10,7 +10,9 @@ module PermissionForge
   # - a record rule cannot compare one (Operators::RuleColumn#encrypted?,
   #   Operators::ValueTyping: every built-in operator that takes a value
   #   matches nothing; is_null / is_not_null work, as the ciphertext is NULL
-  #   exactly when the value is; RuleProblem :encrypted_column);
+  #   exactly when the value is; RuleProblem :encrypted_column), whichever
+  #   table of the rule's query it is in ({.models_on}: a table the query
+  #   joins that is on no model along the rule's path);
   # - the admin's people search leaves one out of its LIKE, and bulk matching
   #   of its lower-cased equality; a deterministically encrypted one matches
   #   a whole value exactly (`where(email: value)` encrypts the value);
@@ -78,6 +80,33 @@ module PermissionForge
       base = model.base_class
       table = model.table_name
       [model, base, *base.descendants.select { |klass| !klass.abstract_class? && klass.table_name == table }].uniq
+    end
+
+    # Every loaded model class that stores rows in a table of that name:
+    # what a table a query joins stands for when it is on no model the
+    # caller knows (a `has_many :through`'s join table, a table a default
+    # scope or a host's join brings in: Operators::EncryptedAlias). Any
+    # loaded, non-abstract Active Record class whose table (its last
+    # segment, without a schema) is the name — the classes of a
+    # single-table hierarchy among them, so {.names} of any one of them
+    # covers the hierarchy. A class the application has not loaded yet
+    # (lazy loading in development) is not seen; nor is the database a
+    # class is on told apart (a table of that name in another database
+    # counts too: fail closed).
+    #
+    # @param table [String] the table's name, as the query gives it
+    # @param exact [Boolean] compare names as written (PostgreSQL), else
+    #   without regard to case (Operators::RuleColumn.same_name?)
+    # @return [Array<Class>]
+    def models_on(table, exact: false)
+      ActiveRecord::Base.descendants.select do |klass|
+        next false if klass.abstract_class?
+
+        own = klass.table_name.to_s.split('.').last
+        own.present? && Operators::RuleColumn.same_name?(own, table.to_s, exact)
+      rescue StandardError
+        false # a class that cannot name its table (an anonymous one without `table_name`) stores rows in none
+      end
     end
 
     # Of `names` (column names), those that do not hold ciphertext: what SQL
