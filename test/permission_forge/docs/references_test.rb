@@ -3,16 +3,20 @@
 require 'test_helper'
 require 'rake'
 require_relative '../../support/doc_blocks'
+require_relative '../../support/rake_tasks'
 
 module PermissionForge
   module Docs
     # The reference lint of README.md and docs/*.md: every relative link and
-    # anchor resolves; every `config.<name>` is an option of Configuration;
-    # every `permission_forge:<task>` is a defined rake task (or generator),
-    # and every defined task is documented with the environment variables it
-    # reads; every `PermissionForge::…` constant resolves; a default a sentence
-    # states for an option is the default of Configuration.new. Fixtures at
-    # the end prove each rule bites.
+    # anchor resolves, and so does every link to this repository on GitHub
+    # (in the docs and in what the code prints); every `config.<name>`, every
+    # `name = value` span and every bare `name` shaped like an option is an
+    # option of Configuration; every `permission_forge:<task>` is a defined
+    # rake task (or generator), and every defined task is documented with the
+    # environment variables it reads (ACTOR and REASON through RakeAudit
+    # included); every `PermissionForge::…` constant resolves; a default a
+    # sentence states for an option is the default of Configuration.new.
+    # Fixtures at the end prove each rule bites.
     class ReferencesTest < ActiveSupport::TestCase
       ROOT = DocBlocks::ROOT
       DOCS = DocBlocks.files.freeze
@@ -35,10 +39,35 @@ module PermissionForge
         'to_prepare' => 'config.to_prepare, a Rails hook'
       }.freeze
 
+      # Inline code shaped like an option that names something else: `name = value` spans, and bare `name`s that
+      # share an option's first two words or are within two edits of one. A stale entry fails.
+      NOT_OPTIONS = {
+        'owner_id' => 'a rule in prose (`owner_id = current_user.id`)',
+        'permitted' => 'a local in a Rails 7 scaffold line',
+        'require_tenant' => "acts_as_tenant's setting",
+        'consider_all_requests_local' => 'a Rails setting',
+        'is_editable' => 'a column of the permission models',
+        'audit_event' => 'an api_serializer_overrides key',
+        'extra_fields_for_permissions' => "extra_fields_method's default method name",
+        'api_auth_denied' => 'an api.auth_failed reason', 'api_auth_not_configured' => 'an api.auth_failed reason',
+        'audit_log_not_authorized' => 'an auth_failed reason',
+        'conditional_sets_lenient' => 'a SecurityAudit finding', 'audit_hook_failures_logged' => 'a SecurityAudit finding',
+        'gdpr_defaults_off' => 'a SecurityAudit finding', 'audit_trail_off' => 'a SecurityAudit finding',
+        'nil_user_bypass' => 'a SecurityAudit finding', 'action_guard_missing' => 'a SecurityAudit finding',
+        'audit_runtime_default' => 'a SecurityAudit finding'
+      }.freeze
+      ASSIGNED_SPAN = /`((\w+) = [^`]+)`/
+      BARE_SPAN = /`(\w+)`/
+
       # Constants the docs name that are not defined in the gem; a stale entry fails.
       CONSTANTS_ALLOWED = {
         'PermissionForge::Cache::RedisCache' => 'migration-guide.md names it as removed'
       }.freeze
+
+      # A link to this repository on GitHub names a file of it: the repository's page (README.md) or a file on main.
+      REPOSITORY_URL = %r{\Ahttps://github\.com/fetijashari/permission_forge(?:/(?:blob|tree)/main/(?<path>[^#?]*))?/?(?:#(?<fragment>.*))?\z}
+      # Where the code prints such a link (the install generator's Quick Start, the initializer template, the admin).
+      CODE_WITH_LINKS = %w[lib/**/*.rb lib/**/*.tt app/**/*.rb app/**/*.erb].freeze
 
       CONSTANT = /\b(PermissionForge(?:::[A-Z]\w*)+)/
       # `config.<name>` as the docs write PermissionForge's options; `Foo.config.adapter` is somebody else's config.
@@ -71,6 +100,17 @@ module PermissionForge
         assert_empty problems, problems.join("\n")
       end
 
+      test 'every link to this repository the code prints names a file and anchor of it' do
+        found = CODE_WITH_LINKS.flat_map { |glob| Dir[ROOT.join(glob).to_s] }.flat_map do |path|
+          File.read(path).scan(%r{https://github\.com/fetijashari/permission_forge[^\s'"`)<>]*}).map do |url|
+            [path.delete_prefix("#{ROOT}/"), url.sub(/[.,;:]+\z/, '')] # a full stop after the link ends the sentence
+          end
+        end
+        problems = found.filter_map { |file, url| (problem = repository_link_problem(url)) && "#{file}: #{problem}" }
+        assert_empty problems, problems.join("\n")
+        assert_includes found.map(&:last), 'https://github.com/fetijashari/permission_forge#quick-start', 'the generator prints the Quick Start link'
+      end
+
       # ---- config.* -----------------------------------------------------------------
 
       test 'every config.<name> the docs name is an option of Configuration' do
@@ -79,6 +119,14 @@ module PermissionForge
         named = DOCS.flat_map { |file| read(file).scan(CONFIG_NAME).flatten }.uniq
         stale = RAILS_CONFIG.keys - named
         assert_empty stale, "RAILS_CONFIG entries no doc names any more: #{stale.inspect}"
+      end
+
+      test 'every option the docs write as `name = value`, or as a bare `name` shaped like an option, is one' do
+        problems = DOCS.flat_map { |file| option_span_problems(file, read(file)) }
+        assert_empty problems, problems.join("\n")
+        named = DOCS.flat_map { |file| read(file).scan(/`(\w+)(?: = [^`]+)?`/).flatten }.uniq
+        stale = NOT_OPTIONS.keys - named
+        assert_empty stale, "NOT_OPTIONS entries no doc names any more: #{stale.inspect}"
       end
 
       # ---- rake tasks -----------------------------------------------------------------
@@ -123,6 +171,18 @@ module PermissionForge
         assert_empty link_problems('docs/fixture.md', "## Twice\n## Twice\n\n[x](#twice-1)")
       end
 
+      test 'a link to this repository on GitHub is checked as the file it names' do
+        assert_equal ['docs/fixture.md:1: missing anchor #no-such (in docs/audit-log.md)'],
+                     link_problems('docs/fixture.md', '[x](https://github.com/fetijashari/permission_forge/blob/main/docs/audit-log.md#no-such)')
+        assert_equal ['docs/fixture.md:1: missing file https://github.com/fetijashari/permission_forge/blob/main/docs/nope.md'],
+                     link_problems('docs/fixture.md', '[x](https://github.com/fetijashari/permission_forge/blob/main/docs/nope.md)')
+        repository = 'https://github.com/fetijashari/permission_forge'
+        assert_empty link_problems('docs/fixture.md', "[x](#{repository}/blob/main/docs/audit-log.md#retention-and-purge) " \
+                                                      "[y](#{repository}/actions/workflows/ci.yml) [z](https://example.com/#x)")
+        assert_equal 'missing anchor #no-such-section (in README.md)', repository_link_problem('https://github.com/fetijashari/permission_forge#no-such-section')
+        assert_nil repository_link_problem('https://github.com/fetijashari/permission_forge#quick-start')
+      end
+
       test 'an unknown config name, task and constant are reported' do
         assert_equal ['fixture.md:1: config.no_such_option is not a Configuration option'],
                      config_name_problems('fixture.md', 'set `config.no_such_option = true`')
@@ -135,13 +195,30 @@ module PermissionForge
         assert_empty constant_problems('fixture.md', '`PermissionForge::Services::MaskValue.call`')
       end
 
+      test 'an option renamed in the docs, written as `name = value` or as a bare name, is reported' do
+        assert_equal ['fixture.md:1: `no_such_option = true` names no Configuration option'],
+                     option_span_problems('fixture.md', 'set `no_such_option = true`')
+        assert_equal ['fixture.md:1: `auto_query_scopin = :off` names no Configuration option'],
+                     option_span_problems('fixture.md', 'With the default `auto_query_scopin = :off` nothing changes')
+        assert_equal ['fixture.md:1: `nil_user_strategies` looks like an option (nil_user_strategy) but is not one'],
+                     option_span_problems('fixture.md', '`nil_user_strategies` (default `:bypass`) decides')
+        assert_equal ['fixture.md:1: `cache_tll` looks like an option (cache_ttl) but is not one'],
+                     option_span_problems('fixture.md', 'lower `cache_tll`')
+        assert_empty option_span_problems('fixture.md', '`nil_user_strategy`, `nil_user_strategy = :deny`, `read_access`, `owner_id = 1`, ' \
+                                                        '`mask_strategy` and `user_ids`')
+      end
+
       test 'a task without a doc, or documented without an env var it reads, is reported' do
         problems = task_documentation_problems('permission_forge:erasure', docs_text: { 'docs/x.md' => '`permission_forge:erasure`' })
-        assert_equal ['permission_forge:erasure: no doc that names it mentions USER_ID, DRY_RUN (lib/tasks/permission_forge_gdpr.rake reads them)'],
-                     problems
+        assert_equal ['permission_forge:erasure: no doc that names it mentions ACTOR, DRY_RUN, REASON, USER_ID ' \
+                      '(lib/tasks/permission_forge_gdpr.rake reads them)'], problems
         assert_equal ['permission_forge:erasure: no doc names it'], task_documentation_problems('permission_forge:erasure', docs_text: {})
-        assert_empty task_documentation_problems('permission_forge:erasure',
+        # ACTOR and REASON are read by RakeAudit, not in the task body: a doc without them is still reported.
+        assert_equal ['permission_forge:erasure: no doc that names it mentions ACTOR, REASON (lib/tasks/permission_forge_gdpr.rake reads them)'],
+                     task_documentation_problems('permission_forge:erasure',
                                                  docs_text: { 'docs/x.md' => 'USER_ID=1 DRY_RUN=false bin/rails permission_forge:erasure' })
+        documented = 'ACTOR=me REASON=t USER_ID=1 DRY_RUN=false bin/rails permission_forge:erasure'
+        assert_empty task_documentation_problems('permission_forge:erasure', docs_text: { 'docs/x.md' => documented })
       end
 
       test 'a wrong default is reported in each phrasing, an unknown option or value is not asserted' do
@@ -168,9 +245,7 @@ module PermissionForge
         problems = []
         outside_fences(text) do |line, number|
           line.scan(/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/).flatten.each do |target|
-            next if target.match?(/\A(?:https?:|mailto:)/)
-
-            problem = link_problem(file, target)
+            problem = target.match?(/\A(?:https?:|mailto:)/) ? repository_link_problem(target) : link_problem(file, target)
             problems << "#{file}:#{number}: #{problem}" if problem
           end
         end
@@ -184,6 +259,15 @@ module PermissionForge
         return nil if fragment.nil? || !resolved.end_with?('.md')
 
         "missing anchor ##{fragment} (in #{resolved})" unless anchors_of(resolved).include?(fragment)
+      end
+
+      # A link to this repository on GitHub (REPOSITORY_URL), checked as the repository file it names; any other
+      # URL is not checked (nil). The repository's own page is its README.md.
+      def repository_link_problem(url)
+        match = url.match(REPOSITORY_URL) or return
+        path = match[:path].presence || 'README.md'
+        problem = link_problem('README.md', [path, match[:fragment]].compact.join('#')) # README.md: a path from the root
+        problem&.sub(/\Amissing file .*/, "missing file #{url}")
       end
 
       # The repository path a link's path names from `file` (the file itself for a bare #anchor).
@@ -244,6 +328,37 @@ module PermissionForge
         end
       end
 
+      # `name = value` must assign an option; a bare `name` that looks like one must be one (or a method of
+      # Configuration). NOT_OPTIONS names the exceptions.
+      def option_span_problems(file, text)
+        text.lines.each_with_index.flat_map do |line, index|
+          (assigned_span_problems(line) + bare_span_problems(line)).map { |problem| "#{file}:#{index + 1}: #{problem}" }
+        end.uniq
+      end
+
+      def assigned_span_problems(line)
+        line.scan(ASSIGNED_SPAN).filter_map do |span, name|
+          "`#{span}` names no Configuration option" unless option?(name) || NOT_OPTIONS.key?(name) || RAILS_CONFIG.key?(name)
+        end
+      end
+
+      def bare_span_problems(line)
+        line.scan(BARE_SPAN).flatten.filter_map do |name|
+          next if options.include?(name) || NOT_OPTIONS.key?(name)
+
+          (like = option_like(name)) && "`#{name}` looks like an option (#{like}) but is not one"
+        end
+      end
+
+      # The writer option a name resembles: the same first two words (of three or more), or within two edits.
+      def option_like(name)
+        words = name.split('_')
+        prefix = "#{words.first(2).join('_')}_" if words.size > 2
+        writers.find { |option| (prefix && option.start_with?(prefix)) || DidYouMean::Levenshtein.distance(option, name) <= 2 }
+      end
+
+      def writers = @writers ||= options.select { |name| option?(name) }.sort
+
       def each_line_match(file, text, pattern)
         text.lines.each_with_index.flat_map do |line, index|
           line.scan(pattern).flatten.filter_map do |capture|
@@ -276,13 +391,14 @@ module PermissionForge
         ["#{name}: no doc that names it mentions #{missing.join(', ')} (#{file} reads them)"]
       end
 
-      # The environment variables each task body reads literally, by the task's short name.
+      # The environment variables each task body reads (RakeTasks.env_keys_read: literally, and ACTOR / REASON
+      # through RakeAudit), by the task's short name.
       def env_reads
         @env_reads ||= TASK_FILES.each_with_object({}) do |path, reads|
           file = path.delete_prefix("#{ROOT}/")
           File.read(path).split(/^(?=\s*task \w+)/).each do |chunk|
             short = chunk[/\A\s*task (\w+)/, 1] or next
-            reads[short] = [file, chunk.scan(/ENV(?:\.fetch\(|\[)'([A-Z_]+)'/).flatten.uniq]
+            reads[short] = [file, RakeTasks.env_keys_read(chunk)]
           end
         end
       end

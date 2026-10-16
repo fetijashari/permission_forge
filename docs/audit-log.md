@@ -422,9 +422,9 @@ config.audit_retention_period = 2.years
 Nothing deletes events on its own. Run the purge from cron, a job or a rake task:
 
 ```bash run
-bin/rails permission_forge:audit_events:purge                              # counts only (a dry run)
-DRY_RUN=false bin/rails permission_forge:audit_events:purge                # deletes
-ACTOR="Ops nightly" REASON="TCK-88" DRY_RUN=false bin/rails permission_forge:audit_events:purge
+DRY_RUN=1 bin/rails permission_forge:audit_events:purge                    # counts only (a dry run)
+bin/rails permission_forge:audit_events:purge                              # deletes
+ACTOR="Ops nightly" REASON="TCK-88" bin/rails permission_forge:audit_events:purge
 ```
 
 ```ruby run
@@ -432,7 +432,7 @@ PermissionForge::Services::AuditEventPurger.call(dry_run: true)
 PermissionForge::Services::AuditEventPurger.call(actor: 'nightly job', reason: 'policy 7.2')
 ```
 
-- `DRY_RUN` decides whether the task deletes: only an explicit `DRY_RUN=false`, `0` or `no` deletes; without it, or with any other value (`1`, `yes`, `TRUE`), the task only counts. A scheduled purge sets `DRY_RUN=false`. `ACTOR=` and `REASON=` name who ran it and why on its `audit.purged` events.
+- `DRY_RUN` decides whether the task deletes: unset (or empty), `false`, `0` or `no` deletes, so a scheduled purge keeps running; any other value (`1`, `true`, `yes`, `TRUE`) only counts. `rake permission_forge:erasure` reads `DRY_RUN` the same way but is a dry run when it is unset. `ACTOR=` and `REASON=` name who ran it and why on its `audit.purged` events.
 - Only events with `occurred_at` strictly before `now - period` are deleted. A Duration is subtracted by the calendar (`30.days` across a daylight-saving change, `1.year`); a number is seconds.
 - Deleted in id batches of 1000, each batch in one transaction with its own `audit.purged` event (`count`, `batch`, `cutoff`, `period_seconds`). A purge with no tenant set while tenancy is on writes one `audit.purged` per tenant whose events the batch deleted, in that tenant and with that tenant's `count` (`across_tenants: true`), plus one without a tenant for untenanted events, so each tenant's auditors see that their log was purged.
 - **`audit.purged` events are never purged.** The record of what was deleted outlives it.

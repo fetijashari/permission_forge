@@ -43,10 +43,7 @@ module PermissionForge
 
       # Pins to a test another branch of this release writes: { 'path#name' => 'why it is not here yet' }.
       # An entry is removed once the test exists (the guard then checks it like any other pin).
-      PENDING_PINS = {
-        'test/permission_forge/tasks/gdpr_erasure_task_test.rb#test DRY_RUN values other than an explicit false are a dry run' =>
-          'written by fix/r5'
-      }.freeze
+      PENDING_PINS = {}.freeze
 
       SECTION = /\A## \[(?<name>[^\]]+)\]/
       HEADING = /\A### (?<name>.+?)\s*\z/

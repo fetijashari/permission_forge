@@ -788,10 +788,10 @@ and the RLS re-sync.
   Hashes and events are additive. A script that matched `Cache cleared: true` matches `Cached permissions removed:`.
   <!-- pin: test/permission_forge/tasks/cache_clear_task_test.rb#with ACTOR and REASON: every holder is invalidated, the event names the actor from rake -->
   <!-- pin: test/permission_forge/tasks/rake_output_test.rb#an erasure on an in-memory store says the running servers kept the cached permissions, in output and event -->
-- **`DRY_RUN=1`, `yes` or `TRUE` now mean a dry run for `rake permission_forge:erasure`; only `DRY_RUN=false`, `0`
-  or `no` executes.** The task treated only the literal `DRY_RUN=true` as a dry run (its default), so `DRY_RUN=1` —
-  the value `audit_events:purge` documents for a dry run — really erased the person. **No opt-out:** an erasure runs
-  only when asked for explicitly.
+- **`DRY_RUN=1`, `yes` or `TRUE` now mean a dry run for `rake permission_forge:erasure` and `audit_events:purge`;
+  only `false`, `0` or `no` executes.** The erasure took only the literal `true` as a dry run, so `DRY_RUN=1` (the
+  purge's documented dry run) erased the person. Unset, each keeps its default: the erasure is a dry run, the purge
+  deletes. **No opt-out:** a value other than an explicit false never deletes.
   <!-- pin: test/permission_forge/tasks/gdpr_erasure_task_test.rb#test DRY_RUN values other than an explicit false are a dry run -->
 - **Service results gained keys (additive).** `ConsentWithdrawalHandler.call` answers the same keys for a real run and
   a dry run (the real run answered `{ revoked_sets:, invalidated: }` only; it now also answers `affected_sets`,

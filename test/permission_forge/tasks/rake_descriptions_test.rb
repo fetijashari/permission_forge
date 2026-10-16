@@ -17,17 +17,11 @@ module PermissionForge
     class RakeDescriptionsTest < ActiveSupport::TestCase
       MAX_FIRST_SENTENCE = 100
       ABBREVIATION = /\b(Art|No|etc|e\.g|i\.e|cf|vs|approx|incl)\z/i
-      ENV_READ = /\bENV(?:\.fetch\(|\[|\.key\?\()\s*['"]([A-Z_]+)['"]/
-      RAKE_AUDIT_READS = %w[ACTOR REASON].freeze
+      ENV_READ = RakeTasks::ENV_READ
 
       def self.tasks = RakeTasks.tasks
 
-      def self.env_keys_read(task)
-        body = RakeTasks.body_of(task)
-        keys = body.scan(ENV_READ).flatten
-        keys += RAKE_AUDIT_READS if body.match?(/RakeAudit\.(changing|reporting)\(/)
-        keys.uniq.sort
-      end
+      def self.env_keys_read(task) = RakeTasks.env_keys_read(RakeTasks.body_of(task))
 
       test 'the gem defines the tasks this lint knows, each with a description' do
         names = self.class.tasks.map(&:name)
