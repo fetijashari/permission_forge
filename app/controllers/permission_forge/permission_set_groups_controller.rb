@@ -30,12 +30,14 @@ module PermissionForge
       @people_counts = PermissionForge::PermissionSetUser.active_assignments.group(:permission_set_id).count
     end
 
-    # "Group saved. No one's access changed." for a change; a save that
-    # changes nothing says so (SaveNotice).
+    # "Group saved. No one's access changed." for a change; an unchanged
+    # group is not saved, and says so (SaveNotice).
     def update
       attrs = group_params
       return redirect_to(group_page, alert: t('permission_forge.errors.admin.group_blank')) if blank_name?(attrs)
-      return redirect_to(group_page, alert: PermissionForge::Admin::ErrorSentence.first(@group.errors)) unless @group.update(attrs)
+
+      saved = pf_save_changed(@group, attrs, &:save)
+      return redirect_to(group_page, alert: PermissionForge::Admin::ErrorSentence.first(@group.errors)) unless saved
 
       redirect_to group_page, **pf_save_flash(@group) { t('permission_forge.flash.groups.updated') }
     end

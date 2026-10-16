@@ -1985,14 +1985,19 @@ none.** (code and API clients that create without a name, or with a blank one), 
   No one's access changed.", the Conditions tab "Activation conditions saved.", an applied batch "Saved 0 changes", and
   an end date set to the one the assignment had restated it — none of them changed a row or wrote an audit event (field
   test round 8, B#70). "The save changed something" has one definition, `RecordsAuditEvents#saved_audited_changes?`
-  (saved changes minus the bookkeeping columns), which also decides whether the change event is written; the admin's
-  flash goes through `SaveNotice#pf_save_flash` (a record, or whether a batched edit applied any change), with no cache
-  note when nothing was done. The group keeps its sentence for a change that affects nobody. The key moved from
-  `flash.permission_sets.no_changes` to `flash.no_changes`.
-  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#every admin form that saves a record, submitted unchanged, says No changes to save and writes no event -->
-  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#a save that changes something still says what it saved -->
+  (saved changes minus the bookkeeping columns), which also decides whether the change event is written, with its twin
+  before the save, `#audited_changes_pending?`: the admin saves a record only when it holds such a change
+  (`SaveNotice#pf_save_changed`), so an unchanged submit no longer invalidates every holder's cached permissions (Rails
+  runs the commit callbacks of a save that wrote nothing). The flash goes through `SaveNotice#pf_save_flash`, with no
+  cache note; an apply whose every requested change was refused says why, as the review step does. The group keeps its
+  sentence for a change that affects nobody. The key moved from `flash.permission_sets.no_changes` to
+  `flash.no_changes`.
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#every admin form that saves a record, submitted unchanged, says No changes to save, writes no event, keeps the cache -->
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#every walked form submitted with a change says what it saved, writes one event, invalidates the holder -->
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#an apply whose every change was refused says why, as the review does -->
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#no admin controller decides by itself whether a save changes something -->
   <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#every template with a PATCH form is classified: walked as a save, or why it is not one -->
-  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: a save changed something (RecordsAuditEvents#saved_audited_changes?) -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: a save changed something (RecordsAuditEvents#saved_audited_changes?, #audited_changes_pending?) -->
 - **The rule builder names a relationship path in the page's language.** Under the relationship picker it printed
   `field_accessor_path: ownr` — the column's name — in every locale, while the banner and the picker's label said
   "Relationship" in the page's language (field test round 8, B#95); it reads "Relationship path: `ownr`" (en, sq, mk).

@@ -34,12 +34,11 @@ module PermissionForge
     end
 
     # A blank label over a generated one, or a blank over nothing, is no
-    # change (Admin::Prefill.posted); a save that changes nothing says so
-    # (SaveNotice).
+    # change (Admin::Prefill.posted); an unchanged action is not saved, and
+    # says so (SaveNotice).
     def update
       attrs = PermissionForge::Admin::Prefill.posted_attributes(@action_record, action_params.except(:name), :label, :description)
-      @action_record.assign_attributes(attrs)
-      @action_record.save!
+      pf_save_changed(@action_record, attrs, &:save!)
       redirect_to pf_back_or(resource_path),
                   **pf_save_flash(@action_record) { t('permission_forge.flash.actions.updated', action: @action_record.display_name) }
     end

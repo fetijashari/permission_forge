@@ -47,7 +47,7 @@ module PermissionForge
       return redirect_to(return_path, **pf_save_flash(false)) if expires_at == :invalid
       return if widening_refused?(expires_at)
 
-      outcome = cache_outcome { @assignment.update!(expires_at: expires_at) }
+      outcome = cache_outcome { pf_save_changed(@assignment, { expires_at: expires_at }, &:save!) }
       redirect_to return_path, **pf_save_flash(@assignment) { cache_flash_text(outcome, end_changed_notice(expires_at)) }
     end
 

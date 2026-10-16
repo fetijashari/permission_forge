@@ -24,17 +24,19 @@ module PermissionForge
     end
 
     # The flash of an applied batched edit: how many changes, for whom, and
-    # what the cache store confirmed (CacheConfirmation) — or "No changes to
-    # save." when it applied none (SaveNotice).
+    # what the cache store confirmed (CacheConfirmation) — or, when it
+    # applied none, what the review step says (#pf_nothing_to_save_flash:
+    # "No changes to save.", or why each requested change was refused).
     #
-    # @param changes [Array] what ChangeSet#apply! applied
+    # @param change_set [PermissionForge::Admin::ChangeSet] after #apply!
     # @param outcome [PermissionForge::Cache::Outcome]
     # @return [Hash] for redirect_to
-    def pf_applied_flash(changes, outcome)
-      pf_save_flash(changes.any?) do
-        people = helpers.pf_people_text(pf_people_count(@permission_set))
-        cache_flash_text(outcome, t('permission_forge.flash.permission_sets.saved', count: changes.size, people: people))
-      end
+    def pf_applied_flash(change_set, outcome)
+      changes = change_set.changes
+      return pf_nothing_to_save_flash(change_set) if changes.empty?
+
+      people = helpers.pf_people_text(pf_people_count(@permission_set))
+      cache_flash_text(outcome, t('permission_forge.flash.permission_sets.saved', count: changes.size, people: people))
     end
   end
 end

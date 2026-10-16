@@ -1,5 +1,6 @@
 require_relative 'admin_test_case'
 require_relative 'rendered_forms'
+require_relative '../../support/static_guard'
 
 module PermissionForge
   module Html
@@ -46,7 +47,24 @@ module PermissionForge
         @rule = create_permission_set_rule(permission_set: @set, resource: @resource, name: 'Own customers',
                                            field_name: 'domain', field_value: 'acme.test', include_nulls: false)
         @group = create_permission_set_group(name: 'Sales', description: 'Front line')
-        @set.update!(allowed_ips: '10.0.0.0/8', requires_session_flag: 'mfa')
+        @set.update!(allowed_ips: '10.0.0.0/8', requires_session_flag: 'mfa', permission_set_group: @group)
+      end
+
+      # Ana holds @set: her cached permissions, built and stored.
+      def warm_holder_cache
+        PermissionForge.cache.clear
+        User.find(@ana.id).permissions_hash
+        assert holder_cached?, 'the holder has a cached entry'
+      end
+
+      def holder_cached? = PermissionForge.cache.read(@ana.send(:permission_cache_key)).present?
+
+      # [what it said, the events it wrote, whether the holder's entry was kept] of the block's submit.
+      def submit_outcome
+        warm_holder_cache
+        before = AuditEvent.unscoped.pluck(:id)
+        yield
+        [[flash[:notice], flash[:alert]].compact, AuditEvent.unscoped.where.not(id: before).pluck(:event), holder_cached?]
       end
 
       def base = "/permission_sets/#{@set.id}"
@@ -75,32 +93,107 @@ module PermissionForge
         ]
       end
 
-      test 'every admin form that saves a record, submitted unchanged, says No changes to save and writes no event' do
+      # Review of the round-8 fix: an unchanged record was still saved, and
+      # Rails runs the commit callbacks of a save that wrote nothing — every
+      # holder's cached permissions were invalidated (InvalidatesInBatch,
+      # PermissionSetUser). An unchanged record is not saved now
+      # (SaveNotice#pf_save_changed).
+      test 'every admin form that saves a record, submitted unchanged, says No changes to save, writes no event, keeps the cache' do
         no_changes = I18n.t('permission_forge.flash.no_changes')
         failures = unchanged_submits.filter_map do |label, page, action, options|
-          before = AuditEvent.unscoped.pluck(:id)
-          submit_as_rendered(page, action, **(options || {}))
-          events = AuditEvent.unscoped.where.not(id: before).pluck(:event)
-          said = [flash[:notice], flash[:alert]].compact
-          "#{label}: said #{said.inspect}, wrote #{events.inspect}" unless said == [no_changes] && events.empty?
+          said, events, kept = submit_outcome { submit_as_rendered(page, action, **(options || {})) }
+          next if said == [no_changes] && events.empty? && kept
+
+          "#{label}: said #{said.inspect}, wrote #{events.inspect}, #{kept ? 'kept' : 'invalidated'} the holder's cache"
         end
 
         assert_empty failures, failures.join("\n")
       end
 
-      test 'a save that changes something still says what it saved' do
-        submit_as_rendered("#{resource_base}/actions/#{@action.id}", "#{resource_base}/actions/#{@action.id}",
-                           'resource_action[label]' => 'Export CSV')
-        assert_equal I18n.t('permission_forge.flash.actions.updated', action: 'Export CSV'), flash[:notice]
+      def saved_text(count = 1) = I18n.t('permission_forge.flash.permission_sets.saved', count: count, people: '1 person')
 
-        submit_as_rendered("#{resource_base}/rules/#{@rule.id}/edit", "#{resource_base}/rules/#{@rule.id}", 'rule[value]' => 'other.test')
-        assert_equal I18n.t('permission_forge.flash.rules.updated', rule: 'Own customers'), flash[:notice]
+      # [label, the submit, the flash it starts with, the one event it writes] of
+      # every walked form, each with a change (the review steps save nothing).
+      def changed_submits # rubocop:disable Metrics/AbcSize,Metrics/MethodLength -- one row per form
+        field = "#{resource_base}/fields/email"
+        action = "#{resource_base}/actions/#{@action.id}"
+        rule = "#{resource_base}/rules/#{@rule.id}"
+        [
+          ['field drawer', -> { submit_as_rendered(field, field, 'field[level]' => 'read') }, saved_text, 'resource_field.updated'],
+          ['field drawer: apply recommendation', lambda {
+            @email.update_columns(mask_access: false) # no event of its own
+            submit_as_rendered(field, field, to: "#{field}/apply_recommendation", '_method' => 'post')
+          }, I18n.t('permission_forge.flash.fields.recommendation_applied', field: 'email'), 'resource_field.updated'],
+          ['action form', -> { submit_as_rendered(action, action, 'resource_action[label]' => 'Export CSV') },
+           I18n.t('permission_forge.flash.actions.updated', action: 'Export CSV'), 'resource_action.updated'],
+          ['rule builder', -> { submit_as_rendered("#{rule}/edit", rule, 'rule[value]' => 'other.test') },
+           I18n.t('permission_forge.flash.rules.updated', rule: 'Own customers'), 'permission_set_rule.updated'],
+          ['group page', -> { submit_as_rendered("/groups/#{@group.id}", "/groups/#{@group.id}", 'group[description]' => 'Back office') },
+           I18n.t('permission_forge.flash.groups.updated'), 'permission_set_group.updated'],
+          ['Conditions tab', -> { submit_as_rendered("#{base}?tab=conditions", "#{base}/conditions", 'allowed_ips' => '10.0.0.0/8 192.168.0.0/16') },
+           I18n.t('permission_forge.flash.permission_sets.conditions_saved'), 'permission_set.updated'],
+          ['set page: apply', lambda {
+            submit_as_rendered(base, "#{base}/review", to: "#{base}/apply", '_method' => 'patch', 'pf[set][description]' => 'New desc')
+          }, saved_text, 'permission_set.updated'],
+          ['Resource page: apply', lambda {
+            submit_as_rendered(resource_base, "#{resource_base}/review", to: "#{resource_base}/apply", '_method' => 'patch',
+                                                                         "pf[resources][#{@resource.id}][delete_access]" => '1')
+          }, saved_text, 'resource.updated'],
+          ["person's end date", -> { submit_as_rendered("/people/#{@ana.id}", "/assignments/#{@assignment.id}", 'expiry' => '30d') },
+           "Ana Krasniqi's access to Sales rep", 'assignment.changed'],
+          ['Assignments tab end date', -> { submit_as_rendered("#{base}?tab=assignments", "/assignments/#{@assignment.id}", 'expiry' => '1w') },
+           "Ana Krasniqi's access to Sales rep", 'assignment.changed']
+        ]
+      end
 
-        submit_as_rendered("/groups/#{@group.id}", "/groups/#{@group.id}", 'group[description]' => 'Back office')
-        assert_equal I18n.t('permission_forge.flash.groups.updated'), flash[:notice], 'a change that affects nobody keeps its sentence'
+      test 'every walked form submitted with a change says what it saved, writes one event, invalidates the holder' do
+        failures = changed_submits.filter_map do |label, submit, said_start, event|
+          said, events, kept = submit_outcome(&submit)
+          next if said.size == 1 && said.first.start_with?(said_start) && events == [event] && !kept
 
-        submit_as_rendered("#{base}?tab=conditions", "#{base}/conditions", 'allowed_ips' => '10.0.0.0/8 192.168.0.0/16')
-        assert_equal I18n.t('permission_forge.flash.permission_sets.conditions_saved'), flash[:notice]
+          "#{label}: said #{said.inspect}, wrote #{events.inspect}, #{kept ? 'kept' : 'invalidated'} the holder's cache"
+        end
+
+        assert_empty failures, failures.join("\n")
+      end
+
+      # Review of the round-8 fix: a batched edit sent straight to apply
+      # whose every change is refused (Edit with Read off) says why, as the
+      # review step does — not a bare "No changes to save.".
+      test 'an apply whose every change was refused says why, as the review does' do
+        @resource.update!(read_access: false, edit_access: false)
+        params = { pf: { resources: { @resource.id => { read_access: '0', edit_access: '1' } } }, locale: 'en' }
+        reason = I18n.t('permission_forge.ui.changes.not_applied_read', resource: 'Customer',
+                                                                        flag: I18n.t('permission_forge.ui.flags_short.edit_access'))
+
+        %W[#{resource_base}/apply #{base}/apply].each do |path|
+          patch pf(path), params: params
+          assert_equal I18n.t('permission_forge.flash.permission_sets.nothing_applied', reasons: reason), flash[:alert], path
+          assert_nil flash[:notice], path
+        end
+        assert_not @resource.reload.edit_access
+      end
+
+      # Whether a save changes something is decided by RecordsAuditEvents
+      # (#audited_changes_pending? before, #saved_audited_changes? after,
+      # through SaveNotice); an admin controller reading dirty tracking
+      # itself would decide it a second way.
+      DIRTY_READS = /(?:\b|_)(?:changed\?|saved_change_to_\w+|will_save_change_to_\w+)/
+      DIRTY_READ_ALLOWED = [
+        ['app/controllers/permission_forge/settings_controller.rb', /row\.changed\?/,
+         'a Settings row differs from the default (Admin::SettingsCatalog), no record'],
+        ['app/controllers/permission_forge/api/permission_sets_controller.rb', /permission_set_group_id_changed\?/,
+         'the lock check of a group move (EditableLock.locked_group_for_move) before the save, not its outcome']
+      ].freeze
+
+      test 'no admin controller decides by itself whether a save changes something' do
+        scope = { globs: %w[app/controllers/**/*.rb], needle: DIRTY_READS }
+        hits = StaticGuard.scan(**scope, allowlist: DIRTY_READ_ALLOWED)
+
+        assert_empty hits.map(&:to_s)
+        StaticGuard.assert_allowlist_current(self, **scope, allowlist: DIRTY_READ_ALLOWED)
+        assert_match DIRTY_READS, StaticGuard.code_of('return unless @rule.changed?'), 'the needle bites a bare changed?'
+        assert_match DIRTY_READS, StaticGuard.code_of('flash = saved_change_to_label? ? a : b'), 'and saved_change_to_*'
       end
 
       test 'every template with a PATCH form is classified: walked as a save, or why it is not one' do

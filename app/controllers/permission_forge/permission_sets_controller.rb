@@ -87,9 +87,9 @@ module PermissionForge
     end
 
     def apply
-      changes = nil
-      outcome = cache_outcome { changes = change_set.apply! }
-      redirect_to back_to_set, **pf_applied_flash(changes, outcome)
+      applied = change_set
+      outcome = cache_outcome { applied.apply! }
+      redirect_to back_to_set, **pf_applied_flash(applied, outcome)
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to back_to_set, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end
@@ -131,7 +131,7 @@ module PermissionForge
       @conditions_form = PermissionForge::Admin::ConditionsForm.new(params) # the re-render reads it back
       attrs = @conditions_form.attributes
       @condition_errors = @conditions_form.errors
-      if @condition_errors.empty? && @permission_set.update(attrs)
+      if @condition_errors.empty? && pf_save_changed(@permission_set, attrs, &:save) # unchanged: not saved (SaveNotice)
         return redirect_to permission_forge.permission_set_path(@permission_set, tab: 'conditions'),
                            **pf_save_flash(@permission_set) { t('permission_forge.flash.permission_sets.conditions_saved') }
       end

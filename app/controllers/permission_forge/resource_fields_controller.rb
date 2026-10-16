@@ -25,12 +25,12 @@ module PermissionForge
     def update
       attrs = pf_boolean_attributes(pf_require_hash(:field).permit(:level, :mask_strategy, :label, :description, :is_active).to_h,
                                     :is_active)
-      changes = nil
+      applied = nil
       outcome = cache_outcome do
-        changes = apply_field_changes(attrs)
+        applied = apply_field_changes(attrs)
         finish_new_field(attrs) unless @field
       end
-      redirect_to pf_back_or(resource_path), **pf_applied_flash(changes, outcome)
+      redirect_to pf_back_or(resource_path), **pf_applied_flash(applied, outcome)
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to field_path, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end
@@ -53,9 +53,9 @@ module PermissionForge
       return redirect_to(field_path) unless match
 
       level = @permission_set.is_muting ? 'mask' : 'masked'
-      changes = apply_field_changes('level' => level, 'mask_strategy' => match.strategy)
+      applied = apply_field_changes('level' => level, 'mask_strategy' => match.strategy)
       redirect_to pf_back_or(field_path),
-                  **pf_save_flash(changes.any?) { t('permission_forge.flash.fields.recommendation_applied', field: @key) }
+                  **pf_save_flash(applied.changes.any?) { t('permission_forge.flash.fields.recommendation_applied', field: @key) }
     end
 
     private
@@ -75,13 +75,15 @@ module PermissionForge
 
     # Applies `attrs` to this field through a ChangeSet; an unconfigured column
     # is created at attrs['level'].
+    #
+    # @return [PermissionForge::Admin::ChangeSet] the applied change set
     def apply_field_changes(attrs)
       change_params = if @field
                         { fields: { @field.id.to_s => attrs } }
                       else
                         { new_fields: { @resource.id.to_s => { @key => { 'level' => attrs['level'] } } } }
                       end
-      PermissionForge::Admin::ChangeSet.new(permission_set: @permission_set, params: change_params).apply!
+      PermissionForge::Admin::ChangeSet.new(permission_set: @permission_set, params: change_params).tap(&:apply!)
     end
 
     # Filter rules (no relationship) on this field.
