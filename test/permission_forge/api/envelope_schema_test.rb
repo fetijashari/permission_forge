@@ -38,12 +38,11 @@ module PermissionForge
         'permission_set_users#create' => { user_id: '' }, 'permission_set_users#bulk' => { bulk_action: 'nope', user_ids: [1] },
         'permission_set_groups#create' => { permission_set_group: 'x' }, 'permission_set_groups#update' => { permission_set_group: 'x' },
         'permission_set_group_users#create' => { user_id: '' },
+        'permission_sets#clone' => { name: ['Copy'] }, 'permission_set_groups#clone' => { name: true },
         'audit_events#index' => { from: '2026-02-30' }
       }.freeze
       # Mutating routes that read nothing a client can get wrong.
       NO_UNPROCESSABLE = {
-        'permission_sets#clone' => 'an unreadable name is the default copy name',
-        'permission_set_groups#clone' => 'an unreadable name is the default copy name',
         'unmatched_routes#show' => 'answers its 404 to everything'
       }.freeze
       # Mutating routes the lock on their record does not refuse (a 403

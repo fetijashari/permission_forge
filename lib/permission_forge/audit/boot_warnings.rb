@@ -31,7 +31,8 @@ module PermissionForge
         PermissionForge::Warnings.emit(:audit_actor_shared_login,
                                        'The admin UI uses HTTP Basic auth and audit_actor_resolver is not set: ' \
                                        'every change is attributed to the shared login. Set ' \
-                                       'config.audit_actor_resolver to return the signed-in admin.')
+                                       'config.audit_actor_resolver to return the signed-in admin.',
+                                       audience: :server)
       end
 
       # The missing-table warning (Audit logs it once per process). Its

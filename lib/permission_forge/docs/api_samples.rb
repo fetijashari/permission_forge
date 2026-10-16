@@ -59,6 +59,8 @@ module PermissionForge
         %w[expires_at api.errors.not_iso8601_time], %w[permission_set api.errors.section_missing],
         %w[bulk_action api.errors.bulk_action_invalid], %w[user_ids api.errors.user_ids_missing],
         %w[user_id api.errors.user_not_found], %w[grant_all api.errors.boolean_invalid],
+        %w[is_active api.errors.boolean_invalid], %w[name api.errors.text_shape],
+        %w[field_value api.errors.field_value_shape],
         %w[base api.errors.field_generation_failed]
       ].freeze
 

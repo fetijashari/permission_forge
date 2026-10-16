@@ -58,6 +58,17 @@ module PermissionForge
                                                       status: :see_other
     end
 
+    # A flag the admin cannot read (ParamShapes::InvalidFlag: not true or
+    # false, where the forms post "0" and "1"): back to the page like the
+    # uniqueness race, saying which flag, nothing changed. ActiveModel's
+    # cast read any other word as true; this is never that, nor a 500. (Any
+    # other InvalidParam, a date the admin cannot read, stays a 400.)
+    rescue_from PermissionForge::ParamShapes::InvalidFlag do |error|
+      redirect_back_or_to permission_forge.root_path,
+                          alert: t('permission_forge.flash.invalid_param', param: error.param, detail: error.detail),
+                          allow_other_host: false, status: :see_other
+    end
+
     helper PermissionForge::ApplicationHelper unless self < PermissionForge::ApplicationHelper
     helper_method :pf_fragment?, :pf_theme, :pf_help_visible?, :pf_current_admin,
                   :pf_attention, :pf_settings_catalog, :pf_back_or

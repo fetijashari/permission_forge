@@ -17,9 +17,12 @@ sq:
         bulk_action_invalid: duhet të jetë assign ose revoke
         expires_at_past: duhet të jetë në të ardhmen
         field_generation_failed: Fushat për këtë burim nuk mund të gjenerohen
+        field_value_shape: duhet të jetë varg, numër, true ose false; listë e tyre
+          (asnjë me presje) vetëm për in, not_in dhe between
         flag_shape: duhet të jetë varg ose null
         forbidden: E ndaluar
         hour_shape: duhet të jetë numër i plotë nga 0 deri në 23, ose null
+        integer_shape: duhet të jetë numër i plotë
         ip_list_empty: nuk ka asnjë hyrje; dërgoni null për ta hequr kushtin
         ip_list_shape: duhet të jetë varg ose listë vargjesh (adresa IP ose diapazone
           CIDR), ose null
@@ -38,6 +41,7 @@ sq:
           ose config.api_stats_require_admin = false
         tenant_required: Kjo kërkesë nuk ka qiramarrës. API-ja e administrimit shërben
           një qiramarrës në një kohë.
+        text_shape: duhet të jetë varg
         unauthorized: Nuk jeni i autentikuar
         user_id_invalid: nuk është id përdoruesi
         user_id_missing: mungon
@@ -483,6 +487,7 @@ sq:
         set_added: "“%{set}” u zhvendos në këtë grupim."
         set_removed: "“%{set}” u hoq nga ky grupim."
         updated: Grupimi u ruajt. Qasja e askujt nuk ndryshoi.
+      invalid_param: "%{param} %{detail}. Asgjë nuk u ndryshua."
       locked_widening: 'Ky grup lejesh është i kyçur: qasja mund të hiqet ose të shkurtohet,
         jo të jepet ose të zgjatet.'
       locked_widening_muting: 'Ky grup lejesh heshtës është i kyçur: mbajtësit mund

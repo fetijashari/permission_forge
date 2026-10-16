@@ -34,12 +34,66 @@ module PermissionForge
         @detail = detail
         super("#{@param} #{detail}")
       end
+
+      # The field-keyed messages of the API's 422 (`{ "expires_at" => [...] }`).
+      #
+      # @return [Hash{String => Array<String>}]
+      def messages = { param => [detail] }
+    end
+
+    # A flag that is not true or false (ParamShapes.boolean): the API
+    # answers it like any InvalidParam (422 keyed by it); the admin, whose
+    # forms post "0" and "1", goes back with a flash and changes nothing
+    # (ApplicationController).
+    #
+    # @api private
+    class InvalidFlag < InvalidParam
+      # @param param [String, Symbol] the flag, e.g. "is_active"
+      def initialize(param)
+        super(param, I18n.t('permission_forge.api.errors.boolean_invalid'))
+      end
     end
 
     # What a boolean parameter is read as: JSON's true and false, their
-    # strings, and 1 / 0 as a number or a string (see #pf_boolean_param).
+    # strings, and 1 / 0 as a number or a string (see .boolean).
     BOOLEANS = { true => true, 'true' => true, 1 => true, '1' => true,
                  false => false, 'false' => false, 0 => false, '0' => false }.freeze
+
+    # The words a boolean is also sent as, in any case: what a form posts
+    # (`on` for a checkbox without a value; `off`) and the letters
+    # PostgreSQL and ActiveModel write (`t`, `f`).
+    BOOLEAN_WORDS = { 'true' => true, 't' => true, 'on' => true, '1' => true,
+                      'false' => false, 'f' => false, 'off' => false, '0' => false }.freeze
+
+    # The one reading of a boolean the admin and the API take: BOOLEANS,
+    # or a String that is one of BOOLEAN_WORDS in any case. Anything else
+    # ("yes", "nope", "", 2, 1.5, a list) is no boolean: a reader refuses
+    # it (InvalidParam), never takes it for true as ActiveModel's cast does.
+    #
+    # @return [Boolean, nil] nil when the value is no boolean
+    def self.boolean(value)
+      return BOOLEANS[value] if BOOLEANS.key?(value)
+
+      BOOLEAN_WORDS[value.downcase] if value.is_a?(String)
+    end
+
+    # A flag `key` as true or false (.boolean).
+    #
+    # @raise [InvalidFlag] for anything else
+    # @return [Boolean]
+    def self.flag(key, value)
+      read = boolean(value)
+      read.nil? ? raise(InvalidFlag, key) : read
+    end
+
+    # `attrs` with each of `keys` it has read as a flag (.flag), in place.
+    #
+    # @raise [InvalidFlag] keyed by the first flag that is no boolean
+    # @return [Hash, ActionController::Parameters] attrs
+    def self.flags(attrs, keys)
+      keys.map(&:to_s).select { |key| attrs.key?(key) }.each { |key| attrs[key] = flag(key, attrs[key]) }
+      attrs
+    end
 
     # The time an ISO 8601 String names, in Time.zone: see IsoTime.
     #
@@ -131,15 +185,26 @@ module PermissionForge
       Array.wrap(params[key]).filter_map { |value| PermissionForge::Admin::RecordId.cast(value) }
     end
 
-    # params[key] as true or false (BOOLEANS); false when it is absent or null.
+    # params[key] as true or false (ParamShapes.boolean); false when it is
+    # absent or null.
     #
-    # @raise [InvalidParam] for anything else ("yes", "", 2, a list): a value
+    # @raise [InvalidFlag] for anything else ("yes", "", 2, a list): a value
     #   that cannot be read must never be taken for false
     def pf_boolean_param(key)
       value = params[key]
       return false if value.nil?
 
-      BOOLEANS.fetch(value) { raise InvalidParam.new(key, I18n.t('permission_forge.api.errors.boolean_invalid')) }
+      ParamShapes.flag(key, value)
+    end
+
+    # `attrs` (an attribute hash of a form) with each of `keys` it has read
+    # as true or false (ParamShapes.flags): the admin's flags. ActiveModel
+    # would read "nope" as true.
+    #
+    # @raise [InvalidFlag] keyed by the attribute for anything else (the
+    #   admin answers it with a flash: nothing is changed)
+    def pf_boolean_attributes(attrs, *keys)
+      ParamShapes.flags(attrs, keys)
     end
 
     # The time params[key] names (an ISO 8601 date or date-time, IsoTime),

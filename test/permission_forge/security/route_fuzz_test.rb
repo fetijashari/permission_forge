@@ -89,7 +89,19 @@ module PermissionForge
         'permission_forge/api/permission_set_users#create' => { 'user_id' => :keyed_refusal, 'expires_at' => :keyed_refusal_or_no_end },
         'permission_forge/api/permission_set_group_users#create' => { 'user_id' => :keyed_refusal },
         'permission_forge/api/resources#generate_fields' => { 'grant_all' => :keyed_refusal },
-        'permission_forge/api/permission_set_users#bulk' => { 'bulk_action' => :keyed_refusal }
+        'permission_forge/api/permission_set_users#bulk' => { 'bulk_action' => :keyed_refusal, 'user_ids' => :keyed_refusal },
+        'permission_forge/api/permission_sets#clone' => { 'name' => :keyed_refusal_unless_text },
+        'permission_forge/api/permission_set_groups#clone' => { 'name' => :keyed_refusal_unless_text }
+      }.freeze
+      # The shapes no attribute of an API section takes, and the ones only
+      # some do (Api::InputShapes): a list or an object never; `true` only a
+      # boolean column or a rule's value; `1.5` only a rule's value.
+      WRONG_SHAPES = { 'list' => ['x'], 'object' => { 'a' => '1' }, 'true' => true, 'fraction' => 1.5 }.freeze
+      # The model each API attribute section writes.
+      SECTION_MODELS = {
+        'permission_set' => PermissionForge::PermissionSet, 'permission_set_group' => PermissionForge::PermissionSetGroup,
+        'resource' => PermissionForge::Resource, 'resource_field' => PermissionForge::ResourceField,
+        'resource_action' => PermissionForge::ResourceAction, 'permission_set_rule' => PermissionForge::PermissionSetRule
       }.freeze
       # Shapes that are a positive whole number: a page they name is a page.
       NUMERIC_SHAPES = %w[huge overbig].freeze
@@ -262,6 +274,18 @@ module PermissionForge
           assert_empty stored_nuls, "#{verb.upcase} #{path} stored a NUL byte"
         end
 
+        if controller.start_with?('permission_forge/api') && verb != 'get'
+          test "#{format('%03d', index)} #{verb.upcase} #{spec} (#{controller}##{action}) answers a wrong shape of each " \
+               'section attribute with a 422 keyed by it' do
+            path = build_path(spec, controller)
+            failures = valid_contexts(controller, action).flat_map do |base|
+              sections_of(base).flat_map { |section, attributes| wrong_shape_failures(verb, path, base, section, attributes) }
+            end
+
+            assert_empty failures, "#{verb.upcase} #{path}"
+          end
+        end
+
         next if controller.start_with?('permission_forge/api')
 
         test "#{format('%03d', index)} #{verb.upcase} #{spec} (#{controller}##{action}) answers any Accept header below 500" do
@@ -297,6 +321,32 @@ module PermissionForge
         assert_includes FuzzParams.read_by('permission_forge/audit_events'), 'correlation_id'
         assert_includes FuzzParams.sections['rule'], 'remove_step'
         assert_includes FuzzParams.sections['permission_set_rule'], 'include_nulls'
+        assert_includes FuzzParams.read_by('permission_forge/api/permission_sets'), 'permission_set'
+      end
+
+      # The API reads its sections through pf_record_attributes: the scan
+      # must find every key each one takes, or the single passes above stop
+      # poisoning them without a word. Each API route's valid request runs
+      # once with Api::InputShapes.call recording what it was asked to read.
+      test 'the parameter scan finds every key pf_record_attributes takes' do
+        taken = Hash.new { |hash, key| hash[key] = [] }
+        original = PermissionForge::Api::InputShapes.method(:call)
+        replace_singleton_method(PermissionForge::Api::InputShapes, :call) do |attrs, model, keys, **options|
+          taken[model] |= keys.map(&:to_s)
+          original.call(attrs, model, keys, **options)
+        end
+        self.class.routes.each do |verb, spec, controller, action|
+          next unless controller.start_with?('permission_forge/api') && verb != 'get'
+
+          valid_contexts(controller, action).each { |base| status_of(verb, build_path(spec, controller), base, as: :json) }
+        end
+      ensure
+        replace_singleton_method(PermissionForge::Api::InputShapes, :call, original) if original
+        assert_equal SECTION_MODELS.values.sort_by(&:name), taken.keys.sort_by(&:name), 'every API section was read'
+        taken.each do |model, keys|
+          section = SECTION_MODELS.key(model)
+          assert_empty keys - FuzzParams.sections.fetch(section, []), "#{section}: keys the scan does not find"
+        end
       end
 
       # --- the uniqueness race -------------------------------------------------
@@ -474,6 +524,36 @@ module PermissionForge
         return keyed_refusal_failure(param, shape, status, json) unless shape == 'blank'
 
         "#{status}: #{json.to_s[0, 160]}" unless status == 201
+      end
+
+      # [attribute shape: answer] for each wrong shape (WRONG_SHAPES) of each
+      # attribute of `section` that is not a 422 keyed by the attribute, the
+      # rest of the request valid, as JSON.
+      def wrong_shape_failures(verb, path, base, section, attributes)
+        model = SECTION_MODELS.fetch(section)
+        attributes.flat_map do |attribute|
+          WRONG_SHAPES.except(*taken_shapes(model, attribute)).filter_map do |shape, value|
+            send(verb, path, params: base.merge(section => base[section].merge(attribute => value)), as: :json)
+            failure = keyed_refusal_failure(attribute, shape, response.status, JSON.parse(response.body))
+            "#{section}[#{attribute}] #{shape}: #{failure}" if failure
+          end
+        end
+      end
+
+      # The WRONG_SHAPES an attribute takes: `true` for a boolean column,
+      # `true` and `1.5` for a rule's value (a JSON scalar is its text).
+      def taken_shapes(model, attribute)
+        return %w[true fraction] if model == PermissionForge::PermissionSetRule && attribute == 'field_value'
+
+        model.columns_hash[attribute]&.type == :boolean ? %w[true] : []
+      end
+
+      # Text is read (a copy's name: created, or the name's own 422); anything
+      # else is a 422 keyed by the parameter.
+      def keyed_refusal_unless_text_failure(param, shape, status, json)
+        return keyed_refusal_failure(param, shape, status, json) unless POISON.fetch(shape).is_a?(String)
+
+        "#{status}: #{json.to_s[0, 160]}" unless status == 201 || (status == 422 && json.dig('error', 'messages', param))
       end
 
       def nested(value)

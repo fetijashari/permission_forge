@@ -68,7 +68,8 @@ module PermissionForge
     end
 
     def action_params
-      pf_require_hash(:resource_action).permit(:name, :label, :description, :is_permitted, :is_active)
+      pf_boolean_attributes(pf_require_hash(:resource_action).permit(:name, :label, :description, :is_permitted, :is_active),
+                            :is_permitted, :is_active)
     end
 
     # "Export CSV " => "export_csv"

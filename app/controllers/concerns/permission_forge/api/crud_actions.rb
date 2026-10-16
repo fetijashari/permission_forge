@@ -16,7 +16,7 @@ module PermissionForge
     #     def collection_scope = @resource.resource_fields
     #     def current_record = @field
     #     def serializer_type = :resource_field
-    #     def record_params = pf_require_hash(:resource_field).permit(:name, :label)
+    #     def record_params = pf_record_attributes(:resource_field, PermissionForge::ResourceField, :name, :label)
     #   end
     module CrudActions
       extend ActiveSupport::Concern
@@ -71,7 +71,8 @@ module PermissionForge
       # @return [Symbol] key for serializer_for()
       def serializer_type = raise(NotImplementedError, "#{self.class}#serializer_type")
 
-      # @return [ActionController::Parameters] permitted params
+      # @return [ActiveSupport::HashWithIndifferentAccess] the attributes, in
+      #   their shapes (BaseController#pf_record_attributes)
       def record_params = raise(NotImplementedError, "#{self.class}#record_params")
 
       # @return [ActiveRecord::Base] new record built from collection_scope and params

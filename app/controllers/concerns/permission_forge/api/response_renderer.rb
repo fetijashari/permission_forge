@@ -67,7 +67,7 @@ module PermissionForge
 
       def input_error_messages(error)
         case error
-        when PermissionForge::ParamShapes::InvalidParam then { error.param => [error.detail] }
+        when PermissionForge::ParamShapes::InvalidParam then error.messages
         when ActionController::ParameterMissing
           { error.param.to_s => [I18n.t('permission_forge.api.errors.section_missing')] }
         else { 'base' => [error.message] }

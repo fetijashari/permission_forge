@@ -22,7 +22,8 @@ module PermissionForge
     end
 
     def update
-      attrs = pf_require_hash(:field).permit(:level, :mask_strategy, :label, :description, :is_active).to_h
+      attrs = pf_boolean_attributes(pf_require_hash(:field).permit(:level, :mask_strategy, :label, :description, :is_active).to_h,
+                                    :is_active)
       changes = nil
       outcome = cache_outcome do
         changes = apply_field_changes(attrs)

@@ -99,7 +99,8 @@ module PermissionForge
     end
 
     def group_params
-      pf_require_hash(:group).permit(:name, :description, :is_active).tap { |attrs| strip_name!(attrs) }
+      attrs = pf_require_hash(:group).permit(:name, :description, :is_active).tap { |permitted| strip_name!(permitted) }
+      pf_boolean_attributes(attrs, :is_active)
     end
 
     def strip_name!(attrs)

@@ -26,6 +26,10 @@ module PermissionForge
   # - severity: every Warnings.emit key is in SEVERITY with the severity its
   #   site passes, and a reason when that is :config (SECURITY = access wider
   #   than configured, or a change unrecorded);
+  # - audience: every key is in AUDIENCE with the audience its site passes,
+  #   and a reason when that is :server (a warning about the admin or the API
+  #   this process serves: a runner, a rake task, a console or a job serves
+  #   neither, so it gets the log only — round 7, a-onboarding #23);
   # - policy: the emitter with an injected environment, server flag, generator
   #   flag, logger and io writes where POLICY says, and once per key on the
   #   terminal. The dummy app booted as a development runner proves the
@@ -126,6 +130,30 @@ module PermissionForge
       'unscoped_detection_raise_in_production' => [:config, 'raising fails closed: an outage risk, not wider access']
     }.freeze
 
+    # Per Warnings.emit key (the static part of an interpolated one): the
+    # audience its site passes. :all (the default) is every process; :server
+    # needs its reason — what the warning is about that only a process
+    # serving the admin or the API has. Every other warning describes data,
+    # the cache or the models, which a runner, a rake task or a job uses too.
+    SERVER_ONLY = 'outside a server process it goes to the log only'
+    AUDIENCE = {
+      'basic_auth_without_credentials' => [:server, 'the 401 is what the admin screens answer; a runner serves none, and ' \
+                                                    'the credentials are often set for the server process only (PF_ADMIN_*)'],
+      'audit_actor_shared_login' => [:server, 'the actor of a change made in the admin screens; a runner, a rake task ' \
+                                              'or a job records its own actor (with_audit_actor)'],
+      'api_only_admin' => [:server, 'the middlewares the admin screens need in the process that serves them'],
+      'tenantless_admin' => [:server, 'what the admin and the API serve without a tenant'],
+      'api_authorization_gap' => [:server, 'what the JSON API lets its callers change'],
+      'audit_events_off' => [:all], 'audit_table_missing' => [:all], 'audit_table_unchecked' => [:all],
+      'conditional_sets_without_context' => [:all], 'join_rules_not_auto_scoped' => [:all], 'rls_policy_drift' => [:all],
+      'rls_not_postgresql' => [:all], 'virtual_readers.unmasked.' => [:all], 'masked_models.unknown_listed.' => [:all],
+      'masked_models.unmaskable.' => [:all], 'masking_sync_incomplete_at_boot' => [:all], 'masking_sync.token_not_taken.' => [:all],
+      'masking_sync_store_failed' => [:all], 'masking_sync_failed' => [:all], 'cache_process_local' => [:all],
+      'cache_unannounced_masking' => [:all], 'model_bindings.' => [:all], 'unmasked_gdpr_fields' => [:all],
+      'boot_check_skipped.' => [:all], 'database_unreachable' => [:all], 'cache_stale_permissions' => [:all],
+      'cache_development_masking' => [:all], 'unscoped_detection_raise_in_production' => [:all]
+    }.freeze
+
     DEVELOPMENT = ActiveSupport::EnvironmentInquirer.new('development')
     TEST = ActiveSupport::EnvironmentInquirer.new('test')
     PRODUCTION = ActiveSupport::EnvironmentInquirer.new('production')
@@ -144,6 +172,20 @@ module PermissionForge
       [PRODUCTION, false, false, false] => %i[log terminal], # console, runner, rake, seed, a job worker
       [PRODUCTION, false, false, true] => %i[log],
       [PRODUCTION, true, true, false] => [],
+      [PRODUCTION, false, true, false] => []
+    }.freeze
+
+    # A :server warning: the policy above in a server process, the log alone
+    # in any other (a console, a runner, a rake task, a seed, a job worker).
+    SERVER_POLICY = {
+      [DEVELOPMENT, false, false, false] => %i[log],
+      [DEVELOPMENT, true, false, false] => %i[log terminal],
+      [DEVELOPMENT, true, false, true] => %i[log],
+      [DEVELOPMENT, false, true, false] => [],
+      [DEVELOPMENT, true, true, false] => [],
+      [TEST, true, false, false] => %i[log],
+      [PRODUCTION, true, false, false] => %i[log],
+      [PRODUCTION, false, false, false] => %i[log],
       [PRODUCTION, false, true, false] => []
     }.freeze
 
@@ -182,6 +224,55 @@ module PermissionForge
       assert_empty SEVERITY.keys.reject { |name| sites.any? { |key, _, _| key == name || key.start_with?(name) } },
                    'stale SEVERITY entries'
       assert_equal :security, PermissionForge::ModelBindings::SEVERITY[:tenant_model]
+    end
+
+    # ---- audiences ------------------------------------------------------------
+
+    test 'every warning has its audience in AUDIENCE, the one its site passes, and a reason when it is server' do
+      sites = emit_sites
+      problems = sites.filter_map do |key, _severity, where, audience|
+        entry = AUDIENCE.find { |name, _| key == name || (name.end_with?('.') && key.start_with?(name)) }&.last
+        next "#{where} #{key}: not in AUDIENCE" unless entry
+
+        expected, reason = entry
+        next "#{where} #{key}: AUDIENCE says #{expected}, the site passes #{audience}" unless audience == expected.to_s
+
+        "#{where} #{key}: a :server warning needs its reason" if expected == :server && reason.to_s.strip.empty?
+      end
+
+      assert_empty problems
+      assert_equal SEVERITY.keys.sort, AUDIENCE.keys.sort, 'every warning has a severity and an audience'
+      assert_equal %w[api_authorization_gap api_only_admin audit_actor_shared_login basic_auth_without_credentials tenantless_admin],
+                   AUDIENCE.select { |_, (audience)| audience == :server }.keys.sort
+    end
+
+    test 'a server warning is written where the server policy table says' do
+      SERVER_POLICY.each do |(env, server, generator, on_terminal), expected|
+        logger = ActiveSupport::Logger.new(on_terminal ? $stdout : StringIO.new)
+        context = PermissionForge::Warnings::Context.new(env: env, server: server, generator: generator, logger: logger)
+
+        assert_equal expected, PermissionForge::Warnings.channels(context, audience: :server),
+                     "env=#{env} server=#{server} generator=#{generator} logger on terminal=#{on_terminal}"
+        policy = POLICY[[env, server, generator, on_terminal]]
+        assert_equal policy, PermissionForge::Warnings.channels(context), 'every other warning keeps the policy' if policy
+      end
+    end
+
+    test 'a development runner logs a server warning and keeps it off standard error; a server prints it' do
+      io = StringIO.new
+      log = capture_rails_log do
+        emitter(io, env: DEVELOPMENT, server: false).emit(:test_admin, 'the admin answers 401.', audience: :server)
+      end
+      assert_includes log, '[PermissionForge] the admin answers 401.'
+      assert_empty io.string
+
+      capture_rails_log { emitter(io, env: DEVELOPMENT, server: true).emit(:test_admin_served, 'served.', audience: :server) }
+      assert_equal "[PermissionForge] served.\n", io.string
+    end
+
+    test 'the audience is one of the table' do
+      assert_raises(ArgumentError) { emitter(StringIO.new, env: DEVELOPMENT).emit(:test_bad, 'x', audience: :nobody) }
+      assert_equal %i[all server], PermissionForge::Warnings::AUDIENCES
     end
 
     test 'the allow-list and the canonical file are current' do
@@ -300,12 +391,35 @@ module PermissionForge
 
     # ---- which process this is -------------------------------------------------
 
-    test 'a server process is one bin/rails server or the puma command started' do
+    # Each constant is what the server's own command loads before it boots
+    # the app, never what `require "<gem>"` (Bundler.require in a runner)
+    # loads: Puma::CLI (not puma), Unicorn::Launcher (bin/unicorn and
+    # bin/unicorn_rails, not unicorn), PhusionPassenger::App (Passenger's
+    # rack loaders, not phusion_passenger), Falcon::Command (bin/falcon and
+    # bin/falcon-host, not falcon). Pitchfork has no such constant
+    # (SERVER_PROGRAMS, below).
+    test 'a server process is one bin/rails server or a web server command started' do
       assert_not_predicate PermissionForge::Warnings, :server_process?, 'the test runner'
-      assert_equal %w[Rails::Server Puma::CLI], PermissionForge::Warnings::SERVER_COMMANDS
+      assert_equal %w[Rails::Server Puma::CLI Unicorn::Launcher PhusionPassenger::App Falcon::Command],
+                   PermissionForge::Warnings::SERVER_COMMANDS
 
-      with_constant('Rails::Server') { assert_predicate PermissionForge::Warnings, :server_process? }
+      PermissionForge::Warnings::SERVER_COMMANDS.each do |name|
+        with_constant(name) { assert_predicate PermissionForge::Warnings, :server_process?, name }
+      end
       assert_not_predicate PermissionForge::Warnings, :server_process?
+    end
+
+    # Pitchfork's command defines no constant of its own (bin/pitchfork
+    # requires what `require "pitchfork"` does): the program name says it.
+    test 'a process the pitchfork command started is a server' do
+      assert_equal %w[pitchfork], PermissionForge::Warnings::SERVER_PROGRAMS
+      program = $PROGRAM_NAME
+      $PROGRAM_NAME = '/srv/app/bin/pitchfork'
+      assert_predicate PermissionForge::Warnings, :server_process?
+      $PROGRAM_NAME = '/usr/local/bin/pitchfork-not'
+      assert_not_predicate PermissionForge::Warnings, :server_process?
+    ensure
+      $PROGRAM_NAME = program
     end
 
     test 'generator_running? has one definition, which BootChecks and Audit::BootWarnings delegate to' do

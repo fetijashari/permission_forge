@@ -20,7 +20,7 @@ module PermissionForge
       end
 
       def record_params
-        pf_require_hash(:resource_action).permit(:name, :label, :description, :is_permitted, :is_active)
+        pf_record_attributes(:resource_action, PermissionForge::ResourceAction, :name, :label, :description, :is_permitted, :is_active)
       end
 
       # A create or a rename must also name a valid action key. Checked after

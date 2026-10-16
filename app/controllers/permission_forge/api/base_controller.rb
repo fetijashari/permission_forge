@@ -165,6 +165,34 @@ module PermissionForge
         scope.find_by!(identifier => value)
       end
 
+      # The attributes of the body section `section` an endpoint writes to
+      # `model`: those of `keys` it has, each in its shape (Api::InputShapes,
+      # the one shape table). The other keys of the section go through
+      # strong parameters' own handling of keys an action does not take
+      # (logged, or raised under action_on_unpermitted_parameters = :raise).
+      #
+      # @param record [ActiveRecord::Base, nil] the record an update changes
+      # @return [ActiveSupport::HashWithIndifferentAccess]
+      # @raise [ActionController::ParameterMissing] the section is missing,
+      #   empty or not an object (a 422 keyed by it)
+      # @raise [InputShapes::Refused] a value of the wrong shape (a 422 keyed
+      #   by each such attribute)
+      def pf_record_attributes(section, model, *keys, record: nil)
+        attrs = pf_require_hash(section)
+        attrs.except(*keys.map(&:to_s)).permit
+        InputShapes.call(attrs, model, keys, record: record)
+      end
+
+      # The `name` of a copy: text without NUL bytes and surrounding white
+      # space, '' when absent or null (the caller's default name).
+      #
+      # @raise [InputShapes::Refused] for anything else (true, a number, a
+      #   list, an object), keyed by name: never silently the default name
+      def pf_copy_name
+        InputShapes.check!(:name, params[:name], :text)
+        pf_text_param(:name)
+      end
+
       # `attrs` with the reference `key` (e.g. permission_set_group_id)
       # replaced by the id of the record it names in `scope`, looked up like
       # every identifier (tenant-scoped): its numeric id, or — under

@@ -17,9 +17,12 @@ en:
         bulk_action_invalid: must be assign or revoke
         expires_at_past: must be in the future
         field_generation_failed: Could not generate fields for this resource
+        field_value_shape: must be a string, a number, true or false; a list of them
+          (none with a comma) only for in, not_in and between
         flag_shape: must be a string or null
         forbidden: Forbidden
         hour_shape: must be a whole number from 0 to 23, or null
+        integer_shape: must be a whole number
         ip_list_empty: has no entry; send null to clear the condition
         ip_list_shape: must be a string or an array of strings (IP addresses or CIDR
           ranges), or null
@@ -36,6 +39,7 @@ en:
           or config.api_stats_require_admin = false
         tenant_required: No tenant is set for this request. The admin API serves one
           tenant at a time.
+        text_shape: must be a string
         unauthorized: Not authenticated
         user_id_invalid: is not a user id
         user_id_missing: is missing
@@ -473,6 +477,7 @@ en:
         set_added: Moved “%{set}” into this group.
         set_removed: Removed “%{set}” from this group.
         updated: Group saved. No one's access changed.
+      invalid_param: "%{param} %{detail}. Nothing was changed."
       locked_widening: 'This Permission Set is locked: access can be removed or shortened,
         not given or extended.'
       locked_widening_muting: 'This Muting Permission Set is locked: holders can be
