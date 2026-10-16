@@ -20,7 +20,18 @@ module DocsApp
       %w[config/initializers db/migrate log tmp public].each { |dir| FileUtils.mkdir_p(File.join(root, dir)) }
       Dir.chdir(root)
       define(api_only: api_only, serve: serve)
+      importmap_macro!
       Rails.application.initialize!
+    end
+
+    # Rails 8.1's generated ApplicationController calls importmap-rails'
+    # `stale_when_importmap_changes` (the documented one keeps the line). The
+    # docs app serves no assets and does not load that gem: here the macro
+    # does nothing.
+    def importmap_macro!
+      ActiveSupport.on_load(:action_controller_base) do
+        define_singleton_method(:stale_when_importmap_changes) { |*| nil } unless respond_to?(:stale_when_importmap_changes)
+      end
     end
 
     def define(api_only:, serve:)

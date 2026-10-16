@@ -239,8 +239,8 @@ With `auto_query_scoping = :filter_only` the scope is decided when the relation 
 When `PermissionForge.current_user` returns nil (e.g., in background jobs, seeds, console), row-level rules are bypassed by default:
 
 ```ruby fragment
-Current.user = nil
-Customer.find_by(uuid: 'abc')  # Returns the record, no rules applied
+Current.reset             # Rails 8's Current: no session, so Current.user is nil
+Customer.find_by(id: 1)   # Returns the record, no rules applied
 ```
 
 This is intentional — system-level code shouldn't be blocked by user permissions. It's also configurable via `config.nil_user_strategy`: `:bypass` (default), `:deny` (returns nil), or `:raise` (raises `NotAuthorizedError`). The read-path equivalent for `FiltersResponseAttributes` is `config.response_filter_nil_user_strategy` (`:bypass` default / `:block`). Model masking follows `config.masked_attributes_nil_user_strategy` (`:bypass` default / `:hide`).

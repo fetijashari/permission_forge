@@ -236,7 +236,7 @@ end
 
 ## Privacy Defaults
 
-When `config.gdpr_defaults = true` (the default since v0.5.0), the `ResourceFieldGenerator` automatically applies masking to fields matching known privacy-sensitive patterns. This only applies at field **creation** time — it never overwrites admin changes.
+When `config.gdpr_defaults = true` (the default since v0.5.0), a field that looks like personal data (`PermissionForge::SensitiveColumns`: `gdpr_field_patterns`, plus the columns your `filter_parameters` name while `filter_parameters_integration` is on) is created **Masked when it is granted Read-only** — by the admin's Read-only preset, "Add all new as Read-only", the Fields tab's bulk add and the field drawer — and its recommended mask strategy is recorded on every generated row. A row created Hidden stays Hidden (a privacy default never grants); full access masks nothing (next paragraph). This only applies at field **creation** time — it never overwrites admin changes.
 
 Full access is the exception (since 0.15.0): `ResourceFieldGenerator.call(grant_all: true)`, `Resource.grant_full_access!`, `ResourceWithFieldsBuilder`, the API's `generate_fields` with `grant_all` and the admin's "Full access" preset apply no mask. The fields are still flagged as personal data — `GdprFieldAuditor` / `rake permission_forge:audit_masks` report them as `unmasked_field`, and the admin's Home lists them under "Privacy audit" — so you decide, field by field, which to mask (or confirm "This is intended"). The recommended strategy is stored on the row (`mask_strategy`), so masking it later uses the right one.
 
@@ -249,12 +249,14 @@ PermissionForge.configure do |config|
   config.gdpr_defaults = false
 end
 
-# With gdpr_defaults enabled (the default), auto-generated fields get masks applied
+# With gdpr_defaults enabled (the default), ResourceFieldGenerator.call(resource:)
+# creates every field Hidden with the recommended strategy on the personal-data
+# ones; open them Read-only in the admin and they start Masked
 PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)
-# email field → read_access: true, mask_access: true, mask_strategy: 'email'
-# phone field → read_access: true, mask_access: true, mask_strategy: 'last4'
-# name field  → read_access: true, mask_access: true, mask_strategy: 'first1_last4'
-# (other fields: no access)
+# email field → read_access: false, mask_access: false, mask_strategy: 'email'
+# phone field → read_access: false, mask_access: false, mask_strategy: 'last4'
+# name field  → read_access: false, mask_access: false, mask_strategy: 'first1_last4'
+# (other fields: no access, mask_strategy: 'full')
 
 # Full access applies no mask; the recommended strategy is kept for later
 PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: true)
@@ -314,9 +316,11 @@ report = PermissionForge::Services::GdprFieldAuditor.call
 ```bash fragment
 bundle exec rake permission_forge:audit_masks
 # Exits with status 1 if issues found — integrate into your CI pipeline
+ACTOR="CI" REASON="nightly privacy check" bundle exec rake permission_forge:audit_masks
+# ACTOR= and REASON= name who ran it and why on the report.generated event the run records
 ```
 
-The auditor is read-only — it reports gaps for admin review without auto-fixing, preserving intentional admin overrides.
+The auditor is read-only — it reports gaps for admin review without auto-fixing, preserving intentional admin overrides. Each line of the report names why the column counts as personal data: `matches 'email'` (the GDPR pattern that matched) or `named by filter_parameters`.
 
 **Detect GDPR pattern drift:**
 
@@ -357,7 +361,7 @@ PermissionForge::PermissionSetRule.create!(
   field_name: 'owner_id',
   field_value: 'current_user',     # Substituted with the current user's id at runtime;
                                    # any other value is compared in the column's type, and
-                                   # one the column cannot hold makes the rule match nothing
+                                   # one the column cannot hold is refused on save
   operator: 'equal',
   include_nulls: true              # Also match NULL values
 )

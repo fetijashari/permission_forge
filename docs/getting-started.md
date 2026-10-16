@@ -5,7 +5,7 @@ This guide walks you through setting up PermissionForge in a fresh Rails app fro
 ## Prerequisites
 
 Before you begin, make sure you have:
-- A Rails 7.1+ application
+- A Rails 7.1+ application. Steps 1–7 work on 7.1 and later. [Wiring a scaffold](#wiring-a-scaffold) and [Using Rails 8's authentication generator](#using-rails-8s-authentication-generator) show the code Rails 8 generates (`params.expect`, `bin/rails generate authentication`, `Current.session`); each says what to write on Rails 7.x
 - Ruby 3.2+
 - A `User` model (any model works, but we'll use `User` in examples; it needs no `uuid` column)
 - A shared cache store for production (Redis, Memcached or Solid Cache through `Rails.cache`); in development, `config.cache_store = :file_store, "tmp/cache/store"` lets a change made from a console or rake task reach the running server (Rails' default `:memory_store` is per process; see [Cache Consistency](./configuration.md#cache-consistency))
@@ -215,6 +215,26 @@ entry[:fields]
 
 A controller made by `bin/rails generate scaffold` needs a few changes before the permissions show in it. Masked fields appear masked right away, which makes the first run look protected while it is not:
 
+- **Include the two concerns.** The model needs `PermissionScopedFindable` for its row-level rules (the controller below calls `Customer.permission_scoped`), and `ApplicationController` needs `ControllerActionGuard`, which checks the resource's CRUD flags before each REST action of every controller that inherits from it (`index` and `show` need `read_access`, ...; see [Controller Actions](./controller-actions.md)). Masking needs nothing here: it is applied to a model as soon as a Resource row names it (`auto_apply_masked_attributes`). The model, with the scaffold's `belongs_to :owner` pointed at `User` (`owner:references` names no model of its own):
+
+  ```ruby file=app/models/customer.rb
+  class Customer < ApplicationRecord
+    include PermissionForge::Concerns::PermissionScopedFindable
+
+    belongs_to :owner, class_name: 'User'
+  end
+  ```
+
+  And one line in `ApplicationController`, after `include Authentication` when you use Rails 8's authentication generator (the session must be resumed before the guard runs). [Handling Denials](./row-level-rules.md#rescuing-them-yourself) shows the whole file, with the handler that answers a denial in your layout; read [Using Rails 8's authentication generator](#using-rails-8s-authentication-generator) before you deploy it — the guard also reaches the sign-in page:
+
+  ```ruby fragment
+  class ApplicationController < ActionController::Base
+    include Authentication
+    include PermissionForge::Concerns::ControllerActionGuard # after Authentication
+    # ... the rest of the file as the generator wrote it
+  end
+  ```
+
 - **Row-level rules and the write path.** `PermissionScopedFindable` applies the user's rules to the class-level `find_by` / `find_by!` and to `permission_scoped` only. The scaffold's `Customer.all` (index) and `Customer.find` (`set_customer`) ignore them: every user lists every row and opens any record by its URL. And the scaffold's `customer_params` saves every column the form posts, whatever the user's field rows say. The controller as generated, with the three lines changed (the guard in `ApplicationController` checks the resource's CRUD flags for each REST action; the rules narrow the rows; `PermitsAttributes` drops the fields the user may not edit):
 
   ```ruby file=app/controllers/customers_controller.rb
@@ -291,6 +311,8 @@ A controller made by `bin/rails generate scaffold` needs a few changes before th
   end
   ```
 
+  On Rails 7.x, where the scaffold has no `params.expect`, the two private methods read `Customer.find_by!(id: params[:id])` and `permitted = params.require(:customer).permit(:name, :email, :phone, :status, :notes, :owner_id)`; the rest is the same (an older scaffold writes `:unprocessable_entity` where this one writes `:unprocessable_content`: the same 422).
+
   Or turn on [query scoping](./query-scoping.md) (`auto_query_scoping = :filter_only`) so that `all` and `find` are scoped too. `PermitsAttributes` returns a plain Hash with the keys the user's field rows let through (a key without a row is dropped under the default `unconfigured_field_strategy = :block`); see [Field Filtering](./field-filtering.md) for telling the user what was not saved.
 - **JSON views.** The scaffold's jbuilder partial calls `json.extract!`, which calls each getter: a field the user may not read comes out as `"notes": null`, so a client cannot tell hidden from empty. `as_json` leaves out a field whose row is **Hidden** (read off; `omit_hidden_in_attributes_hash`, the default), so build the partial from it. `only:` is the column list the scaffold's `json.extract!` line had (here a `Customer` scaffold with `name`, `email`, `phone`, `status`, `notes` and `owner:references`), so the JSON keeps its shape:
 
@@ -300,7 +322,7 @@ A controller made by `bin/rails generate scaffold` needs a few changes before th
   json.url customer_url(customer, format: :json)
   ```
 
-  A column with **no row at all** is not left out. The default `unconfigured_field_strategy = :block` refuses it too, but `as_json` keeps its key with `null` (see [Unconfigured fields](./masked-attributes.md#unconfigured-fields)). Step 5 creates rows for `name` and `email` only, so `phone`, `status`, `notes`, `owner_id` and the timestamps come out as `null`. Give every column a row, so that each one is either readable or left out: the admin's **Sync fields with model** ("Add all new as Hidden", "… as Read-only" or "… with full access"), or in a console `PermissionForge::Services::ResourceFieldGenerator.call(resource: customer_resource)`. The generator adds a row for each column that has none: Hidden, `created_at` / `updated_at` included, except, under `gdpr_defaults` (on by default), columns that look like personal data (readable, masked); `grant_all: true` makes them all readable and editable, unmasked, and the timestamps read-only (see [Rails timestamps](./masked-attributes.md#rails-timestamps)). Then open the fields the set should read.
+  A column with **no row at all** is not left out. The default `unconfigured_field_strategy = :block` refuses it too, but `as_json` keeps its key with `null` (see [Unconfigured fields](./masked-attributes.md#unconfigured-fields)). Step 5 creates rows for `name` and `email` only, so `phone`, `status`, `notes`, `owner_id` and the timestamps come out as `null`. Give every column a row, so that each one is either readable or left out: the admin's **Sync fields with model** ("Add all new as Hidden", "… as Read-only" or "… with full access"), or in a console `PermissionForge::Services::ResourceFieldGenerator.call(resource: customer_resource)`. The generator adds a row for each column that has none: Hidden, `created_at` / `updated_at` included — also the columns that look like personal data, which get their recommended mask strategy on the row for when you open them (through 0.14.1 they came back readable and masked). `grant_all: true` makes them all readable and editable, unmasked, and the timestamps read-only (see [Rails timestamps](./masked-attributes.md#rails-timestamps)). The admin's **Sync fields with model** writes the same rows: "Add all new as Hidden" is the generator without `grant_all`, "… with full access" is `grant_all: true`, and "… as Read-only" starts the personal-data columns Masked under `gdpr_defaults`. Then open the fields the set should read.
 
 - **HTML views.** The scaffold's `_customer.html.erb` prints a label and a getter for each column, so a field the user may not read still shows its label with a blank value (`Notes:` and nothing after it). Ask the user's field permissions and skip those fields, with a helper:
 
@@ -353,7 +375,7 @@ Restart the server with `PF_ADMIN_USER` and `PF_ADMIN_PASSWORD` set and open `ht
 
 ## Using Rails 8's authentication generator
 
-If your app was set up with `bin/rails generate authentication`, the generated `current_user_resolver` already reads its `Current.user`, so it needs no change. Three things to know:
+`bin/rails generate authentication` is Rails 8's (on Rails 7.x use your own sign-in or Devise, and point `current_user_resolver` at its user: see [Step 3](#step-3-configure-the-gem)). If your app was set up with it, the generated `current_user_resolver` already reads its `Current.user`, so it needs no change. Three things to know:
 
 - **The guard in `ApplicationController` guards the sign-in page too.** The generator's `SessionsController` maps to its `Session` model, so with `ControllerActionGuard` included in `ApplicationController` and `action_guard_nil_user_strategy = :deny` (what the install generator writes), a signed-out visitor is refused the sign-in form. The symptom: nobody can sign in, and Sign out ends the session but lands on the refused sign-in page. With the [Handling Denials](./row-level-rules.md#rescuing-them-yourself) handler that page is the 403 page ("You are not allowed to see this page. Sign in to see it.") where the form should be; with a handler that answers an empty 403, **Sign out seems to do nothing**: the page stays as it was, "Signed in as …" still in the header. Leave the sign-in pages out of the guard in the initializer:
 

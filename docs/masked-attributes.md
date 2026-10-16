@@ -345,7 +345,7 @@ Unknown strategy values fall back to `:block` (fail closed), never pass-through.
 
 ### Rails timestamps
 
-Generating fields gives Rails' timestamps (`created_at`, `updated_at`, `created_on`, `updated_on`) a row, so under `:block` a reader who is granted them reads them as stored instead of `nil`. Through 0.14.1 they were in `ignored_fields` and got no row: every reader, admin included, saw `null`. All the paths that generate rows treat them alike — `ResourceFieldGenerator` (also `Resource.grant_full_access!` and `generate_fields` in the API) and the admin's presets, "Add all new" and "Sync fields":
+Generating fields gives Rails' timestamps (`created_at`, `updated_at`, `created_on`, `updated_on`) a row, so under `:block` a reader who is granted them reads them as stored instead of `nil`. Through 0.14.1 they were in `ignored_fields` and got no row: every reader, admin included, saw `null`. All the paths that generate rows treat them alike — `ResourceFieldGenerator` (also `Resource.grant_full_access!` and `generate_fields` in the API) and the admin's presets, "Add all new", "Sync fields" and the Fields tab's bulk add (through 0.14.1 the bulk add did not). All of them build the row in one place (`ResourceFieldGenerator::RowBuilder`), so the level, the privacy default and the timestamp rule cannot drift between them:
 
 | On a granting Permission Set, the level chosen | A timestamp row |
 |---|---|

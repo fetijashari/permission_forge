@@ -202,10 +202,10 @@ PermissionForge::PermissionSetUser.create!(permission_set: pset, user: user)
 Only `name` has a field row here. A column with no row is refused by the default
 `unconfigured_field_strategy = :block`: its getter returns `nil` and `as_json` keeps the key as `null` (a Hidden row,
 read off, leaves the key out). `PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)` gives every
-column without a row one: Hidden, `created_at` / `updated_at` included, except the columns that look like personal data,
-which are readable and masked under the default `gdpr_defaults`. With `grant_all: true` every row is readable and
-editable, unmasked, and the timestamps read-only. The admin's "Sync fields with model" adds the rows at a level you
-pick. Then open the ones the set should read.
+column without a row one: Hidden, `created_at` / `updated_at` included — also the columns that look like personal
+data, which get their recommended mask strategy on the row. With `grant_all: true` every row is readable and editable,
+unmasked, and the timestamps read-only. The admin's "Sync fields with model" adds the rows at a level you pick (under
+the default `gdpr_defaults`, "… as Read-only" starts the personal-data columns Masked). Then open the ones the set should read.
 
 Each change invalidates the cached permissions of the users it affects; the next read rebuilds them. The admin UI
 (mounted at `/permissions` in [Installation](#installation)) does the same through forms.
@@ -264,7 +264,9 @@ and the preset as a commented line with what it costs. The rows that need your c
 | `base_controller_class` / `api_base_controller_class` | With tenancy on, a request with no current tenant is refused (403) | Controllers that authenticate and set the tenant |
 | `user_active_check` | Only reported by the security audit; an inactive user keeps every grant | Revoke the assignments of users you deactivate |
 
-Upgrading from 0.13: once the last 0.13 process is gone, run `bin/rails permission_forge:cache:clear` (see the
+Upgrading to 0.15: run `bin/rails permission_forge:audit` before you deploy (see the
+[Migration Guide](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015)).
+From 0.13: once the last 0.13 process is gone, run `bin/rails permission_forge:cache:clear` (see the
 [CHANGELOG](https://github.com/fetijashari/permission_forge/blob/main/CHANGELOG.md)).
 
 Already closed by default, keep them so: `api_require_authorization = true` (API changes need

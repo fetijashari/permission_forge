@@ -1,5 +1,99 @@
 # Migration Guide
 
+## Upgrading to 0.15
+
+**What an existing 0.14 install must run:** nothing for the database — 0.15 adds no table and no column, and `bin/rails generate permission_forge:upgrade` adds no migration a 0.14 install does not have. Run the audit before you deploy, re-sync RLS policies after (PostgreSQL only), and read the behaviour changes below. An app still on 0.13 upgrades to 0.14 first ([below](#upgrading-from-013-to-014)).
+
+### Before the deploy: run the audit
+
+Run the 0.15 security audit against your data before production runs 0.15 — from a branch with the new gem against a copy of the data, or on a staging deploy: the 0.14 audit does not know most of these findings. It changes no permission data (it records one `report.generated` event):
+
+```bash fragment
+bin/rails permission_forge:audit
+```
+
+It lists the rows 0.15 reads differently. Fix them before production sees the new behaviour:
+
+| Finding | What 0.15 does with such a row |
+|---------|--------------------------------|
+| `missing_rule_columns` | A rule naming a column, table or association path that is not there matches nothing (its holders are denied every record), and is refused when created or changed. |
+| `unknown_rule_operators` | A rule with an operator or join type this version does not know matches nothing. |
+| `unusable_rule_values` | A rule whose value its column cannot hold matches nothing, and a new or changed one is refused. On PostgreSQL this now includes `uuid` / `inet` / `cidr` / native enum values PostgreSQL could not read (they raised before), date or time text PostgreSQL cannot read, a LIKE operator on a non-text column, and every rule on a `json` / `jsonb` / array column under an operator other than `is_null` / `is_not_null`. |
+| `secret_rule_columns` | A rule comparing a password digest, a token, an encrypted value or a secret keeps applying, but a new one, or a change of its column, is refused. |
+| `incomplete_conditions` | An activation condition the validation refuses (a bad IP entry, one hour of the two, the same hour twice) is unjudgeable: a Muting Permission Set applies to every request, a granting set never passes. |
+| `variant_rows_conflict` | An explicit field row for a variant name (`owner_uuid` next to `owner_id`) now decides that name, whichever row is older. |
+| `dependency_violations` | A row that skips a required permission (edit without read, Modify All without View All), written past the validation, no longer grants the dependent permission. |
+| `unknown_mask_strategies` | A field masked with a strategy this app does not know is masked fully. |
+
+### Behaviour changes
+
+Each with its opt-out, or why there is none. The [CHANGELOG](../CHANGELOG.md) has the full list.
+
+1. **`include_nulls` defaults to `false`** for a rule made in code, through the API and in the admin's builder (before, the column default `true` let the NULL rows of a rule created in code or through the API through). Stored rules keep their value. **Opt out:** pass `include_nulls: true` (code, API) or tick "Also show records where … is empty" in the builder, per rule. See [The `include_nulls` Flag](row-level-rules.md#the-include_nulls-flag).
+2. **Rules on a column that holds a secret are refused** when created or when their column, path, join type or resource changes. **Opt out:** `config.rule_secret_column_patterns = []`, or a narrower list.
+3. **A rule value its column cannot hold is refused on save** (`field_value`: "is not a value Customer.owner_id can hold"; 422 in the API). **No opt-out:** such a rule could only deny every record; stored ones keep matching nothing and are listed by `unusable_rule_values`. See [A value the column cannot hold](row-level-rules.md#a-value-the-column-cannot-hold).
+4. **PostgreSQL types rule values more closely:** date or time text in another notation than ISO 8601 and column types without a caster (`hstore`, `money`, `interval`, `macaddr`, `xml`, ...) are asked of PostgreSQL once per process — what it cannot read matches nothing and is refused on save (it raised for every holder); a LIKE operator matches text columns only; a uuid in braces, after `urn:uuid:` or without hyphens is read as the uuid it holds. **No opt-out:** such a rule never matched a row; a custom operator still gets the value as written. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
+5. **A rule on a `json`, `jsonb` or array column matches nothing** under every built-in operator but `is_null` / `is_not_null`. **Opt out:** register a custom operator (`operator_registry:`), which receives the value as written.
+6. **The field generator writes fewer rows.** `ResourceFieldGenerator.call(resource:)` (also the API's `generate_fields` without `grant_all`) creates the personal-data columns Hidden like the others, with their recommended mask strategy on the row (they were readable and masked), and on a Muting Permission Set writes no row at all. `grant_all: true` gives every field full access, unmasked. Rows already written are not changed. **Opt out:** add the personal-data columns Read-only in the admin (under `gdpr_defaults` they start Masked), or generate with `grant_all: true` and mask what `rake permission_forge:audit_masks` lists.
+7. **Generated rows give `created_at` / `updated_at` a row** (at most read-only on a granting set); right after the upgrade the admin lists them as not configured on every existing Resource until you sync its fields. **Opt out:** `config.ignored_fields += %w[created_at updated_at]`.
+8. **An explicit field row for a variant name decides that name**, and **a broken activation condition is unjudgeable** (see the table above). **No opt-out:** the explicit row is what the admin wrote; a lockdown that never locked was the defect.
+9. **An unrescued denial answers 403** (`NotAuthorizedError`, `ActionNotAuthorizedError`), not 500; in production an HTML request gets an empty page until you add `public/403.html`. **Opt out:** rescue the errors yourself, or set another status in `config.action_dispatch.rescue_responses`. See [Handling Denials](row-level-rules.md#handling-denials).
+10. **API answers.** A refusing `api_auth` is 401 (was 403); every 422 is `{"error": {"status": 422, "messages": {"<field>": ["…"]}}}`, keyed by the request parameter or `base`; an `expires_at` given as a date means the end of that day, and one that is not after now is a 422; unrouted paths and extensions other than `.json` answer the JSON 404 envelope. **No opt-out:** see the CHANGELOG for each answer and what a client reads instead.
+11. **Permission Set names are unique within a tenant** (ignoring case and surrounding spaces) for a new set or a rename; two sets that already share a name stay valid until one is renamed. **No opt-out:** give duplicates distinct names.
+
+### If you override the gem's locale keys
+
+The gem's own locales are complete. Only a host whose locale files override one of these keys (all under `permission_forge.`) renames it:
+
+| 0.14 key | 0.15 key |
+|----------|----------|
+| `ui.levels.*` | `ui.states.field_level.*` |
+| `ui.states.granted`, `ui.states.blocked`, `ui.states.none` | `ui.states.effective.granted`, `.blocked`, `.none` |
+| `people.effective_tab.hidden_by_muting` | `ui.states.effective.hidden_by_muting` |
+| `audit_log.actor_types.*` | `ui.states.actor.*` |
+| `ui.badges.locked` | `ui.states.lock.locked` |
+| `shared.crud_cell.needs_read` | `ui.needs_read_first` |
+| `settings.row.default`, `settings.row.docs` | `settings.row.default_html`, `settings.row.docs_html` |
+| `permission_set_rules.builder.message_placeholder` | `permission_set_rules.builder.message_help` (a hint under the field, not a placeholder) |
+| `home.index.search_placeholder` (the long sentence) | `home.index.search_placeholder` is now "Name or email"; the sentence moved to `home.index.search_help` |
+
+Removed without a replacement: `ui.levels.muted`, `ui.badges.not_configured`, `ui.audit.system`, `people.effective_tab.legend_muted`, `people.effective_tab.legend_none`, `shared.across_sets.muted_hidden`. See [i18n.md](i18n.md#overriding-translations).
+
+### Removed and deprecated
+
+Removed in 0.15:
+
+- `PermissionForge::Engine.apply_masked_attributes_to_managed_models` — call `PermissionForge::MaskedModels.apply(only:)`.
+- The 0.13 cache keys (`user_<id>`, `tenant_<t>_user_<id>`) are no longer removed by an invalidation. An app still on 0.13 upgrades through 0.14, or deploys 0.15 and runs `bin/rails permission_forge:cache:clear` once its 0.13 processes are gone (a 0.13 process's invalidation cannot reach the 0.15 entries).
+
+Deprecated in 0.15, removed in 0.16 (each warns through `PermissionForge.deprecator`):
+
+- An `api_auth` that sets `@admin` on the controller to open `GET /api/stats` — set `config.api_stats_authorization`.
+- The `pf_time_ago` helper — use `pf_relative`.
+- `PermissionForge::Admin::SensitiveColumns` — use `PermissionForge::SensitiveColumns`.
+
+### After the deploy: RLS (PostgreSQL)
+
+`RlsPolicyGenerator::GENERATOR_VERSION` is 7, so `bin/rails permission_forge:rls:status` reports every table as `STALE — run permission_forge:rls:sync` (and exits 1) until you sync. The old policies stay in force until then — wider than the application layer for a set with only an end hour. Run once the new code is live:
+
+```bash fragment
+bin/rails permission_forge:rls:sync
+```
+
+See [what version 7 changes](query-scoping.md#level-3--database-postgres-row-level-security).
+
+### The `include_nulls` column
+
+A 0.15 install creates `include_nulls` with the default `false`; a 0.14 install keeps the column default `true`. Nothing needs to change: the model declares the default (`false`), so every rule created through the model — code, API, admin — gets `false`; only a row inserted with SQL, past the model, takes the column default. To align the column anyway, a migration of your own (use your table prefix):
+
+```ruby fragment
+class ChangePermissionForgeIncludeNullsDefault < ActiveRecord::Migration[7.1]
+  def change
+    change_column_default :permission_forge_permission_set_rules, :include_nulls, from: true, to: false
+  end
+end
+```
+
 ## Upgrading from 0.13 to 0.14
 
 No migration is needed: 0.14 adds no table or column. Several defaults are stricter; go through these steps before you deploy.
@@ -30,7 +124,7 @@ ACTOR="ops: deploy" REASON="deploy 0.14" bin/rails permission_forge:cache:clear
 - Running it before the last 0.13 process stops does not help: an invalidation that process makes afterwards misses the new entries again.
 - The cache is cold afterwards: each user rebuilds once, on their next request. Expect that load right after.
 - It is recorded as `cache.cleared` (one event per tenant plus one without a tenant; see [audit-log.md](audit-log.md)).
-- The removal of the 0.13 keys on invalidation goes away in 0.15.
+- 0.15 no longer removes the 0.13 keys on invalidation: an app still on 0.13 upgrades through 0.14 (see [Upgrading to 0.15](#upgrading-to-015)).
 
 ## Upgrading to 0.13: the audit log
 
