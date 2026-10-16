@@ -37,7 +37,7 @@ module PermissionForge
         string: ->(value) { value.is_a?(String) },
         boolean: ->(value) { [true, false].include?(value) },
         uuid: ->(value) { value.is_a?(String) && value.match?(UUID) },
-        time: ->(value) { value.is_a?(String) && Schema.iso8601?(value) },
+        time: ->(value) { value.is_a?(String) && Check.iso8601?(value) },
         foreign_identifier: ->(value) { value.is_a?(Integer) },
         host_key: ->(value) { value.is_a?(Integer) || value.is_a?(String) },
         host_key_list: ->(value) { value.is_a?(Array) && value.all? { |item| item.is_a?(Integer) || item.is_a?(String) } },
@@ -228,51 +228,79 @@ module PermissionForge
       end
 
       # What is wrong with `value` against `spec`, one message per problem,
-      # each with its JSON path.
+      # each with its JSON path (Check).
       #
       # @return [Array<String>]
-      def problems(value, spec, path = '$')
-        case spec
-        when Hash then object_problems(value, spec, path)
-        when Array then spec.first == :exactly ? exact_problems(value, spec.last, path) : list_problems(value, spec.first, path)
-        else type_problems(value, spec, path)
-        end
-      end
-
-      def object_problems(value, spec, path)
-        return ["#{path}: expected an object, got #{value.inspect[0, 60]}"] unless value.is_a?(Hash)
-
-        keys = value.keys.map(&:to_s)
-        expected = spec.keys.map(&:to_s)
-        (keys - expected).map { |key| "#{path}.#{key}: not declared in Api::Schema" } +
-          (expected - keys).map { |key| "#{path}.#{key}: missing" } +
-          spec.flat_map { |key, inner| keys.include?(key.to_s) ? problems(value[key.to_s], inner, "#{path}.#{key}") : [] }
-      end
-
-      def list_problems(value, spec, path)
-        return ["#{path}: expected a list, got #{value.inspect[0, 60]}"] unless value.is_a?(Array)
-
-        value.each_with_index.flat_map { |item, index| problems(item, spec, "#{path}[#{index}]") }
-      end
-
-      def exact_problems(value, expected, path)
-        value == expected ? [] : ["#{path}: expected #{expected.inspect}, got #{value.inspect[0, 60]}"]
-      end
-
-      def type_problems(value, type, path)
-        return [] if value.nil? && type.to_s.end_with?('?')
-
-        base = base_type(type)
-        TYPES.fetch(base).call(value) ? [] : ["#{path}: expected #{type}, got #{value.inspect[0, 60]}"]
-      end
+      def problems(value, spec, path = '$') = Check.problems(value, spec, path)
 
       def base_type(type) = type.to_s.delete_suffix('?').to_sym
 
-      def iso8601?(text)
-        Time.iso8601(text)
-        true
-      rescue ArgumentError
-        false
+      # Walks a parsed answer along a spec (a Hash, a one-element Array, a
+      # type Symbol, or [:exactly, value]).
+      #
+      # @api private
+      module Check
+        # A value of the answer and its JSON path.
+        Node = Data.define(:value, :path) do
+          def refused(expected) = ["#{path}: expected #{expected}, got #{value.inspect[0, 60]}"]
+          def at(key) = "#{path}.#{key}"
+        end
+
+        module_function
+
+        def problems(value, spec, path)
+          node = Node.new(value, path)
+          case spec
+          when Hash then object_problems(node, spec)
+          when Array then spec.first == :exactly ? exact_problems(node, spec.last) : list_problems(node, spec.first)
+          else type_problems(node, spec)
+          end
+        end
+
+        def object_problems(node, spec)
+          value = node.value
+          return node.refused('an object') unless value.is_a?(Hash)
+
+          keys = value.keys.map(&:to_s)
+          key_problems(node, keys, spec.keys.map(&:to_s)) + value_problems(node, spec)
+        end
+
+        # The values of the declared keys the answer has, each against its spec.
+        def value_problems(node, spec)
+          value = node.value
+          spec.flat_map { |key, inner| value.key?(key.to_s) ? problems(value[key.to_s], inner, node.at(key)) : [] }
+        end
+
+        # Keys the answer has and the spec does not, and the reverse.
+        def key_problems(node, keys, expected)
+          (keys - expected).map { |key| "#{node.at(key)}: not declared in Api::Schema" } +
+            (expected - keys).map { |key| "#{node.at(key)}: missing" }
+        end
+
+        def list_problems(node, spec)
+          value = node.value
+          return node.refused('a list') unless value.is_a?(Array)
+
+          value.each_with_index.flat_map { |item, index| problems(item, spec, "#{node.path}[#{index}]") }
+        end
+
+        def exact_problems(node, expected)
+          node.value == expected ? [] : node.refused(expected.inspect)
+        end
+
+        def type_problems(node, type)
+          value = node.value
+          return [] if value.nil? && type.to_s.end_with?('?')
+
+          TYPES.fetch(Schema.base_type(type)).call(value) ? [] : node.refused(type)
+        end
+
+        def iso8601?(text)
+          Time.iso8601(text)
+          true
+        rescue ArgumentError
+          false
+        end
       end
     end
   end

@@ -130,7 +130,7 @@ module PermissionForge
         }
       end
 
-      def input_error_requests(set, resource, resources)
+      def input_error_requests(set, resource, resources) # rubocop:disable Metrics/AbcSize -- one request per line of the sample
         users = "#{API}/permission_sets/#{set.uuid}/users"
         [
           -> { post users, params: { user_id: create_user.id, expires_at: 'tuesday' }, as: :json },

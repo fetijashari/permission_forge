@@ -121,37 +121,55 @@ Changes made from a console, a runner or a job are not API requests: wrap them i
 JSON responses use the envelope below. Some answers have no body: the 401 while `api_auth` is not set, the 404 while the API is disabled and the 204 of a delete.
 
 **Success (single record):**
-```json
+```json sample=permission_set
 {
   "data": {
-    "id": 1,
-    "uuid": "abc-123",
+    "id": 12,
+    "uuid": "d2b4c7e1-5a3f-4b8e-9c6d-1f2a3b4c5d6e",
     "name": "Sales Team",
+    "description": "Read and edit customers",
     "is_active": true,
-    "created_at": "2026-03-10T12:00:00Z"
+    "is_editable": true,
+    "is_muting": false,
+    "requires_session_flag": null,
+    "allowed_ips": "203.0.113.0/24",
+    "allowed_ip_list": ["203.0.113.0/24"],
+    "allowed_hours_start": null,
+    "allowed_hours_end": null,
+    "permission_set_group_id": 3,
+    "created_at": "2026-03-10T12:00:00.000Z",
+    "updated_at": "2026-03-12T09:30:00.000Z"
   }
 }
 ```
 
 **Success (collection):** every list endpoint is paginated and answers `meta.pagination` with its page:
-```json
+```json sample=permission_set_group_collection
 {
   "data": [
-    { "id": 1, "uuid": "abc-123", "name": "Sales Team" },
-    { "id": 2, "uuid": "def-456", "name": "Support Team" }
+    {
+      "id": 3,
+      "uuid": "8a6f2c1d-3e4b-4f5a-8b7c-9d0e1f2a3b4c",
+      "name": "Sales",
+      "description": null,
+      "is_active": true,
+      "is_editable": true,
+      "created_at": "2026-03-10T12:00:00.000Z",
+      "updated_at": "2026-03-10T12:00:00.000Z"
+    }
   ],
   "meta": {
     "pagination": {
       "page": 1,
       "per_page": 15,
-      "total_count": 42
+      "total_count": 1
     }
   }
 }
 ```
 
 **Error (validation):**
-```json
+```json sample=validation_error
 {
   "error": {
     "status": 422,
@@ -163,7 +181,7 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 ```
 
 **Error (not found):**
-```json
+```json sample=not_found
 {
   "error": {
     "status": 404,
@@ -174,7 +192,7 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 
 **A path or method no endpoint answers is a 404 in the same envelope.** Any other path under the API mount (`GET /permissions/api/unknown`, `GET …/permission_sets/:uuid/widgets`, `PUT /permissions/api/stats`, a `POST`, `PATCH` or `DELETE` on the read-only `audit_events`) answers:
 
-```json
+```json sample=route_not_found
 { "error": { "status": 404, "messages": "No API endpoint answers this path and method" } }
 ```
 
@@ -184,7 +202,7 @@ It passes the same guards first: while the API is disabled it is the bodiless 40
 
 **Every 422 has this shape.** `messages` is always an object mapping a field to a list of messages: the model's attribute for a failed validation, the request parameter for input the API cannot read, and `base` when the error names no field:
 
-```json
+```json sample=input_errors
 { "error": { "status": 422, "messages": { "expires_at": ["is not an ISO 8601 date or time"] } } }
 { "error": { "status": 422, "messages": { "permission_set": ["is missing, empty or not an object"] } } }
 { "error": { "status": 422, "messages": { "bulk_action": ["must be assign or revoke"] } } }
@@ -198,7 +216,7 @@ The messages follow the request's locale. Through 0.14.1 an input error answered
 
 **A body that cannot be parsed is a 400.** A request sent as `application/json` whose body is not valid JSON (`{"permission_set": {"name": "x"`) answers, in the envelope:
 
-```json
+```json sample=body_unreadable
 { "error": { "status": 400, "messages": "The request body could not be read. Send valid JSON with Content-Type application/json." } }
 ```
 
@@ -462,7 +480,7 @@ DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/actions/:uuid
 
 **Action names.** `name` is the key your code and the [controller action guard](controller-actions.md) look the action up by, so it must be a valid action key: lowercase letters, digits and `_`, starting with a letter, at most 63 characters (`export`, `export_csv`). The name is not normalized for you. Creating an action under any other name (`Export`, `archive ` with a trailing space, `export-csv`), or renaming one to it, returns 422:
 
-```json
+```json sample=action_name_invalid
 { "error": { "status": 422, "messages": { "name": ["Use lowercase letters, numbers and underscores, starting with a letter (for example export)."] } } }
 ```
 
@@ -686,21 +704,46 @@ GET /permissions/api/audit_events?event=assignment.revoked&from=2026-07-01&to=20
 GET /permissions/api/audit_events/:identifier
 ```
 
-```json
+```json sample=audit_event_collection
 {
   "data": [
     {
-      "id": 481, "uuid": "5c1e...", "occurred_at": "2026-09-14T08:12:44.120391Z",
-      "event": "assignment.revoked", "category": "change",
-      "actor_type": "user", "actor_id": "7", "actor_label": "Ada Admin", "source": "admin_ui",
-      "record_type": "PermissionForge::PermissionSetUser", "record_id": "93", "record_uuid": "a77f...", "record_label": "Bo Brandt",
-      "permission_set_id": 12, "permission_set_uuid": "d2b4...", "subject_user_id": "31",
-      "data": { "snapshot": { "user_id": 31, "expires_at": null } },
-      "reason": "left the team", "request_id": "6f1b...", "ip": "203.0.113.9", "correlation_id": "0b8c...",
+      "id": 481,
+      "uuid": "5c1e9a7b-2d4f-4e6a-9b8c-0d1e2f3a4b5c",
+      "occurred_at": "2026-09-14T08:12:44.120391Z",
+      "event": "assignment.revoked",
+      "category": "change",
+      "actor_type": "user",
+      "actor_id": "7",
+      "actor_label": "Ada Admin",
+      "source": "admin_ui",
+      "record_type": "PermissionForge::PermissionSetUser",
+      "record_id": "93",
+      "record_uuid": "a77f3b2c-1d4e-4f5a-8b6c-7d8e9f0a1b2c",
+      "record_label": "Bo Brandt",
+      "permission_set_id": 12,
+      "permission_set_uuid": "d2b4c7e1-5a3f-4b8e-9c6d-1f2a3b4c5d6e",
+      "subject_user_id": "31",
+      "data": {
+        "snapshot": {
+          "user_id": 31,
+          "expires_at": null
+        }
+      },
+      "reason": "left the team",
+      "request_id": "6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+      "ip": "203.0.113.9",
+      "correlation_id": "0b8c7d6e-5f4a-4b3c-9d2e-1f0a9b8c7d6e",
       "created_at": "2026-09-14T08:12:44.121002Z"
     }
   ],
-  "meta": { "pagination": { "page": 1, "per_page": 100, "total_count": 1 } }
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "per_page": 100,
+      "total_count": 1
+    }
+  }
 }
 ```
 

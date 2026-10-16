@@ -22,6 +22,10 @@ require 'ripper'
 # Every ruby, erb and bash block must say which one it is (MARKED_LANGS);
 # other languages (json, yaml, sql, mermaid, text) may carry `file=`.
 #
+#   ```json sample=not_found     generated: the body is rendered by
+#                               PermissionForge::Docs::ApiSamples
+#                               (`bundle exec rake docs:api`); json only
+#
 #   DocBlocks.all                      every block of every document
 #   DocBlocks.documents                [Document(file, blocks)] with #program
 #   DocBlocks.problems(blocks)         what the meta test reports
@@ -78,7 +82,10 @@ module DocBlocks
     def run? = marker == 'run'
     def fragment? = marker == 'fragment'
     def file? = marker == 'file'
-    def marked? = run? || fragment? || file?
+    def sample? = marker == 'sample' && lang == 'json'
+    def marked? = run? || fragment? || file? || sample?
+    # The ApiSamples entry a ```json sample=<name> block is rendered from.
+    def sample = (tokens.first.to_s[/\Asample=(.+)\z/, 1] if sample?)
     def must_mark? = MARKED_LANGS.include?(LANG_ALIASES.fetch(lang, lang))
     def path = tokens.first.to_s[/\Afile=(.+)\z/, 1]
     def ruby? = lang == 'ruby'
@@ -165,11 +172,15 @@ module DocBlocks
   end
 
   def block_problems(block)
-    [alias_problem(block), *marker_problems(block), syntax_problem(block), *handler_problems(block)].compact
+    [alias_problem(block), *marker_problems(block), sample_problem(block), syntax_problem(block), *handler_problems(block)].compact
   end
 
   def alias_problem(block)
     "#{block.location}: spell the language `#{LANG_ALIASES[block.lang]}`, not `#{block.lang}`" if LANG_ALIASES.key?(block.lang)
+  end
+
+  def sample_problem(block)
+    "#{block.location}: sample= needs a name" if block.sample? && block.sample.nil?
   end
 
   def syntax_problem(block)

@@ -75,15 +75,35 @@ module PermissionForge
         'permission_set_group_users#create' => { user_id: :other }
       }.freeze
 
+      # One request being prepared: the scenario's step changes what it needs.
+      Call = Struct.new(:verb, :path, :params, :raw, keyword_init: true)
+
+      # The error classes: [label, status, whether it applies to a route, the
+      # step that provokes it]. The success follows, always.
+      ERROR_CLASSES = [
+        ['401 api_auth refuses', 401, :every_route?, :refuse_authentication!],
+        ['401 api_auth not set', 401, :every_route?, :unset_authentication!],
+        ['404 API disabled', 404, :every_route?, :disable_api!],
+        ['403 no tenant', 403, :every_route?, :leave_tenant!],
+        ['404 unknown record', 404, :names_a_record?, :unknown_record!],
+        ['400 unreadable body', 400, :takes_a_body?, :unreadable_body!],
+        ['422 unreadable input', 422, :reads_input?, :unreadable_input!],
+        ['403 refused by the authorization lambdas', 403, :authorized?, :refuse_everything!],
+        ['403 locked', 403, :locked_out?, :lock!]
+      ].freeze
+
       # [verb, path spec, "controller#action"] for every API route, one entry per verb.
       def self.routes
-        PermissionForge::Engine.routes.routes.flat_map do |route|
-          controller = route.requirements[:controller].to_s
-          next [] unless controller.start_with?('permission_forge/api/')
+        PermissionForge::Engine.routes.routes.flat_map { |route| entries(route) }.uniq
+      end
 
-          key = "#{controller.delete_prefix('permission_forge/api/')}##{route.requirements[:action]}"
-          route.verb.to_s.split('|').map { |verb| [verb.downcase, route.path.spec.to_s.sub('(.:format)', ''), key] }
-        end.uniq
+      def self.entries(route)
+        controller = route.requirements[:controller].to_s
+        return [] unless controller.start_with?('permission_forge/api/')
+
+        key = "#{controller.delete_prefix('permission_forge/api/')}##{route.requirements[:action]}"
+        spec = route.path.spec.to_s.sub('(.:format)', '')
+        route.verb.to_s.split('|').map { |verb| [verb.downcase, spec, key] }
       end
 
       setup do
@@ -179,7 +199,7 @@ module PermissionForge
         bad['data']['created_at'] = 'yesterday'
         assert_equal ['$.data.secret: not declared in Api::Schema', '$.data.is_muting: missing',
                       '$.data.name: expected string, got nil', '$.data.permission_set_group_id: expected foreign_identifier?, ' \
-                                                              "got #{@group.uuid.inspect}",
+                                                               "got #{@group.uuid.inspect}",
                       '$.data.created_at: expected time, got "yesterday"'], Schema.success_problems(endpoint, bad)
         assert_equal ['$.meta: missing'], Schema.success_problems(Schema::ENDPOINTS.fetch('permission_sets#index'), { 'data' => [] })
       end
@@ -220,27 +240,44 @@ module PermissionForge
 
       # [label, expected status, request] for every class that applies to the route.
       def scenarios(verb, spec, key)
-        path = build_path(spec)
-        mutating = MUTATING.include?(verb) && key != 'unmatched_routes#show'
-        request = ->(params = valid_params(key), target = path) { send(verb, target, params: params, headers: HEADERS.dup, as: :json) }
-        endpoint = Schema::ENDPOINTS.fetch(key)
-        list = []
-        list << ['401 api_auth refuses', 401, -> { PermissionForge.configuration.api_auth = ->(_) { false }; request.call }]
-        list << ['401 api_auth not set', 401, -> { PermissionForge.configuration.api_auth = nil; request.call }]
-        list << ['404 API disabled', 404, -> { PermissionForge.configuration.api_enabled = false; request.call }]
-        list << ['403 no tenant', 403, -> { no_tenant!; request.call }]
-        list << ['404 unknown record', 404, -> { request.call(valid_params(key), build_path(spec, unknown: true)) }] if spec.include?(':')
-        list << ['400 unreadable body', 400, -> { send(verb, path, params: '{"x": ', headers: HEADERS.merge('CONTENT_TYPE' => 'application/json')) }] if verb != 'get'
-        list << ['422 unreadable input', 422, -> { request.call(resolve(UNPROCESSABLE[key])) }] if UNPROCESSABLE.key?(key)
-        list << ['403 refused by the authorization lambdas', 403, -> { refuse_everything!; request.call }] if mutating || refusable?(key)
-        list << ['403 locked', 403, -> { lock!; request.call }] if mutating && !LOCK_ALLOWS.key?(key)
-        list << ["#{endpoint.status} success", endpoint.status, -> { request.call }]
-        list
+        route = [verb, spec, key]
+        status = Schema::ENDPOINTS.fetch(key).status
+        steps = ERROR_CLASSES.select { |entry| send(entry[2], *route) }.map { |label, code, _, step| [label, code, step] }
+        (steps + [["#{status} success", status, nil]]).map { |label, code, step| [label, code, -> { run_step(step, route) }] }
       end
 
-      def refusable?(key) = %w[dashboard#show audit_events#index audit_events#show].include?(key)
+      def run_step(step, route)
+        verb, spec, key = route
+        call = Call.new(verb: verb, path: build_path(spec), params: valid_params(key))
+        send(step, call, *route) if step
+        perform(call)
+      end
 
-      def refuse_everything!
+      def perform(call)
+        if call.raw
+          send(call.verb, call.path, params: call.raw, headers: HEADERS.merge('CONTENT_TYPE' => 'application/json'))
+        else
+          send(call.verb, call.path, params: call.params, headers: HEADERS.dup, as: :json)
+        end
+      end
+
+      def every_route?(*) = true
+      def names_a_record?(_verb, spec, _key) = spec.include?(':')
+      def takes_a_body?(verb, *) = verb != 'get'
+      def reads_input?(_verb, _spec, key) = UNPROCESSABLE.key?(key)
+      def mutating?(verb, key) = MUTATING.include?(verb) && key != 'unmatched_routes#show'
+      def authorized?(verb, _spec, key) = mutating?(verb, key) || %w[dashboard#show audit_events#index audit_events#show].include?(key)
+      def locked_out?(verb, _spec, key) = mutating?(verb, key) && !LOCK_ALLOWS.key?(key)
+
+      def refuse_authentication!(*) = PermissionForge.configuration.api_auth = ->(_) { false }
+      def unset_authentication!(*) = PermissionForge.configuration.api_auth = nil
+      def disable_api!(*) = PermissionForge.configuration.api_enabled = false
+      def leave_tenant!(*) = no_tenant!
+      def unknown_record!(call, _verb, spec, _key) = call.path = build_path(spec, unknown: true)
+      def unreadable_body!(call, *) = call.raw = '{"x": '
+      def unreadable_input!(call, _verb, _spec, key) = call.params = resolve(UNPROCESSABLE.fetch(key))
+
+      def refuse_everything!(*)
         config = PermissionForge.configuration
         config.api_action_authorization = ->(*) { false }
         config.api_assignment_authorization = ->(*) { false }
@@ -249,26 +286,31 @@ module PermissionForge
         config.audit_log_authorization = ->(_) { false }
       end
 
-      def lock!
+      def lock!(*)
         [@set, @group].each { |record| record.update!(is_editable: false) }
       end
 
+      # Everything wrong with the answer just received, each line labelled.
       def check_answer(label, expected_status, key, bodiless:)
-        failures = []
-        failures << "#{label}: status #{response.status}, expected #{expected_status} (#{response.body.to_s[0, 160]})" if response.status != expected_status
         body = response.body.presence && JSON.parse(response.body)
-        failures << "#{label}: no body" if body.nil? && !bodiless
-        failures << "#{label}: a body where none is declared" if body && bodiless
-        problems = if response.status == expected_status && expected_status < 400
-                     Schema.success_problems(Schema::ENDPOINTS.fetch(key), body)
-                   else
-                     Schema.error_problems(response.status, body)
-                   end
-        problems += message_problems(body) if body
-        problems += empty_collection(body, key) if body && expected_status < 300
-        failures + problems.map { |problem| "#{label}: #{problem}" }
+        (shape_failures(expected_status, body, bodiless) + schema_problems(expected_status, body, key)).map { |problem| "#{label}: #{problem}" }
       rescue JSON::ParserError
         ["#{label}: not JSON: #{response.body.to_s[0, 160]}"]
+      end
+
+      # The status, and a body exactly where one is declared.
+      def shape_failures(expected_status, body, bodiless)
+        status = response.status
+        [("status #{status}, expected #{expected_status} (#{response.body.to_s[0, 160]})" if status != expected_status),
+         ('no body' if body.nil? && !bodiless), ('a body where none is declared' if body && bodiless)].compact
+      end
+
+      def schema_problems(expected_status, body, key)
+        success = response.status == expected_status && expected_status < 400
+        problems = success ? Schema.success_problems(Schema::ENDPOINTS.fetch(key), body) : Schema.error_problems(response.status, body)
+        return problems unless body
+
+        problems + message_problems(body) + (success ? empty_collection(body, key) : [])
       end
 
       # A collection with nothing in it would check no payload.
@@ -280,15 +322,19 @@ module PermissionForge
       # Every message of an error body must be a translation of xx with no
       # untranslated prose left (interpolated host data aside).
       def message_problems(body)
-        messages = body.is_a?(Hash) && body.dig('error', 'messages')
-        return [] unless messages
-
-        Array(messages.is_a?(Hash) ? messages.values.flatten : messages).filter_map do |text|
+        message_texts(body).filter_map do |text|
           leaks = PseudoLocale.leaks(text, vocabulary)
           next if text.include?(PseudoLocale::OPEN) && leaks.empty?
 
           "$.error.messages: #{text.inspect} is not a translation of xx#{" (#{leaks.join(', ')})" if leaks.any?}"
         end
+      end
+
+      def message_texts(body)
+        messages = body.is_a?(Hash) && body.dig('error', 'messages')
+        return [] unless messages
+
+        Array(messages.is_a?(Hash) ? messages.values.flatten : messages)
       end
 
       def vocabulary
