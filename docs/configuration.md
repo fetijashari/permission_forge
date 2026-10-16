@@ -352,6 +352,15 @@ PermissionForge.configure do |config|
   # find_by / find_by! / permission_scoped apply no rules whatever this says.
   config.nil_user_strategy = :bypass
 
+  # What the same reads do for a SIGNED-IN user whose Permission Sets do not
+  # grant read_access on the model's Resource (no entry at all included):
+  #   :rules_only — apply the rules of the user's entries; no rules there,
+  #                 every row (default; check can_read? in the controller)
+  #   :deny       — no rows: permission_scoped and auto-scoping return none,
+  #                 find_by / find_by! raise NotAuthorizedError for an
+  #                 existing record (the strict preset's value)
+  config.no_read_access_strategy = :rules_only
+
   # A `<assoc>_attributes` payload (PermitsAttributes) for a child model the
   # user has no Resource entry for:
   #   false — dropped (default, fail closed)
@@ -644,6 +653,7 @@ Users who relied on old defaults can restore them in their initializer.
 | `nil_user_strategy` | `:bypass` | `:deny` |
 | `response_filter_nil_user_strategy` | `:bypass` | `:block` |
 | `auto_query_scoping` | `:off` | `:filter_only` |
+| `no_read_access_strategy` | `:rules_only` | `:deny` |
 | `unconfigured_action_strategy` | `:allow` | `:block` |
 | `action_guard_nil_user_strategy` | `nil` | `:deny` |
 | `conditional_sets_strict_mode` | `false` | `true` |
@@ -659,7 +669,7 @@ What `:strict` leaves open:
 
 So `:strict` is not "every finding closed": run the audit after setting it.
 
-What `:strict` costs: with `nil_user_strategy :deny` and `auto_query_scoping :filter_only`, code that runs with no current user (jobs, mailers, seeds, webhooks, the console, sign-in lookups on a user model that includes `PermissionScopedFindable`) sees no protected rows, and a `belongs_to` presence check on a protected parent fails ("must exist"). An idempotent seed is the easy one to miss: `Customer.find_or_create_by!(name: ...)` run with nobody signed in finds no row and creates a duplicate on every run. Run such code with a user, or inside `PermissionForge.without_permission_scope { }`: there `where`, `find`, `find_by` and `permission_scoped` apply no rules when nobody is signed in (a signed-in user's `find_by` and `permission_scoped` still apply theirs), so never put it around code an anonymous request reaches. Do not include `PermissionScopedFindable` in the user model. A conditional Permission Set needs a `request_context_resolver` that returns the request's IP and session flags, or its grant never applies.
+What `:strict` costs: with `nil_user_strategy :deny` and `auto_query_scoping :filter_only`, code that runs with no current user (jobs, mailers, seeds, webhooks, the console, sign-in lookups on a user model that includes `PermissionScopedFindable`) sees no protected rows, and a `belongs_to` presence check on a protected parent fails ("must exist"). An idempotent seed is the easy one to miss: `Customer.find_or_create_by!(name: ...)` run with nobody signed in finds no row and creates a duplicate on every run. Run such code with a user, or inside `PermissionForge.without_permission_scope { }`: there `where`, `find`, `find_by` and `permission_scoped` apply no rules when nobody is signed in (a signed-in user's `find_by` and `permission_scoped` still apply theirs), so never put it around code an anonymous request reaches. Do not include `PermissionScopedFindable` in the user model. With `no_read_access_strategy :deny`, a signed-in user whose sets do not grant Read on a protected model finds none of its records either (auto-scoping included, so also through an association or a `belongs_to` presence check): give each role Read on the models its pages and validations load. A conditional Permission Set needs a `request_context_resolver` that returns the request's IP and session flags, or its grant never applies.
 
 ```ruby fragment
 PermissionForge.configure do |config|
@@ -672,7 +682,7 @@ The preset takes `:strict`, `:compat` or their String; anything else raises `Per
 
 ## Option values and hooks
 
-**Strategy options are checked when they are set.** `nil_user_strategy`, `response_filter_nil_user_strategy`, `masked_attributes_nil_user_strategy`, `masked_write_protection`, `action_guard_nil_user_strategy`, `admin_tenantless_access`, `unconfigured_action_strategy`, `extra_fields_default_access`, `auto_query_scoping`, `unscoped_query_detection` and the audit options take a Symbol from their list; a String is taken as its Symbol, and any other value raises `PermissionForge::ConfigurationError` in the initializer. (`action_guard_nil_user_strategy` also takes `nil` or blank.)
+**Strategy options are checked when they are set.** `nil_user_strategy`, `no_read_access_strategy`, `response_filter_nil_user_strategy`, `masked_attributes_nil_user_strategy`, `masked_write_protection`, `action_guard_nil_user_strategy`, `admin_tenantless_access`, `unconfigured_action_strategy`, `extra_fields_default_access`, `auto_query_scoping`, `unscoped_query_detection` and the audit options take a Symbol from their list; a String is taken as its Symbol, and any other value raises `PermissionForge::ConfigurationError` in the initializer. (`action_guard_nil_user_strategy` also takes `nil` or blank.)
 
 **What counts as "yes" in a hook.** Most hooks allow on any truthy answer, so a lambda that returns a relation, a String or `1` allows. Two require exactly `true`:
 
@@ -897,6 +907,17 @@ Your User model needs no `uuid` column: `uuid` is then `nil`, and `permission_se
 Inside `PermissionForge.without_permission_scope { }`, with nobody signed in, `find_by`, `find_by!` and `permission_scoped` apply no rules whatever this says (reported as `rule.bypassed`, `scope_suspended`).
 
 It does not govern model masking (`masked_attributes_nil_user_strategy`) or response filtering (`response_filter_nil_user_strategy`). A String is taken as its Symbol (`'deny'` is `:deny`); any other value raises `ConfigurationError` when it is set.
+
+#### no_read_access_strategy
+
+**Default:** `:rules_only` Takes `:rules_only` or `:deny` (or its String).
+
+**Records without read access.** What record lookups and queries return for a signed-in user whose Permission Sets do not grant Read on the resource: the rows the record rules allow (with no rule, every row), or none. It governs `find_by` / `find_by!` / `permission_scoped` and the default scope of `auto_query_scoping`, for a user who has no entry for the model's Resource (or for an entry of its single-table-inheritance chain: a subclass with no Resource of its own reads as its base), or one of whose entries does not grant `read_access`:
+
+- `:rules_only` (the default, as every version had it): the reads apply the rules of the user's entries; a user with no entry, or an entry without read, has no rules there and gets every row. `can_read?` is the check — ask it in the controller, or let [`ControllerActionGuard`](controller-actions.md) ask it.
+- `:deny` (the strict preset's value): no rows. `permission_scoped` and the default scope return `none`; `find_by` and `find_by!` raise `NotAuthorizedError` for a record that exists, with one `failure_messages` entry from the locale (`permission_forge.denials.no_read_access`: "You do not have permission to read Customer records."), and return `nil` / raise `RecordNotFound` for one that does not. Each denial is an `access.denied` event with reason `no_read_access`. Whatever took read away counts: no Permission Set grants it, a Muting Permission Set takes it, a Resource row renamed off its model, a granting set whose activation conditions do not pass or cannot be judged. View All and Modify All skip the rules of an entry that grants read; they never stand in for it.
+
+With nobody signed in, `nil_user_strategy` decides. Where the rules are lifted, this is lifted with them: `PermissionForge.without_permission_scope { }` lifts the default scope (and, with nobody signed in, `find_by` / `permission_scoped`); a signed-in user's `find_by` and `permission_scoped` keep applying both inside it. The generated RLS policies apply the rules only, whatever this says. A String is taken as its Symbol; any other value raises `ConfigurationError` when it is set.
 
 #### on_rule_bypass
 

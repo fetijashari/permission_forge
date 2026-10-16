@@ -356,6 +356,7 @@ sq:
           one: "%{count} do të caktohet"
           other: "%{count} do të caktohen"
     denials:
+      no_read_access: Nuk keni leje për të lexuar regjistrimet e %{resource}.
       rule_default: Nuk keni leje për të kryer këtë veprim.
     errors:
       admin:
@@ -1798,6 +1799,11 @@ sq:
           desc: Nëse rregullat anashkalohen, mohojnë gjithçka ose ngrenë gabim kur
             nuk ka përdorues aktual.
           name: Rregullat e regjistrimeve kur askush nuk ka hyrë
+        no_read_access_strategy:
+          desc: 'Çfarë kthejnë kërkimet e regjistrimeve për një përdorues të hyrë,
+            Grupet e lejeve të të cilit nuk japin Lexim mbi burimin: rreshtat që lejojnë
+            rregullat e regjistrimeve (pa asnjë rregull, çdo rresht), ose asnjë.'
+          name: Regjistrimet pa qasje leximi
         omit_hidden_in_attributes_hash:
           desc: Fushat e fshehura hiqen nga hash-et e atributeve në vend që të vendosen
             bosh.
@@ -1918,6 +1924,8 @@ sq:
           askush nuk ka hyrë (modeli i përdoruesit mbetet i lexueshëm për hyrjen).
         masked_write_protection: Vlerat e maskuara nuk ruhen kurrë mbrapsht.
         nil_user_strategy: Kodi pa përdorues të hyrë nuk sheh asnjë regjistrim.
+        no_read_access_strategy: Përdoruesit e hyrë pa Lexim mbi një burim nuk shohin
+          asnjë nga regjistrimet e tij.
         preset: Paracaktimi :strict mbyll cilësimet që si parazgjedhje e lënë qasjen
           të hapur.
         unconfigured_action_strategy: Veprimet e kontrolluesve që askush nuk i ka

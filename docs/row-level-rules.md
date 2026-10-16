@@ -13,7 +13,7 @@ Row-level rules solve this.
 
 > **Where rules apply.** With the default `auto_query_scoping = :off`, rules only apply to the class-level `Model.find_by`, `Model.find_by!` and `Model.permission_scoped`. Everything else returns every record: a bare `where`, `all`, `find`, an association (`supplier.customers.find_by(...)`), a `find_by` on a relation (`Customer.where(...).find_by(...)`, `Customer.unscoped.find_by(...)`) and `find_sole_by`. Set `auto_query_scoping = :filter_only` to apply filter rules to every query (join rules still need `permission_scoped`); see [Query scoping](query-scoping.md). The admin Home lists rules that aren't applied everywhere, and the Rules tab warns about them.
 >
-> **No rules means no restriction.** A user who has no active rule for a model — including a user with no `Resource` row for it at all — gets every row through `find_by` and `permission_scoped`. Rules only ever narrow.
+> **No rules means no restriction.** A user who has no active rule for a model — including a user with no `Resource` row for it at all — gets every row through `find_by` and `permission_scoped`. Rules only ever narrow. To refuse every row to a signed-in user whose sets do not grant Read on the model, set `config.no_read_access_strategy = :deny` (see [Rules only, not the CRUD flags](#rules-only-not-the-crud-flags)).
 
 ## How It Works
 
@@ -46,7 +46,9 @@ Customer.permission_scoped.find(id)             # scoped find by PK
 
 `permission_scoped` honors `view_all`/`modify_all` (returns the unconstrained relation) and `nil_user_strategy` (`:bypass` → all, `:deny` → none, `:raise` → raises).
 
-**Rules only, not the resource's CRUD flags.** `find_by`, `find_by!` and `permission_scoped` apply the row-level rules of the user's sets. They do not ask whether the user may read the resource at all: a user whose set has a rule on `Customer` but `read_access: false` still gets the rows the rule selects (the field rows then hide every column). The CRUD flags are answers to `can_read?`, `can_edit?`, ... and are enforced where you ask them, or by the controller guard: with [`ControllerActionGuard`](controller-actions.md) a REST action is checked against the matching flag before it runs (`index` and `show` need `read_access`, `create` `create_access`, ...), so a controller that includes the guard and queries through `permission_scoped` enforces both. Without the guard, ask first:
+### Rules only, not the CRUD flags
+
+By default (`config.no_read_access_strategy = :rules_only`) `find_by`, `find_by!` and `permission_scoped` apply the row-level rules of the user's sets. They do not ask whether the user may read the resource at all: a user whose set has a rule on `Customer` but `read_access: false` still gets the rows the rule selects (the field rows then hide every column), and a user with no `Customer` Resource has no rule there and gets every row. The CRUD flags are answers to `can_read?`, `can_edit?`, ... and are enforced where you ask them, or by the controller guard: with [`ControllerActionGuard`](controller-actions.md) a REST action is checked against the matching flag before it runs (`index` and `show` need `read_access`, `create` `create_access`, ...), so a controller that includes the guard and queries through `permission_scoped` enforces both. Without the guard, ask first:
 
 ```ruby fragment
 class CustomersController < ApplicationController
@@ -57,6 +59,22 @@ class CustomersController < ApplicationController
   end
 end
 ```
+
+Or let the record reads ask for read themselves:
+
+```ruby fragment
+PermissionForge.configure do |config|
+  config.no_read_access_strategy = :deny # part of config.preset = :strict
+end
+```
+
+Under `:deny`, for a signed-in user whose entries for the model's Resource (and, for a single-table-inheritance subclass, its bases' along the chain) do not all grant `read_access` — no entry at all, an entry without read, read taken by a Muting Permission Set or by a granting set whose conditions do not pass:
+
+- `permission_scoped` and the `auto_query_scoping` default scope return `none`;
+- `find_by` and `find_by!` raise `NotAuthorizedError` for a record that exists, with one `failure_messages` entry ("You do not have permission to read Customer records.", `permission_forge.denials.no_read_access` in every locale), and return `nil` / raise `RecordNotFound` for one that does not;
+- each denial is an `access.denied` event with reason `no_read_access`.
+
+View All and Modify All skip the rules of an entry that grants read; they never stand in for it. With nobody signed in `nil_user_strategy` decides, as before. The check is lifted where the rules are: `without_permission_scope` lifts the default scope, and a signed-in user's `find_by` and `permission_scoped` keep both inside it. The generated RLS policies apply the rules only.
 
 ## Step 1: Include the Concern
 

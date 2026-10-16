@@ -8,6 +8,7 @@ module PermissionForge
   class ConfigurationStrategyValuesTest < ActiveSupport::TestCase
     OPTIONS = {
       nil_user_strategy: %i[bypass raise deny],
+      no_read_access_strategy: %i[rules_only deny],
       response_filter_nil_user_strategy: %i[bypass block],
       masked_write_protection: %i[skip raise off],
       masked_attributes_nil_user_strategy: %i[bypass hide],

@@ -151,8 +151,9 @@ Composition concern that includes 3 focused sub-concerns:
 - Thin orchestrator — overrides `find_by`/`find_by!` and adds `Model.permission_scoped` (chainable rule-constrained relation), delegates query building to `PermissionRuleApplier` service
 - `find_by` returns `nil` for a genuinely missing record; `NotAuthorizedError` raised only when a rule denies an existing record. `NotAuthorizedError#failure_messages` = the denying rules' own `failure_message` texts (the applier's third return value: the denying rule hashes; a blank one reads `permission_forge.denials.rule_default`); `message`/`details` keep the `[Forbidden by Rule: …]` strings. Unrescued it is a 403 (engine's `rescue_responses`)
 - ViewAll/ModifyAll bypass — when resource has `view_all` or `modify_all`, all row-level rules are skipped
-- Row rules only: a user without read on the resource still gets rows; the CRUD flag is the controller guard's (REST → flag) or an explicit `can_read?`
+- Row rules only by default: a user without read on the resource still gets rows; the CRUD flag is the controller guard's (REST → flag) or an explicit `can_read?` — unless `no_read_access_strategy = :deny` (below)
 - Nil current user follows `nil_user_strategy` (default `:bypass`); fallback queries use `where(nil)` (preserves `default_scope` and tenant scope)
+- A signed-in user whose entries along the `ResourceChain` do not all grant `read_access` (no entry included) follows `no_read_access_strategy`: `:rules_only` (default) applies the rules alone (no rules → every row); `:deny` (strict preset) → `permission_scoped` and the default scope `none`, `find_by`/`find_by!` raise `NotAuthorizedError` for an existing record (`failure_messages` from `permission_forge.denials.no_read_access`), `access.denied` reason `no_read_access`. Checked before the rules (a View All entry without read gets no bypass); lifted only where the rules are. The RLS policies do not follow it
 
 ### PermissionsRegenerator (included on PermissionSet, Resource, ResourceField, ResourceAction, PermissionSetRule, PermissionSetGroup)
 - `after_commit` on create/update/destroy invalidates affected users' cached permissions (lazy read-through rebuild — no eager regeneration)
@@ -422,6 +423,7 @@ All new code must respect SOLID principles. Apply this checklist before finalizi
 - `NotAuthorizedError` must stay at `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError`
 - Tests use the `test/dummy/` Rails app with SQLite — keep it minimal
 - Field variant mappings (`_id` → `_uuid`, `_cents` → base name) are configurable — don't hardcode. The variants a row applies to have one definition, `PermissionForge::FieldVariants` (the mapped names the model has: attribute, alias, public reader/writer, declared virtual field; an unloadable model keeps all) — the builder (granting and muting), `Admin::EffectiveFields` and `Admin::FieldDetail` use it, never `config.field_variants_for` directly
+- "May this signed-in user read this model's records at all" has one definition, `PermissionForge::RecordReadAccess.denied?` (the strategy, then `ResourceChain.readable?`) — `find_by` / `permission_scoped` and the auto scope ask it before the applier; never re-derive it from `can_read?` or `grants?`
 - "In effect / managed" has one definition: `Resource.in_effect` / `ResourceAction.in_effect` (and `#in_effect?`) — never re-derive it
 - Declared virtual-field names have one reader: `PermissionForge::VirtualFields` — never call `extra_fields_method` directly
 - The guard path must never turn an error into "unmapped" (which is allowed): raise instead

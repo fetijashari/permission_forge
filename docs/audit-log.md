@@ -108,7 +108,7 @@ Published always, stored only for the groups in `config.audit_runtime_events`. W
 
 | Event | Group | What it carries |
 |---|---|---|
-| `access.denied` | `denied` | `data.model`, `data.reason` (`rule`, `nil_user`), `data.via` (`find_by`, `permission_scoped`, `auto_scope`); `subject_user_id` is the user denied |
+| `access.denied` | `denied` | `data.model`, `data.reason` (`rule`, `nil_user`, `no_read_access`: a signed-in user without Read on the model under `no_read_access_strategy = :deny`), `data.via` (`find_by`, `permission_scoped`, `auto_scope`); `subject_user_id` is the user denied |
 | `action.denied` | `denied` | `data.model`, `data.reason` (the Authorizer reason), `data.action`, `controller`, `action_name`, `via: action_guard` |
 | `rule.bypassed` | `bypass` | `data.model`, `data.via`, `data.reason`: `view_all`, `modify_all`, `nil_user`, `scope_suspended`, `auto_scope_opt_out`, `no_rules`, `guard_bypass` |
 | `query.unscoped` | `bypass` | `data.model`, `data.table`, `data.mode`, `data.call_site`; never the SQL |
@@ -159,7 +159,7 @@ Read this list before you tell an assessor what the log proves. Each item is a l
 
 **Database policies.** `rake permission_forge:rls:sync` and `rls:remove` (and the RLS generator's migration) write no audit event, by design: they only install, replace or remove PostgreSQL policies derived from rules whose changes are already recorded. `rls:remove` switches row-level security off without a trace in the log; record these runs in your change management.
 
-**Decisions that allow.** Only denials are recorded (`access.denied`, `action.denied`), and bypasses when their group is stored. An allowed controller action and the rows a rule allowed leave no event. Rows a row-level rule filters out are not denials either: `permission_scoped`, auto-scoping and `find` (which raises `RecordNotFound`) publish no event for them; only `find_by` and `find_by!` attribute a rule denial to the user. `user.can?` and `can_*?`, `Authorizer.allowed?` (the checks behind buttons in a view) and conditional-set activation (IP, hours, session flag) are not instrumented.
+**Decisions that allow.** Only denials are recorded (`access.denied`, `action.denied`), and bypasses when their group is stored. An allowed controller action and the rows a rule allowed leave no event. Rows a row-level rule filters out are not denials either: `permission_scoped`, auto-scoping and `find` (which raises `RecordNotFound`) publish no event for them; only `find_by` and `find_by!` attribute a rule denial to the user. A model refused whole under `no_read_access_strategy = :deny` is an `access.denied` (`no_read_access`) on each of the three paths (once per request under auto-scoping). `user.can?` and `can_*?`, `Authorizer.allowed?` (the checks behind buttons in a view) and conditional-set activation (IP, hours, session flag) are not instrumented.
 
 **Expiry.** An assignment whose `expires_at` has passed leaves no event at the moment access lapses; only the later removal by the expired-assignment cleaner is an event (`assignment.revoked`, `cleanup.expired_assignments`). Derive the lapse from `expires_at` in the grant's snapshot.
 

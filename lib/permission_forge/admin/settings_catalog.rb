@@ -75,6 +75,7 @@ module PermissionForge
         d(:mask_virtual_attributes, 'masked_attributes', :enum, options: %i[off auto list]),
 
         d(:nil_user_strategy, 'record_rules', :enum, options: %i[bypass deny raise]),
+        d(:no_read_access_strategy, 'record_rules', :enum, options: Configuration::StrategyValues::ALLOWED[:no_read_access_strategy]),
         d(:on_rule_bypass, 'record_rules', :hook, example: '->(user:, resource:, reason:) { Rails.logger.info(...) }'),
         d(:auto_query_scoping, 'record_rules', :enum, options: %i[off filter_only], ladder: 'enforce'),
         d(:unscoped_query_detection, 'record_rules', :enum, options: %i[off log raise], ladder: 'detect'),
@@ -190,6 +191,7 @@ module PermissionForge
         'audit_events' => ->(config) { AuditLog.recording_problem(config) ? :warn : :ok },
         'gdpr_defaults' => ->(config) { config.gdpr_defaults ? :ok : nil },
         'nil_user_strategy' => ->(config) { config.nil_user_strategy.to_s == 'bypass' ? nil : :ok },
+        'no_read_access_strategy' => ->(config) { config.deny_record_reads_without_read_access? ? :ok : nil },
         'masked_attributes_nil_user_strategy' => ->(config) { config.hide_masked_attributes_without_user? ? :ok : nil },
         'extra_fields_default_access' => ->(config) { config.grant_extra_fields_by_default? ? nil : :ok },
         'unconfigured_action_strategy' => ->(config) { config.allow_unconfigured_actions? ? nil : :ok },

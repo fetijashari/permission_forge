@@ -9,6 +9,10 @@ relation or an association (`Model.where(nil).find_by!`, `Model.unscoped.find_by
 A user with no rules for a model sees every row: rules only narrow. Rules from several granting
 sets apply together (AND), and for an STI subclass the rules of its own resource and of every
 ancestor's apply together — see [row-level-rules.md](row-level-rules.md#several-permission-sets).
+With `config.no_read_access_strategy = :deny` (part of `config.preset = :strict`), a signed-in
+user whose sets do not grant Read on the model sees no row at all, through `find_by`,
+`permission_scoped` and Level 1 alike — see
+[Rules only, not the CRUD flags](row-level-rules.md#rules-only-not-the-crud-flags).
 
 This guide covers the three optional defense levels that close that gap. Each is
 independently configurable and **all default to OFF** — nothing changes until you opt in.
@@ -61,6 +65,10 @@ user.customers                 # association traversal scoped too
 - **Nil current user** follows `nil_user_strategy`: `:bypass` → unscoped, `:deny`/`:raise`
   → empty relation (fail closed — the auto path never raises from inside a scope, so
   consoles and rake tasks don't detonate).
+- **A signed-in user without Read** on the model's resource (no entry for it at all included)
+  gets no rules there and every row under the default `no_read_access_strategy = :rules_only`;
+  under `:deny` the scope is an empty relation (`access.denied`, reason `no_read_access`, once
+  per request).
 - **The scope is decided when the relation is built, not when it loads.** A relation built
   while there is no current user (under the default `:bypass`) stays unscoped after a user is
   set: `Customer.where(nil)` built before authentication returns every row when it is loaded
@@ -186,7 +194,8 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   A digest of the rule state is stored on the policy; a boot warning fires when the live
   policies drift from the current rules.
 - **Semantics parity:** muting sets contribute no rules but *do* cancel a view_all bypass;
-  users in no rule-bearing set see all rows (rules only restrict); a missing session
+  users in no rule-bearing set see all rows (rules only restrict), whatever
+  `no_read_access_strategy` says (the policies do not read the CRUD flags); a missing session
   variable follows `nil_user_strategy` (`:bypass` allows, `:deny`/`:raise` hides all rows).
 - **The view_all bypass needs a resource row in effect.** A `view_all` grant (`modify_all`
   counts only with it, as in the application layer) bypasses the rules only while its resource row and its set are active and, with tenancy

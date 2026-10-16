@@ -107,6 +107,7 @@ module PermissionForge
         def pf_build_auto_scope
           current_user = PermissionForge.current_user
           return pf_nil_user_auto_scope unless current_user
+          return pf_no_read_access_auto_scope(current_user) if PermissionForge::RecordReadAccess.denied?(current_user, self)
 
           # Resolve the rules once — permissions_hash is a cache read per
           # call, and this hook runs on every relation build: those of this
@@ -128,6 +129,17 @@ module PermissionForge
           PermissionForge::Services::PermissionRuleApplier.scope(
             model_class: self, rules: rules, current_user: current_user
           )
+        end
+
+        # A signed-in user the model's Resource chain grants no read_access,
+        # under no_read_access_strategy :deny (RecordReadAccess): no rows,
+        # access.denied once per request.
+        def pf_no_read_access_auto_scope(current_user)
+          PermissionForge::Audit::Runtime.denied(
+            PermissionForge::Audit::Runtime::DENIED,
+            reason: PermissionForge::RecordReadAccess::REASON, model: self, via: 'auto_scope', user: current_user, once: true
+          )
+          none
         end
 
         # Fail closed for :deny AND :raise — raising from inside a default_scope

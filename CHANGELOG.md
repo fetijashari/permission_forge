@@ -367,6 +367,22 @@ and the RLS re-sync.
   selects nothing in the app layer and hides every row under a real policy; the matrix covers `uuid`, `inet`, `cidr`,
   native enum, `jsonb` and `text[]` columns.
   <!-- pin: test/rls/rls_rule_parity_test.rb#every kind of rule the app layer matches nothing for has a parity case -->
+- **`config.no_read_access_strategy`: record reads that need read access.** `:rules_only` (the default) keeps the
+  record reads as they were: `find_by`, `find_by!`, `permission_scoped` and the `auto_query_scoping` default scope
+  apply the rules of the user's entries, so a signed-in user with no entry for the model, or one without
+  `read_access`, has no rules there and gets every row. `:deny` refuses them whole: for a signed-in user whose
+  entries along the model's Resource chain do not all grant `read_access` (whatever took it — no grant, a Muting
+  Permission Set, a Resource renamed off its model, a granting set whose conditions cannot be judged),
+  `permission_scoped` and the default scope are `none`, and `find_by` / `find_by!` raise `NotAuthorizedError` for an
+  existing record with one `failure_messages` entry from the locale (`permission_forge.denials.no_read_access`; en,
+  sq, mk), `nil` / `RecordNotFound` for a missing one; each is an `access.denied` with reason `no_read_access`. View
+  All and Modify All never stand in for read; with nobody signed in `nil_user_strategy` decides; the RLS policies
+  apply the rules only. One definition, `PermissionForge::RecordReadAccess`. A README checklist row, a Settings page
+  row and a strategy value checked when set.
+  <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#no entry, :deny: no rows, find_by raises with the locale message, a missing record is still missing -->
+  <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#no entry, :rules_only: every read returns every row, as before -->
+  <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#STI: an unreadable base denies the subclass that grants read itself -->
+  <!-- pin: test/permission_forge/release_readiness/stored_data_fail_closed_test.rb#~under no_read_access_strategy :deny, no poisoning widens a record read -->
 
 ### Changed
 
@@ -968,6 +984,12 @@ and the RLS re-sync.
   `permission_sets.copy_name`, `"<name> (copy)"` in the request's locale (`(kopje)`, `(копија)`), a set's copy
   numbered when taken, as the admin and the cloners do. **Opt out:** send `name`.
   <!-- pin: test/permission_forge/api/permission_sets_controller_test.rb#POST clone without a name names the copy as the admin does, numbered when taken, in the request locale -->
+- **`config.preset = :strict` sets `no_read_access_strategy = :deny`.** Under the strict preset a signed-in user
+  whose Permission Sets do not grant Read on a model finds none of its records: `permission_scoped` and auto-scoping
+  return no rows (associations and `belongs_to` presence checks included), `find_by` raises `NotAuthorizedError`.
+  Give each role Read on the models its pages and validations load. The library default is unchanged. **Opt out:** `config.no_read_access_strategy = :rules_only`.
+  <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#the library default is :rules_only, the strict preset :deny -->
+  <!-- pin: test/permission_forge/configuration_presets_test.rb#:strict closes exactly the README hardening checklist -->
 
 ### Deprecated
 

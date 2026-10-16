@@ -42,6 +42,7 @@ Each with its opt-out, or why there is none. The [CHANGELOG](../CHANGELOG.md) ha
 11. **Permission Set names are unique within a tenant** (ignoring case and surrounding spaces) for a new set or a rename; two sets that already share a name stay valid until one is renamed. **No opt-out:** give duplicates distinct names.
 12. **A filter rule compares its own table:** one qualified with another model's table (`suppliers.name` on `Customer`) matches nothing and is refused on save (it raised for every holder); `rake permission_forge:audit` lists stored ones as `foreign_table_filter_rules`. **Opt out:** use a join rule (`join_type` + `field_accessor_path`) for a column of another table. See [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name).
 13. **API: `allowed_ips` with no entry** (`[]`, `[""]`) is a 422; send `null` to clear the condition.
+14. **New option `config.no_read_access_strategy`**: the default `:rules_only` changes nothing; under `config.preset = :strict` it is `:deny`, and a signed-in user whose Permission Sets do not grant Read on a model finds none of its records (`find_by` raises `NotAuthorizedError`, `permission_scoped` and auto-scoping are empty). **Opt out:** `config.no_read_access_strategy = :rules_only`. See [Rules only, not the CRUD flags](row-level-rules.md#rules-only-not-the-crud-flags).
 
 ### If you override the gem's locale keys
 

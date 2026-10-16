@@ -92,6 +92,18 @@ module PermissionForge
       entries(user, names).first&.dig(:permissions, flag) == true
     end
 
+    # Whether the user may read the class's records at all: an entry along
+    # the chain, and every one of them grants read_access — a class cannot
+    # be more readable than an entry it answers to, as for its fields
+    # (#unreadable?). A subclass with no entry of its own reads as its base.
+    # Asked through RecordReadAccess.denied?.
+    #
+    # @return [Boolean]
+    def readable?(user, names)
+      resource_entries = entries(user, names)
+      resource_entries.any? && !unreadable?(resource_entries)
+    end
+
     # @return [Symbol, nil] :view_all or :modify_all when one of them lets
     #   the user past the rules of an entry
     def bypass_reason(permissions)

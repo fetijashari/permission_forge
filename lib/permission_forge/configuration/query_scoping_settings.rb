@@ -43,6 +43,20 @@ module PermissionForge
       # Unknown values raise ConfigurationError at assignment (see below).
       attr_reader :auto_query_scoping
 
+      # What the record reads (find_by / find_by! / permission_scoped, and the
+      # default scope under auto_query_scoping) do for a signed-in user whose
+      # entry for the model's Resource chain does not grant read_access (no
+      # entry at all included):
+      #   :rules_only — (default) apply the rules of the user's entries, if
+      #                 any: no rules, every row (can_read? is the check)
+      #   :deny       — no rows: permission_scoped and the default scope are
+      #                 empty, find_by / find_by! raise NotAuthorizedError for
+      #                 an existing record (nil / RecordNotFound for a missing
+      #                 one). The strict preset's value.
+      # With nobody signed in nil_user_strategy decides. One definition:
+      # PermissionForge::RecordReadAccess.
+      attr_accessor :no_read_access_strategy
+
       # Level 2 — DETECT.
       #   :off   — (default) no detection
       #   :log   — Rails.logger.warn for each unscoped query on a protected table
@@ -104,6 +118,13 @@ module PermissionForge
         @auto_query_scoping == :filter_only
       end
 
+      # @return [Boolean] whether the record reads of a signed-in user need
+      #   read_access on the model's Resource chain. Only the exact
+      #   :rules_only value applies the rules alone.
+      def deny_record_reads_without_read_access?
+        no_read_access_strategy.to_s != 'rules_only'
+      end
+
       def unscoped_query_detection_active?
         return false if @unscoped_query_detection == :off
         return false unless defined?(Rails) && Rails.respond_to?(:env)
@@ -115,6 +136,7 @@ module PermissionForge
 
       def set_query_scoping_defaults
         @auto_query_scoping = :off
+        @no_read_access_strategy = :rules_only
         @unscoped_query_detection = :off
         @unscoped_query_detection_environments = %w[development test]
         @database_row_level_security = false

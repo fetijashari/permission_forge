@@ -42,32 +42,46 @@ module PermissionForge
     # but AuditEvent, every column but the bookkeeping ones and the foreign
     # keys (a pointer is not interpreted). A column added to a model is
     # covered the day it is added; a column to leave out goes in SKIP with a
-    # reason, and an entry that matches nothing fails. PENDING names the
-    # (column, read path) failures that wait for a decision: they are
-    # reported, not counted, and an entry whose column no longer fails on
-    # one of its paths must be removed.
+    # reason, and an entry that matches nothing fails. BY_DESIGN names the
+    # (column, read path) failures that are a documented reading, each with
+    # why: they are reported, not counted, and an entry whose column no
+    # longer fails on one of its paths must be removed.
+    #
+    # Each model is read a second time under no_read_access_strategy :deny
+    # (the strict preset), on the record reads only (DENY_PATHS), with no
+    # exemption: a poisoned row that takes the user's read away there
+    # leaves no rows.
     class StoredDataFailClosedTest < ActiveSupport::TestCase
       BOOKKEEPING = %w[id uuid created_at updated_at].freeze
       # 'Model.column' => why it is not poisoned.
       SKIP = {}.freeze
-      # Whole-entry loss: the poisoned row takes the user's whole entry out of
-      # the hash (a Resource renamed off its model, a field row renamed off
-      # its column, a granting set whose condition cannot be judged). The
-      # grant goes (can_read? is false), and with it the rules and masks the
-      # entry carried, so the record-level reads answer as for a user with
-      # no entry for the model: no rules (every row), no field row (no mask).
-      # A pre-existing reading, hidden until refusal was judged on the clean
-      # row (review R1): a decision for the lead, not a fix of R1's.
-      ENTRY_LOSS = 'the whole entry drops out: no grant, so no rules and no masks either (review R1 follow-up)'
+      # Whole-entry loss: the poisoned row takes the user's whole Customer
+      # entry out of the hash (the granting Resource renamed off its model, a
+      # granting set whose condition cannot be judged). The grant goes
+      # (can_read? is false), and with it the rules the entry carried.
+      RULES_ONLY = 'record reads apply rules only under the default record_reads_without_read_access = :rules_only ' \
+                   '(config.no_read_access_strategy); :deny (strict preset) denies — the :deny run holds these paths closed'
+      # A row renamed off what it names: the Muting Permission Set's Resource
+      # (or its domain field row) mutes nothing on Customer any more, so
+      # domain is readable again; the granting Resource's (or email row's)
+      # entry is listed by the admin under the stored name. Not a missing
+      # read and not unconfigured_field_strategy (this test runs under the
+      # library default :block): no reading can tell what such a row was
+      # meant for. The audit names it (unknown_models / unknown_fields).
+      NAMES_ELSEWHERE = 'a row renamed off its model or column configures what it names now: a muting row mutes nothing ' \
+                        'on Customer (what it took away is back), a granting entry is listed under the stored name; ' \
+                        'reported by the audit (unknown_models / unknown_fields)'
       ROW_PATHS = %i[scoped find_by_unowned filter_all filter_count].freeze
       VALUE_PATHS = %i[effective getters bracket attributes as_json filtered].freeze
-      # 'Model.column' => { paths: the read paths it fails on, reason: }.
-      PENDING = {
-        'Resource.name' => { paths: ROW_PATHS + VALUE_PATHS, reason: ENTRY_LOSS },
-        'ResourceField.name' => { paths: VALUE_PATHS, reason: ENTRY_LOSS },
-        'PermissionSet.allowed_ips' => { paths: ROW_PATHS, reason: ENTRY_LOSS },
-        'PermissionSet.allowed_hours_start' => { paths: ROW_PATHS, reason: ENTRY_LOSS },
-        'PermissionSet.allowed_hours_end' => { paths: ROW_PATHS, reason: ENTRY_LOSS }
+      # The record reads the :deny run reads.
+      DENY_PATHS = (ROW_PATHS + %i[find_by find_by_bang filter_exists]).freeze
+      # 'Model.column' => [{ paths: the read paths it fails on, reason: }, ...].
+      BY_DESIGN = {
+        'Resource.name' => [{ paths: ROW_PATHS, reason: RULES_ONLY }, { paths: VALUE_PATHS, reason: NAMES_ELSEWHERE }],
+        'ResourceField.name' => [{ paths: VALUE_PATHS, reason: NAMES_ELSEWHERE }],
+        'PermissionSet.allowed_ips' => [{ paths: ROW_PATHS, reason: RULES_ONLY }],
+        'PermissionSet.allowed_hours_start' => [{ paths: ROW_PATHS, reason: RULES_ONLY }],
+        'PermissionSet.allowed_hours_end' => [{ paths: ROW_PATHS, reason: RULES_ONLY }]
       }.freeze
 
       # 'supplier_id.id': a qualifier the join rule's ON clause mentions as a
@@ -341,6 +355,23 @@ module PermissionForge
         only.index_with { |path| read(path) }
       end
 
+      # The record reads alone, as a new user object (the reads ask
+      # Current.user, which the permission paths otherwise set first).
+      def read_records
+        reset_reads
+        fresh_user
+        DENY_PATHS.index_with { |path| read(path) }
+      end
+
+      # The record reads only, under no_read_access_strategy :deny: nothing
+      # raises, nothing widens against the :deny baseline.
+      def check_deny(record, attrs, failures, refused)
+        fail_on = failure_recorder(record, attrs, failures)
+        results = read_records
+        results.each { |path, outcome| fail_on.call(path, "raised #{outcome.error.class}: #{outcome.error.message[0, 160]}") if outcome.error }
+        assert_not_widened(results, fail_on) if refused
+      end
+
       # Between two reads of the store: the user's cache entries and the
       # managed-actions index go, and the next read builds from the rows.
       def reset_reads
@@ -540,43 +571,67 @@ module PermissionForge
 
       # --- the tests: one per model ------------------------------------------------
 
+      def each_poisoning(model)
+        columns = self.class.columns_of(model).reject { |column| SKIP.key?("#{model.name.demodulize}.#{column}") }
+        rows_of(model).each do |record|
+          columns.each do |column|
+            values_for(model, column).each do |attrs|
+              refused = refused?(record, attrs)
+              poison(record, attrs) { yield record, attrs, refused }
+            end
+          end
+        end
+        columns
+      end
+
       models.each do |model|
         test "#{model.name.demodulize}: every interpreted column, poisoned past validation, never raises or widens" do
           failures = []
-          columns = self.class.columns_of(model).reject { |column| SKIP.key?("#{model.name.demodulize}.#{column}") }
-          rows_of(model).each do |record|
-            columns.each do |column|
-              values_for(model, column).each do |attrs|
-                refused = refused?(record, attrs)
-                poison(record, attrs) { check(record, attrs, failures, refused) }
-              end
-            end
-          end
+          columns = each_poisoning(model) { |record, attrs, refused| check(record, attrs, failures, refused) }
           report(model.name.demodulize, columns, failures)
+        end
+
+        # The RULES_ONLY entries of BY_DESIGN closed: under :deny no
+        # poisoning of any column widens a record read, with no exemption.
+        test "#{model.name.demodulize}: under no_read_access_strategy :deny, no poisoning widens a record read" do
+          PermissionForge.configuration.no_read_access_strategy = :deny
+          @baseline = read_records
+          failures = []
+          each_poisoning(model) { |record, attrs, refused| check_deny(record, attrs, failures, refused) }
+          assert_no_failures(model.name.demodulize, failures)
         end
       end
 
       def report(name, columns, failures)
-        pending, real = failures.partition { |failure| PENDING[failure.key]&.fetch(:paths)&.include?(failure.path) }
-        report_pending(pending)
-        assert_pending_current(name, columns, pending)
+        known, real = failures.partition { |failure| by_design_paths(failure.key).include?(failure.path) }
+        report_by_design(known)
+        assert_by_design_current(name, columns, known)
         assert_no_failures(name, real)
       end
 
-      def report_pending(pending)
-        pending.group_by(&:key).each do |key, list|
-          puts "[G1 pending] #{key} (#{PENDING.dig(key, :reason)}): #{list.size} failures, first: #{list.first}" if ENV['G1_VERBOSE']
+      def by_design_paths(key) = BY_DESIGN.fetch(key, []).flat_map { |entry| entry.fetch(:paths) }
+
+      def report_by_design(known)
+        return unless ENV['G1_VERBOSE']
+
+        known.group_by(&:key).each do |key, list|
+          reasons = BY_DESIGN.fetch(key).map { |entry| entry.fetch(:reason) }.join(' / ')
+          puts "[G1 by design] #{key} (#{reasons}): #{list.size} failures, first: #{list.first}"
         end
       end
 
-      # Every pending entry of the model names a column that still fails, on each of its paths.
-      def assert_pending_current(name, columns, pending)
-        PENDING.select { |key, _| key.start_with?("#{name}.") }.each do |key, entry|
-          assert columns.include?(key.split('.').last), "#{key}: no such column — remove the PENDING entry"
-          entry.fetch(:paths).each do |path|
-            assert pending.any? { |failure| failure.key == key && failure.path == path }, "#{key} no longer fails on #{path}: remove it from PENDING"
-          end
+      # Every BY_DESIGN entry of the model names a column that still fails, on each of its paths.
+      def assert_by_design_current(name, columns, known)
+        BY_DESIGN.select { |key, _| key.start_with?("#{name}.") }.each do |key, entries|
+          assert columns.include?(key.split('.').last), "#{key}: no such column — remove the BY_DESIGN entry"
+          failing = known.select { |failure| failure.key == key }.map(&:path)
+          entries.each { |entry| assert_entry_current(key, entry, failing) }
         end
+      end
+
+      def assert_entry_current(key, entry, failing)
+        assert entry.fetch(:reason).to_s.strip.present?, "#{key}: give the BY_DESIGN entry a reason"
+        entry.fetch(:paths).each { |path| assert_includes failing, path, "#{key} no longer fails on #{path}: remove it from BY_DESIGN" }
       end
 
       def assert_no_failures(name, real)

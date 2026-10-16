@@ -50,7 +50,7 @@ module PermissionForge
         'audit_event' => 'an api_serializer_overrides key',
         'extra_fields_for_permissions' => "extra_fields_method's default method name",
         'api_auth_denied' => 'an api.auth_failed reason', 'api_auth_not_configured' => 'an api.auth_failed reason',
-        'audit_log_not_authorized' => 'an auth_failed reason',
+        'audit_log_not_authorized' => 'an auth_failed reason', 'no_read_access' => 'an access.denied reason',
         'conditional_sets_lenient' => 'a SecurityAudit finding', 'audit_hook_failures_logged' => 'a SecurityAudit finding',
         'gdpr_defaults_off' => 'a SecurityAudit finding', 'audit_trail_off' => 'a SecurityAudit finding',
         'nil_user_bypass' => 'a SecurityAudit finding', 'action_guard_missing' => 'a SecurityAudit finding',

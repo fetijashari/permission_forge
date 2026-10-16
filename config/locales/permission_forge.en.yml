@@ -347,6 +347,7 @@ en:
           one: "%{count} will be assigned"
           other: "%{count} will be assigned"
     denials:
+      no_read_access: You do not have permission to read %{resource} records.
       rule_default: You do not have permission to perform this action.
     errors:
       admin:
@@ -1755,6 +1756,11 @@ en:
           desc: Whether rules are skipped, deny everything, or raise an error when
             there's no current user.
           name: Record rules with nobody signed in
+        no_read_access_strategy:
+          desc: 'What record lookups and queries return for a signed-in user whose
+            Permission Sets do not grant Read on the resource: the rows the record
+            rules allow (with no rule, every row), or none.'
+          name: Records without read access
         omit_hidden_in_attributes_hash:
           desc: Hidden fields are removed from attribute hashes instead of being set
             to empty.
@@ -1870,6 +1876,8 @@ en:
           nobody is signed in (the user model stays readable for sign-in).
         masked_write_protection: Masked values are never written back.
         nil_user_strategy: Code without a signed-in user sees no records.
+        no_read_access_strategy: Signed-in users without Read on a resource see none
+          of its records.
         preset: The :strict preset closes the settings that fail open by default.
         unconfigured_action_strategy: Controller actions nobody configured are blocked.
       risks:
