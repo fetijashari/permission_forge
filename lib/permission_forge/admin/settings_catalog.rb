@@ -81,6 +81,7 @@ module PermissionForge
         d(:unscoped_query_detection_environments, 'record_rules', :list),
         d(:database_row_level_security, 'record_rules', :bool, ladder: 'database'),
         d(:rls_session_variable, 'record_rules', :str),
+        d(:rule_secret_column_patterns, 'record_rules', :list),
 
         d(:controller_action_discovery, 'controller_actions', :bool),
         d(:controller_action_resolver, 'controller_actions', :hook,

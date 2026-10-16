@@ -85,7 +85,7 @@ module PermissionForge
         assert_privacy_row('name') do
           assert_select 'a', text: t('home.privacy_card.fix')
           assert_select 'button', text: t('home.privacy_card.intended')
-          assert_select '.pf-badge', text: /#{t('ui.badges.locked')}/, count: 0
+          assert_select '.pf-badge', text: /#{t('ui.states.lock.locked')}/, count: 0
         end
       end
 
@@ -97,7 +97,7 @@ module PermissionForge
         get pf('/'), params: { privacy: 'all' }
 
         assert_privacy_row('name') do
-          assert_select '.pf-badge', text: /#{t('ui.badges.locked')}/, count: 1
+          assert_select '.pf-badge', text: /#{t('ui.states.lock.locked')}/, count: 1
           assert_select 'a', text: t('home.privacy_card.fix'), count: 0
           assert_select 'button', text: t('home.privacy_card.intended'), count: 0
           assert_select "a[href$='/fields/name']", text: t('home.privacy_card.view')
@@ -151,10 +151,10 @@ module PermissionForge
         assert_response :success
         rows = Admin::FieldRows.new(resource).rows
         assert_predicate rows.size, :positive?
-        assert_select "a.pf-filter[href*='filter=leave']", text: /#{t('resources.fields_tab.filters.leave')}\s*#{rows.size}/
+        assert_select "a.pf-filter[href*='filter=leave']", text: /#{t('ui.states.field_level.leave')}\s*#{rows.size}/
         assert_select "a.pf-filter[href*='filter=unconfigured']", count: 0
         assert_select "input[type=radio][value=leave][checked][name^='pf[new_fields]']", rows.size
-        assert_not_includes body, t('resources.fields_tab.not_configured', behaviour: t('resources.fields_tab.mutes_nothing'))
+        assert_not_includes body, t('resources.fields_tab.not_configured', state: t('ui.states.field_level.none'), behaviour: t('resources.fields_tab.mutes_nothing'))
       end
 
       test 'saving a muting column left on Unchanged creates no field row' do
@@ -252,7 +252,7 @@ module PermissionForge
           get pf("/audit/#{event.uuid}"), params: { locale: 'en' }
 
           assert_response :success
-          unknown = t('audit_log.actor_types.unknown')
+          unknown = t('ui.states.actor.unknown')
           assert_not_includes who_card.text.squish, "#{unknown} · #{unknown}"
           assert_equal 'PermissionForge.with_audit_actor', who_card.at_css('code').text
           assert_match(/no actor was named for this change/i, who_card.text)
