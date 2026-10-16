@@ -36,7 +36,7 @@
                            selected: @filter == filter, count: @counts[filter] %>
       <% end %>
     </div>
-    <div class="pf-card pf-scroll-x">
+    <%= pf_scroll_frame('aria-label': t('permission_forge.nav.permission_sets'), class: 'pf-card') do %>
       <div class="pf-table pf-table--sets" role="table" aria-label="<%= t('permission_forge.nav.permission_sets') %>">
         <div class="pf-table__head" role="row">
           <span role="columnheader"><%= t('.columns.set') %></span>
@@ -78,6 +78,6 @@
       <% if @permission_sets.empty? %>
         <p class="pf-empty"><%= t('.no_match') %></p>
       <% end %>
-    </div>
+    <% end %>
   </div>
 <% end %>

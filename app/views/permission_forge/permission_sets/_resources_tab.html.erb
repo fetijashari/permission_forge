@@ -1,7 +1,7 @@
 <% muting = set.is_muting %>
 <% flags = PermissionForge::Admin::EffectiveAccess::CRUD %>
 <% requires = { 'edit_access' => 'read_access', 'delete_access' => 'read_access' } %>
-<div class="pf-card pf-scroll-x">
+<%= pf_scroll_frame('aria-label': t('.label'), class: 'pf-card') do %>
   <div class="pf-matrix" role="table" aria-label="<%= t('.label') %>">
     <div class="pf-matrix__head" role="row">
       <span role="columnheader"><%= t('permission_forge.ui.resource') %></span>
@@ -46,4 +46,4 @@
       <%= pf_modal_link "+ #{t('.add')}", permission_forge.new_permission_set_resource_path(set), class: 'pf-btn pf-btn--sm' %>
     </div>
   <% end %>
-</div>
+<% end %>

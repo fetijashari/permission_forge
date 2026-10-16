@@ -141,6 +141,18 @@ module PermissionForge
       content_tag(pf_fragment? ? :h3 : :h2, text, class: 'pf-h3', id: id)
     end
 
+    # A frame that scrolls sideways when its content (a wide grid) is wider than the page: a
+    # tab stop with a name (aria-label, or aria-labelledby on a section), so the keyboard
+    # reaches the region and assistive technology says what scrolls; the stylesheet paints the
+    # cue at its edges and clips what it contains. Every grid 480px or wider goes in one
+    # (html/layout_lint_test.rb).
+    #   <%= pf_scroll_frame('aria-label': t('.label'), class: 'pf-card') do %> … <% end %>
+    #   <%= pf_scroll_frame(tag: :section, 'aria-labelledby': 'pf-changes', class: 'pf-card') do %> … <% end %>
+    def pf_scroll_frame(tag: :div, **options, &)
+      classes = ['pf-scroll-x', options.delete(:class)].compact.join(' ')
+      content_tag(tag, class: classes, role: (tag == :section ? nil : 'region'), tabindex: '0', **options, &)
+    end
+
     # Breadcrumb from [[label, path], ..., label]
     def pf_breadcrumb(*items)
       parts = items.map do |item|

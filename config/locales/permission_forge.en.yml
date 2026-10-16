@@ -604,8 +604,9 @@ en:
         people:
           one: "%{count} person has"
           other: "%{count} people have"
-        search_placeholder: Look up a person by name or email to see what they can
-          access, and why
+        search_help: Look up a person by name or email to see what they can access,
+          and why
+        search_placeholder: Name or email
         sets:
           one: "%{count} active Permission Set"
           other: "%{count} active Permission Sets"
@@ -941,7 +942,7 @@ en:
             desc: Records without the related record are kept.
             title: Also records without it
         message: Blocked message
-        message_placeholder: Shown when someone opens a record this rule hides.
+        message_help: Shown when someone opens a record this rule hides.
         model_error: "%{field} %{message}"
         model_missing: This model or relationship no longer exists in the app.
         name: Rule name
@@ -2238,7 +2239,7 @@ en:
         other: Rules (%{count})
       rules_tab: Rules
       search: Search
-      search_people: Search by name or email
+      search_people: Name or email
       setting: Setting
       states:
         blocked: Blocked

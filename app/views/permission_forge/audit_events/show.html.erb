@@ -97,7 +97,7 @@
 </div>
 
 <% if d.changes? %>
-  <section class="pf-card pf-scroll-x" aria-labelledby="pf-event-changes">
+  <%= pf_scroll_frame(tag: :section, 'aria-labelledby': 'pf-event-changes', class: 'pf-card') do %>
     <div class="pf-card__header">
       <h2 class="pf-h2" id="pf-event-changes"><%= t('.changes') %></h2>
       <span class="pf-card__desc"><%= t('.changes_desc', count: d.changes_count) %></span>
@@ -114,11 +114,11 @@
         <% end %>
       </tbody>
     </table>
-  </section>
+  <% end %>
 <% end %>
 
 <% if d.snapshot? %>
-  <section class="pf-card pf-scroll-x" aria-labelledby="pf-event-snapshot">
+  <%= pf_scroll_frame(tag: :section, 'aria-labelledby': 'pf-event-snapshot', class: 'pf-card') do %>
     <div class="pf-card__header">
       <h2 class="pf-h2" id="pf-event-snapshot"><%= t('.snapshot') %></h2>
       <span class="pf-card__desc"><%= d.snapshot_of_removed? ? t('.snapshot_destroyed') : t('.snapshot_desc') %></span>
@@ -131,11 +131,11 @@
         <% end %>
       </tbody>
     </table>
-  </section>
+  <% end %>
 <% end %>
 
 <% if d.other? %>
-  <section class="pf-card pf-scroll-x" aria-labelledby="pf-event-data">
+  <%= pf_scroll_frame(tag: :section, 'aria-labelledby': 'pf-event-data', class: 'pf-card') do %>
     <div class="pf-card__header"><h2 class="pf-h2" id="pf-event-data"><%= t('.data') %></h2></div>
     <table class="pf-audit-table">
       <thead><tr><th scope="col"><%= t('.key') %></th><th scope="col"><%= t('.value') %></th></tr></thead>
@@ -145,7 +145,7 @@
         <% end %>
       </tbody>
     </table>
-  </section>
+  <% end %>
 <% end %>
 
 <% if d.no_data? %>

@@ -24,7 +24,7 @@
     <div class="pf-card"><p class="pf-empty"><%= t('permission_forge.people.access_tab.empty', name: first_name) %></p></div>
   <% else %>
     <div class="pf-split">
-      <div class="pf-split__main pf-card pf-scroll-x">
+      <%= pf_scroll_frame('aria-label': t('.grid_label'), class: 'pf-split__main pf-card') do %>
         <div class="pf-effective" role="table" aria-label="<%= t('.grid_label') %>">
           <div class="pf-matrix__head" role="row">
             <span role="columnheader"><%= t('permission_forge.ui.resource') %></span>
@@ -102,7 +102,7 @@
             </div>
           <% end %>
         </div>
-      </div>
+      <% end %>
 
       <aside class="pf-split__side pf-card" aria-live="polite" aria-label="<%= t('.why_label') %>">
         <div class="pf-why" data-pf-why-empty <%= 'hidden' if @why.present? %>>

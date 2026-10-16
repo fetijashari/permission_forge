@@ -110,7 +110,8 @@
     <%# 4. Blocked message %>
     <div class="pf-field">
       <label class="pf-label" for="pf-rule-msg">4. <%= t('.message') %> <span class="pf-fs-12 pf-text-3 pf-fw-500"><%= t('.optional') %></span></label>
-      <textarea id="pf-rule-msg" class="pf-textarea" name="rule[failure_message]" rows="2" placeholder="<%= t('.message_placeholder') %>"><%= form.failure_message %></textarea>
+      <textarea id="pf-rule-msg" class="pf-textarea" name="rule[failure_message]" rows="2" aria-describedby="pf-rule-msg-help"><%= form.failure_message %></textarea>
+      <p id="pf-rule-msg-help" class="pf-hint"><%= t('.message_help') %></p>
     </div>
 
     <%# Advanced %>

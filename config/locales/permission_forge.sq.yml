@@ -615,8 +615,9 @@ sq:
         people:
           one: "%{count} person ka"
           other: "%{count} persona kanë"
-        search_placeholder: Kërkoni një person sipas emrit ose email-it për të parë
-          çfarë mund të shohë dhe pse
+        search_help: Kërkoni një person sipas emrit ose email-it për të parë çfarë
+          mund të shohë dhe pse
+        search_placeholder: Emër ose email
         sets:
           one: "%{count} Grup lejesh aktiv"
           other: "%{count} Grupe lejesh aktive"
@@ -958,8 +959,7 @@ sq:
             desc: Regjistrimet pa regjistrimin e lidhur mbahen.
             title: Edhe regjistrimet pa të
         message: Mesazhi i bllokimit
-        message_placeholder: Shfaqet kur dikush hap një regjistrim që ky rregull e
-          fsheh.
+        message_help: Shfaqet kur dikush hap një regjistrim që ky rregull e fsheh.
         model_error: "%{field} %{message}"
         model_missing: Ky model ose lidhje nuk ekziston më në aplikacion.
         name: Emri i rregullit
@@ -2294,7 +2294,7 @@ sq:
         other: Rregullat (%{count})
       rules_tab: Rregullat
       search: Kërko
-      search_people: Kërko me emër ose email
+      search_people: Emër ose email
       setting: Cilësimi
       states:
         blocked: I bllokuar
