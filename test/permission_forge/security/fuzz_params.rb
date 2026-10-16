@@ -11,7 +11,9 @@ module PermissionForge
     # A read is `params[:x]`, `params['x']`, `@params[:x]` (a form object
     # handed the params), `params.require/fetch/key?/dig(:x)`, a ParamShapes
     # reader (`pf_text_param(:x)`, `pf_require_hash(:x)` …) and, inside an
-    # attribute section, every key of the `.permit(...)` that follows it.
+    # attribute section, every key of the `.permit(...)` that follows it —
+    # or, in the API, every key `pf_record_attributes(:x, Model, :a, :b)`
+    # names (Api::InputShapes reads the section without `.permit`).
     module FuzzParams
       ROOT = File.expand_path('../../..', __dir__)
 
@@ -20,11 +22,14 @@ module PermissionForge
         /(?:\bcontroller\.|@|\b)params\[['"](\w+)['"]\]/,
         /\bparams\.(?:require|fetch|key\?|dig)\(:(\w+)/,
         /\bpf_(?:text|integer|boolean|time)_param\(:(\w+)/,
-        /\bpf_(?:require_hash|hash_param|id_list)\(:(\w+)/
+        /\bpf_(?:require_hash|hash_param|id_list)\(:(\w+)/,
+        /\bpf_record_attributes\(\s*:(\w+)/
       ].freeze
       TAB_READER = /\bpf_tab_param\(/
       SECTION = /\bpf_(?:require_hash|hash_param)\(:(\w+)\)/
       PERMIT = /\.permit\(([^)]*)\)/m
+      # The API's attribute sections: the section, the model, the keys.
+      RECORD_ATTRIBUTES = /\bpf_record_attributes\(\s*:(\w+)\s*,\s*[\w:]+\s*,([^)]*)\)/m
 
       # Read for every request: the audit context (`reason`) and the audited
       # pages (Audit::AuditedViews).
@@ -99,13 +104,20 @@ module PermissionForge
         names.uniq
       end
 
-      # Each `.permit(...)` is the section read last before it in the file.
+      # Each `.permit(...)` is the section read last before it in the file;
+      # each `pf_record_attributes(:section, Model, :key, ...)` names its own.
       def self.section_permits(source)
-        source.to_enum(:scan, PERMIT).filter_map do
+        source = source.gsub(/^\s*#.*$/, '')
+        permits = source.to_enum(:scan, PERMIT).filter_map do
           match = Regexp.last_match
           section = source[0, match.begin(0)].scan(SECTION).flatten.last
-          [section, match[1].scan(/:(\w+)|(\w+):/).flatten.compact.uniq] if section
+          [section, keys_in(match[1])] if section
         end
+        permits + source.scan(RECORD_ATTRIBUTES).map { |section, keys| [section, keys.scan(/:(\w+)/).flatten.uniq] }
+      end
+
+      def self.keys_in(list)
+        list.scan(/:(\w+)|(\w+):/).flatten.compact.uniq
       end
 
       def self.with_included(files)

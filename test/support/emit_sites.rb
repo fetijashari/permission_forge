@@ -4,9 +4,10 @@ require 'prism'
 require_relative 'static_guard'
 
 # Every PermissionForge::Warnings.emit call of the gem (BootWarningsChannelTest's
-# severity guard): [key, severity as written, file:line]. The key of an
-# interpolated one is its static part ("masked_models.unmaskable."); a site
-# that passes no severity is 'config' (the default); a computed one is its
+# severity and audience guards): [key, severity as written, file:line,
+# audience as written]. The key of an interpolated one is its static part
+# ("masked_models.unmaskable."); a site that passes no severity is 'config'
+# (the default), no audience 'all' (the default); a computed one is its
 # expression ("SEVERITY.fetch(setting, :config)").
 module EmitSites
   module_function
@@ -30,16 +31,20 @@ module EmitSites
 
   def site(node, path)
     arguments = node.arguments&.arguments || []
-    [key(arguments.first), severity(arguments), "#{Pathname(path).relative_path_from(StaticGuard::ROOT)}:#{node.location.start_line}"]
+    [key(arguments.first), severity(arguments), "#{Pathname(path).relative_path_from(StaticGuard::ROOT)}:#{node.location.start_line}",
+     option(arguments, 'audience:', 'all')]
   end
 
   def key(argument)
     argument.slice.delete_prefix(':').delete('"').sub(/\#\{.*\z/, '')
   end
 
-  def severity(arguments)
+  def severity(arguments) = option(arguments, 'severity:', 'config')
+
+  # The keyword `name` as written (a Symbol without its colon), else `default`.
+  def option(arguments, name, default)
     options = arguments.find { |argument| argument.is_a?(Prism::KeywordHashNode) }
-    option = options&.elements&.find { |element| element.key.slice == 'severity:' }
-    option ? option.value.slice.delete_prefix(':') : 'config'
+    option = options&.elements&.find { |element| element.key.slice == name }
+    option ? option.value.slice.delete_prefix(':') : default
   end
 end
