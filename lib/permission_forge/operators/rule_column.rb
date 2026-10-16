@@ -129,10 +129,7 @@ module PermissionForge
           return unless model
 
           models = models_along(model, rule.join_rule? ? path_segments(rule.field_accessor_path) : [])
-          return unless models.any? && models.all? { |model| PermissionForge::SchemaRead.table?(model, model.table_name) }
-
-          models.each { |model| PermissionForge::SchemaRead.columns(model, verify: true) } if verify
-          find(rule.field_name, models)
+          find(rule.field_name, models) if readable?(models, verify)
         rescue *UNTELLABLE
           nil
         end
@@ -167,6 +164,16 @@ module PermissionForge
         end
 
         private
+
+        # Every table along the path is there (asking a missing one for its
+        # columns fails the statement); compared with the database first when
+        # `verify`.
+        def readable?(models, verify)
+          return false unless models.any? && models.all? { |model| PermissionForge::SchemaRead.table?(model, model.table_name) }
+
+          models.each { |model| PermissionForge::SchemaRead.columns(model, verify: true) } if verify
+          true
+        end
 
         # The model a table name stands for; without one, the model the rule ends on.
         def table_model(table, models)
