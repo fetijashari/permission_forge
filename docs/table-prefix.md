@@ -20,7 +20,7 @@ PermissionForge creates 9 database tables: the 8 permission tables and the audit
 
 The install generator accepts a `--table-prefix` option:
 
-```bash
+```bash fragment
 # Default — full prefix (recommended for new apps)
 rails generate permission_forge:install
 
@@ -41,7 +41,7 @@ The upgrade generator (`rails generate permission_forge:upgrade`, which adds sch
 
 Edit your initializer, then restart every process (web, jobs, consoles):
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   config.table_name_prefix = 'pf_'  # or '' for no prefix
@@ -50,7 +50,7 @@ end
 
 If you're changing the prefix on an existing database, you'll need to rename the tables:
 
-```ruby
+```ruby fragment
 # db/migrate/YYYYMMDDHHMMSS_rename_permission_forge_tables.rb
 class RenamePermissionForgeTables < ActiveRecord::Migration[7.2]
   def change
@@ -73,7 +73,7 @@ Only table names carry the prefix. Foreign-key columns are always `permission_se
 
 All 9 models use dynamic `def self.table_name` methods instead of static `self.table_name =` assignments:
 
-```ruby
+```ruby fragment
 # app/models/permission_forge/permission_set.rb
 module PermissionForge
   class PermissionSet < ActiveRecord::Base
@@ -101,7 +101,7 @@ Use an empty prefix (`''`) when:
 
 The prefix applies to the table a reference points at, never to the column:
 
-```ruby
+```ruby fragment
 # With prefix 'permission_forge_':
 t.references :permission_set, foreign_key: { to_table: :permission_forge_permission_sets }
 
@@ -118,7 +118,7 @@ References to the host app's `users` table are never prefixed either — they al
 
 Those versions also prefixed the *columns* (`permission_forge_permission_set_id`), which the models never read, so an install with a non-empty prefix could not create or read any permission data. If you still have such a migration unapplied, delete it and run the generator again. If you applied it, rename the columns:
 
-```ruby
+```ruby fragment
 class FixPermissionForgeForeignKeys < ActiveRecord::Migration[7.1]
   PREFIX = 'permission_forge_'
   REFERENCES = {

@@ -8,7 +8,7 @@ Permission set assignments can be time-bound via the `expires_at` column on `Per
 
 ### Via Code
 
-```ruby
+```ruby fragment
 # Assign with expiration
 PermissionForge::PermissionSetUser.create!(
   user: user,
@@ -28,7 +28,7 @@ PermissionForge::PermissionSetUser.create!(
 
 ### Via API
 
-```bash
+```bash fragment
 # Assign with expiration
 POST /api/permission_sets/:identifier/users
 { "user_id": 42, "expires_at": "2026-04-01T00:00:00Z" }
@@ -53,7 +53,7 @@ POST /api/permission_sets/:identifier/users/bulk
 
 Whenever the permission hash is built (read-through on cache miss, or an explicit `regenerate_permissions`), the `PermissionCacheAccessor` filters out expired assignments before passing permission sets to the `PermissionHashBuilder`:
 
-```ruby
+```ruby fragment
 # Only active (non-expired) assignments are used
 permission_set_users.active_assignments  # WHERE expires_at IS NULL OR expires_at >= NOW()
 ```
@@ -67,7 +67,7 @@ This means:
 
 Use `ExpiredAssignmentCleaner` to remove stale records and invalidate affected users' cached permissions (each hash is rebuilt read-through on the user's next access):
 
-```ruby
+```ruby run
 # Remove expired assignments and invalidate affected users' caches
 result = PermissionForge::Services::ExpiredAssignmentCleaner.call
 # => { removed: 5, invalidated: 3 }  # :invalidated = users whose cache was invalidated
@@ -79,7 +79,7 @@ result = PermissionForge::Services::ExpiredAssignmentCleaner.call(dry_run: true)
 
 ### Rake Tasks
 
-```bash
+```bash run
 # Dry run — see what's expired without removing
 rake permission_forge:expired_assignments
 
@@ -98,7 +98,7 @@ Every removed assignment is destroyed through its callbacks, so each one is an `
 
 The cleaner re-reads each selected assignment under a row lock before destroying it: an assignment renewed (given a later `expires_at`) or removed since the run selected it is left alone, and the `assignment.revoked` snapshot is the row as it was at that moment.
 
-```ruby
+```ruby run
 PermissionForge::Services::ExpiredAssignmentCleaner.call(actor: 'nightly job', reason: 'daily cleanup')
 ```
 
@@ -116,7 +116,7 @@ An assignment without `expires_at` is permanent. The Stale list on Home, the per
 
 ### Rake task: stale assignments
 
-```bash
+```bash run
 bin/rails permission_forge:stale_assignments                    # not reviewed for admin_stale_assignment_days
 THRESHOLD_DAYS=30 bin/rails permission_forge:stale_assignments  # your own threshold
 ```
@@ -143,7 +143,7 @@ The shared cache cannot outlive an assignment — the cache TTL is clamped to th
 
 **You should still schedule the cleaner to run periodically** (daily or hourly depending on your needs):
 
-```ruby
+```ruby fragment
 # Sidekiq + sidekiq-cron
 class ExpiredAssignmentCleanupJob
   include Sidekiq::Job
@@ -171,14 +171,14 @@ end
 
 ## Scopes
 
-```ruby
+```ruby run
 PermissionForge::PermissionSetUser.active_assignments  # Non-expired (nil or future)
 PermissionForge::PermissionSetUser.expired              # Past expires_at
 ```
 
 ## Instance Methods
 
-```ruby
+```ruby fragment
 psu.expired?           # true if expires_at is present and in the past
 psu.active_assignment? # true if not expired (nil or future)
 ```

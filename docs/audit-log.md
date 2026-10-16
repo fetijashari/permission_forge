@@ -184,7 +184,7 @@ The actor of an event is the first of these that names someone (`Audit::Actor.cu
 
 The actor is never taken from parameters or headers. A resolver that raises, or answers with something that is not an actor, gives `unknown` and is reported through `audit_hook_failure_strategy`.
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   # Under HTTP Basic auth your app's sign-in does not run in the admin: name the
@@ -206,7 +206,7 @@ end
 
 Outside a request, name the actor explicitly:
 
-```ruby
+```ruby fragment
 PermissionForge.with_audit_actor(user: admin, source: 'job', reason: 'TCK-12') do
   PermissionForge::Services::ExpiredAssignmentCleaner.call
 end
@@ -229,7 +229,7 @@ Each event carries `request_id` and `ip` from `request.request_id` and `request.
 
 Override either with a lambda; a key you return replaces the default (a key returned as `nil` stores nothing):
 
-```ruby
+```ruby fragment
 config.audit_request_context = ->(controller) {
   { request_id: controller.request.headers['X-Correlation-Id'], ip: controller.request.headers['CF-Connecting-IP'] }
 }
@@ -247,7 +247,7 @@ On an assignment or a group membership the reason is also kept on the row (`reas
 
 **Correlation.** Events of one action share a `correlation_id`: one id per mutating admin or API request, one per outermost transaction otherwise, one per standalone event when neither applies. `Audit.correlate { ... }` makes a block share one id (an outer block's id wins).
 
-```ruby
+```ruby fragment
 PermissionForge::Audit.correlate { change_set.apply! }
 ```
 
@@ -268,7 +268,7 @@ All ten options live in `PermissionForge::Configuration::AuditSettings`; the Set
 | `audit_log_authorization` | `nil` | `lambda(controller)`; the audit pages, exports and API endpoint are shown only when it returns exactly `true`. `nil`: anyone who can reach the admin. |
 | `admin_assignment_authorization` | `nil` | `lambda(controller, target, user_ids, action)`; see [configuration.md](configuration.md#admin_assignment_authorization). |
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.audit_events = :auto
   config.audit_runtime_events = %i[denied bypass]
@@ -313,7 +313,7 @@ Runtime events are published always (if somebody listens) and stored only for th
 
 Every event is published after the transaction that wrote it commits (at once outside a transaction, never after a rollback). Runtime events are published at once. The payload has every column as a symbol key, plus `tenant_id`, `stored` (was a row written), `deferred` (it will be written when the open transaction ends), `audit_event` (the row or `nil`) and, for in-process subscribers only, `objects`.
 
-```ruby
+```ruby fragment
 ActiveSupport::Notifications.subscribe(/\.permission_forge\z/) do |event|
   Rails.logger.info("#{event.name} #{event.payload[:actor_label]}")
 end
@@ -415,19 +415,19 @@ Newest first (`occurred_at desc, id desc`). Pagination follows `config.api_defau
 
 `audit_retention_period` defaults to `nil`: events are kept forever (the security audit reports this as `audit_kept_forever`, Info). Set it to your policy:
 
-```ruby
+```ruby fragment
 config.audit_retention_period = 2.years
 ```
 
 Nothing deletes events on its own. Run the purge from cron, a job or a rake task:
 
-```bash
+```bash run
 bin/rails permission_forge:audit_events:purge                              # deletes
 DRY_RUN=1 bin/rails permission_forge:audit_events:purge                    # counts only
 ACTOR="Ops nightly" REASON="TCK-88" bin/rails permission_forge:audit_events:purge
 ```
 
-```ruby
+```ruby run
 PermissionForge::Services::AuditEventPurger.call(dry_run: true)
 PermissionForge::Services::AuditEventPurger.call(actor: 'nightly job', reason: 'policy 7.2')
 ```
@@ -526,7 +526,7 @@ From 0.13 to 0.14 no migration is needed. The deploy step `bin/rails permission_
 
 From a version without the audit log (before 0.13):
 
-```bash
+```bash fragment
 bin/rails generate permission_forge:upgrade --skip   # up to three migrations; reads your table prefix
 bin/rails db:migrate
 ```
@@ -545,7 +545,7 @@ Behaviour changes are listed in the [migration guide](migration-guide.md#upgradi
 
 Adding an event is one catalogue entry; recording it is one call.
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb (after configure)
 PermissionForge::Audit::EventCatalog.register('host.export_requested', category: 'admin')
 

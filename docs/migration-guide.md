@@ -22,7 +22,7 @@ No migration is needed: 0.14 adds no table or column. Several defaults are stric
 
 0.14 keeps its entries under a new key namespace (`pf:v2:user_<id>`, `pf:v2:tenant_<t>_user_<id>`, and per-context variants). A 0.14 invalidation also removes the 0.13 keys, but a 0.13 process cannot reach a 0.14 entry: during a rolling deploy, a permission change made by a 0.13 process can stay cached in 0.14 until `cache_ttl`. Once **the last 0.13 process is gone**, run:
 
-```bash
+```bash run
 ACTOR="ops: deploy" REASON="deploy 0.14" bin/rails permission_forge:cache:clear
 ```
 
@@ -38,7 +38,7 @@ Version 0.13 adds the [audit event log](audit-log.md): an `audit_events` table t
 
 ### Steps
 
-```bash
+```bash fragment
 bin/rails generate permission_forge:upgrade --skip   # reads your table prefix; add --tenant-column=<col> if your tables are tenant-scoped
 bin/rails db:migrate
 ```
@@ -84,7 +84,7 @@ The audit gains an `audit_trail` check ([security-audit.md](security-audit.md)).
 
 Columns that store one of *your* primary keys — `user_id`, the audit columns `created_by_id` / `updated_by_id`, and the tenant column added by `--tenant` — must have the type of that key. The install generator reads the key type from your user model (and tenant model) and types the columns to match:
 
-```bash
+```bash fragment
 bin/rails generate permission_forge:install                       # detected from User
 bin/rails generate permission_forge:install --user-id-type=uuid   # explicit: bigint, integer, uuid or string
 bin/rails generate permission_forge:install --tenant=Account --tenant-id-type=uuid
@@ -96,7 +96,7 @@ Run the generator after your users table exists so detection can work; when it c
 
 **Repairing an affected install.** The stored ids are truncated and cannot be mapped back to users, so the assignments have to be re-created after the columns are retyped:
 
-```ruby
+```ruby fragment
 class RetypePermissionForgeUserKeys < ActiveRecord::Migration[7.1]
   PREFIX = 'permission_forge_'
   ASSIGNMENTS = { permission_set_users: %i[permission_set_id idx_pf_pset_users_unique],
@@ -133,7 +133,7 @@ Version 0.10.0 added schema hardening that new installs now get automatically fr
 
 If you installed with an earlier version, run the upgrade generator:
 
-```bash
+```bash fragment
 bin/rails generate permission_forge:upgrade
 ```
 
@@ -141,7 +141,7 @@ This creates a migration that de-duplicates any existing `(resource_id, name)` c
 
 The generator reads your app's configured `config.table_name_prefix` (the initializer is loaded by `rails generate`), so the migrations target your real tables — including unprefixed ones — without extra flags. To override, pass `--table-prefix`:
 
-```bash
+```bash fragment
 bin/rails generate permission_forge:upgrade --table-prefix=""
 ```
 
@@ -154,17 +154,17 @@ This also applies if you migrated from an embedded implementation with `--skip-m
 If you already have permission tables in your database (e.g., `permission_sets`, `resources`, etc.):
 
 1. Install without migration:
-   ```bash
+   ```bash fragment
    rails generate permission_forge:install --skip-migration --table-prefix=""
    ```
 
 2. Update your configuration to use empty prefix:
-   ```ruby
+   ```ruby fragment
    config.table_name_prefix = ''
    ```
 
 3. Replace concern includes:
-   ```ruby
+   ```ruby fragment
    # Before
    include PermissionsGenerator
    include PermissionsHelpers
@@ -174,7 +174,7 @@ If you already have permission tables in your database (e.g., `permission_sets`,
    ```
 
 4. Replace model references:
-   ```ruby
+   ```ruby fragment
    # Before                              # After
    Users::PermissionSet           =>     PermissionForge::PermissionSet
    Users::Resource                =>     PermissionForge::Resource

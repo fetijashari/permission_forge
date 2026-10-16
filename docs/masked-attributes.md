@@ -19,9 +19,9 @@ The committing process writes a new token (`masked_models_version`) to the cache
 The token is written with no expiry, also under a Rails cache with a default `expires_in`. A process that finds no token (evicted by an LRU store, or flushed) writes a new one and re-applies, and every other process re-applies once when it sees it: losing the token costs one query per process, never a model left unmasked.
 
 - **This needs a shared cache store**: `:rails_cache` over Redis, Memcached or Solid Cache (or `:file_store` on one machine), or a store instance every process shares. Under `cache_backend = :memory` or a `:memory_store` each process has a token of its own, and other processes pick a new model up only at their next boot. A store that keeps nothing (`cache_backend = :null`, a `:null_store`) is never asked for the token: it would read as lost at every check. Production boots with such a store warn that a model first named in another process stays unmasked there until a restart.
-- **In development** (Rails 8 generates a `:memory_store`, Rails 7.1/7.2 a `:null_store` unless `bin/rails dev:cache`), the token cannot reach the server either: a `Resource` row created from a console, `bin/rails runner` or a rake task used to leave the model unmasked in the running server until a restart. There each request or job re-reads the `Resource` names from the database instead, one query at most every 2 seconds (`MaskingSync::DATABASE_RECHECK`), so the model is masked at the server's next request after that. The boot says so (in the log and on standard error). To avoid the query, share the store or [include the concern](#recommended-in-production-include-the-concern-explicitly).
+- **In development** (Rails 8 generates a `:memory_store`, Rails 7.1/7.2 a `:null_store` unless `bin/rails dev:cache`), the token cannot reach the server either: a `Resource` row created from a console, `bin/rails runner` or a rake task used to leave the model unmasked in the running server until a restart. There each request or job re-reads the `Resource` names from the database instead, one query at most every 2 seconds (`MaskingSync::DATABASE_RECHECK`), so the model is masked at the server's next request after that. The boot says so (in the log and [on standard error](configuration.md#where-warnings-appear)). To avoid the query, share the store or [include the concern](#recommended-in-production-include-the-concern-explicitly).
 - **Cost:** one store read per request or job while either setting is `:auto` (the default for `auto_apply_masked_attributes`). The `Resource` names are read (one query) only when the token changed (or was lost). With lists or `false`, nothing per request.
-- **When the store does not answer** (unreachable, or it neither gives nor keeps the token), the process stops reading it for 30 seconds and logs that once per outage (`The cache store did not give or keep the masking token ...`: a store that is up but loses the token at once cannot sync masking — share one that keeps entries, or include the concern in the models). When the pause ends, one request or job per process probes the store (the others make no store call): it pays the timeout twice on an error-swallowing store such as `RedisCacheStore` (the read, then the token write) and once on a store that raises. An outage then adds that to one request or job per process every 30 seconds, not to every one. A model named in another process during the outage is masked here at the first check after the pause. If the process that names the model cannot write the token (the store is down, or raises), it logs a warning, never fails the save, and writes the token at its first request or job after the store answers again (after the pause). Until then the other processes do not mask that model: an outage plus up to 30 seconds, as long as the announcing process serves another request or job.
+- **When the store does not answer** (unreachable, or it neither gives nor keeps the token), the process stops reading it for 30 seconds and logs that once per outage (`The cache store did not give or keep the masking token ...`: a store that is up but loses the token at once cannot sync masking — share one that keeps entries, or include the concern in the models). When the store answers nothing the warning says so — `(it did not answer, or a read right after a write came back empty: the store is down, full, or evicts the key at once)` — and names the remedy (a shared store that keeps entries, or the concern included in the models). When the pause ends, one request or job per process probes the store (the others make no store call): it pays the timeout twice on an error-swallowing store such as `RedisCacheStore` (the read, then the token write) and once on a store that raises. An outage then adds that to one request or job per process every 30 seconds, not to every one. A model named in another process during the outage is masked here at the first check after the pause. If the process that names the model cannot write the token (the store is down, or raises), it logs a warning, never fails the save, and writes the token at its first request or job after the store answers again (after the pause). Until then the other processes do not mask that model: an outage plus up to 30 seconds, as long as the announcing process serves another request or job.
 - **A process that booted without its database** (an image build running `assets:precompile`, a deploy during a failover) masks at its first request or job that can read the `Resource` rows.
 
 **A model whose table cannot be read** when masking is applied (a `Resource` row seeded before the model's migration ran, or a database that is down) is skipped, and the other models are still masked. The log says so once per model and process (again after a code reload):
@@ -34,7 +34,7 @@ At boot this is followed by `Auto-applied masking is not complete at boot ...`. 
 
 You can change this behavior via `config.auto_apply_masked_attributes`:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # :auto / true  — auto-apply to every model with a Resource record (default)
   config.auto_apply_masked_attributes = :auto
@@ -51,7 +51,7 @@ end
 
 Auto-apply is convenient: a model is masked as soon as a `Resource` row names it, in every process. It costs one cache-store read per request and job, and a model is masked only once a row names it. In production, include `MaskedAttributes` in every model that holds personal data and turn auto-apply off (or list those models):
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 config.auto_apply_masked_attributes = false   # or ['Customer', 'Order']
 
@@ -65,7 +65,7 @@ The model is masked from the moment it loads, whatever the rows say, and no requ
 
 ## Manual include (when auto-apply is off)
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   include PermissionForge::Concerns::PermissionScopedFindable  # row-level
   include PermissionForge::Concerns::MaskedAttributes          # field-level
@@ -126,7 +126,7 @@ A subclass on its parent's table (`VipCustomer < Customer`) answers to its own `
 
 An alias is not a field of its own. Reading or writing it is reading or writing the attribute it points to, at that attribute's level:
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   alias_attribute :mail, :email
 end
@@ -181,7 +181,7 @@ When the user lacks `read_access` on a field:
 - **`attributes` / `as_json` / `to_json`**: the key is **omitted entirely** by default. This matches `Security.stripInaccessible()` — the field literally doesn't exist in the hash. Set `config.omit_hidden_in_attributes_hash = false` to include the key with a sentinel value instead.
 - **`read_attribute` / `[]`**: returns `config.hidden_attribute_value` (default: `nil`). Set this to a custom sentinel (e.g. `RedactedValue.new`) if `nil` is ambiguous in your domain.
 
-```ruby
+```ruby fragment
 # Default
 customer.read_attribute(:domain)  # => nil
 customer.attributes               # => { 'name' => 'Acme', 'email' => 'c***@acme.com' }
@@ -204,7 +204,7 @@ The same precedence as `FiltersResponseAttributes`:
 | `true` | `true` | Masked via `MaskValue` (`mask_strategy`) |
 | `true` | `false` | Raw value |
 
-```ruby
+```ruby fragment
 customer.read_attribute(:email)
 # => "c***@acme.com"  when read_access: true, mask_access: true, mask_strategy: 'email'
 # => "contact@acme.com"  when read_access: true, mask_access: false
@@ -234,7 +234,7 @@ A virtual field is a field that is not a column: a method, a store accessor, an 
 
 `config.mask_virtual_attributes` extends the model-level enforcement to virtual readers:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # false / nil    — off (default)
   config.mask_virtual_attributes = false
@@ -257,7 +257,7 @@ A name is never wrapped when it is the primary key, a column, a method `ActiveRe
 
 The engine wraps the readers at boot and whenever the concern is applied to a newly named model (in every process, through `MaskingSync`), for every selected model that has the concern — auto-applied or included by the model itself. If you include the concern yourself on a model that has no `Resource` row yet, or want other names covered, call it at the end of the class body:
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   include PermissionForge::Concerns::MaskedAttributes
 
@@ -277,7 +277,7 @@ If the model's `extra_fields_method` raises while the readers are being wrapped,
 
 To check one reader from the console:
 
-```ruby
+```ruby fragment
 PermissionForge::Concerns::MaskedAttributes::VirtualReaders.masked?(Customer, :full_address)
 # => true when the reader is wrapped and the config selects Customer
 ```
@@ -310,7 +310,7 @@ Attribute-API attributes go through `read_attribute`, exactly like columns. (`at
 
 Code that needs the real value (the model's own validations and callbacks, exports run for a signed-in user) asks for it explicitly:
 
-```ruby
+```ruby fragment
 before_save :normalize_address
 
 def normalize_address
@@ -364,7 +364,7 @@ Validators judge the stored value of the attribute they validate: a masked or hi
 
 When a field returns an unexpected value (nil where you expected raw, raw where you expected masked), ask the concern to explain its decision from the console:
 
-```ruby
+```ruby fragment
 PermissionForge::Concerns::MaskedAttributes.explain(customer, :email)
 # => { attribute: :email, field_configured: true, field_entry: { read_access: true, ... },
 #      unconfigured_field_strategy: :block, raw_value: "contact@acme.com",
@@ -385,7 +385,7 @@ For a 1000-row index page calling `customers.map(&:as_json)`, expect 5–15ms ad
 
 ## Configuration reference
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # Auto-apply mode. :auto/true (default), array of names, or false/nil.
   config.auto_apply_masked_attributes = :auto

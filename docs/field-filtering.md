@@ -16,7 +16,7 @@ Without field-level permissions, you'd need complex if/else logic everywhere. Wi
 
 ### Manual Setup
 
-```ruby
+```ruby fragment
 resource = PermissionForge::Resource.create!(
   permission_set: pset,
   name: 'Customer',
@@ -34,7 +34,7 @@ PermissionForge::ResourceField.create!(resource: resource, name: 'credit_limit',
 
 Instead of creating fields one by one, you can auto-generate them:
 
-```ruby
+```ruby fragment
 # Creates a ResourceField for every column in the Customer model
 # (except ignored fields like id, uuid, password; on a granting set
 # created_at / updated_at are at most read-only: read-only with grant_all,
@@ -49,7 +49,7 @@ PermissionForge::Services::ResourceFieldGenerator.call(
 
 For admin-level permission sets:
 
-```ruby
+```ruby fragment
 PermissionForge::Resource.grant_full_access!(
   permission_set: admin_pset,
   resource_name: 'Customer'
@@ -60,7 +60,7 @@ PermissionForge::Resource.grant_full_access!(
 
 ## Reading Field Permissions
 
-```ruby
+```ruby fragment
 entry = user.permissions_hash_for(:Customer)
 fields = entry[:fields]
 
@@ -88,7 +88,7 @@ Muting sets are applied after this merge; see [Muting Permission Sets](muting-pe
 
 Use `PermitsAttributes` to automatically strip fields the user can't edit:
 
-```ruby
+```ruby fragment
 class CustomersController < ApplicationController
   def update
     customer = Customer.find_by(uuid: params[:uuid])
@@ -126,7 +126,7 @@ Without a current user `PermitsAttributes` returns `{}`: every key is dropped. A
 
 Dropping is silent: the update succeeds with the keys that were kept, and a scaffold then says "Customer was successfully updated." although `status` and `notes` were ignored. Pass `report: true` to learn what was dropped. The call then answers a `PermitsAttributes::Result` instead of the Hash: `params` (the same filtered Hash), `dropped` (the paths of the dropped keys: `status`, `supplier_attributes.secret`, `lines_attributes.*.price`; never their values), `dropped?` and `dropped_fields` (the top-level keys, for a message). Without `report:` the return value is the Hash, as before.
 
-```ruby
+```ruby fragment
 def update
   result = PermissionForge::Services::PermitsAttributes.call(
     resource: @customer, permitted_params: customer_params, report: true
@@ -146,7 +146,7 @@ Translate the message as you do your others.
 
 `dropped` lists every key the user may not edit **that the request sent**, changed or not. An unchanged scaffold form posts every field back, so the message above says "Not saved: email, phone, status, notes, owner_id" after an edit that touched only `name`, and on create it names the blank fields nobody filled in. Do not post what will be dropped: render a field the user may not edit as a disabled input (browsers do not submit disabled inputs, so `dropped` then holds only keys a client sent on purpose), and leave out a field they may not read, by asking the same permissions the filter uses:
 
-```erb
+```erb fragment
 <%# app/views/customers/_form.html.erb %>
 <% access = Current.user&.field_permissions(:Customer, :status) || {} %>
 <% if access[:read_access] %>
@@ -165,7 +165,7 @@ Translate the message as you do your others.
 
 For read access, filter fields before sending the response:
 
-```ruby
+```ruby fragment
 class CustomerSerializer
   def initialize(customer, user)
     @customer = customer
@@ -208,7 +208,7 @@ A variant gets an entry in the permission hash only when the model has that name
 
 Add your own mappings in the initializer:
 
-```ruby
+```ruby fragment
 config.field_variant_mappings = {
   /_id\z/    => ->(name) { "#{name.sub(/_id\z/, '')}_uuid" },
   /_cents\z/ => ->(name) { name.sub(/_cents\z/, '') },
@@ -221,7 +221,7 @@ config.field_variant_mappings = {
 
 Some models have computed or virtual attributes that aren't database columns. You can register these for permission tracking:
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   def self.extra_fields_for_permissions
     %w[full_address contact_count total_revenue]
@@ -242,7 +242,7 @@ What a declared virtual field gets when a resource has no row for it is set by `
 | `:grant` (default) | Gets an implicit entry that follows the resource: `read_access` when the user's merged resource grants read, `edit_access` when it grants edit, never masked. (Before 0.14 the entry was read + edit for everyone the resource was readable for, so a read-only user could write a declared virtual field.) |
 | `:unconfigured` | Gets no entry. It follows `config.unconfigured_field_strategy` on the read path, like a column nobody configured, and is never editable. With the default `:block` it is hidden until an admin gives it a level. |
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.extra_fields_default_access = :unconfigured
 end
@@ -295,7 +295,7 @@ By default a virtual field's level is enforced where your code filters: `Permits
 
 A nested payload is filtered record by record against the **association model's own** resource (with its STI ancestors'), not the parent's:
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   has_many :contacts
   accepts_nested_attributes_for :contacts
@@ -336,7 +336,7 @@ When `FiltersResponseAttributes` encounters a field that has no `ResourceField` 
 | `:warn` | Pass through + log warning | Catch missing field configs during migration |
 | `:pass_through` | Field passes through unmasked | Legacy behavior, NOT recommended for production |
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.unconfigured_field_strategy = :block  # default (secure)
 end
@@ -354,7 +354,7 @@ Related fail-closed behavior (v0.10.0+):
 
 Call your own code for each field-level decision the gem makes (response filtering and `MaskedAttributes` reads; not `pluck` or raw SQL):
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.on_field_filtered = lambda { |resource_name:, field_name:, action:, user:|
     AuditLog.create!(

@@ -17,7 +17,7 @@ into a Permission Set.
 
 ### 1. Include the guard
 
-```ruby
+```ruby fragment
 class CustomersController < ApplicationController
   include PermissionForge::Concerns::ControllerActionGuard
 
@@ -44,31 +44,14 @@ in — see [Callback order](#callback-order).
 ### 2. Answer denied requests
 
 The guard never renders or redirects. A denied action raises
-`PermissionForge::ActionNotAuthorizedError`; your app decides what the user sees:
+`PermissionForge::ActionNotAuthorizedError` (`error.resource` is `"Customer"`, `error.action` `"export"`,
+`error.controller_path` `"customers"`, `error.reason` `:action_denied`, or `:nil_user_denied` when nobody is
+signed in); your app decides what the user sees. The handler is kept in one place, so that this page and that
+one cannot drift: copy the `rescue_from` for this error from
+[Handling Denials → Rescuing them yourself](row-level-rules.md#rescuing-them-yourself), which also has the
+`errors/forbidden` template and the `SessionsController#new` line that goes with it.
 
-```ruby
-class ApplicationController < ActionController::Base
-  rescue_from PermissionForge::ActionNotAuthorizedError do |error|
-    # error.resource        => "Customer"
-    # error.action          => "export"
-    # error.controller_path => "customers"
-    # error.reason          => :action_denied (:nil_user_denied when nobody is signed in)
-    respond_to do |format|
-      format.html do
-        if error.reason == :nil_user_denied && request.path != new_session_path # your sign-in page
-          redirect_to new_session_path, alert: t('errors.sign_in_first')
-        else
-          # The 403 page in place: never a redirect to the page that was just refused (the browser would loop).
-          render 'errors/forbidden', status: :forbidden # a template of your app, in its layout
-        end
-      end
-      format.any { head :forbidden } # JSON, CSV, ...: a 403 without HTML
-    end
-  end
-end
-```
-
-Only a signed-out visitor is redirected, to sign in, and never from the sign-in page itself. Not
+What that handler does: only a signed-out visitor is redirected, to sign in, and never from the sign-in page itself. Not
 `redirect_back fallback_location: root_path`: when the refused action is the root page, that
 redirects to it again, forever (`ERR_TOO_MANY_REDIRECTS`, one `action.denied` event per hop).
 Everyone else gets the 403 page in place, rendered as a template in your layout, not
@@ -88,7 +71,7 @@ handlers for this error and the row-level `NotAuthorizedError`.
 
 ### 3. Permit the action in a Permission Set
 
-```ruby
+```ruby fragment
 resource = PermissionForge::Resource.find_by!(permission_set: support_set, name: 'Customer')
 
 PermissionForge::ResourceAction.create!(
@@ -139,7 +122,7 @@ An action named after one of the CRUD words `user.can?` understands (`read`, `cr
 
 Declare the mapping on the controller when the convention does not fit:
 
-```ruby
+```ruby fragment
 class Customers::MergesController < ApplicationController
   include PermissionForge::Concerns::ControllerActionGuard
 
@@ -168,7 +151,7 @@ an action unchecked.
 
 One lambda for the whole app, useful when you cannot or do not want to touch the controllers:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.controller_action_resolver = lambda do |controller_path, action_name|
     next ['Customer', 'merge'] if controller_path == 'customers/merges' && action_name == 'create'
@@ -266,7 +249,7 @@ Details:
 
 What happens to a Resource or an action that no Permission Set manages (rows 4 and 8):
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.unconfigured_action_strategy = :allow   # default
   # config.unconfigured_action_strategy = :block
@@ -287,7 +270,7 @@ those are outside the guard altogether.
 
 A lambda that lets chosen users skip the guard, for example administrators:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.action_guard_bypass = ->(user, controller) { user.admin? }
 end
@@ -336,7 +319,7 @@ The rule: **the user must be resolved before the guard runs and before any model
 `find_by`, `permission_scoped`, a masked getter), on every action, public ones included. If your
 app sets the user in a `before_action` too, that callback has to come first:
 
-```ruby
+```ruby fragment
 class ApplicationController < ActionController::Base
   before_action :authenticate_user!                         # 1. sets Current.user
   include PermissionForge::Concerns::ControllerActionGuard  # 2. the guard
@@ -358,7 +341,7 @@ back to the sign-in form, as if not signed in), and if the guard is skipped
 too, row-level rules and masking follow the nil-user strategies, whose default `:bypass` shows
 every row unmasked. Resume the session on those actions, ahead of the guard:
 
-```ruby
+```ruby fragment
 class CustomersController < ApplicationController
   include PermissionForge::Concerns::ControllerActionGuard
   allow_unauthenticated_access only: :index
@@ -375,7 +358,7 @@ reaches the action, as `nil`.
 
 Ask the same question the guard asks, without raising:
 
-```erb
+```erb fragment
 <% if PermissionForge::ControllerActions::Authorizer.allowed?(controller_path: 'customers', action_name: 'export') %>
   <%= link_to 'Export', export_customers_path %>
 <% end %>
@@ -383,7 +366,7 @@ Ask the same question the guard asks, without raising:
 
 A small helper keeps views short:
 
-```ruby
+```ruby file=app/helpers/application_helper.rb
 module ApplicationHelper
   def action_allowed?(controller_path, action_name)
     PermissionForge::ControllerActions::Authorizer.allowed?(controller_path: controller_path, action_name: action_name)
@@ -411,7 +394,7 @@ actually includes the guard.
 
 `Authorizer.call` returns the full decision:
 
-```ruby
+```ruby fragment
 decision = PermissionForge::ControllerActions::Authorizer.call(controller_path: 'customers', action_name: 'export')
 decision.allowed?   # => false
 decision.reason     # => :action_denied

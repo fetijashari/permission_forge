@@ -14,7 +14,7 @@ This guide explains how to use the built-in `/hipaa-compliance` Claude Code skil
 
 Open your terminal in your project directory and run Claude Code:
 
-```bash
+```bash fragment
 claude
 ```
 
@@ -170,7 +170,7 @@ Before citing the log, read [What is not recorded](audit-log.md#what-is-not-reco
 
 Some HIPAA checks can be run directly in a Rails console:
 
-```ruby
+```ruby run
 # ePHI field audit (reuses the GDPR auditor). The default gdpr_field_patterns have no clinical
 # terms: add your own first, for example
 #   config.gdpr_field_patterns = config.gdpr_field_patterns.merge(/diagnosis|\Amrn\z|medication/ => 'full')
@@ -209,7 +209,7 @@ PermissionForge::PermissionSetUser
 
 ## Running Audits in CI
 
-```bash
+```bash fragment
 claude --print "/hipaa-compliance full" > hipaa-audit-report.md
 ```
 

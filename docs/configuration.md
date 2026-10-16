@@ -6,7 +6,7 @@ All configuration options with their defaults. These are the defaults of `Permis
 
 Set these in `config/initializers`. `user_class`, `audit_user_class` and `tenant_model` are read by the models as they load; a change made later does not reach a loaded class (PermissionForge logs a warning).
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # Sets the options that decide whether something fails open, all at once
   # (see Presets below: masked_attributes_nil_user_strategy and the options
@@ -541,7 +541,7 @@ On a snapshot database, read the permissions once (`current_user.permissions_has
 
 **In development, share the cache between processes.** An invalidation reaches the cache of the process that makes it. Rails 8.0+ generates `config.cache_store = :memory_store` in `config/environments/development.rb` (Rails 7.1 and 7.2: `:memory_store` after `bin/rails dev:cache`, `:null_store` otherwise), and the generated initializer caches through `Rails.cache` — so each process (the server, a console, `bin/rails runner`, a rake task) has a cache of its own. A permission change made from a console, a runner or a rake task (seeds, `permission_forge:cleanup_expired_assignments`, an erasure) invalidates only that process's copy, and the running server keeps serving the permissions it had cached until `cache_ttl` (an hour by default) or a restart; a change made in the server's own admin UI applies at once. The boot logs a warning in development when the permission cache is per process (`cache_backend = :memory`, or a `:memory_store`). Either share the store:
 
-```ruby
+```ruby fragment
 # config/environments/development.rb
 config.cache_store = :file_store, "tmp/cache/store"
 ```
@@ -550,7 +550,30 @@ or switch caching off in development (`config.cache_backend = :null if Rails.env
 
 **The same store carries auto-applied masking.** While `auto_apply_masked_attributes` (or `mask_virtual_attributes`) is `:auto`, a process that commits the first `Resource` row for a model tells the others through a token in the cache store ([Masked attributes](masked-attributes.md#how-other-processes-learn-about-a-new-model-maskingsync)). A per-process store (`:memory`, a `:memory_store`) or one that keeps nothing (`:null`, a `:null_store`) carries it to no other process: a `Customer` row created from `bin/rails runner` left the server's `Customer` unmasked — emails in clear while `masked_field?` said `true` — until a restart. In development the server therefore re-reads the `Resource` names from the database instead, one query at most every 2 seconds, so such a model is masked at its next request; no other environment runs that query. The development boot says so when the store is one of these, and production warns that a model first named in another process stays unmasked there until a restart. The remedies: a store every process shares (as above), or `include PermissionForge::Concerns::MaskedAttributes` in each model that holds personal data with `auto_apply_masked_attributes = false` (the recommended production setup, [below](masked-attributes.md#recommended-in-production-include-the-concern-explicitly)), or a list of models in `auto_apply_masked_attributes`.
 
-In development these warnings are also written to standard error, once per boot: the boot logs before `bin/rails server` attaches its console logger, and `bin/rails runner` and the console never attach one, so `log/development.log` alone went unread. Nothing is written there when the logger already writes to standard output or error, while `bin/rails generate` or `destroy` runs, or in any other environment.
+### Where warnings appear
+
+Every boot and configuration warning of the gem — the per-process cache above, conditional sets with an empty request
+context, the API enabled without authorization lambdas, unmasked GDPR fields, join rules under auto-scoping, missing or
+stale RLS policies, a model a `Resource` row names that cannot be masked, `audit_events = false`, a shared Basic-auth
+login without `audit_actor_resolver`, a model class that loaded with another setting — is written by one emitter with
+one policy:
+
+- **The log, always** (`Rails.logger.warn`, prefixed `[PermissionForge]`; a fail-open condition is prefixed
+  `[PermissionForge] SECURITY warning:`).
+- **Standard error as well, where the log is not read:** in development (`bin/rails server` boots before it attaches
+  its console logger; a console, `bin/rails runner`, a rake task and `db:seed` never attach one), and in every other
+  environment but test in any process that is not a web server — a console, a runner, a rake task, a seed, a job worker.
+  A server (`bin/rails server`, the `puma` command) in production or staging gets the log only. Each warning is written
+  there once per process.
+- **Not twice:** when the logger already writes to standard output or error (a container, `RAILS_LOG_TO_STDOUT`, the
+  Rails 7.1+ production default), nothing is written to standard error.
+- **Nothing while `bin/rails generate` or `destroy` runs:** the install generator boots the app before it writes the
+  initializer, so its warnings would describe the defaults the app is about to stop having. The next server, console or
+  task boot checks the configuration the app has.
+
+There is no switch for the standard-error copy: each warning names the setting that removes its condition (a shared
+cache store, the authorization lambdas, `conditional_sets_strict_mode`, masking the field, ...), and the warning goes
+with it.
 
 **When the cache store is unreachable** nothing is raised and access never widens: requests work with the hash they build. An invalidation that could not be made is reported (`config.on_cache_failure`), and the process that failed makes it when the store answers again — see [architecture.md](architecture.md#when-the-cache-store-fails) for what that does and does not cover.
 
@@ -615,7 +638,7 @@ So `:strict` is not "every finding closed": run the audit after setting it.
 
 What `:strict` costs: with `nil_user_strategy :deny` and `auto_query_scoping :filter_only`, code that runs with no current user (jobs, mailers, seeds, webhooks, the console, sign-in lookups on a user model that includes `PermissionScopedFindable`) sees no protected rows, and a `belongs_to` presence check on a protected parent fails ("must exist"). An idempotent seed is the easy one to miss: `Customer.find_or_create_by!(name: ...)` run with nobody signed in finds no row and creates a duplicate on every run. Run such code with a user, or inside `PermissionForge.without_permission_scope { }`: there `where`, `find`, `find_by` and `permission_scoped` apply no rules when nobody is signed in (a signed-in user's `find_by` and `permission_scoped` still apply theirs), so never put it around code an anonymous request reaches. Do not include `PermissionScopedFindable` in the user model. A conditional Permission Set needs a `request_context_resolver` that returns the request's IP and session flags, or its grant never applies.
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.preset = :strict
   config.nil_user_strategy = :bypass # wins over the preset
@@ -648,11 +671,18 @@ Return a real boolean from every hook (`current_user&.admin? == true`, `.exists?
 
 ## Option reference
 
-One entry per option, in the order the admin **Settings** page shows them (its "Configuration docs" links point here). Set these in `config/initializers`. `user_class`, `audit_user_class` and `tenant_model` are read by the models as they load; a change made later does not reach a loaded class (PermissionForge logs a warning).
+One entry per option, in the order the admin **Settings** page shows them (its "Configuration docs" links point here), then the options that page does not show. The **Default** line of each entry is generated from the code (`bundle exec rake docs:configuration`), so it is the default of `PermissionForge::Configuration.new` in this version; a strategy option also lists the values it takes. Set these in `config/initializers`. `user_class`, `audit_user_class` and `tenant_model` are read by the models as they load; a change made later does not reach a loaded class (PermissionForge logs a warning).
+
+<!-- option-reference:start -->
+<!-- Generated by `bundle exec rake docs:configuration` from SettingsCatalog and Configuration.new.
+     Edit the text under a heading here (or settings.items.<option> in the en locale for a new option):
+     the headings, their order and the **Default:** lines are regenerated. -->
 
 ### Preset
 
 #### preset
+
+**Default:** `:compat`
 
 **Preset.** `:strict` closes the settings that fail open by default, except masking with nobody signed in; `:compat` (the default) keeps the library defaults. A setting made in the initializer always wins. See [Presets](#presets).
 
@@ -660,21 +690,31 @@ One entry per option, in the order the admin **Settings** page shows them (its "
 
 #### http_basic_auth_enabled
 
+**Default:** `true`
+
 **Password-protect this admin.** Asks for a shared username and password before anyone can open these screens.
 
 #### http_basic_auth_user
+
+**Default:** `nil`
 
 **Admin username.** Username for the password prompt above.
 
 #### http_basic_auth_password
 
+**Default:** `nil`
+
 **Admin password.** Password for the password prompt above. Never shown here.
 
 #### base_controller_class
 
+**Default:** `'::ActionController::Base'`
+
 **Admin controller.** The app controller these screens inherit from. This is where your own sign-in check runs.
 
 #### admin_assignment_authorization
+
+**Default:** `nil`
 
 **Who may change assignments.** Code that decides whether a request may change who holds a Permission Set or belongs to a Permission Set Group, in these screens and in the API. It is called with `(controller, target, user_ids, action)`: `target` is the `PermissionSet` or `PermissionSetGroup`, `user_ids` the people concerned, `action` one of `:grant`, `:revoke`, `:change_expiry`, `:review`, `:add_member`, `:remove_member`. A truthy answer allows, a falsy one refuses (the request changes nothing, the screens show a message, the API answers 403, and the refusal is recorded as `admin.auth_failed` / `api.auth_failed`); an exception fails the request. Multi-set actions ask once per set and refuse everything if any set is refused. In the API it runs after `api_assignment_authorization`. It is asked by the admin screens and the API before a grant, expiry change, review, revocation or membership change; consent withdrawal, erasure, the expired-assignment clean-up, assignments removed with a deleted Permission Set or group, and Ruby/console calls are not gated by it. Not set means no extra check.
 
@@ -682,29 +722,43 @@ One entry per option, in the order the admin **Settings** page shows them (its "
 
 #### user_class
 
+**Default:** `'User'`
+
 **People model.** The model that represents a person who can receive Permission Sets.
 
 #### current_user_resolver
+
+**Default:** the gem's own lambda
 
 **How the current user is found.** Tells PermissionForge who is signed in on each request. The generated initializer sets `-> { ::Current.user if defined?(::Current) && ::Current.respond_to?(:user) }`, which works with or without a `Current` class (Rails 8's authentication generator creates one). Until it returns your signed-in user, nobody is signed in and `nil_user_strategy` decides — with the default `:bypass`, nothing is restricted.
 
 #### user_active_check
 
+**Default:** the gem's own lambda
+
 **Active-person check.** Tells PermissionForge whether an assigned person's account is still active. It does not remove access: only `rake permission_forge:audit` (its assignment check) reads it, to report assignments still held by people it calls inactive. Revoke those assignments, or remove them when you deactivate the account.
 
 #### user_list_resolver
+
+**Default:** `nil` (the built-in behaviour)
 
 **People list source.** Which people appear in pickers on these screens (a relation is searched in SQL, an Array in Ruby: see [How people are labelled and searched](#how-people-are-labelled-and-searched)), **and which people these screens and the API can reach by id**: a person the resolver leaves out is not found (404) on the person page, erasure, assignment, restore, group membership, bulk assignment and the API's assignment endpoints. Lists of a set's holders still show every holder of the set. With tenancy on and a users table that is not tenant-scoped, scope the resolver to the current tenant's users.
 
 #### user_list_limit
 
+**Default:** `500`
+
 **People list limit.** Maximum people loaded into a list before asking you to search.
 
 #### user_label_formatter
 
+**Default:** `nil` (the built-in behaviour)
+
 **Person label.** How a person is shown in lists, for example name and email. See [How people are labelled and searched](#how-people-are-labelled-and-searched).
 
 #### profile_builder
+
+**Default:** the gem's own lambda
 
 **Profile details.** The profile details cached with each person's permissions (`permissions_hash[:profile]`). The default and the generated initializer build `{ id:, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email).presence || user.try(:email_address) }` (`email_address` is the column Rails 8's authentication generator creates; the key stays `email`).
 
@@ -714,73 +768,101 @@ Your User model needs no `uuid` column: `uuid` is then `nil`, and `permission_se
 
 #### unconfigured_field_strategy
 
+**Default:** `:block`
+
 **Fields without a setting.** What happens to a column that no Permission Set mentions.
 
 #### response_filter_nil_user_strategy
 
+**Default:** `:bypass` Takes `:bypass` or `:block` (or its String).
+
 **Responses with nobody signed in.** Whether field filtering is skipped or everything is blocked when there is no current user.
 
-#### masked_attributes_nil_user_strategy
-
-**Masked attributes with nobody signed in.** Whether a masked model's getters, `attributes` and `as_json` return the stored values (`:bypass`, the default) or hide every guarded attribute (`:hide`) when there is no current user. The primary key and the raw paths stay as they are. Takes a Symbol or its String; anything else raises `ConfigurationError`. `rake permission_forge:audit` reports `:bypass` as `masked_nil_user_bypass` (medium). Not part of any preset. Under `:hide` the user model (`user_class` and its subclasses) is exempt: authentication reads it before anyone is signed in (Devise's `encrypted_password`, `confirmation_token`, lockable counters), so with nobody signed in its columns, password digests included, read as stored: do not render it with no current user (`permission_forge:audit` reports `user_model_unmasked_without_user`). Another authenticatable model (a second Devise scope) is not exempt. Validations always read stored values.
-
 #### custom_mask_strategies
+
+**Default:** `{}`
 
 **Custom mask styles.** Extra masking styles defined in code, offered next to the built-in ones.
 
 #### ignored_fields
 
+**Default:** `%w[id token_digest token_last_digits created_by updated_by token password encrypted_password deleted_at uuid deactivated]`
+
 **Ignored columns.** Columns PermissionForge never manages. They don't appear in field lists and get no generated row (under `unconfigured_field_strategy = :block` a column without a row reads as hidden). The list is frozen: extend it with `config.ignored_fields += %w[internal_flag]`, not `<<`. Since 0.15 the default no longer lists `created_at` / `updated_at`: generating fields gives Rails' timestamps a row instead, at most read-only on a granting set (see [Rails timestamps](masked-attributes.md#rails-timestamps)); `config.ignored_fields += %w[created_at updated_at]` restores the old behaviour. On an existing install the admin lists the two columns as not configured on every resource until you sync its fields or add them to `ignored_fields`.
 
 #### field_variant_mappings
+
+**Default:** `/_id\z/` (owner_id → owner_uuid), `/_cents\z/` (amount_cents → amount)
 
 **Linked field variants.** A field's setting also applies to these related names, where the model has them (a column or attribute, an alias, a public reader or writer, or a declared virtual field). See [Field Variant Mappings](field-filtering.md#field-variant-mappings).
 
 #### extra_fields_method
 
+**Default:** `:extra_fields_for_permissions`
+
 **Virtual fields method.** Model method that lists extra, non-database fields to protect.
 
 #### extra_fields_default_access
+
+**Default:** `:grant` Takes `:grant` or `:unconfigured` (or its String).
 
 **Virtual fields without a setting.** Whether a virtual field nobody configured is editable by default (`:grant`) or follows “Fields without a setting” (`:unconfigured`).
 
 #### virtual_field_discovery
 
+**Default:** `false`
+
 **Discover virtual fields.** Also lists store accessors and attribute-API attributes as virtual fields. Discovered names never get access until an admin sets a level.
 
 #### on_field_filtered
 
+**Default:** `nil`
+
 **When a field is hidden or masked.** Code that runs each time a field is filtered, for example to log it.
-
-#### nested_attributes_parent_fallback
-
-**Nested payloads without a child resource.** Not on the Settings page. How `PermitsAttributes` treats a `<assoc>_attributes` payload for a child model the user has no Resource entry for. `false` (default) drops the payload. `true` filters it against the parent resource's fields, as before 0.14 — a key editable on the parent then admits the same key on a child the user was never granted. Keep it `false`; `rake permission_forge:audit` reports `true` as a medium finding (`nested_parent_fallback`).
 
 ### Masked attributes on models
 
 #### auto_apply_masked_attributes
 
+**Default:** `:auto`
+
 **Mask model attributes automatically.** Applies masking when the app reads attributes directly, not only in responses. `:auto` (default) masks every model a Resource row names, in every process, for one cache-store read per request and job — through a cache store every process shares ([Cache Consistency](#cache-consistency)). A list of model names, or `false` with `include PermissionForge::Concerns::MaskedAttributes` in each model (recommended in production), reads nothing per request. See [Masked attributes](masked-attributes.md).
 
 #### masked_write_protection
 
+**Default:** `:skip` Takes `:skip`, `:raise` or `:off` (or its String).
+
 **Saving masked values.** Stops a masked value like “•••• 4821” from being saved back over the real one.
 
+#### masked_attributes_nil_user_strategy
+
+**Default:** `:bypass` Takes `:bypass` or `:hide` (or its String).
+
+**Masked attributes with nobody signed in.** Whether a masked model's getters, `attributes` and `as_json` return the stored values (`:bypass`, the default) or hide every guarded attribute (`:hide`) when there is no current user. The primary key and the raw paths stay as they are. Takes a Symbol or its String; anything else raises `ConfigurationError`. `rake permission_forge:audit` reports `:bypass` as `masked_nil_user_bypass` (medium). Not part of any preset. Under `:hide` the user model (`user_class` and its subclasses) is exempt: authentication reads it before anyone is signed in (Devise's `encrypted_password`, `confirmation_token`, lockable counters), so with nobody signed in its columns, password digests included, read as stored: do not render it with no current user (`permission_forge:audit` reports `user_model_unmasked_without_user`). Another authenticatable model (a second Devise scope) is not exempt. Validations always read stored values.
+
 #### hidden_attribute_value
+
+**Default:** `nil`
 
 **Value for hidden attributes.** What a hidden attribute returns when code reads it.
 
 #### omit_hidden_in_attributes_hash
 
+**Default:** `true`
+
 **Leave hidden fields out of attribute lists.** Hidden fields are removed from attribute hashes instead of being set to empty.
 
 #### mask_virtual_attributes
+
+**Default:** `false`
 
 **Mask virtual fields on models.** Also hides or masks computed, non-database fields when your code reads them from the model. Off by default; `:auto` for every model with masked attributes, or a list of model names.
 
 ### Record rules & query scoping
 
 #### nil_user_strategy
+
+**Default:** `:bypass` Takes `:bypass`, `:raise` or `:deny` (or its String).
 
 **Record rules with nobody signed in.** Whether rules are skipped, deny everything, or raise an error when there's no current user. It governs:
 
@@ -795,25 +877,37 @@ It does not govern model masking (`masked_attributes_nil_user_strategy`) or resp
 
 #### on_rule_bypass
 
+**Default:** `nil`
+
 **When rules are skipped.** Code that runs when View All or Modify All skips the record rules.
 
 #### auto_query_scoping
+
+**Default:** `:off`
 
 **Apply rules to all queries.** Filter rules are added to every query automatically. Rules that follow a relationship only apply to scoped lookups.
 
 #### unscoped_query_detection
 
+**Default:** `:off`
+
 **Detect unprotected queries.** Notices queries that skip record rules.
 
 #### unscoped_query_detection_environments
+
+**Default:** `%w[development test]`
 
 **Detection runs in.** Environments where unprotected-query detection is on.
 
 #### database_row_level_security
 
+**Default:** `false`
+
 **Database row-level security.** Lets the database itself enforce record rules as a last line of defence.
 
 #### rls_session_variable
+
+**Default:** `'permission_forge.user_id'`
 
 **Database session variable.** Name of the variable that tells the database who the current user is.
 
@@ -823,25 +917,37 @@ See [controller-actions.md](controller-actions.md).
 
 #### controller_action_discovery
 
+**Default:** `false`
+
 **List controller actions.** Shows your app's controller actions on a resource's Actions tab so they can be permitted or blocked.
 
 #### controller_action_resolver
+
+**Default:** `nil` (the built-in behaviour)
 
 **Controller action mapping.** Decides which resource and action a controller action belongs to. Returns `[resource, key]`, `false` (never managed) or `nil` (use the convention); anything else, or a name that is not valid, raises `PermissionForge::ConfigurationError`.
 
 #### controller_discovery_exclude
 
+**Default:** `[/\A(rails|active_storage|action_mailbox|action_cable|action_text|turbo)(\/|\z)/]`
+
 **Controllers left out.** Controllers that are never listed or checked: Regexps, or Strings naming a controller or a namespace (`'webhooks'` covers `webhooks` and `webhooks/*`). Blank entries are ignored. PermissionForge's own controllers are always left out.
 
 #### unconfigured_action_strategy
+
+**Default:** `:allow` Takes `:allow` or `:block` (or its String).
 
 **Actions without a setting.** What happens to a controller action that no Permission Set mentions: `:allow` (default) or `:block`.
 
 #### action_guard_bypass
 
+**Default:** `nil`
+
 **Who skips the action check.** People for whom controller actions are never checked, for example administrators.
 
 #### action_guard_nil_user_strategy
+
+**Default:** `nil` (the built-in behaviour) Takes `:bypass`, `:deny` or `:raise` (or its String), or nil.
 
 **Action check with nobody signed in.** What the guard does with a mapped action when there is no current user. `nil` or blank (the default) follows `nil_user_strategy`; `:bypass` lets the request through; `:deny` refuses it (`ActionNotAuthorizedError`), and so do `:raise` and unknown values. The generated initializer sets `:deny` for new installs; existing installs keep following `nil_user_strategy` until they set it.
 
@@ -849,9 +955,13 @@ See [controller-actions.md](controller-actions.md).
 
 #### request_context_resolver
 
+**Default:** the gem's own lambda
+
 **Request details source.** Where IP address, time and session flags come from. Called on every permission read of a user who holds a conditional set (never for other users): keep it cheap, return `{}` (or anything with `#to_h`) outside a request, and never read permissions inside it, which raises `PermissionForge::ConfigurationError`.
 
 #### conditional_sets_strict_mode
+
+**Default:** `false`
 
 **Strict activation conditions.** With no request context (the resolver returns nothing, or neither an IP nor session flags), strict mode drops conditional granting sets and keeps conditional muting sets. Without it, a blank context lets every conditional set count. See [Activation Conditions](activation-conditions.md#strict-mode).
 
@@ -859,23 +969,31 @@ See [controller-actions.md](controller-actions.md).
 
 #### gdpr_defaults
 
+**Default:** `true`
+
 **Privacy defaults.** Columns that look personal get masked by default when they're added.
 
 #### gdpr_require_explicit_choice
+
+**Default:** `false`
 
 **Require a privacy-defaults choice.** The app refuses to boot until privacy defaults are switched on or off explicitly.
 
 #### gdpr_field_patterns
 
+**Default:** `PermissionForge::Configuration::DEFAULT_GDPR_FIELD_PATTERNS`
+
 **Sensitive name patterns.** Column names matching a pattern are flagged sensitive and get this mask style.
 
 #### filter_parameters_integration
+
+**Default:** `true`
 
 **Filter sensitive values from logs.** Adds the privacy patterns to Rails' filter_parameters so logs don't show them. The patterns also reach `ActiveRecord::Base.filter_attributes` (Rails copies `config.filter_parameters` there), so a matching attribute of your models (`name` and `email` included) prints as `[FILTERED]` in `#inspect`, `pretty_print` and error reports. The gem's own configuration models keep the other filters but show their `name`, `label` and `field_name` (a Permission Set's name is not personal data); `AuditEvent#actor_label` and `#record_label`, which hold people's names, are filtered whenever your filters hide a `name`.
 
 **The patterns apply to the whole app, by parameter name.** Rails matches them against every parameter key, at any depth, whatever the form: a bare `name` key is filtered everywhere — a product's, a team's, and the admin's own forms (a Permission Set, a Resource, a field) — so request logs show `"name" => "[FILTERED]"` for values that are not personal data. To narrow it, add the patterns yourself without the one that matches a bare `name`, and filter `name` only under the forms that carry a person's name. Below the `configure` block of `config/initializers/permission_forge.rb`:
 
-```ruby
+```ruby fragment
 # in the configure block: config.filter_parameters_integration = false
 
 patterns = PermissionForge.gdpr_filter_parameters
@@ -890,6 +1008,8 @@ A String with a dot (`'customer.name'`) matches the nested key `customer[name]` 
 
 #### cache_backend
 
+**Default:** `:memory`
+
 **Cache store.** Where computed permissions are cached.
 
 Under `:rails_cache` the store is `Rails.cache`: in development that is a per-process `:memory_store` unless you change it, and a change made from a console or rake task does not reach the server — see [Cache Consistency](#cache-consistency).
@@ -898,21 +1018,31 @@ On Rails 7.1 and 7.2 with connection_pool 3.x, `ActiveSupport::Cache::RedisCache
 
 #### cache_key_prefix
 
+**Default:** `'pf'`
+
 **Cache key prefix.** Prefix for every cache entry.
 
 #### cache_ttl
+
+**Default:** `3600`
 
 **Cache lifetime.** How long computed permissions are kept. A new value applies to entries cached after the change; entries already in the store keep the TTL they were written with.
 
 #### conditional_set_cache_ttl
 
+**Default:** `300`
+
 **Conditional set cache lifetime.** How long permissions are kept for people with conditional sets: the base entry and its per-context variants. Selection happens on every read; this is a backstop. It is also how long the variants an invalidation leaves stay in the store (unreachable); with this and `cache_ttl` both `nil` they stay until written over, an erasure or `cache:clear`.
 
 #### snapshot_transactions
 
+**Default:** `:auto`
+
 **Transactions read from a snapshot.** Whether a database transaction keeps seeing the data as it was when it began. Permissions computed inside such a transaction are not cached. Auto decides from the database: MySQL and SQLite do, PostgreSQL only at repeatable read or stronger.
 
 #### on_cache_failure
+
+**Default:** `nil`
 
 **When the cache store fails.** Code that runs when cached permissions could not be cleared, for example to alert you. Until the cache lifetime ends, that person may keep their old permissions.
 
@@ -924,45 +1054,67 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### audit_trail_enabled
 
+**Default:** `true`
+
 **Record who created and last edited.** Stamps them on the 8 permission models when the acting person is a record of `audit_user_class`; API clients, HTTP Basic logins, system and Hash actors stamp nothing and leave the previous editor. A convenience on the live row, not the audit log.
 
 #### audit_user_class
+
+**Default:** `'User'`
 
 **Audit people model.** The model used for “created by” and “edited by”.
 
 #### audit_events
 
+**Default:** `:auto`
+
 **Audit log.** Records each change made through the permission models — the actor as resolved (possibly `unknown`), when, and the previous values — in the `audit_events` table. `:auto` (default): on when the table exists. `true`: always (under the default `:raise` strategy a missing table then fails every change). `false`: never (events are still published).
 
 #### audit_actor_resolver
+
+**Default:** `nil` (the built-in behaviour)
 
 **Who is recorded as the actor.** Code that names who acts in a request to these screens or the API. Not set means the signed-in person; under HTTP Basic, the username.
 
 #### audit_request_context
 
+**Default:** `nil` (the built-in behaviour)
+
 **Request details on events.** Code that gives the request id and IP address stored with each event. Not set means `request.request_id` and `request.remote_ip`.
 
 #### audit_change_failure_strategy
+
+**Default:** `:raise`
 
 **When a change cannot be recorded.** `:raise` (default) rolls the change back; `:report` lets it through and reports it; `:log` lets it through and only logs it. This covers every event written with `Audit.record`; a refusal written after an open transaction and the events of a rake report are reported, never raised, and the purge always fails closed.
 
 #### audit_hook_failure_strategy
 
+**Default:** `:report`
+
 **When a subscriber fails.** What happens when a subscriber, legacy hook, runtime-event store or resolver fails: `:report` (default), `:log` or `:raise`.
 
 #### audit_runtime_events
+
+**Default:** `%i[denied]`
 
 **Stored runtime events.** Which runtime decisions are stored, not only published: `denied` (default), `bypass`, `field_read`, `params_filtered`, `cache`.
 
 #### audit_log_subscriber
 
+**Default:** `false`
+
 **Copy events to the log.** Also writes every audit event, with its data but without name labels, to the application log.
 
 #### audit_retention_period
 
+**Default:** `nil`
+
 **Keep audit events for.** How long audit events are kept before the purge task may delete them. Not set means forever.
 
 #### audit_log_authorization
+
+**Default:** `nil` (the built-in behaviour)
 
 **Who may read the audit log.** Code that decides who may read the audit log, its exports and the API endpoint; allowed only when it returns exactly `true`. Not set means anyone with access to these screens.
 
@@ -970,13 +1122,19 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### tenant_model
 
+**Default:** `nil` (off)
+
 **Tenant model.** Model that separates customers of a multi-tenant app.
 
 #### tenant_column
 
+**Default:** `nil` (off)
+
 **Tenant column.** Column that holds the tenant on each record.
 
 #### admin_tenantless_access
+
+**Default:** `:deny` Takes `:deny` or `:allow` (or its String).
 
 **Admin requests with no tenant.** What the admin screens and the admin API do with a request that has no current tenant while `tenant_model` is set. `:deny` (default) refuses it with a 403, recorded as `admin.auth_failed` / `api.auth_failed` with reason `tenant_missing`. `:allow` serves it: it reads, edits and deletes existing records of **every** tenant, but creating a record still needs a tenant (refused as invalid, 422 in the API). Only the exact `:allow` (or `'allow'`) allows; anything else denies. Set the tenant in `base_controller_class` / `api_base_controller_class` (or middleware) instead — see [multi-tenancy.md](multi-tenancy.md).
 
@@ -984,57 +1142,85 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### api_enabled
 
+**Default:** `false`
+
 **JSON API.** Lets other systems manage Permission Sets over HTTP.
 
 #### api_auth
+
+**Default:** `nil`
 
 **API sign-in.** How API callers prove who they are. Called with the controller; a falsy answer is a 401 (`api.auth_failed`, reason `api_auth_denied`). Not set: every request is a 401. What an authenticated caller may change is `api_action_authorization` / `api_assignment_authorization` (403).
 
 #### api_base_controller_class
 
+**Default:** `'::ActionController::Base'`
+
 **API controller.** The controller API endpoints inherit from.
 
 #### api_action_authorization
+
+**Default:** `nil`
 
 **API permission check.** Decides which API calls each caller may make.
 
 #### api_assignment_authorization
 
+**Default:** `nil`
+
 **API assignment check.** Decides who may assign Permission Sets through the API. Called with `(controller, target, user_ids)`: `target` is the `PermissionSet`, or the `PermissionSetGroup` on the group-member endpoints; `user_ids` is an Array cast to the user model's key type (Integers for integer keys) on every endpoint. A truthy answer allows.
 
 #### api_require_authorization
+
+**Default:** `true`
 
 **Require API permission checks.** Default `true`: until `api_action_authorization` and `api_assignment_authorization` are both set, API changes and assignments are refused (403, `api.auth_failed`). `false` lets every caller `api_auth` admits change permissions and assign anyone (boot warning; `rake permission_forge:audit` finding `api_mutations_unguarded`).
 
 #### api_stats_require_admin
 
+**Default:** `true`
+
 **Stats only for admins.** Only admins can read usage statistics through the API. Default `true`: `GET /api/stats` answers only callers `api_stats_authorization` allows (403 otherwise, also while it is unset). `false`: every caller `api_auth` admits.
 
 #### api_stats_authorization
+
+**Default:** `nil`
 
 **API stats check.** Decides who may read usage statistics through the API while `api_stats_require_admin` is on. Called with the controller; a truthy answer allows, anything else is a 403 recorded as `api.auth_failed` (reason `stats_not_authorized`). Not set: the stats are refused. Replaces an `api_auth` that sets `@admin = true` on the controller, which still allows while this is unset (deprecated, removed in 0.16).
 
 #### api_record_identifier
 
+**Default:** `:uuid`
+
 **API record identifier.** Which identifier the API uses in URLs.
 
 #### api_default_per_page
+
+**Default:** `15`
 
 **Default page size.** Records per API page when the caller doesn't say.
 
 #### api_max_per_page
 
+**Default:** `100`
+
 **Maximum page size.** Upper limit on records per API page.
 
 #### api_pagination_handler
+
+**Default:** `nil` (the built-in behaviour)
 
 **Pagination.** How API results are split into pages.
 
 #### api_serializer_overrides
 
+**Default:** `{}`
+
 **Custom serializers.** Overrides for how records are written in API responses.
 
 #### api_redact_rule_field_values
+
+**Default:** `false`
 
 **Hide rule values in the API.** Rule values are redacted in API responses.
 
@@ -1042,25 +1228,37 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### admin_model_resolver
 
+**Default:** `nil` (the built-in behaviour)
+
 **Models offered in the admin.** Which models are offered when you add a resource.
 
 #### admin_session_flags
+
+**Default:** `{}`
 
 **Session flag names.** Friendly names for session flags offered on the Conditions tab.
 
 #### admin_stale_assignment_days
 
+**Default:** `90`
+
 **Review assignments after.** Permanent assignments not reviewed for this long appear under Stale assignments. Also the default threshold of `rake permission_forge:stale_assignments` and `StaleAssignmentAuditor`.
 
 #### admin_app_name
+
+**Default:** `nil` (the built-in behaviour)
 
 **App name.** The app name shown under the logo in these screens.
 
 #### admin_back_url
 
+**Default:** `nil` (the built-in behaviour)
+
 **"Back to app" link.** Where the link under the logo leads (default: your app's home page). A String, or a lambda receiving the view context, e.g. `->(view) { view.main_app.dashboard_path }`.
 
 #### admin_docs_url
+
+**Default:** `'https://github.com/fetijashari/permission_forge/blob/main/docs/configuration.md'`
 
 **Configuration docs link.** Where the “Configuration docs” links on this page point to.
 
@@ -1068,12 +1266,28 @@ A value the log cannot work with is refused with `PermissionForge::Configuration
 
 #### table_name_prefix
 
+**Default:** `'permission_forge_'`
+
 **Table prefix.** Prefix for PermissionForge's own database tables.
 
 #### uuid_generator
+
+**Default:** the gem's own lambda
 
 **UUID generator.** How record UUIDs are created.
 
 #### available_locales
 
+**Default:** `nil` (the built-in behaviour)
+
 **Languages.** Languages these screens are available in.
+
+### Other options
+
+#### nested_attributes_parent_fallback
+
+**Default:** `false`
+
+**Nested payloads without a child resource.** Not on the Settings page. How `PermitsAttributes` treats a `<assoc>_attributes` payload for a child model the user has no Resource entry for. `false` (default) drops the payload. `true` filters it against the parent resource's fields, as before 0.14 — a key editable on the parent then admits the same key on a child the user was never granted. Keep it `false`; `rake permission_forge:audit` reports `true` as a medium finding (`nested_parent_fallback`).
+
+<!-- option-reference:end -->

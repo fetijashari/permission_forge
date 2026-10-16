@@ -26,7 +26,7 @@ Level 2 `:raise` in test/CI → Level 1 → Level 3 where rules must hold below 
 
 ## Level 1 — ENFORCE (`auto_query_scoping = :filter_only`)
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.auto_query_scoping = :filter_only   # default: :off
 end
@@ -36,7 +36,7 @@ Every relation built on a protected model (a model including
 `PermissionForge::Concerns::PermissionScopedFindable`) now carries the current user's
 **filter-type** rules automatically:
 
-```ruby
+```ruby fragment
 Customer.where(active: true)   # rules applied
 Customer.all                   # rules applied
 Customer.find(42)              # RecordNotFound if rule-denied
@@ -74,7 +74,7 @@ user.customers                 # association traversal scoped too
 
 ### Escape hatches
 
-```ruby
+```ruby fragment
 # Block form — intentional unscoped access (reports, admin maintenance, jobs):
 PermissionForge.without_permission_scope do
   Customer.all.find_each { |c| ... }
@@ -83,7 +83,7 @@ end
 
 `without_permission_scope { }` suspends auto-scoping and detection, and with nobody signed in lets `find_by`, `find_by!` and `permission_scoped` past `nil_user_strategy`; a signed-in user's `find_by` and `permission_scoped` still apply their rules (reported as `rule.bypassed`, `scope_suspended`). Inside the block nobody signed in is trusted more than a signed-in user: wrap trusted code only (jobs, seeds, rake tasks, sign-in lookups), never code an anonymous request reaches. A block that runs inside one of the gem's own suspensions (a model callback during a permission-cache invalidation or an audit lookup) is not trusted that way: there nobody signed in still follows `nil_user_strategy` (fails closed). Only the gem's admin controllers use the public block (after your authentication); the flags are per fiber.
 
-```ruby
+```ruby fragment
 # Per-model opt-out:
 class AuditLog < ApplicationRecord
   include PermissionForge::Concerns::PermissionScopedFindable
@@ -95,7 +95,7 @@ end
 
 ## Level 2 — DETECT (`unscoped_query_detection = :log | :raise`)
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.unscoped_query_detection = :log                        # default: :off
   config.unscoped_query_detection_environments = %w[development test]  # default
@@ -133,12 +133,12 @@ connection whose session variable names a user. A session **without** the variab
 `:bypass` it sees every row. Only with `nil_user_strategy = :deny` or `:raise` does such a session
 see no rows:
 
-```bash
+```bash fragment
 bin/rails generate permission_forge:rls   # migration: enable RLS + install policies
 bin/rails db:migrate
 ```
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.database_row_level_security = true
   # config.rls_session_variable = 'permission_forge.user_id'   # default
@@ -147,7 +147,7 @@ end
 
 Then tell Postgres who the current user is:
 
-```ruby
+```ruby fragment
 # Controllers (around_action):
 around_action do |_controller, action|
   PermissionForge::RLS.set_user!(current_user)
@@ -177,9 +177,10 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   Whether a set and its resource row are active is read live by the policy, so switching
   either off or on needs no re-sync. After editing rules run:
 
-  ```bash
+  ```bash fragment
   rake permission_forge:rls:sync     # regenerate policies
   rake permission_forge:rls:status   # per-table drift report (exit 1 when stale)
+  rake permission_forge:rls:remove   # drop the policies and switch row-level security off
   ```
 
   A digest of the rule state is stored on the policy; a boot warning fires when the live

@@ -4,7 +4,7 @@
 
 The gem ships a read-only audit task. It changes no permission data (it writes one `report.generated` audit event), so it is safe to run in production:
 
-```bash
+```bash fragment
 bin/rails permission_forge:audit                   # text report
 FORMAT=json bin/rails permission_forge:audit       # machine-readable
 FAIL_ON=high bin/rails permission_forge:audit      # exit 1 on any High or Critical finding (CI)
@@ -125,7 +125,7 @@ This guide explains how to use the built-in `/security-audit` Claude Code skill 
 
 Open your terminal in your project directory and run Claude Code:
 
-```bash
+```bash fragment
 claude
 ```
 
@@ -273,7 +273,7 @@ Before citing the log, read [What is not recorded](audit-log.md#what-is-not-reco
 
 You can run the security audit as part of your CI pipeline using Claude Code's headless mode:
 
-```bash
+```bash fragment
 claude --print "/security-audit full" > security-audit-report.md
 ```
 
@@ -283,7 +283,7 @@ This generates the report as a markdown file you can attach to pull requests or 
 
 Some audit checks can be run directly in a Rails console:
 
-```ruby
+```ruby run
 # GDPR field audit
 report = PermissionForge::Services::GdprFieldAuditor.call
 report.each { |finding| puts "#{finding[:type]}: #{finding.except(:type)}" }

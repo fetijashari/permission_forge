@@ -70,13 +70,13 @@ sit next to one (for example Pundit for controller decisions, PermissionForge fo
 
 Add to your `Gemfile`:
 
-```ruby
+```ruby fragment
 gem 'permission_forge'
 ```
 
 Then run:
 
-```bash
+```bash fragment
 bundle install
 bin/rails generate permission_forge:install
 bin/rails db:migrate
@@ -87,12 +87,12 @@ audit log, prefixed with `permission_forge_` by default.
 
 Then mount the admin UI and give it credentials. It is behind HTTP Basic auth and answers 401 until both are set:
 
-```ruby
+```ruby fragment
 # config/routes.rb
 mount PermissionForge::Engine, at: "/permissions"
 ```
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb: uncomment Option A ("Admin screens")
 config.http_basic_auth_user     = ENV['PF_ADMIN_USER']
 config.http_basic_auth_password = ENV['PF_ADMIN_PASSWORD']
@@ -124,7 +124,7 @@ Upgrading? Read the [CHANGELOG](https://github.com/fetijashari/permission_forge/
 The generated initializer reads `Current.user` when your app has a `Current` class that answers `user` (as Rails 8's
 authentication generator creates). Otherwise point it at your own lookup:
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   config.user_class = 'User'
@@ -148,7 +148,7 @@ module, add a callback), use `Rails.application.config.to_prepare` or
 
 ### 2. Include the concern in your User model
 
-```ruby
+```ruby fragment
 class User < ApplicationRecord
   include PermissionForge::Concerns::PermissionedUser
 end
@@ -162,7 +162,7 @@ those, not the private helpers.
 
 ### 3. Protect models with row-level rules (optional)
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   include PermissionForge::Concerns::PermissionScopedFindable
 end
@@ -180,7 +180,7 @@ Run these lines in order, in one console. If a `create!` raises (a Permission Se
 admin already holds "Sales Team"), fix it and run it again before going on: the lines after it use its record and,
 without it, fail with a database `NOT NULL` error that hides the first one.
 
-```ruby
+```ruby run
 pset = PermissionForge::PermissionSet.create!(name: 'Sales Team', is_active: true)
 
 resource = PermissionForge::Resource.create!(
@@ -218,7 +218,7 @@ wrap it to say who and why: `PermissionForge.with_audit_actor(user: admin, reaso
 
 Look up the same person step 4 assigned (`User.first` may be someone else, who holds no set: `false` and `{}`):
 
-```ruby
+```ruby run
 user = User.find_by!(email_address: 'bob@example.com') # the person you assigned in step 4
 user.can_read?('Customer')   # => true
 user.can_delete?('Customer') # => false
@@ -307,7 +307,7 @@ Behind your own admin controller (`base_controller_class`) the actor is the user
 Under HTTP Basic auth your app's sign-in does not run in the admin, so admins share one login name unless
 `audit_actor_resolver` names them:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # Rails 8's authentication generator (with Devise: controller.request.env['warden']&.user(:user))
   config.audit_actor_resolver = ->(controller) { Session.find_by(id: controller.request.cookie_jar.signed[:session_id])&.user }

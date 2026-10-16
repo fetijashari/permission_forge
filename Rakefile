@@ -31,6 +31,9 @@ end
 
 task default: :test
 
+# docs:configuration — the Option reference of docs/configuration.md (gem development only)
+load File.expand_path('lib/tasks/permission_forge_docs.rake', __dir__)
+
 # Documentation floor for the public API: objects marked `@api private` are not counted, and the number of
 # undocumented ones may not grow (lower a floor when you document something, never raise it).
 #   bundle exec rake yard:check

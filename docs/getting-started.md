@@ -14,19 +14,19 @@ Before you begin, make sure you have:
 
 Add PermissionForge to your `Gemfile`:
 
-```ruby
+```ruby fragment
 gem 'permission_forge'
 ```
 
 Run:
 
-```bash
+```bash fragment
 bundle install
 ```
 
 ## Step 2: Run the Install Generator
 
-```bash
+```bash fragment
 rails generate permission_forge:install
 ```
 
@@ -36,7 +36,7 @@ This creates two files and prints the next steps (the ones in this guide):
 
 Now run the migration:
 
-```bash
+```bash fragment
 rails db:migrate
 ```
 
@@ -50,7 +50,7 @@ Booting before `db:migrate` logs "audit_events is :auto but the table … was no
 
 Open `config/initializers/permission_forge.rb`. The most important settings are:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # Tell PermissionForge which model represents your users
   config.user_class = 'User'
@@ -89,7 +89,7 @@ A `Current` class is optional. The generated resolver works with Rails 8's authe
 
 **Your own resolver:**
 
-```ruby
+```ruby fragment
 # A CurrentAttributes class of your own with a `user` attribute (recommended):
 config.current_user_resolver = -> { Current.user }
 ```
@@ -100,7 +100,7 @@ config.current_user_resolver = -> { Current.user }
 
 Open your User model and add this line:
 
-```ruby
+```ruby fragment
 class User < ApplicationRecord
   include PermissionForge::Concerns::PermissionedUser
 
@@ -127,11 +127,11 @@ A **Permission Set** is like a "role on steroids." While a traditional role just
 
 Open the Rails console:
 
-```bash
+```bash fragment
 rails console
 ```
 
-```ruby
+```ruby run
 # 1. Create a permission set
 sales_pset = PermissionForge::PermissionSet.create!(
   name: 'Sales Team',
@@ -179,8 +179,8 @@ PermissionForge::PermissionSetUser.create!(
 
 # 5. Now test it! Permissions are built and cached automatically on the
 #    first check (read-through caching) — no manual step needed.
-puts user.can_read?('Customer')   # => true
-puts user.can_delete?('Customer') # => false
+user.can_read?('Customer')   # => true
+user.can_delete?('Customer') # => false
 ```
 
 > **Note:** You don't need to refresh permissions by hand. Changes to permission sets, resources, fields, rules, and user assignments automatically invalidate the affected users' cached permissions after the commit, and the hash is rebuilt on the next permission check (read-through caching).
@@ -189,7 +189,7 @@ puts user.can_delete?('Customer') # => false
 
 Check the person Step 5 assigned. `User.first` may be someone else, who holds no Permission Set (one you assigned in the admin, for example): every check below then answers `false` and `{}`, with nothing to say why.
 
-```ruby
+```ruby run
 # In the console:
 user = User.find_by!(email_address: 'bob@example.com') # the person you assigned in Step 5
 
@@ -217,7 +217,7 @@ A controller made by `bin/rails generate scaffold` needs a few changes before th
 
 - **Row-level rules.** `PermissionScopedFindable` applies the user's rules to the class-level `find_by` / `find_by!` and to `permission_scoped` only. The scaffold's `Customer.all` (index) and `Customer.find` (`set_customer`) ignore them: every user lists every row and opens any record by its URL. Use the scoped calls:
 
-  ```ruby
+  ```ruby fragment
   def index
     @customers = Customer.permission_scoped # was Customer.all
   end
@@ -232,7 +232,7 @@ A controller made by `bin/rails generate scaffold` needs a few changes before th
   Or turn on [query scoping](./query-scoping.md) (`auto_query_scoping = :filter_only`) so that `all` and `find` are scoped too.
 - **JSON views.** The scaffold's jbuilder partial calls `json.extract!`, which calls each getter: a field the user may not read comes out as `"notes": null`, so a client cannot tell hidden from empty. `as_json` leaves out a field whose row is **Hidden** (read off; `omit_hidden_in_attributes_hash`, the default), so build the partial from it. `only:` is the column list the scaffold's `json.extract!` line had (here a `Customer` scaffold with `name`, `email`, `phone`, `status`, `notes` and `owner:references`), so the JSON keeps its shape:
 
-  ```ruby
+  ```ruby file=app/views/customers/_customer.json.jbuilder
   # app/views/customers/_customer.json.jbuilder
   json.merge! customer.as_json(only: %i[id name email phone status notes owner_id created_at updated_at])
   json.url customer_url(customer, format: :json)
@@ -242,7 +242,7 @@ A controller made by `bin/rails generate scaffold` needs a few changes before th
 
 - **HTML views.** The scaffold's `_customer.html.erb` prints a label and a getter for each column, so a field the user may not read still shows its label with a blank value (`Notes:` and nothing after it). Ask the user's field permissions and skip those fields, with a helper:
 
-  ```ruby
+  ```ruby file=app/helpers/customers_helper.rb
   # app/helpers/customers_helper.rb
   module CustomersHelper
     # true when the signed-in user may read the Customer field (masked or not). A field without a
@@ -253,7 +253,7 @@ A controller made by `bin/rails generate scaffold` needs a few changes before th
   end
   ```
 
-  ```erb
+  ```erb fragment
   <%# app/views/customers/_customer.html.erb: one block per column %>
   <% if customer_field_readable?(:notes) %>
     <div>
@@ -271,7 +271,7 @@ The forms still offer every field: see [Telling the user what was not saved](./f
 
 The admin UI is where a business owner manages Permission Sets, people and assignments without the console. Mount it in `config/routes.rb`:
 
-```ruby
+```ruby fragment
 Rails.application.routes.draw do
   mount PermissionForge::Engine, at: "/permissions"
 end
@@ -279,7 +279,7 @@ end
 
 It is behind HTTP Basic auth and answers **401** until credentials are set. The generated initializer has them commented under "Admin screens", Option A; uncomment the two lines:
 
-```ruby
+```ruby fragment
 config.http_basic_auth_user     = ENV['PF_ADMIN_USER']
 config.http_basic_auth_password = ENV['PF_ADMIN_PASSWORD']
 ```
@@ -292,7 +292,7 @@ If your app was set up with `bin/rails generate authentication`, the generated `
 
 - **The guard in `ApplicationController` guards the sign-in page too.** The generator's `SessionsController` maps to its `Session` model, so with `ControllerActionGuard` included in `ApplicationController` and `action_guard_nil_user_strategy = :deny` (what the install generator writes), a signed-out visitor is refused the sign-in form. The symptom: nobody can sign in, and Sign out ends the session but lands on the refused sign-in page. With the [Handling Denials](./row-level-rules.md#rescuing-them-yourself) handler that page is the 403 page ("You are not allowed to see this page. Sign in to see it.") where the form should be; with a handler that answers an empty 403, **Sign out seems to do nothing**: the page stays as it was, "Signed in as …" still in the header. Leave the sign-in pages out of the guard in the initializer:
 
-  ```ruby
+  ```ruby fragment
   config.controller_discovery_exclude += %w[sessions passwords]
   ```
 

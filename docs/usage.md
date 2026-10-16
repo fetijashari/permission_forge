@@ -19,7 +19,7 @@ Users can belong to multiple permission sets. When granting permission sets have
 
 Muting sets (`is_muting: true`) are applied **after** this granting merge and subtract access (they never add rules) — see [Muting Permission Sets](muting-permission-sets.md). Sets are merged in a deterministic order (`created_at`, then `id`), so "first mask_strategy wins" is stable across requests.
 
-```ruby
+```ruby fragment
 # Example: User with two permission sets
 # "Sales Team" — read + create customers, mask email
 # "Admin" — full CRUD, unmask email, can export
@@ -33,7 +33,7 @@ user.can?(:export, :Customer)         # => true  (from Admin)
 
 ## Setting Up Permissions
 
-```ruby
+```ruby fragment
 # Create a permission set
 pset = PermissionForge::PermissionSet.create!(name: 'Admin', is_active: true)
 
@@ -62,7 +62,7 @@ No refresh call is needed: creating, changing or removing permission records and
 
 ViewAll and ModifyAll are resource-level permissions that bypass all row-level rules on that resource (either flag bypasses them for `find_by` and `permission_scoped` alike). When enabled, the user sees all records regardless of ownership rules.
 
-```ruby
+```ruby fragment
 resource = PermissionForge::Resource.create!(
   permission_set: pset,
   name: 'Customer',
@@ -96,7 +96,7 @@ These validations are enforced on save. Attempting to create a resource with `ed
 
 Assign or revoke multiple users at once — each user whose assignment changed has their cached permissions invalidated once, after the commit, and rebuilt read-through on their next permission read:
 
-```ruby
+```ruby fragment
 PermissionForge::Services::BulkPermissionSetAssignment.call(
   permission_set: pset,
   user_ids: [1, 2, 3, 4, 5],
@@ -106,7 +106,7 @@ PermissionForge::Services::BulkPermissionSetAssignment.call(
 
 ## Checking Permissions
 
-```ruby
+```ruby fragment
 # Resource-level checks
 user.can_read?('Customer')    # => true
 user.can_create?('Customer')  # => true
@@ -137,7 +137,7 @@ Beyond CRUD, admins can define custom actions per resource. These are fully conf
 
 To have controller actions checked automatically instead of calling `can?` by hand, and to list your app's controller actions in the admin, see [Controller Actions](controller-actions.md).
 
-```ruby
+```ruby fragment
 # Admin creates custom actions for a resource
 PermissionForge::ResourceAction.create!(
   resource: resource,
@@ -166,7 +166,7 @@ user.can?(:update, :Customer)  # => true  (delegates to can_edit?; the set above
 
 ## Field-Level Permissions
 
-```ruby
+```ruby fragment
 # Get field permissions from the cached hash (here with a `name` row and the masked,
 # read-only `email` row created under "Masked Attributes" below)
 entry = user.permissions_hash_for(:Customer)
@@ -202,7 +202,7 @@ Field masking provides a middle ground between fully visible and fully hidden. W
 | `last4` | `+1234567890` | `*******7890` |
 | `first1_last4` | `John Smith` | `J*****mith` |
 
-```ruby
+```ruby fragment
 # Configure masking on a resource field
 PermissionForge::ResourceField.create!(
   resource: resource,
@@ -242,7 +242,7 @@ Full access is the exception (since 0.15.0): `ResourceFieldGenerator.call(grant_
 
 > **Important:** Masking provides display-level obfuscation only — it does NOT constitute GDPR-compliant anonymization or pseudonymization. See [GDPR Masking Disclaimer](gdpr_masking_disclaimer.md) for details.
 
-```ruby
+```ruby fragment
 # gdpr_defaults is true by default since v0.5.0
 # To opt out:
 PermissionForge.configure do |config|
@@ -281,7 +281,7 @@ Detection reads the column name only, the same way for every model (the same pat
 
 **Extend or override patterns:**
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.gdpr_defaults = true
   config.gdpr_field_patterns = PermissionForge::Configuration::DEFAULT_GDPR_FIELD_PATTERNS.merge(
@@ -292,7 +292,7 @@ end
 
 **Audit existing fields for privacy gaps:**
 
-```ruby
+```ruby run
 # Returns both unmasked fields AND unmapped model columns matching GDPR patterns.
 # Only rows in effect count (active row, active resource, active granting set):
 # a switched-off row is reported as unmapped, not as unmasked.
@@ -311,7 +311,7 @@ report = PermissionForge::Services::GdprFieldAuditor.call
 
 **Run the audit from the command line (CI-friendly):**
 
-```bash
+```bash fragment
 bundle exec rake permission_forge:audit_masks
 # Exits with status 1 if issues found — integrate into your CI pipeline
 ```
@@ -320,7 +320,7 @@ The auditor is read-only — it reports gaps for admin review without auto-fixin
 
 **Detect GDPR pattern drift:**
 
-```ruby
+```ruby run
 # After changing gdpr_field_patterns, check if re-generation is needed
 PermissionForge.configuration.gdpr_patterns_changed_since_generation?
 # => true (patterns changed since last ResourceFieldGenerator run)
@@ -330,7 +330,7 @@ PermissionForge.configuration.gdpr_patterns_changed_since_generation?
 
 PermissionForge can automatically redact GDPR-sensitive fields from Rails logs and error reporters by appending its patterns to `Rails.application.config.filter_parameters`.
 
-```ruby
+```ruby fragment
 # Automatic (enabled by default — set to false to opt out)
 PermissionForge.configure do |config|
   config.gdpr_defaults = true
@@ -347,7 +347,7 @@ This uses the same `gdpr_field_patterns` as masking — single source of truth. 
 
 Row-level rules are applied when a model includes `PermissionScopedFindable` and you go through the class-level `Model.find_by` / `Model.find_by!` or `Model.permission_scoped` (or turn on `auto_query_scoping`; see [Query scoping](query-scoping.md)). A user with no rules for a model sees every row.
 
-```ruby
+```ruby fragment
 # Create a rule: users can only see their own records
 PermissionForge::PermissionSetRule.create!(
   permission_set: pset,
@@ -382,7 +382,7 @@ Customer.permission_scoped.where(active: true).count
 
 **Join types for nested associations:**
 
-```ruby
+```ruby fragment
 PermissionForge::PermissionSetRule.create!(
   # ...
   join_type: 'left_joins',              # or 'joins', 'left_outer_joins'
@@ -398,7 +398,7 @@ PermissionForge::PermissionSetRule.create!(
 
 Strip fields the user cannot edit (used in commands/controllers on incoming params):
 
-```ruby
+```ruby fragment
 params = { name: 'New Name', email: 'new@mail.com', secret: 'hidden' }
 filtered = PermissionForge::Services::PermitsAttributes.call(
   resource: customer,          # An instance of the model
@@ -413,7 +413,7 @@ filtered = PermissionForge::Services::PermitsAttributes.call(
 
 Strip fields the user cannot read and mask sensitive fields (used in serializers/views on outgoing data):
 
-```ruby
+```ruby fragment
 attributes = { name: 'Acme', email: 'john@example.com', secret: 'classified', domain: 'acme.com' }
 filtered = PermissionForge::Services::FiltersResponseAttributes.call(
   attributes: attributes,
@@ -435,7 +435,7 @@ filtered = PermissionForge::Services::FiltersResponseAttributes.call(
 
 **Serializer integration example:**
 
-```ruby
+```ruby fragment
 class BaseSerializer < ActiveModel::Serializer
   def filter_attributes(hash, model_name)
     PermissionForge::Services::FiltersResponseAttributes.call(

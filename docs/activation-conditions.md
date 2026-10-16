@@ -14,7 +14,7 @@ When no resolver is configured, the context is blank and every conditional set a
 
 ## Configuration
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.request_context_resolver = lambda {
     {
@@ -40,7 +40,7 @@ If it returns `{}` or isn't configured, every conditional set applies by default
 
 Use `requires_session_flag` to restrict a set to users who have completed a specific step (e.g., MFA verification).
 
-```ruby
+```ruby run
 ps = PermissionForge::PermissionSet.create!(
   name: 'Admin After MFA',
   requires_session_flag: 'mfa_verified'
@@ -56,7 +56,7 @@ ps = PermissionForge::PermissionSet.create!(
 
 Use `allowed_ips` to restrict a set to specific IP ranges (CIDR notation, comma-separated).
 
-```ruby
+```ruby run
 ps = PermissionForge::PermissionSet.create!(
   name: 'Office Only',
   allowed_ips: '192.168.1.0/24, 10.0.0.0/8'
@@ -72,7 +72,7 @@ ps = PermissionForge::PermissionSet.create!(
 
 Use `allowed_hours_start` and `allowed_hours_end` to restrict a set to specific hours of the day.
 
-```ruby
+```ruby run
 ps = PermissionForge::PermissionSet.create!(
   name: 'Business Hours Only',
   allowed_hours_start: 9,   # 9:00 AM
@@ -90,7 +90,7 @@ ps = PermissionForge::PermissionSet.create!(
 
 All conditions on a set must pass (AND logic). A nil/blank condition always passes.
 
-```ruby
+```ruby run
 ps = PermissionForge::PermissionSet.create!(
   name: 'Sensitive Access',
   requires_session_flag: 'mfa_verified',
@@ -105,7 +105,7 @@ ps = PermissionForge::PermissionSet.create!(
 
 The conditional sets that apply are selected on every read, so an IP change or an hour rollover takes effect on the next read without waiting for a TTL. The TTL is a backstop for the cached entries themselves (the base entry and its variants): when any of a user's sets is conditional, it is clamped to `conditional_set_cache_ttl`:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.cache_ttl = 3600                  # Baseline TTL in seconds (default: 3600 = 1 hour)
   config.conditional_set_cache_ttl = 300   # Clamp when conditional sets exist (default: 300 = 5 minutes)
@@ -133,7 +133,7 @@ The effective TTL is `min(cache_ttl, conditional_set_cache_ttl)`, and no later t
 
 By default, every conditional set is treated as **active** when `request_context_resolver` returns a blank context (`{}`, `nil`) — backward compatible, but an unwired resolver skips IP, hours and session-flag enforcement. A boot-time security warning is logged when conditional sets exist and the resolver returns an empty context at boot, and `rake permission_forge:audit` reports it (`conditional_sets_lenient`). Enable strict mode to fail closed:
 
-```ruby
+```ruby fragment
 config.conditional_sets_strict_mode = true   # default: false
 ```
 
@@ -154,7 +154,7 @@ We recommend strict mode where conditional sets are used.
 
 Muting sets can also have conditions. A conditional muting set is evaluated per request like a granting one, and revokes permissions only for the requests whose context meets its conditions. In strict mode it also applies with no request context (see [Strict Mode](#strict-mode)):
 
-```ruby
+```ruby run
 muting = PermissionForge::PermissionSet.create!(
   name: 'Lockdown Mode',
   is_muting: true,
@@ -165,7 +165,7 @@ muting = PermissionForge::PermissionSet.create!(
 
 ## Model Methods & Scopes
 
-```ruby
+```ruby run
 ps.conditional?    # true if any condition is set
 ps.unconditional?  # true if no conditions
 
@@ -184,7 +184,7 @@ PermissionForge::PermissionSet.unconditional  # Sets with no conditions
 
 For advanced use cases, you can evaluate conditions directly:
 
-```ruby
+```ruby run
 PermissionForge::Services::PermissionSetConditionEvaluator.call(
   permission_set: ps,
   context: { ip: '192.168.1.5', session_flags: ['mfa_verified'], time: Time.current }
