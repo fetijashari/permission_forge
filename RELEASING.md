@@ -159,8 +159,8 @@ The workflow never creates or pushes a tag or a branch.
 
 In place on GitHub:
 
-- **Environment `rubygems`** (Settings → Environments): required reviewers `fetijashari` and `abytyqi`, "prevent
-  self-review" on (the person who pushed the tag cannot approve its deployment); administrators cannot bypass it;
+- **Environment `rubygems`** (Settings → Environments): required reviewers `fetijashari`, `abytyqi` and `robkurti`,
+  "prevent self-review" on (the person who pushed the tag cannot approve its deployment); administrators cannot bypass it;
   deployment branches and tags: tags matching `v*` only; no secrets.
 - **Rulesets on `refs/tags/v*`:** "release tags" blocks deletion, update and force-push, with no bypass; "release tag
   creation" blocks creation, with the Repository admin role as the only bypass. They are separate because a bypass
