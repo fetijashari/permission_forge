@@ -44,6 +44,18 @@ module PermissionForge
           assert_no_match rule[:needle], StaticGuard.code_of("# #{line.strip}"), "#{rule[:name]}: a comment is no hit"
         end
       end
+
+      # Every rule of any table that names a `fixture:` line bites it: the
+      # needle hits the line as code, not as a comment.
+      test 'every fixture line is a hit (negative fixtures)' do
+        with_fixture = RULES.select { |rule| rule.key?(:fixture) }
+        assert_not_empty with_fixture
+
+        with_fixture.each do |rule|
+          assert_match rule[:needle], StaticGuard.code_of(rule[:fixture]), "#{rule[:name]} must hit #{rule[:fixture].inspect}"
+          assert_no_match rule[:needle], StaticGuard.code_of("# #{rule[:fixture]}"), "#{rule[:name]}: a comment is no hit"
+        end
+      end
     end
   end
 end
