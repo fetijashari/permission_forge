@@ -24,7 +24,8 @@ module PermissionForge
     # under `api_record_identifier = :uuid`: its value is unchanged (the
     # record's id), and the key after it, `:foreign_uuid`, names the same
     # record by its uuid (`permission_set_id`, `permission_set_uuid`:
-    # Serializers::BaseSerializer.reference).
+    # Serializers::BaseSerializer.reference) — answer-only: no endpoint
+    # takes it, the `_id` key changes a reference.
     #
     # test/permission_forge/api/envelope_schema_test.rb asserts every route,
     # in every error class, against this module and every serializer's keys

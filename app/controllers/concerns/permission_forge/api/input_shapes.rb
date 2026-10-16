@@ -29,10 +29,9 @@ module PermissionForge
     #   comma, only for an operator that takes several values (`in`,
     #   `not_in`, `between`: Operators::ValueTyping::SEVERAL), stored joined
     #   with commas;
-    # - a reference (`permission_set_group_id`, `permission_set_group_uuid`):
-    #   taken as sent, then read by BaseController#with_reference_id (the id
-    #   or uuid of a record; null or "" clears it; anything else a 422 keyed
-    #   by it).
+    # - a reference (`permission_set_group_id`): taken as sent, then read by
+    #   BaseController#with_reference_id (the id or uuid of a record; null or
+    #   "" clears it; anything else a 422 keyed by it).
     #
     # `null` is passed to the model for every attribute: a nullable column
     # is cleared, a NOT NULL one answers its own validation (422 keyed by
@@ -71,7 +70,7 @@ module PermissionForge
       DECLARED = {
         'allowed_ips' => :ip_list, 'requires_session_flag' => :flag,
         'allowed_hours_start' => :hour, 'allowed_hours_end' => :hour,
-        'field_value' => :rule_value, 'permission_set_group_id' => :reference, 'permission_set_group_uuid' => :reference
+        'field_value' => :rule_value, 'permission_set_group_id' => :reference
       }.freeze
 
       # The shapes whose blank String ("") is no value (null): a condition

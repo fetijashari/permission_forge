@@ -13,8 +13,11 @@ module PermissionForge
       # through 0.14.1) followed by its uuid (`permission_set_uuid`), so a
       # client that only knows uuids — `api_record_identifier = :uuid`, the
       # identifier the URLs take — can follow it (field test round 8, D#29).
-      # Both keys are always there, whatever the identifier setting. A
-      # collection looks the uuids up in one query per reference.
+      # Both keys are always there, whatever the identifier setting. The uuid
+      # key is answer-only: no endpoint takes it (the `_id` key changes a
+      # reference, and takes the uuid under `:uuid`), so a whole answer sent
+      # back is ignored there. A collection looks the uuids up in one query
+      # per reference.
       class BaseSerializer
         def initialize(record)
           @record = record
@@ -69,7 +72,6 @@ module PermissionForge
         end
 
         # The one naming of a reference's keys: the id key and the uuid key.
-        # The API's input reads the same two names (BaseController#with_reference_id).
         #
         # @param association [Symbol, String]
         # @return [Array(Symbol, Symbol)]

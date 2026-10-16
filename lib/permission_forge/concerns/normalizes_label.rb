@@ -15,8 +15,9 @@ module PermissionForge
     # "no label" there. A Resource stores nil (its label column is nullable
     # and the admin names a model from the host's translation).
     #
-    # A rename that leaves a generated label as it was relabels the row with
-    # its new name: the old name would read as a label an admin wrote.
+    # A rename that leaves a label the gem would generate for the old name
+    # (the name or its humanized form: GeneratedText.label?) relabels the row
+    # with its new name: the old name would read as a label an admin wrote.
     #
     # Checked on create, when the label changes and on a rename only: a row
     # stored with a blank label before keeps it through a save of its other

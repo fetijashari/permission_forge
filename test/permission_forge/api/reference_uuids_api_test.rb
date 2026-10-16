@@ -100,71 +100,52 @@ module PermissionForge
         assert_equal(([@set.uuid] * 3) + ([other.uuid] * 3), rows.map { |row| row[:permission_set_uuid] })
       end
 
-      test 'permission_set_group_uuid is read as the group, under either identifier setting' do
-        %i[uuid id].each do |identifier|
-          @config.api_record_identifier = identifier
-          @set.update!(permission_set_group: nil)
-          patch "#{BASE}/permission_sets/#{@set.public_send(identifier)}",
-                params: { permission_set: { permission_set_group_uuid: @group.uuid } }, as: :json
-
-          assert_response :ok, "#{identifier}: #{response.body}"
-          assert_equal @group.id, @set.reload.permission_set_group_id, identifier
-          assert_reference(data, :permission_set_group, @group)
-        end
-
-        patch "#{BASE}/permission_sets/#{@set.id}", params: { permission_set: { permission_set_group_uuid: '' } }, as: :json
-        assert_response :ok
-        assert_nil @set.reload.permission_set_group_id
-      end
-
       def patch_set(attrs) = patch(set_path, params: { permission_set: attrs }, as: :json)
 
-      # Review of D#29: the answer carries both keys, so a client that edits
-      # one of them in a whole answer and sends it back sends the other as
-      # it was. The key that changes the stored group wins.
-      test 'an answer sent back whole with one reference key edited moves the set as that key says' do
+      # The uuid companions are answer-only (review of D#29): only the _id key
+      # moves a set, so an answer sent back whole is idempotent and a stale
+      # copy never undoes another admin's move by its echoed uuid.
+      test 'an answer sent back whole moves the set as its id key says, the same every time' do
         other = create_permission_set_group(name: 'Support')
         @set.update!(permission_set_group: @group)
         get set_path
         answer = data
 
-        [['permission_set_group_id', other.uuid, other.id], ['permission_set_group_id', other.id, other.id],
-         ['permission_set_group_id', nil, nil], ['permission_set_group_uuid', other.uuid, other.id]].each do |key, value, stored|
-          @set.update!(permission_set_group: @group)
-          patch_set(answer.merge(key => value))
+        2.times do |attempt|
+          patch_set(answer.merge('permission_set_group_id' => other.uuid))
+          assert_response :ok, "attempt #{attempt}: #{response.body}"
+          assert_equal other.id, @set.reload.permission_set_group_id, "attempt #{attempt}"
+          assert_reference(data, :permission_set_group, other)
+        end
 
-          assert_response :ok, "#{key}=#{value.inspect}: #{response.body}"
-          assert_equal [stored], [@set.reload.permission_set_group_id], "#{key}=#{value.inspect}"
+        patch_set(answer.merge('permission_set_group_id' => nil))
+        assert_response :ok
+        assert_nil @set.reload.permission_set_group_id
+
+        @set.update!(permission_set_group: other)
+        patch_set(answer.merge('permission_set_group_id' => other.id, 'permission_set_group_uuid' => @group.uuid))
+        assert_response :ok
+        assert_equal other.id, @set.reload.permission_set_group_id, 'a stale uuid companion changes nothing'
+      end
+
+      test 'a body with only permission_set_group_uuid changes nothing: the companion is answer-only' do
+        @set.update!(permission_set_group: nil)
+        %i[uuid id].each do |identifier|
+          @config.api_record_identifier = identifier
+          patch "#{BASE}/permission_sets/#{@set.public_send(identifier)}",
+                params: { permission_set: { name: 'Sales Reps', permission_set_group_uuid: @group.uuid } }, as: :json
+
+          assert_response :ok, "#{identifier}: #{response.body}"
+          assert_nil @set.reload.permission_set_group_id, identifier
         end
       end
 
-      test 'both reference keys changing the group must name the same one' do
-        other = create_permission_set_group(name: 'Support')
-        third = create_permission_set_group(name: 'Ops')
-        @set.update!(permission_set_group: @group)
-
-        patch_set(permission_set_group_id: @group.id, permission_set_group_uuid: @group.uuid)
-        assert_response :ok
-        patch_set(permission_set_group_id: other.id, permission_set_group_uuid: other.uuid)
-        assert_response :ok
-        assert_equal other.id, @set.reload.permission_set_group_id
-
-        patch_set(permission_set_group_id: third.id, permission_set_group_uuid: @group.uuid)
-        assert_response :unprocessable_entity
-        assert_equal ['permission_set_group_uuid'], response.parsed_body.dig('error', 'messages').keys
-        assert_equal other.id, @set.reload.permission_set_group_id
-
-        assert_no_difference -> { PermissionSet.count } do
-          post "#{BASE}/permission_sets", params: { permission_set: { name: 'New', permission_set_group_id: other.id,
-                                                                      permission_set_group_uuid: @group.uuid } }, as: :json
-        end
-        assert_response :unprocessable_entity, 'a create has no stored group to tell which key changed'
-        assert_equal ['permission_set_group_uuid'], response.parsed_body.dig('error', 'messages').keys
-
-        patch_set(permission_set_group_uuid: SecureRandom.uuid)
-        assert_response :unprocessable_entity
-        assert_equal [I18n.t('permission_forge.validations.permission_set.group_missing')],
-                     response.parsed_body.dig('error', 'messages', 'permission_set_group_uuid')
+      test 'Api::Schema declares the uuid companions as answer-only: no endpoint takes them' do
+        controller = Class.new(PermissionSetsController) { public :permission_set_params }.new
+        assert_includes Schema.payload_keys(:permission_set), :permission_set_group_uuid
+        assert_not InputShapes::DECLARED.key?('permission_set_group_uuid')
+        controller.params = ActionController::Parameters.new(permission_set: { name: 'x', permission_set_group_uuid: @group.uuid })
+        assert_not controller.permission_set_params.key?('permission_set_group_uuid')
       end
     end
   end
