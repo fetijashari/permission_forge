@@ -162,7 +162,7 @@ module PermissionForge
 
         # one cache-scope suffix for every cache-touching event (audit_log.cache_scope.own_process)
         assert_includes listed, 'Ops on-call cleared the cached permissions of every user. The cached permissions were ' \
-                                'cleared in its own process only (an in-memory store): the web and job processes kept theirs.'
+                                'cleared only in the process that ran it (an in-memory store): every other process kept theirs.'
         assert_includes listed, 'Ops on-call cleared the cached permissions of every user.'
       end
 

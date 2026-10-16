@@ -54,7 +54,7 @@ module PermissionForge
         warn_setup
 
         # Through the one emitter (PermissionForge::Warnings): a SECURITY warning.
-        assert_includes @log.string, BootWarnings.missing_table(PermissionForge::AuditEvent.table_name).delete_prefix(PermissionForge::Warnings::PREFIX)
+        assert_includes @log.string, BootWarnings.missing_table(PermissionForge::AuditEvent.table_name)
         assert_includes @log.string, "#{PermissionForge::Warnings::PREFIX}SECURITY warning: audit_events is :auto"
       ensure
         PermissionForge::AuditEvent.singleton_class.send(:remove_method, :table_exists?)

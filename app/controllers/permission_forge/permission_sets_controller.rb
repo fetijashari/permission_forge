@@ -8,6 +8,7 @@ module PermissionForge
     include PermissionForge::ChangeReview
     include PermissionForge::AuditLogGate
     include PermissionForge::CopyRefusal
+    include PermissionForge::CacheConfirmation
 
     FILTERS = %w[all granting muting conditional off].freeze
     TABS = %w[resources assignments conditions audit].freeze
@@ -86,9 +87,11 @@ module PermissionForge
     end
 
     def apply
-      changes = change_set.apply!
-      redirect_to back_to_set, notice: t('permission_forge.flash.permission_sets.saved',
-                                         count: changes.size, people: helpers.pf_people_text(pf_people_count(@permission_set)))
+      changes = nil
+      outcome = cache_outcome { changes = change_set.apply! }
+      notice = t('permission_forge.flash.permission_sets.saved', count: changes.size,
+                                                                 people: helpers.pf_people_text(pf_people_count(@permission_set)))
+      redirect_to back_to_set, **cache_flash_text(outcome, notice)
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to back_to_set, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end

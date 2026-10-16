@@ -35,9 +35,29 @@ module PermissionForge
     def cache_flash(outcome, keys, **)
       outcome = PermissionForge::Cache::Outcome.wrap(outcome)
       kind = outcome.flash_kind
-      text = t("permission_forge.flash.#{controller_name}.#{keys.fetch(kind)}", **)
-      text = "#{text} #{t('permission_forge.flash.cache_process_local')}" if outcome.process_local?
-      { kind => text }
+      cache_scoped(outcome, kind => t("permission_forge.flash.#{controller_name}.#{keys.fetch(kind)}", **))
+    end
+
+    # The flash for a change whose message has no alert of its own (one
+    # assignment, a batch of edits): `text` as the notice, or — when the
+    # store did not confirm — as the alert, followed by
+    # flash.cache_not_confirmed; flash.cache_process_local as in #cache_flash.
+    #
+    # @param outcome [PermissionForge::Cache::Outcome]
+    # @param text [String] the translated notice
+    # @return [Hash] for redirect_to / pf_redirect
+    def cache_flash_text(outcome, text)
+      kind = outcome.flash_kind
+      text = "#{text} #{t('permission_forge.flash.cache_not_confirmed')}" if kind == :alert
+      cache_scoped(outcome, kind => text)
+    end
+
+    # `flash` with flash.cache_process_local appended when the store lives
+    # in this process only.
+    def cache_scoped(outcome, flash)
+      return flash unless outcome.process_local?
+
+      flash.transform_values { |text| "#{text} #{t('permission_forge.flash.cache_process_local')}" }
     end
   end
 end

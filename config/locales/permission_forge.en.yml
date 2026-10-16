@@ -26,6 +26,7 @@ en:
         not_editable: This record is not editable
         not_found: Record not found
         not_iso8601_time: is not an ISO 8601 date or time
+        not_null: A required value is missing. Nothing was saved.
         record_not_unique: Another request saved the same record a moment ago; it
           already exists
         resource_names_no_model: names no model this app can load
@@ -173,11 +174,13 @@ en:
         'false': 'No'
         'true': 'Yes'
       cache_scope:
-        own_process: 'The cached permissions were cleared in its own process only
-          (an in-memory store): the web and job processes kept theirs.'
+        own_process: 'The cached permissions were cleared only in the process that
+          ran it (an in-memory store): every other process kept theirs.'
         server_process: 'The cached permissions were cleared in this server process
           only (an in-memory store): the other web workers and the job processes kept
           theirs.'
+        unconfirmed: 'The cache store lives in each process (an in-memory store):
+          the other processes keep their cached permissions either way.'
       categories:
         access: Access
         admin: Admin
@@ -215,8 +218,17 @@ en:
       sentence_variants:
         assignment_revoked_expired: "%{actor} removed %{set} from %{person} after
           it expired on %{date}."
+        cache_cleared_unconfirmed: "%{actor} asked to clear the cached permissions
+          of every user, but the cache store did not confirm it: old permissions may
+          stay in use until the cache lifetime ends."
+        cache_settled_unconfirmed: 'The cached permissions of %{person} were to be
+          cleared after the change by %{actor}, but the cache store did not confirm
+          it: the old ones may stay in use until the cache lifetime ends.'
         field_access_limited: "%{actor} read %{record} with these fields hidden or
           masked: %{fields}."
+        permissions_invalidated_unconfirmed: 'The cached permissions of %{person}
+          were to be cleared, but the cache store did not confirm it: the old ones
+          may stay in use until the cache lifetime ends.'
       sentences:
         access:
           denied: "%{actor} was denied access to %{record}."
@@ -240,6 +252,8 @@ en:
           viewed: "%{actor} viewed audit records."
         cache:
           cleared: "%{actor} cleared the cached permissions of every user."
+          settled: The cached permissions of %{person} were cleared after the change
+            by %{actor}.
         cleanup:
           expired_assignments: "%{actor} removed expired assignments."
         consent:
@@ -424,6 +438,9 @@ en:
           other: Revoked %{set} from %{count} people, but the cache store did not
             confirm that their cached permissions were cleared. The old permissions
             may stay in use until the cache lifetime ends.
+      cache_not_confirmed: 'The cache store did not confirm that the cached permissions
+        were cleared: the old permissions may stay in use until the cache lifetime
+        ends.'
       cache_process_local: 'The cache store lives in this server process only (an
         in-memory store): the other web workers and the job processes keep their cached
         permissions until they restart or the entries expire.'
@@ -467,6 +484,8 @@ en:
             confirm that the affected people's cached permissions were cleared. The
             old permissions may stay in use until the cache lifetime ends.
       not_editable: This record is not editable.
+      not_null: A required value was missing. Nothing was changed; the page shows
+        what is there now.
       people:
         cache_refresh_failed: Could not refresh %{name}'s cached permissions. The
           cache store did not confirm it, so the old permissions may stay in use until
@@ -2347,7 +2366,11 @@ en:
         field_accessor_path: Relationship
         field_name: Field
         field_value: Value
+        include_nulls: Include empty values
         is_active: Active
+        is_editable: Editable
+        is_muting: Muting
+        is_permitted: Permitted
         join_type: Join
         label: Label
         mask_access: Mask

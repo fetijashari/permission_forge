@@ -83,7 +83,7 @@ module PermissionForge
 
       # Every record belonging to a Permission Set (the set, its resources,
       # fields, actions, rules and assignments), filtered and sorted.
-      # Filters (all optional): who:, type:, days:, sort: ('asc' / 'desc', default 'desc').
+      # Filters (all optional): who:, type:, days: (an Integer of DAY_FILTERS), sort: ('asc' / 'desc', default 'desc').
       # @return [Array<Entry>]
       def for_permission_set(permission_set, **filters)
         entries = apply_filters(permission_set_entries(permission_set), filters)
@@ -127,7 +127,7 @@ module PermissionForge
         type, who, days = filters.values_at(:type, :who, :days)
         entries = entries.select { |e| e.type == type } if type.present? && TYPES.key?(type)
         entries = filter_who(entries, who) if who.present?
-        entries = filter_days(entries, days.to_i) if DAY_FILTERS.include?(days.to_i)
+        entries = filter_days(entries, days) if DAY_FILTERS.include?(days)
         entries
       end
 

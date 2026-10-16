@@ -12,6 +12,9 @@ module PermissionForge
     #   outcome = Cache::Report.of { user.invalidate_permissions }        # one user
     #   outcome = Cache::Report.of(user_ids: ids) { ids.each { ... } }   # several: unconfirmed counted per user
     #
+    # Measured inside a caller's transaction the outcome is pending
+    # (#deferred?, the one reading): the invalidations follow its commit.
+    #
     #   report = Cache::Report.new                 # when the summary event is written inside the measured block
     #   report.pending.event_data                  # the scope known in advance, nothing confirmed yet
     #   report.measure { ... }.value
@@ -26,11 +29,9 @@ module PermissionForge
         # Measures the block's cache work.
         #
         # @param user_ids [Array, nil] the users invalidated (nil: one, unnamed)
-        # @param deferred [Boolean, Object] truthy when the invalidation follows
-        #   the caller's transaction: nothing is confirmed yet
-        # @return [Outcome]
-        def of(user_ids: nil, deferred: false, &)
-          measure(&).outcome(user_ids: user_ids, deferred: deferred)
+        # @return [Outcome] pending (#deferred?) inside a caller's transaction
+        def of(user_ids: nil, &)
+          measure(&).outcome(user_ids: user_ids)
         end
 
         # @return [Report] measured; `value` holds what the block returned
@@ -40,12 +41,24 @@ module PermissionForge
       end
 
       # Runs the block, collecting the cache failures reported inside it.
+      # Whether the work waits for a caller's transaction is read here, once,
+      # before the first block (#deferred?).
       #
       # @return [Report] self
       def measure
+        @deferred = PermissionForge::OpenTransaction.current ? true : false if @deferred.nil?
         @collected = Failure.collect { @value = yield }
         self
       end
+
+      # The one reading of "deferred" for every operation that measures its
+      # cache work: a caller's transaction was open when it was measured
+      # (OpenTransaction.current), so the invalidations follow its commit
+      # (the rows' own after_commit, Cache::Settlement) and nothing is
+      # confirmed yet. False before anything was measured.
+      #
+      # @return [Boolean]
+      def deferred? = @deferred == true
 
       # Whether the store lives in this process only — asked once per report.
       #
@@ -55,17 +68,23 @@ module PermissionForge
         @process_local
       end
 
-      # Whether the operation runs inside a request a server process serves:
-      # the audit context says it came from the admin or the API. A rake
-      # task, a runner, a console, a job or a service called with no such
-      # context is a process of its own (a host controller that calls a
-      # service without an audit request context counts as one too: the
-      # answer never claims more than the servers saw).
+      # Whether the operation runs in a server process (Report.in_request?).
       #
       # @return [Boolean]
       def in_request?
-        @in_request = REQUEST_SOURCES.include?(PermissionForge::Audit::Source.current) if @in_request.nil?
+        @in_request = Report.in_request? if @in_request.nil?
         @in_request
+      end
+
+      # The one definition of "the operation ran in a server process": the
+      # audit context says it came from the admin or the API, or this process
+      # is a web server (Warnings.server_process?: a host controller, or a
+      # job run inline by Puma, whatever its audit source). A rake task, a
+      # runner, a console or a job process is a process of its own.
+      #
+      # @return [Boolean]
+      def self.in_request?
+        REQUEST_SOURCES.include?(PermissionForge::Audit::Source.current) || PermissionForge::Warnings.server_process?
       end
 
       # The audit sources of a request a server process serves.
@@ -91,10 +110,9 @@ module PermissionForge
       #   unconfirmed ones (nil: one unnamed — any failure counts as one)
       # @param unconfirmed [Integer, nil] a count the caller made itself
       #   (PermissionCacheClearer counts by slice)
-      # @param deferred [Boolean, Object] truthy: nothing is confirmed yet
-      # @return [Outcome]
-      def outcome(user_ids: nil, unconfirmed: nil, deferred: false)
-        return pending if deferred
+      # @return [Outcome] pending while #deferred?
+      def outcome(user_ids: nil, unconfirmed: nil)
+        return pending if deferred?
 
         unconfirmed ||= count_unconfirmed(user_ids)
         Outcome.new(confirmed: unconfirmed.zero?, process_local: process_local?, unconfirmed: unconfirmed, in_request: in_request?)

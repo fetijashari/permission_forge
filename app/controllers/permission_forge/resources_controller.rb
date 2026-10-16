@@ -5,6 +5,7 @@ module PermissionForge
   # @api private
   class ResourcesController < ApplicationController
     include PermissionForge::ChangeReview
+    include PermissionForge::CacheConfirmation
 
     TABS = %w[fields actions rules].freeze
     GRANTING_PRESETS = %w[full read nothing].freeze
@@ -51,10 +52,11 @@ module PermissionForge
     end
 
     def apply
-      changes = change_set.apply!
+      changes = nil
+      outcome = cache_outcome { changes = change_set.apply! }
       redirect_to pf_back_or(resource_path),
-                  notice: t('permission_forge.flash.permission_sets.saved', count: changes.size,
-                                                                            people: helpers.pf_people_text(pf_people_count(@permission_set)))
+                  **cache_flash_text(outcome, t('permission_forge.flash.permission_sets.saved',
+                                                count: changes.size, people: helpers.pf_people_text(pf_people_count(@permission_set))))
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to resource_path, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end

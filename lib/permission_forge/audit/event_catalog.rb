@@ -101,7 +101,7 @@ module PermissionForge
          group_membership.added group_membership.changed group_membership.removed field.sensitive_acknowledged]
         .each { |name| register(name, category: 'change') }
 
-      %w[erasure.performed consent.withdrawn cleanup.expired_assignments cache.cleared]
+      %w[erasure.performed consent.withdrawn cleanup.expired_assignments cache.cleared cache.settled]
         .each { |name| register(name, category: 'system', cache: true) }
       %w[audit.purged audit.settings_observed report.generated].each { |name| register(name, category: 'system') }
 

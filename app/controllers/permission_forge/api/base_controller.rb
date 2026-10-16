@@ -59,6 +59,13 @@ module PermissionForge
                              { 'base' => [I18n.t('permission_forge.api.errors.record_not_unique')] })
       end
 
+      # A NOT NULL column no validation foresaw (ValidatesRequiredColumns
+      # refuses nil in the gem's own columns, keyed by the attribute): a
+      # host column, a trigger. The 422 envelope, never a 500.
+      rescue_from ActiveRecord::NotNullViolation do
+        render_unprocessable({ 'base' => [I18n.t('permission_forge.api.errors.not_null')] })
+      end
+
       # Field-keyed like a validation error (ResponseRenderer#render_input_error).
       rescue_from ActionController::ParameterMissing, ActionController::BadRequest do |e|
         render_input_error(e)
@@ -70,15 +77,36 @@ module PermissionForge
       # Rails' own. A disabled API stays a 404. params[:locale] cannot be
       # read: the header decides.
       rescue_from ActionDispatch::Http::Parameters::ParseError do
+        render_body_unreadable
+      end
+
+      # A form or multipart body Rack cannot parse (`a[=1&%%%`, a multipart
+      # body without its end) raises ActionController::BadRequest while
+      # Rails reads the parameters for its instrumentation, before
+      # rescue_from applies: answered here like an unreadable JSON body, the
+      # 400 envelope (through 0.15.0-rc Rails' own 400 page).
+      # AbstractController documents process_action as the method to
+      # override around an action.
+      def process_action(...)
+        super
+      rescue ActionController::BadRequest => e
+        raise if performed? || e.is_a?(ParamShapes::InvalidParam)
+
+        render_body_unreadable
+      end
+
+      private
+
+      # The 400 envelope of a body that cannot be read; a disabled API stays
+      # a 404. params[:locale] cannot be read: the header decides.
+      def render_body_unreadable
         verify_api_enabled!
-        next if performed?
+        return if performed?
 
         assign_api_locale(extract_locale_from_accept_language)
         render json: { error: { status: 400, messages: I18n.t('permission_forge.api.errors.body_unreadable') } },
                status: :bad_request
       end
-
-      private
 
       # Who acts (Audit::ActorResolver: audit_actor_resolver, the signed-in
       # user, else an anonymous API client), request id, IP, the `reason`

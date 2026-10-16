@@ -10,6 +10,7 @@ module PermissionForge
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::KeepsCopiedValues
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
     include PermissionForge::Concerns::HasPermissionSetUsers

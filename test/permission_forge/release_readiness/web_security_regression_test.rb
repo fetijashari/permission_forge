@@ -110,7 +110,7 @@ module PermissionForge
 
         delete "#{API}/permission_sets/#{set.uuid}/users/#{assignment.uuid}"
 
-        assert_response :no_content
+        assert_response :ok
         assert_not PermissionForge::PermissionSetUser.exists?(assignment.id)
       end
 
@@ -308,7 +308,7 @@ module PermissionForge
         post "#{API}/permission_sets/#{set.uuid}/users", params: { user_id: other.id }
         assert_response :created
         delete "#{API}/permission_sets/#{set.uuid}/users/#{PermissionForge::PermissionSetUser.find_by!(user_id: other.id).uuid}"
-        assert_response :no_content
+        assert_response :ok
 
         assert_equal [[me.id], [me.id, other.id], [other.id], [other.id]], seen
         assert_not PermissionForge::PermissionSetUser.exists?(user_id: me.id)

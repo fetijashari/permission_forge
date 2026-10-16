@@ -44,8 +44,10 @@ module PermissionForge
         reject_widening!(:revoke) unless performed?
         return if performed? || pf_assignment_refused_api?(@permission_set, psu.user_id, :revoke)
 
-        psu.destroy!
-        head :no_content
+        # The revoked assignment and what the cache store confirmed
+        # (meta.cache, as the bulk endpoint answers it); through 0.14.x a 204.
+        outcome = PermissionForge::Cache::Report.of { psu.destroy! }
+        render_record_with_cache(psu, outcome, status: :ok)
       end
 
       def bulk
@@ -66,9 +68,14 @@ module PermissionForge
         reject_locked!(pf_widening_lock(@permission_set, change))
       end
 
+      # The new assignment and what the cache store confirmed (meta.cache).
       def create_assignment(user)
         psu = @permission_set.permission_set_users.build(user: user, expires_at: future_expires_at)
-        psu.save ? render_created(psu, serializer_for(:permission_set_user)) : render_validation_errors(psu)
+        saved = false
+        outcome = PermissionForge::Cache::Report.of { saved = psu.save }
+        return render_validation_errors(psu) unless saved
+
+        render_record_with_cache(psu, outcome, status: :created)
       end
 
       # params[:expires_at] (ParamShapes#pf_time_param) for a new

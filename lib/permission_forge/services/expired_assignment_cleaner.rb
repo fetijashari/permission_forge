@@ -99,7 +99,8 @@ module PermissionForge
       # The run's counts, people, sets and cache outcome (see the class comment).
       def result(removed, sets, report)
         user_ids = user_ids_of(removed)
-        @invalidated_count = report.confirmed(user_ids).size
+        # not known inside a caller's transaction (Report#deferred?), as a bulk assignment's
+        @invalidated_count = report.deferred? ? nil : report.confirmed(user_ids).size
         { removed: @removed_count, invalidated: @invalidated_count, affected_user_ids: user_ids,
           permission_sets: sets.values.map(&:name).uniq, cache: report.outcome(user_ids: user_ids).to_h }
       end
@@ -139,12 +140,17 @@ module PermissionForge
       SummaryData = Struct.new(:rows, :sets_by_id, :confirmed_user_ids, :outcome) do
         def to_h
           { 'operation' => 'cleanup_expired_assignments', 'removed' => rows.size,
-            'invalidated' => (user_ids & confirmed_user_ids).size, **bounded_user_ids,
+            'invalidated' => invalidated, **bounded_user_ids,
             'set_uuids' => sets.map(&:uuid).uniq, 'set_names' => sets.map(&:name).uniq, 'dry_run' => false,
             **outcome.event_data }
         end
 
         private
+
+        # Not known inside a caller's transaction (a pending outcome).
+        def invalidated
+          (user_ids & confirmed_user_ids).size unless outcome.confirmed.nil?
+        end
 
         def user_ids
           @user_ids ||= rows.map(&:user_id).uniq

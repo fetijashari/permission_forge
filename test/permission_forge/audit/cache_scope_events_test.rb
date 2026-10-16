@@ -33,7 +33,9 @@ module PermissionForge
           travel_to(2.days.from_now) { result = PermissionForge::Services::ExpiredAssignmentCleaner.call(actor: 'ops') }
           result
         end,
-        'cache.cleared' => -> { PermissionForge::Services::PermissionCacheClearer.call(actor: 'ops') }
+        'cache.cleared' => -> { PermissionForge::Services::PermissionCacheClearer.call(actor: 'ops') },
+        # erasure.performed's follow-up: what the store said once the work ran
+        'cache.settled' => -> { PermissionForge::Services::DataSubjectErasure.call(user: person, actor: 'dpo') }
       }.freeze
 
       # The suffix by where the operation ran (Cache::Outcome#in_request):
@@ -87,7 +89,7 @@ module PermissionForge
       end
 
       test 'the flagged events and PRODUCERS name the same operations' do
-        assert_equal %w[cache.cleared cleanup.expired_assignments consent.withdrawn erasure.performed], self.class.flagged
+        assert_equal %w[cache.cleared cache.settled cleanup.expired_assignments consent.withdrawn erasure.performed], self.class.flagged
         assert_equal({ without_producer: [], not_flagged: [] }, self.class.uncovered)
       end
 

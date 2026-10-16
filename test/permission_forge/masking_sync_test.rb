@@ -163,7 +163,7 @@ module PermissionForge
         end
       end
 
-      assert_match(/auto-applied masking could not be synced — ArgumentError: boom/, log)
+      assert_match(/SECURITY warning: Auto-applied masking could not be synced: .* \(ArgumentError: boom\)/, log)
     end
 
     # Development: a code reload hands out new, unmasked model classes.

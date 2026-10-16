@@ -50,6 +50,14 @@ module PermissionForge
       redirect_back_or_to permission_forge.root_path, alert: alert, allow_other_host: false, status: :see_other
     end
 
+    # A NOT NULL column no validation foresaw (ValidatesRequiredColumns
+    # covers the gem's own columns): back to the page like the uniqueness
+    # race, never a 500.
+    rescue_from ActiveRecord::NotNullViolation do
+      redirect_back_or_to permission_forge.root_path, alert: t('permission_forge.flash.not_null'), allow_other_host: false,
+                                                      status: :see_other
+    end
+
     helper PermissionForge::ApplicationHelper unless self < PermissionForge::ApplicationHelper
     helper_method :pf_fragment?, :pf_theme, :pf_help_visible?, :pf_current_admin,
                   :pf_attention, :pf_settings_catalog, :pf_back_or

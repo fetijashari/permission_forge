@@ -5,6 +5,7 @@ module PermissionForge
   # @api private
   class ResourceFieldsController < ApplicationController
     include PermissionForge::ActingAdmin
+    include PermissionForge::CacheConfirmation
 
     before_action :load_field
     before_action :reject_locked, only: %i[update acknowledge apply_recommendation]
@@ -22,9 +23,12 @@ module PermissionForge
 
     def update
       attrs = pf_require_hash(:field).permit(:level, :mask_strategy, :label, :description, :is_active).to_h
-      changes = apply_field_changes(attrs)
-      finish_new_field(attrs) unless @field
-      redirect_to pf_back_or(resource_path), notice: saved_notice(changes)
+      changes = nil
+      outcome = cache_outcome do
+        changes = apply_field_changes(attrs)
+        finish_new_field(attrs) unless @field
+      end
+      redirect_to pf_back_or(resource_path), **cache_flash_text(outcome, saved_notice(changes))
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to field_path, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end

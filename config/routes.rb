@@ -151,7 +151,8 @@ PermissionForge::Engine.routes.draw do
     end
 
     # Last: any other path or method under /api answers the JSON 404
-    # envelope, not Rails' HTML page (Api::UnmatchedRoutesController).
-    match '(*path)', to: 'unmatched_routes#show', via: %i[get post put patch delete], format: false
+    # envelope, not Rails' HTML page (Api::UnmatchedRoutesController) —
+    # OPTIONS and TRACE included (through 0.15.0-rc a RoutingError).
+    match '(*path)', to: 'unmatched_routes#show', via: %i[get post put patch delete options trace], format: false
   end
 end

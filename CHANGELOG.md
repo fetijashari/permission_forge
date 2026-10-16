@@ -119,20 +119,24 @@ and the RLS re-sync.
   (`confirmed`, `process_local`, `in_request`, `unconfirmed`), measured by `Cache::Report`, is what the terminal, the
   admin flash, the API body and the summary audit event report: `PermissionCacheClearer`, `DataSubjectErasure`,
   `ExpiredAssignmentCleaner`, `ConsentWithdrawalHandler` and `BulkPermissionSetAssignment` answer it under `cache:`;
-  `cache.cleared`, `erasure.performed`, `cleanup.expired_assignments` and `consent.withdrawn` record it in their data;
-  the admin's flashes and `POST /api/permission_sets/:id/users/bulk` (`cache: {…}`) say when the store lives in one
-  process. `process_local` is `PermissionForge.cache.process_local?` (`cache_backend = :memory`, or `Rails.cache` a
-  `:memory_store`): there a clear from rake reaches the rake process only, which the terminal said and the audit log
-  did not.
+  `cache.cleared`, `erasure.performed`, `cleanup.expired_assignments` and `consent.withdrawn` record it in their data
+  (`cache.settled` the answer of the last two once their cache work ran); the admin's flashes (one assignment's
+  changes and a batch of edits too), `POST /api/permission_sets/:id/users/bulk` (`cache: {…}`) and `POST` / `DELETE
+  …/users` (`meta.cache`) say when the store did not confirm and when it lives in one process; inside a caller's
+  transaction every one of them reports `confirmed: nil` (`Cache::Report#deferred?`). `process_local` is
+  `PermissionForge.cache.process_local?` (`cache_backend = :memory`, or `Rails.cache` a `:memory_store`): there a clear
+  from rake reaches the rake process only, which the terminal said and the audit log did not.
   <!-- pin: test/permission_forge/audit/cache_scope_events_test.rb#erasure.performed on the suite's memory store says process-local in the event and the result, in every locale -->
   <!-- pin: test/permission_forge/services/permission_cache_clearer_test.rb#every event says whether the clear reached only this process (a memory store) or a shared store -->
   <!-- pin: test/permission_forge/audit/cache_scope_events_test.rb#cleanup.expired_assignments on a shared store says process_local false and reads without a suffix -->
 - **The audit log says which processes kept their cached permissions.** One suffix per locale for an event whose
-  data says `process_local: true`, chosen by where the operation ran: from an admin or API request, "The cached
-  permissions were cleared in this server process only (an in-memory store): the other web workers and the job
-  processes kept theirs."; from a rake task, runner, console or job, "…in its own process only…: the web and job
-  processes kept theirs." (`audit_log.cache_scope.server_process` / `own_process`, en/sq/mk). On a shared store the
-  sentence reads as before.
+  data says `process_local: true`, chosen by where the operation ran and what the store said: in a web server process
+  (an admin or API request, a host controller), "The cached permissions were cleared in this server process only (an
+  in-memory store): the other web workers and the job processes kept theirs."; from a rake task, runner, console or
+  job, "The cached permissions were cleared only in the process that ran it (an in-memory store): every other process
+  kept theirs."; when the store did not confirm, "The cache store lives in each process (an in-memory store): the other
+  processes keep their cached permissions either way." (`audit_log.cache_scope.server_process` / `own_process` /
+  `unconfirmed`, en/sq/mk). On a shared store the sentence reads as before.
   <!-- pin: test/permission_forge/html/audit_sentences_test.rb#a clear made from an admin request names the other workers, not the server itself -->
   <!-- pin: test/permission_forge/html/audit_sentences_test.rb#a cache clear that reached only its own in-memory store says so; one on a shared store reads as before -->
 - **`PermissionForge::RakeOutput`: one presenter for what the rake tasks print.** `rake permission_forge:erasure`,
@@ -269,8 +273,9 @@ and the RLS re-sync.
   marked `:foreign_identifier`; their value is unchanged.
   <!-- pin: test/permission_forge/api/envelope_schema_test.rb#every serializer's keys are its Api::Schema payload, and every payload has its serializer -->
 - **Every API route, in its success and every error class, is asserted against the schema**
-  (`api/envelope_schema_test.rb`, one test per verb and path, the catch-all included: 401 refused or unset, 404 API
-  off or unknown record, 403 tenant, lambdas or lock, 400, 422), under the pseudo-locale `xx`.
+  (`api/envelope_schema_test.rb`, one test per verb and path, the catch-all included with `OPTIONS` and `TRACE`: 401
+  refused or unset, 404 API off or unknown record, 403 tenant, lambdas or lock, 400 for an unreadable JSON, form or
+  multipart body, 422), under the pseudo-locale `xx`.
   <!-- pin: test/permission_forge/api/envelope_schema_test.rb#every API route has an Endpoint, and every Endpoint a route -->
   <!-- pin: test/permission_forge/api/envelope_schema_test.rb#~answers the schema in its success and in every error class -->
 - **The JSON samples of docs/admin-api.md are generated** by `bundle exec rake docs:api`
@@ -305,7 +310,9 @@ and the RLS re-sync.
 - **`PermissionForge::ParamShapes#pf_integer_param(key, default:, range:)`** — the one reader of a whole-number
   request parameter (a page, a page size, a count): the number when the value is one inside the range (digits or a
   JSON number), the default for every other shape (text, `2abc`, fractions, lists, objects, blanks, 0 and negatives
-  below the range). The API's pagination reads `page` and `per_page` through it (see **Changed**).
+  below the range). The API's pagination reads `page` and `per_page` through it (see **Changed**), and so do the audit
+  log's and the person list's page, the audit tab's `days` and the rule builder's `remove_step` (`ParamShapes.integer`);
+  a static guard refuses `params[...].to_i` in the admin and the API.
   <!-- pin: test/permission_forge/controllers/param_shapes_test.rb#anything else is the default: 0 and negatives below the range, text, fractions, lists, objects, blanks -->
 - **Every code sample in README.md and docs/ says what it is**: its fence carries `run` (a console sample the
   documentation app executes, `# => literal` asserted), `file=<path>` (a complete file written into that app) or
@@ -393,6 +400,36 @@ and the RLS re-sync.
   <!-- pin: test/rls/rls_read_access_parity_test.rb#read removed by a Muting Permission Set: none under :deny, in both layers -->
   <!-- pin: test/rls/rls_read_access_parity_test.rb#STI: a subclass entry without read hides its rows (and its subclasses) under :deny -->
   <!-- pin: test/permission_forge/services/rls_policy_generator_test.rb#the digest follows no_read_access_strategy, so rls:status reports the policy stale after it changes -->
+
+- **`cache.settled`: what the cache store said after an erasure or a consent withdrawal.** `erasure.performed` and
+  `consent.withdrawn` are written in the operation's transaction, before its cache work, so they record
+  `cache_confirmed: nil`. A `cache.settled` event (category `system`, `subject_user_id`, `data.operation` `erasure` or
+  `consent_withdrawal`, and the `Cache::Outcome`) now follows on the same `correlation_id` with the store's answer;
+  inside a caller's transaction the work runs again after its commit, measured, and the event is written then (never
+  after a rollback). A failed post-commit invalidation of an erased person leaves this trace
+  (`cache_confirmed: false`), and its sentence says the store did not confirm it (en/sq/mk).
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#an erasure records what the store said in cache.settled, on the erasure correlation id -->
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#inside a caller transaction cache.settled is written after the commit, with the outcome then -->
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#a rolled-back erasure settles nothing -->
+- **The route fuzz poisons each parameter alone, inside a valid request.** `security/route_fuzz_test.rb` poisoned
+  every parameter at once, so a parameter read only when another is valid (`days` behind `tab=audit`,
+  `rule[remove_step]` behind a rule form) was never reached. Per route it now poisons each parameter the controller
+  reads (found in the source by `FuzzParams`: `params[...]`, the `pf_*_param` readers, permitted keys) one at a time
+  inside each valid request of the route (`valid_contexts`), then each attribute of each attribute section, the API
+  also as a JSON body with `null`; a guard fails when a parameter the engine reads is missing from the fuzz table.
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#every parameter the engine reads is in the fuzz table -->
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#every attribute section the engine reads has a valid request that reaches it -->
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#~answers each read parameter alone below 500 -->
+- **Static guards: the cache report per method, integer parameters, warning severities.** The cache-report guard
+  places each invalidation per method (a `Cache::Report` block, `cache_outcome`, or a method all of whose callers are
+  measured) instead of exempting a whole file once it mentions `Cache::Report`, and also sees
+  `regenerate_permissions`, `cache.delete` / `expunge_many` / `delete_matched` and `lib/permission_forge/admin`; a new
+  guard refuses `params[...].to_i` and `.to_s.to_i` in the admin and the API; every `Warnings.emit` key has its
+  severity, and a reason when it is not SECURITY, in the warnings channel test, whose needle also sees a logger's
+  `error` / `add` / `fatal`.
+  <!-- pin: test/permission_forge/release_readiness/cache_report_guard_test.rb#negative fixture: an unmeasured method in a file that measures elsewhere is a hit -->
+  <!-- pin: test/permission_forge/release_readiness/integer_param_guard_test.rb#no request value is read with to_i -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#every warning has its severity in SEVERITY, the one its site passes, and a reason when it is config -->
 
 ### Changed
 
@@ -1002,6 +1039,46 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#the library default is :rules_only, the strict preset :deny -->
   <!-- pin: test/permission_forge/configuration_presets_test.rb#:strict closes exactly the README hardening checklist -->
 
+- **One assignment's change says what the cache store confirmed, as a bulk revoke does.** Assigning, changing the end
+  date, keeping, removing, restoring and undoing one person's assignment in the admin, and saving a batch of edits
+  (Review and save, a field's drawer), were announced as done whatever the store answered; with the store down the
+  toast is now an alert that adds "The cache store did not confirm that the cached permissions were cleared: the old
+  permissions may stay in use until the cache lifetime ends." (`flash.cache_not_confirmed`, en/sq/mk), and on a
+  per-process store every such toast ends with `flash.cache_process_local`. Group membership changes no cached
+  permissions and reports none. **No opt-out:** a toast's wording; share the cache store to drop the per-process
+  sentence.
+  <!-- pin: test/permission_forge/html/assignment_cache_outcome_test.rb#removing one assignment with the store down is an alert, and still removes it -->
+  <!-- pin: test/permission_forge/html/assignment_cache_outcome_test.rb#saving batched edits with the store down is an alert -->
+- **`POST` and `DELETE …/permission_sets/:uuid/users` answer the cache outcome.** The single grant answers
+  `{ "data": {…}, "meta": { "cache": { "confirmed", "process_local", "in_request", "unconfirmed" } } }` (201), as the
+  bulk endpoint answers `cache`; the single revoke answers 200 with the removed assignment and the same `meta.cache`
+  (through 0.14.x a 204 without a body). Declared in `Api::Schema` (`single_with_cache`). **No opt-out:** a client
+  that requires 204 must accept 200 (every 2xx is success); `meta` is additive.
+  <!-- pin: test/permission_forge/api/assignment_cache_outcome_api_test.rb#a single revoke with the store down answers that nothing was confirmed -->
+  <!-- pin: test/permission_forge/api/assignment_cache_outcome_api_test.rb#a single grant answers the cache outcome -->
+- **More warnings are SECURITY warnings.** A warning means access wider than configured, or a change unrecorded, and
+  now says so (`[PermissionForge] SECURITY warning:`) for: a model loaded with another `tenant_model` (or none) than the
+  configuration's; auto-applied masking not complete at boot, a masking token the store did not take, a store that
+  fails the masking sync, and a sync that raised (it was a bare `logger.error`); the production per-process cache and
+  the production masking that cannot be announced (their `WARNING:` prefix is gone); `database_row_level_security` on
+  an adapter that is not PostgreSQL; the audit table that cannot be checked (a bare `logger.warn` before). A log alert
+  that matched `WARNING: Using an in-process permission cache` matches `Using an in-process permission cache`.
+  **No opt-out:** log text and severity; each warning names the setting that removes its condition.
+  <!-- pin: test/permission_forge/model_bindings_test.rb#a tenant_model mismatch is a SECURITY warning; a user_class one is not -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#every warning has its severity in SEVERITY, the one its site passes, and a reason when it is config -->
+- **Inside a caller's transaction, a consent withdrawal and the expired-assignment clean-up report a pending cache
+  outcome.** They reported the outcome measured before the commit as confirmed, while the bulk assignment and the
+  erasure reported `confirmed: nil`. "Deferred" has one reading now, `Cache::Report#deferred?` (a transaction was open
+  when the work was measured): `cache[:confirmed]` and `invalidated` are `nil` there, as is
+  `cleanup.expired_assignments`' `invalidated`. **No opt-out:** the answer is only known at the commit; `cache.settled`
+  records it for the consent withdrawal.
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#inside a caller transaction a consent withdrawal reports deferred, not confirmed -->
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#inside a caller transaction the clean-up reports deferred, not confirmed -->
+- **The audit log's page reads like every page parameter.** A whole number past the last page (`page=99999…`, 40
+  digits) is the last page, as `page=99` was; it was the first. **No opt-out:** a page that does not exist was never
+  meant.
+  <!-- pin: test/permission_forge/release_readiness/integer_param_guard_test.rb#the audit log reads its page with the one reader: a number past the last page is the last page -->
+
 ### Deprecated
 
 - **An `api_auth` that sets `@admin = true` on the controller to open `GET /api/stats`.** Set
@@ -1403,7 +1480,8 @@ and the RLS re-sync.
 - **`permissions.invalidated` says which processes it reached.** The runtime event (the `cache` group) now carries
   `process_local` and `in_request` (the scope every summary event's `Cache::Outcome` carries), so with a per-process
   store its audit sentence ends with the same cache-scope suffix instead of reading as if every process dropped the
-  user's permissions.
+  user's permissions; with `confirmed: false` it says the store did not confirm the removal, never that it was
+  cleared.
   <!-- pin: test/permission_forge/audit/runtime_plumbing_test.rb#a rebuilt and an invalidated permission hash are published, stored only with the cache group -->
 - **Users made by Rails 8's `bin/rails generate authentication` show and are found by their email.** That generator
   names the column `email_address`, and PermissionForge only read `email`: a person without a name column showed as
@@ -1546,6 +1624,49 @@ and the RLS re-sync.
   preview now sits under the level control, no wider than it.
   <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#the mask preview sits under the level control, inside its column -->
   <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#the preview does not widen the level column -->
+
+- **JSON `null`, or a blank form value, for a NOT NULL column was a 500.** `"is_active": null`, `"label": null`,
+  `"mask_strategy": null`, a rule's `"name": null` or `"include_nulls": null` on any API create or update — and a
+  blank Active flag on the admin's group form (a boolean column casts `""` to nil) — raised
+  `ActiveRecord::NotNullViolation`. The eight permission models now refuse nil for every column the schema declares
+  NOT NULL (`ValidatesRequiredColumns`, read from the schema, so a new column is covered; the primary key, the
+  timestamps and `uuid` are filled on create, a column with a presence rule of its own or of a required `belongs_to`
+  keeps that message): a 422 keyed by the attribute in the API, the form again with the message in the admin. A NOT
+  NULL violation no validation foresaw is the 422 envelope (`base`) in the API and a flash in the admin.
+  <!-- pin: test/permission_forge/security/not_null_input_test.rb#API: JSON null or a blank form value on a NOT NULL column is a 422 keyed by the attribute, on create and update -->
+  <!-- pin: test/permission_forge/security/not_null_input_test.rb#admin: a blank Active flag on the group form goes back to the group with the message -->
+  <!-- pin: test/permission_forge/security/not_null_input_test.rb#API: an unforeseen NotNullViolation is a 422 envelope -->
+  <!-- pin: test/permission_forge/concerns/validates_required_columns_test.rb#every permission model refuses nil in each of its NOT NULL columns -->
+- **A Hash or a list in the audit tab's `days`, `who`, `type` or `views` was a 500** (a Permission Set's audit tab, its
+  CSV, and a person's audit tab). They are read as typed text, `days` as one of the offered counts.
+  <!-- pin: test/permission_forge/security/bad_input_test.rb#the audit tab reads a Hash or a list in days, who, type or views as no filter -->
+- **A negative or huge `rule[remove_step]` in the rule builder was a 500** (`path.first(-1)`); it is read as a count
+  of steps between 0 and the path's length, else no removal.
+  <!-- pin: test/permission_forge/security/bad_input_test.rb#the rule builder reads a negative or huge remove_step as no removal -->
+- **The person list read `page=2abc` as page 2.** A page is read by `ParamShapes.integer` there too: anything that is
+  not a whole number is the first page.
+  <!-- pin: test/permission_forge/release_readiness/integer_param_guard_test.rb#a page that is not a whole number is the first page of people -->
+- **An audit sentence said "cleared" when the cache store said no.** `cache.cleared` with `cache_confirmed: false` and
+  `permissions.invalidated` with `confirmed: false` read "cleared the cached permissions", and on a per-process store
+  the suffix added "cleared in its own process only". They now say the store did not confirm the clear, and the suffix
+  for an unconfirmed operation says only that the store lives in each process (`audit_log.cache_scope.unconfirmed`,
+  en/sq/mk).
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#a clear of every cache the store did not confirm is not told as cleared -->
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#an invalidation the store did not confirm is not told as cleared -->
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#the scope suffix of an unconfirmed operation on a per-process store does not say cleared either -->
+- **An invalidation inside a host's web request said the web processes kept their cached permissions — from a web
+  process.** `in_request` was true only for the admin and the API; it is now true for any code of a web server
+  process (`Cache::Report.in_request?`, the one definition, with `Warnings.server_process?`), and the suffix for a
+  process of its own no longer names the web processes ("…cleared only in the process that ran it (an in-memory
+  store): every other process kept theirs.").
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#an invalidation inside a host controller request of a server process records in_request -->
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#the own-process suffix never names the web processes -->
+- **`OPTIONS` and `TRACE` under the API, and a form or multipart body Rack cannot parse, answered Rails' own pages.**
+  The verbs reached no route (`RoutingError`); a body such as `a[=1&%%%` raised `ActionController::BadRequest` while
+  Rails read the parameters for its instrumentation, before `rescue_from`, giving Rails' 400 in `text/html`. The verbs
+  now get the JSON 404 envelope, the bodies the 400 envelope an unreadable JSON body gets.
+  <!-- pin: test/permission_forge/api/unmatched_routes_test.rb#OPTIONS and TRACE under the API answer the JSON 404 envelope -->
+  <!-- pin: test/permission_forge/api/envelope_schema_test.rb#~answers the schema in its success and in every error class -->
 
 ### Documentation
 

@@ -290,13 +290,14 @@ module PermissionForge
           false
         end
       rescue ActiveRecord::NoDatabaseError, ActiveRecord::ConnectionNotEstablished => e
-        Rails.logger&.warn("[PermissionForge] cannot check for the audit table '#{name}': #{e.class}") if defined?(Rails)
+        PermissionForge::Warnings.emit(:audit_table_unchecked, "cannot check for the audit table '#{name}' (#{e.class}): " \
+                                                               'no audit events are recorded until the database answers.',
+                                       severity: :security)
         false
       end
 
       def warn_missing_table(name)
-        PermissionForge::Warnings.emit(:audit_table_missing, BootWarnings.missing_table(name).delete_prefix(PermissionForge::Warnings::PREFIX),
-                                       severity: :security)
+        PermissionForge::Warnings.emit(:audit_table_missing, BootWarnings.missing_table(name), severity: :security)
       end
     end
   end

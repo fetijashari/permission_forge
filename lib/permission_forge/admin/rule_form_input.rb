@@ -22,10 +22,12 @@ module PermissionForge
 
       def self.param_path(attrs)
         path = Array(attrs['path']).map(&:to_s).compact_blank
-        remove = attrs['remove_step']
+        # The steps kept by a "remove" button: a count of them (0 up to the
+        # path's length), else none removed (ParamShapes.integer).
+        keep = ParamShapes.integer(attrs['remove_step'], default: nil, range: 0..path.size)
         # The operator as posted: one that is not a condition is refused by
         # RuleForm#valid?, never rewritten to another.
-        { name: attrs['name'].to_s.strip, path: remove.present? ? path.first(remove.to_i) : path,
+        { name: attrs['name'].to_s.strip, path: keep ? path.first(keep) : path,
           field_name: attrs['field_name'].to_s, operator: attrs.key?('operator') ? attrs['operator'].to_s : 'equal' }
       end
 

@@ -4,6 +4,7 @@ require 'test_helper'
 require 'open3'
 require_relative '../support/static_guard'
 require_relative '../support/boot_test_helpers'
+require_relative '../support/emit_sites'
 
 module PermissionForge
   # Every boot and configuration warning of the gem goes through one emitter,
@@ -16,10 +17,15 @@ module PermissionForge
   # standard error: every SECURITY warning (a fail-open condition) was in the
   # log only, which `bin/rails server` and `bin/rails runner` never show.
   #
-  # Two guards:
-  # - static: every `logger.warn`, `Kernel.warn`, bare `warn`, `$stderr` or
-  #   `STDERR` in lib/ and app/ is the emitter's or in ALLOWLIST with a reason
-  #   (a request-time log, a rake task's answer to its invoker, a deprecation);
+  # Three guards:
+  # - static: every `logger.warn` / `.error` / `.add` / `.fatal` (also on a
+  #   local `log`), `Kernel.warn`, bare `warn`, `$stderr` or `STDERR` in lib/
+  #   and app/ is the emitter's or in ALLOWLIST with a reason (a request-time
+  #   log, a failure reported where it happened, a rake task's answer to its
+  #   invoker, a deprecation);
+  # - severity: every Warnings.emit key is in SEVERITY with the severity its
+  #   site passes, and a reason when that is :config (SECURITY = access wider
+  #   than configured, or a change unrecorded);
   # - policy: the emitter with an injected environment, server flag, generator
   #   flag, logger and io writes where POLICY says, and once per key on the
   #   terminal. The dummy app booted as a development runner proves the
@@ -33,10 +39,11 @@ module PermissionForge
     # STDERR — in code with strings blanked and comments stripped
     # (StaticGuard); a word in a `%w[]` / `%i[]` list (strategy names) is no
     # call (PERCENT_LITERAL).
-    NEEDLE = /(?:logger&?|Kernel)\.warn\b|(?<![.\w:])warn\b(?![\w!?]|\s*[:=?])|\$stderr\b|\bSTDERR\b/
+    NEEDLE = /(?:\blog(?:ger)?&?\.(?:warn|error|add|fatal)|Kernel\.warn)\b|(?<![.\w:])warn\b(?![\w!?]|\s*[:=?])|\$stderr\b|\bSTDERR\b/
     PERCENT_LITERAL = /%[wiWI][\[({<][^\])}>]*[\])}>]/
     CANONICAL = %w[lib/permission_forge/warnings.rb].freeze
 
+    FAILED_HERE = 'a failure reported where it happened, request- or job-time: no boot or configuration warning'
     RAKE_ANSWER = "a rake task's answer to its invoker: standard error is the task's own channel (RakeAudit)"
     REQUEST_TIME = 'a request-time log, written where the request is: no boot or configuration warning'
     ALLOWLIST = [
@@ -56,9 +63,6 @@ module PermissionForge
       ['lib/permission_forge/virtual_fields.rb', /Rails\.logger&\.warn\("\[PermissionForge\] \#\{@klass\}/,
        "logged where a model's extra_fields_method raised; the boot-time consequence (its readers are not " \
        'masked) is VirtualReaders\' SECURITY warning through the emitter'],
-      ['lib/permission_forge/audit.rb', /Rails\.logger&\.warn\("\[PermissionForge\] cannot check for the audit table/,
-       'Audit owns the table check (once per process, Audit.verify_table!); lib/permission_forge/audit.rb is ' \
-       'outside this change — route through Warnings.emit when it is next touched'],
       ['lib/permission_forge/cache/withheld_notice.rb', /Rails\.logger\.warn\(/,
        'the "rebuilt inside a transaction" notice: request-time, once per process by itself'],
       ['lib/permission_forge/cache/rails_cache.rb', /Rails\.logger&\.warn\(/,
@@ -78,8 +82,49 @@ module PermissionForge
       ['lib/permission_forge/concerns/permission_scoped_findable.rb', /current_user is nil — permission_scoped returns unscoped/,
        "#{REQUEST_TIME} (nil_user_strategy)"],
       ['lib/permission_forge/concerns/permission_scoped_findable.rb', /current_user is nil — bypassing row-level rules/,
-       "#{REQUEST_TIME} (nil_user_strategy)"]
+       "#{REQUEST_TIME} (nil_user_strategy)"],
+      ['lib/permission_forge/open_transaction.rb', /Rails\.logger&\.error\("\[PermissionForge\] transaction end hook failed/,
+       "#{FAILED_HERE} (a hook queued for the end of a transaction raised)"],
+      ['lib/permission_forge/cache/failure.rb', /Rails\.logger\.error\("\[PermissionForge\] \#\{message\(payload\)\}/,
+       "#{FAILED_HERE}: Cache::Failure is the one reporter of a store that did not confirm (log, notification, on_cache_failure)"],
+      ['lib/permission_forge/cache/failure.rb', /Rails\.logger\.error\("\[PermissionForge\] \#\{EVENT\} \#\{source\} error/,
+       "#{FAILED_HERE}: a cache_failure subscriber or on_cache_failure hook that raised"],
+      ['lib/permission_forge/audit/failure.rb', /Rails\.logger\.error\("\[PermissionForge\] audit \#\{operation\} failed/,
+       "#{FAILED_HERE}: Audit::Failure is the one reporter of an audit write or hook that failed"],
+      ['lib/permission_forge/controller_actions/authorizer.rb', /Rails\.logger&\.error\("\[PermissionForge\] action_guard_bypass error/,
+       "#{FAILED_HERE} (a raising action_guard_bypass counts as no bypass: the guard fails closed)"],
+      ['lib/permission_forge/services/data_subject_erasure.rb', /Rails\.logger&\.error\("\[PermissionForge\] on_erasure failed/,
+       "#{FAILED_HERE} (an on_erasure callback that raised after the commit; also Rails.error)"],
+      ['app/controllers/permission_forge/api/resources_controller.rb', /Rails\.logger\.error\("\[PermissionForge\] generate_fields failed/,
+       "#{REQUEST_TIME} (an API request that failed, answered with its error)"]
     ].freeze
+
+    # Per Warnings.emit key (the static part of an interpolated one): the
+    # severity its site passes and, for :config, why the condition does not
+    # widen access nor leave a change unrecorded (R2 review, P1-6). A new
+    # warning takes its severity here deliberately.
+    SEVERITY = {
+      'audit_events_off' => [:security], 'audit_table_missing' => [:security], 'audit_table_unchecked' => [:security],
+      'conditional_sets_without_context' => [:security], 'api_authorization_gap' => [:security],
+      'tenantless_admin' => [:security], 'join_rules_not_auto_scoped' => [:security], 'rls_policy_drift' => [:security],
+      'rls_not_postgresql' => [:security], 'virtual_readers.unmasked.' => [:security],
+      'masked_models.unknown_listed.' => [:security], 'masked_models.unmaskable.' => [:security],
+      'masking_sync_incomplete_at_boot' => [:security], 'masking_sync.token_not_taken.' => [:security],
+      'masking_sync_store_failed' => [:security], 'masking_sync_failed' => [:security],
+      'cache_process_local' => [:security], 'cache_unannounced_masking' => [:security],
+      'model_bindings.' => [:by_setting, 'ModelBindings::SEVERITY: tenant_model is :security (tenant isolation not as ' \
+                                         'configured); another user class only points an association elsewhere'],
+      'audit_actor_shared_login' => [:config, 'every change is recorded; only the actor is the shared login'],
+      'unmasked_gdpr_fields' => [:config, 'access is what the rows configure; a recommendation to mask a field that looks personal'],
+      'api_only_admin' => [:config, 'the admin pages fail (no cookies or session): nothing is open'],
+      'boot_check_skipped.' => [:config, 'a check could not read the database; the runtime paths read it themselves'],
+      'database_unreachable' => [:config, 'masking is applied by the first request or job that reaches the database'],
+      'basic_auth_without_credentials' => [:config, 'the admin answers 401 to everything: it fails closed'],
+      'cache_stale_permissions' => [:config, 'development only; its production twin, cache_process_local, is :security'],
+      'cache_development_masking' => [:config, 'development only (the server re-reads the Resource names every 2 s); ' \
+                                               'its production twin, cache_unannounced_masking, is :security'],
+      'unscoped_detection_raise_in_production' => [:config, 'raising fails closed: an outage risk, not wider access']
+    }.freeze
 
     DEVELOPMENT = ActiveSupport::EnvironmentInquirer.new('development')
     TEST = ActiveSupport::EnvironmentInquirer.new('test')
@@ -118,6 +163,27 @@ module PermissionForge
                    'a request-time log goes in ALLOWLIST with its reason'
     end
 
+    # ---- severities -----------------------------------------------------------
+
+    test 'every warning has its severity in SEVERITY, the one its site passes, and a reason when it is config' do
+      sites = emit_sites
+      problems = sites.filter_map do |key, severity, where|
+        entry = SEVERITY.find { |name, _| key == name || (name.end_with?('.') && key.start_with?(name)) }&.last
+        next "#{where} #{key}: not in SEVERITY" unless entry
+
+        expected, reason = entry
+        written = expected == :by_setting ? 'SEVERITY.fetch(setting, :config)' : expected.to_s
+        next "#{where} #{key}: SEVERITY says #{written}, the site passes #{severity}" unless severity == written
+
+        "#{where} #{key}: a :config warning needs its reason" if expected == :config && reason.to_s.strip.empty?
+      end
+
+      assert_empty problems
+      assert_empty SEVERITY.keys.reject { |name| sites.any? { |key, _, _| key == name || key.start_with?(name) } },
+                   'stale SEVERITY entries'
+      assert_equal :security, PermissionForge::ModelBindings::SEVERITY[:tenant_model]
+    end
+
     test 'the allow-list and the canonical file are current' do
       StaticGuard.assert_allowlist_current(self, globs: GLOBS, needle: NEEDLE, canonical: CANONICAL, allowlist: ALLOWLIST)
     end
@@ -125,10 +191,11 @@ module PermissionForge
     # The negative fixture: what the needle must catch, and what it must leave alone.
     test 'the needle catches every way of writing a warning past the emitter and nothing else' do
       caught = ['Rails.logger.warn("x")', 'Rails.logger&.warn "x"', 'logger.warn(x)', 'Kernel.warn(message)',
-                'warn "x"', '  warn message', '$stderr.puts(x)', 'STDERR.puts x', 'io = $stderr']
+                'warn "x"', '  warn message', '$stderr.puts(x)', 'STDERR.puts x', 'io = $stderr',
+                'Rails.logger&.error("an error")', 'logger.add(Logger::WARN, x)', 'log.error(x)', 'Rails.logger.fatal(x)']
       left = ['PermissionForge::Deprecation.warn("x")', 'DEPRECATOR.warn(msg)', 'warn_io.puts(x)', 'warn_unmaskable(klass)',
               'logger.level = :warn', 'warn: lambda { }', 'config.log_level = :warn', '# Rails.logger.warn("in a comment")',
-              'Rails.logger&.error("an error")', 'puts "logger.warn inside a string"', 'def warn? = risk == :warn',
+              'Rails.logger.info("x")', 'catalog.error(x)', 'puts "logger.warn inside a string"', 'def warn? = risk == :warn',
               'def warn!(config)', 'options: %i[block pass_through warn mask_all]', '%w[pass_through warn].include?(x)',
               "<%= warn ? 'x' : 'y' %>"]
 
@@ -289,6 +356,8 @@ module PermissionForge
 
     # Whether the line (its comment stripped, strings blanked) writes a
     # warning past the emitter.
+    def emit_sites = EmitSites.all(StaticGuard.files(%w[lib/**/*.rb app/**/*.rb]))
+
     def warning?(line, erb: false)
       StaticGuard.code_of(line, erb: erb).gsub(PERCENT_LITERAL, '').match?(NEEDLE)
     end

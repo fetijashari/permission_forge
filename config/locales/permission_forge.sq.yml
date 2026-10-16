@@ -26,6 +26,7 @@ sq:
         not_editable: Ky regjistrim nuk mund të redaktohet
         not_found: Regjistrimi nuk u gjet
         not_iso8601_time: nuk është datë ose kohë ISO 8601
+        not_null: Mungon një vlerë e detyrueshme. Asgjë nuk u ruajt.
         record_not_unique: Një kërkesë tjetër e ruajti të njëjtin regjistrim një çast
           më parë; ai ekziston tashmë
         resource_names_no_model: nuk emërton asnjë model që ky aplikacion mund ta
@@ -179,11 +180,13 @@ sq:
         'false': Jo
         'true': Po
       cache_scope:
-        own_process: 'Lejet e ruajtura në cache u pastruan vetëm në procesin e vet
-          (një ruajtje në memorie): proceset e uebit dhe të punëve i mbajtën të tyret.'
+        own_process: 'Lejet e ruajtura në cache u pastruan vetëm në procesin që e
+          kreu (një ruajtje në memorie): çdo proces tjetër i mbajti të tyret.'
         server_process: 'Lejet e ruajtura në cache u pastruan vetëm në këtë proces
           të serverit (një ruajtje në memorie): punëtorët e tjerë të uebit dhe proceset
           e punëve i mbajtën të tyret.'
+        unconfirmed: 'Ruajtja e cache-it jeton në secilin proces (një ruajtje në memorie):
+          proceset e tjera i mbajnë lejet e tyre të ruajtura sido që të jetë.'
       categories:
         access: Qasje
         admin: Administrim
@@ -221,8 +224,17 @@ sq:
       sentence_variants:
         assignment_revoked_expired: "%{actor} i hoqi %{person} Grupin e lejeve %{set}
           pasi kishte skaduar më %{date}."
+        cache_cleared_unconfirmed: "%{actor} kërkoi të pastrohen lejet e ruajtura
+          në cache të çdo përdoruesi, por ruajtja e cache-it nuk e konfirmoi: lejet
+          e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it."
+        cache_settled_unconfirmed: 'Lejet e ruajtura në cache të %{person} duhej të
+          pastroheshin pas ndryshimit nga %{actor}, por ruajtja e cache-it nuk e konfirmoi:
+          të vjetrat mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.'
         field_access_limited: "%{actor} lexoi %{record} me këto fusha të fshehura
           ose të maskuara: %{fields}."
+        permissions_invalidated_unconfirmed: 'Lejet e ruajtura në cache të %{person}
+          duhej të pastroheshin, por ruajtja e cache-it nuk e konfirmoi: të vjetrat
+          mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.'
       sentences:
         access:
           denied: Qasja e %{actor} te %{record} u refuzua.
@@ -247,6 +259,8 @@ sq:
           viewed: "%{actor} pa të dhëna auditimi."
         cache:
           cleared: "%{actor} pastroi lejet e ruajtura në cache të të gjithë përdoruesve."
+          settled: Lejet e ruajtura në cache të %{person} u pastruan pas ndryshimit
+            nga %{actor}.
         cleanup:
           expired_assignments: "%{actor} hoqi caktimet e skaduara."
         consent:
@@ -434,6 +448,9 @@ sq:
           other: "%{set} iu hoq %{count} personave, por ruajtja e cache-it nuk konfirmoi
             që lejet e tyre të ruajtura u pastruan. Lejet e vjetra mund të mbeten
             në përdorim derisa të mbarojë jetëgjatësia e cache-it."
+      cache_not_confirmed: 'Ruajtja e cache-it nuk konfirmoi që lejet e ruajtura u
+        pastruan: lejet e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia
+        e cache-it.'
       cache_process_local: 'Ruajtja e cache-it jeton vetëm në këtë proces të serverit
         (një ruajtje në memorie): punëtorët e tjerë të uebit dhe proceset e punëve
         i mbajnë lejet e tyre të ruajtura derisa të rinisen ose derisa hyrjet të skadojnë.'
@@ -478,6 +495,8 @@ sq:
             konfirmoi që lejet e ruajtura të personave të prekur u pastruan. Lejet
             e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.
       not_editable: Ky regjistrim nuk mund të ndryshohet.
+      not_null: Mungonte një vlerë e detyrueshme. Asgjë nuk u ndryshua; faqja tregon
+        çfarë ka tani.
       people:
         cache_refresh_failed: Lejet e ruajtura të %{name} nuk mund të rifreskoheshin.
           Ruajtja e cache-it nuk e konfirmoi, prandaj lejet e vjetra mund të mbeten
@@ -2405,7 +2424,11 @@ sq:
         field_accessor_path: Lidhja
         field_name: Fusha
         field_value: Vlera
+        include_nulls: Përfshi vlerat bosh
         is_active: Aktiv
+        is_editable: I ndryshueshëm
+        is_muting: Heshtës
+        is_permitted: I lejuar
         join_type: Bashkimi
         label: Etiketa
         mask_access: Maskim

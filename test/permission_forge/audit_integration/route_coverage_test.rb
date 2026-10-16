@@ -40,9 +40,9 @@ module PermissionForge
           none: 'drops the cached permission hash only (permissions.invalidated is a runtime event of the :cache group)'
         },
         'permission_forge/people#withdraw_consent' => { verbs: %w[POST], drive: :withdraw_consent,
-                                                        events: %w[assignment.revoked consent.withdrawn] },
+                                                        events: %w[assignment.revoked cache.settled consent.withdrawn] },
         'permission_forge/people#erase' => { verbs: %w[POST], drive: :erase,
-                                             events: %w[assignment.revoked erasure.performed group_membership.removed] },
+                                             events: %w[assignment.revoked cache.settled erasure.performed group_membership.removed] },
         'permission_forge/assignments#keep' => { verbs: %w[POST], drive: :keep, events: %w[assignment.reviewed] },
         'permission_forge/assignments#restore' => { verbs: %w[POST], drive: :restore, events: %w[assignment.granted] },
         'permission_forge/assignments#undo' => { verbs: %w[POST], drive: :undo, events: %w[assignment.revoked] },
@@ -175,7 +175,7 @@ module PermissionForge
                                                                       events: %w[group_membership.added] },
         'permission_forge/api/permission_set_group_users#destroy' => { verbs: %w[DELETE], drive: :api_member_remove,
                                                                        events: %w[group_membership.removed] },
-        'permission_forge/api/unmatched_routes#show' => { verbs: %w[POST PUT PATCH DELETE], drive: :api_unmatched,
+        'permission_forge/api/unmatched_routes#show' => { verbs: %w[POST PUT PATCH DELETE OPTIONS TRACE], drive: :api_unmatched,
                                                           none: 'no endpoint at this path and method: the JSON 404' }
       }.freeze
 

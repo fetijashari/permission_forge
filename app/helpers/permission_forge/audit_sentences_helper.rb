@@ -26,6 +26,22 @@ module PermissionForge
         next unless ended
 
         t('permission_forge.audit_log.sentence_variants.assignment_revoked_expired', **parts, date: pf_date(ended))
+      },
+      # A clear the cache store did not confirm is not told as cleared.
+      'cache.cleared' => lambda { |event, parts|
+        next unless pf_audit_cache_unconfirmed?(event)
+
+        t('permission_forge.audit_log.sentence_variants.cache_cleared_unconfirmed', **parts)
+      },
+      'permissions.invalidated' => lambda { |event, parts|
+        next unless pf_audit_cache_unconfirmed?(event)
+
+        t('permission_forge.audit_log.sentence_variants.permissions_invalidated_unconfirmed', **parts)
+      },
+      'cache.settled' => lambda { |event, parts|
+        next unless pf_audit_cache_unconfirmed?(event)
+
+        t('permission_forge.audit_log.sentence_variants.cache_settled_unconfirmed', **parts)
       }
     }.freeze
 
@@ -53,15 +69,28 @@ module PermissionForge
       event.data.is_a?(Hash) && event.data['process_local'] == true
     end
 
-    # The suffix for a per-process store (Cache::Outcome#kept_by): the
-    # operation ran in a server process (the other web workers and the job
-    # processes kept theirs) or in a process of its own (every web and job
-    # process kept theirs — also what an event recorded without
-    # `in_request` reads as).
+    # Whether the store said no to the event's cache work: its Cache::Outcome
+    # (`cache_confirmed`), or a permissions.invalidated event's `confirmed`.
+    def pf_audit_cache_unconfirmed?(event)
+      data = event.data
+      data.is_a?(Hash) && (data['cache_confirmed'] == false || data['confirmed'] == false)
+    end
+
+    # The suffix for a per-process store, from where the work ran
+    # (Cache::Outcome#kept_by) and what the store said together: cleared in
+    # a server process (the other web workers and the job processes kept
+    # theirs), cleared in the process that ran it (every other process kept
+    # theirs — also what an event recorded without `in_request` reads as:
+    # it never names the web processes), or not confirmed (nothing is said
+    # to be cleared anywhere).
     def pf_audit_cache_scope_suffix(event)
       return unless pf_audit_process_local?(event)
 
-      t("permission_forge.audit_log.cache_scope.#{event.data['in_request'] == true ? 'server_process' : 'own_process'}")
+      scope = if pf_audit_cache_unconfirmed?(event) then 'unconfirmed'
+              elsif event.data['in_request'] == true then 'server_process'
+              else 'own_process'
+              end
+      t("permission_forge.audit_log.cache_scope.#{scope}")
     end
 
     def pf_audit_plain_sentence(event, parts)

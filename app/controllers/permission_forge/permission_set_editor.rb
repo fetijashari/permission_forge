@@ -48,17 +48,22 @@ module PermissionForge
 
     # The set's events, newest first (the log filtered by this set).
     def load_audit_timeline
-      @timeline_log = PermissionForge::Admin::AuditLog.new({ views: params[:views] },
+      @timeline_log = PermissionForge::Admin::AuditLog.new({ views: @views },
                                                            scope: PermissionForge::Admin::AuditLog.for_permission_set(@permission_set))
       @timeline = @timeline_log.page(params[:page], per_page: AUDIT_TIMELINE_PER_PAGE)
       @timeline_lookups = PermissionForge::Admin::AuditLookups.new(@timeline.events)
     end
 
+    # Typed like every admin parameter (ParamShapes): a Hash or a list in
+    # one of them is no filter, never a 500. Days are one of the offered
+    # counts (AuditTrail::DAY_FILTERS), else no filter.
     def load_audit_filters
-      @who = params[:who].presence
-      @type = params[:type].presence
-      @days = params[:days].presence
+      @who = pf_text_param(:who).presence
+      @type = pf_text_param(:type).presence
+      offered = PermissionForge::Admin::AuditTrail::DAY_FILTERS
+      @days = pf_integer_param(:days, default: nil, range: 1..offered.max).then { |days| days if offered.include?(days) }
       @sort = params[:sort] == 'asc' ? 'asc' : 'desc'
+      @views = pf_text_param(:views).presence
     end
 
     def send_audit_csv

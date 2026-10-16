@@ -60,6 +60,7 @@ module PermissionForge
     class ConsentWithdrawalHandler
       include Concerns::AuditedOperation
       include Concerns::AcrossTenants
+      include Concerns::SettlesCache
 
       # Removes a user from every Permission Set gated on the consent flag.
       # @return [Hash] see {#call}
@@ -92,8 +93,10 @@ module PermissionForge
       def withdraw(affected_assignments)
         @report = PermissionForge::Cache::Report.new
         revoked_count = ActiveRecord::Base.transaction { revoke_and_record(affected_assignments) }
-        # what the store confirmed — not what a host's override of the method returns
+        # what the store confirmed — not what a host's override of the method returns;
+        # pending inside a caller's transaction (Report#deferred?)
         outcome = @report.measure { @user.invalidate_permissions if revoked_count.positive? }.outcome
+        settle_cache('consent_withdrawal', @user, @report) { @user.invalidate_permissions } if revoked_count.positive?
 
         { revoked_sets: revoked_count, invalidated: revoked_count.positive? && outcome.confirmed, cache: outcome.to_h }
       end

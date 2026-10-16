@@ -20,6 +20,11 @@ module PermissionForge
     # The settings a model declares as it loads, each with the association
     # that carries it (the tenant is read from HasTenantScoping).
     ASSOCIATIONS = { user_class: :user, audit_user_class: :created_by }.freeze
+    # The severity of a mismatch, by setting (Warnings): a model loaded with
+    # another tenant model (or none) is not isolated as configured, access
+    # across tenants; another user class only points an association
+    # elsewhere.
+    SEVERITY = { tenant_model: :security }.freeze
 
     class << self
       # One sentence per setting that loaded models declared differently.
@@ -36,7 +41,8 @@ module PermissionForge
       # @return [void]
       def warn!(config = PermissionForge.configuration)
         differences(config).each do |difference, models|
-          Warnings.emit("model_bindings.#{difference.first}", sentence(difference, models))
+          setting = difference.first
+          Warnings.emit("model_bindings.#{setting}", sentence(difference, models), severity: SEVERITY.fetch(setting, :config))
         end
       end
 

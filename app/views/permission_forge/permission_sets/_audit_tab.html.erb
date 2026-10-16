@@ -5,7 +5,7 @@
   <%= render 'permission_forge/shared/audit_timeline',
              title: t('.timeline'), description: t('.timeline_desc'),
              page: @timeline, lookups: @timeline_lookups,
-             path: ->(number) { permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: params[:views].presence, page: number) },
+             path: ->(number) { permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: @views, page: number) },
              views_path: (permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: 1) unless @timeline_log.include_views?),
              links: [[t('.open_log'), pf_audit_log_path(permission_set: set.id)]] %>
 

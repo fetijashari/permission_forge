@@ -2,6 +2,7 @@
 
 require 'test_helper'
 require_relative 'shipped_api_authorization'
+require_relative 'fuzz_params'
 
 module PermissionForge
   module Security
@@ -21,6 +22,16 @@ module PermissionForge
     # shape of that one parameter gets (the rest of the request valid); the
     # duplicate-insert pass plays the uniqueness race on every route that
     # creates a row of a uniquely indexed table.
+    #
+    # The all-at-once passes cannot reach a parameter that is only read when
+    # another one is valid (`days` behind `tab=audit`, `rule[remove_step]`
+    # behind a rule form): the single passes poison, per route, each
+    # parameter its controller reads (FuzzParams, found in the source) one
+    # at a time inside each valid request of #valid_contexts, then each
+    # attribute of each attribute section of those requests; the API also
+    # gets them as a JSON body, `null` included. The guard test fails when a
+    # parameter the engine reads is missing from PARAMS, or a section from
+    # every valid request (R2 review, P1-1).
     class RouteFuzzTest < ActionDispatch::IntegrationTest
       include ShippedApiAuthorization
       include MethodStubs
@@ -47,7 +58,17 @@ module PermissionForge
                   search change_person set_q sort description is_active is_muting requires_session_flag allowed_ips
                   allowed_hours_start allowed_hours_end hours_enabled grant_all is_editable views open why who days
                   permission_set_group_id model_name op rule_id cleanup privacy new v focus changed level
-                  requires_session_flag_custom sync].freeze
+                  requires_session_flag_custom sync actor_id actor_type category correlation_id subject_user_id
+                  record_id record_uuid views].freeze
+      # Parameters that are path segments (a query value of the same name is
+      # overridden by the path).
+      PATH_PARAMS = %w[id permission_set_id resource_model model key group_id file identifier permission_set_identifier
+                       resource_identifier permission_set_group_identifier path].freeze
+
+      # The single passes: one parameter (or one attribute of a section) at a
+      # time; the API's JSON bodies add `null`.
+      SINGLE_SHAPES = POISON.slice('hash', 'array', 'nul', 'blank', 'mixed', 'overbig').merge('negative' => '-1').freeze
+      JSON_SHAPES = SINGLE_SHAPES.merge('null' => nil).freeze
 
       # Attribute hashes the engine reads, and the attributes put inside them.
       NESTED_KEYS = %w[permission_set resource resource_field resource_action permission_set_rule permission_set_group
@@ -72,6 +93,65 @@ module PermissionForge
       }.freeze
       # Shapes that are a positive whole number: a page they name is a page.
       NUMERIC_SHAPES = %w[huge overbig].freeze
+
+      # Valid requests (#valid_contexts), built in the test (instance_exec):
+      # the records of the setup.
+      ADMIN_RULE = { 'path' => %w[orders], 'field_name' => 'name', 'operator' => 'equal', 'value' => 'x', 'name' => 'Rule' }.freeze
+      ACTION_FORM = { 'resource_action' => { 'name' => 'export', 'label' => 'Export' } }.freeze
+      API_RULE = { 'permission_set_rule' => { 'name' => 'r', 'field_name' => 'name', 'field_value' => 'x', 'operator' => 'equal' } }.freeze
+      API_FIELD = { 'resource_field' => { 'name' => 'phone', 'label' => 'Phone', 'read_access' => true } }.freeze
+      API_ACTION = { 'resource_action' => { 'name' => 'export', 'label' => 'Export' } }.freeze
+      VALID_CONTEXTS = {
+        'permission_forge/permission_sets#show' => -> { [{}, { 'tab' => 'audit' }, { 'tab' => 'assignments' }, { 'tab' => 'conditions' }] },
+        'permission_forge/permission_sets#create' => -> { [{ 'name' => 'New set' }] },
+        'permission_forge/permission_sets#review' => -> { [{ 'pf' => { 'set' => { 'description' => 'x' } } }] },
+        'permission_forge/permission_sets#apply' => -> { [{ 'pf' => { 'set' => { 'description' => 'x' } } }] },
+        'permission_forge/permission_sets#conditions' =>
+          -> { [{ 'hours_enabled' => '1', 'allowed_hours_start' => '9', 'allowed_hours_end' => '18', 'allowed_ips' => '10.0.0.1' }] },
+        'permission_forge/people#show' => -> { [{}, { 'tab' => 'effective' }, { 'tab' => 'audit' }] },
+        'permission_forge/resources#show' => -> { [{}, { 'tab' => 'actions' }, { 'tab' => 'rules' }] },
+        'permission_forge/resources#create' => -> { [{ 'model_name' => 'Supplier', 'preset' => 'read' }] },
+        'permission_forge/resources#sync' => -> { [{ 'level' => 'read' }, { 'op' => 'remove_missing' }] },
+        'permission_forge/resource_fields#update' => -> { [{ 'field' => { 'level' => 'read', 'label' => 'E-mail' } }] },
+        'permission_forge/resource_actions#create' => -> { [ACTION_FORM] },
+        'permission_forge/resource_actions#update' => -> { [ACTION_FORM] },
+        'permission_forge/permission_set_rules#create' => -> { [{ 'rule' => ADMIN_RULE }] },
+        'permission_forge/permission_set_rules#update' => -> { [{ 'rule' => ADMIN_RULE }] },
+        'permission_forge/permission_set_rules#refresh' => -> { [{ 'rule' => ADMIN_RULE.merge('remove_step' => '1') }] },
+        'permission_forge/permission_set_rules#new' => -> { [{}, { 'rule_id' => '1' }] },
+        'permission_forge/permission_set_groups#create' => -> { [{ 'name' => 'New team' }] },
+        'permission_forge/permission_set_groups#update' => -> { [{ 'group' => { 'name' => 'Renamed', 'is_active' => '1' } }] },
+        'permission_forge/permission_set_groups#add_set' => -> { [{ 'permission_set_id' => @set.id }] },
+        'permission_forge/permission_set_group_users#create' => -> { [{ 'user_id' => @other.id }] },
+        'permission_forge/assignments#new' => -> { [{ 'user_id' => @user.id }, { 'permission_set_id' => @set.id }] },
+        'permission_forge/assignments#create' =>
+          -> { [{ 'user_id' => @other.id, 'set_ids' => [@set.id], 'expiry' => 'never' }] },
+        'permission_forge/assignments#update' => -> { [{ 'expiry' => 'extend30' }] },
+        'permission_forge/assignments#restore' =>
+          -> { [{ 'permission_set_id' => @set.id, 'user_id' => @user.id }] },
+        'permission_forge/assignments#undo' => -> { [{ 'ids' => [@assignment.id] }] },
+        'permission_forge/bulk_assignments#preview' => -> { [{ 'identifiers' => 'Bo' }] },
+        'permission_forge/bulk_assignments#create' => -> { [{ 'identifiers' => 'Bo', 'expiry' => 'never' }] },
+        'permission_forge/bulk_assignments#revoke' => -> { [{ 'user_ids' => [@user.id] }] },
+        'permission_forge/people#erase' => -> { [{ 'confirmation' => 'Ana' }] },
+        'permission_forge/preferences#update' => -> { [{ 'theme' => 'dark' }] },
+        'permission_forge/api/permission_sets#create' => -> { [{ 'permission_set' => { 'name' => 'Other' } }] },
+        'permission_forge/api/permission_sets#update' => -> { [{ 'permission_set' => { 'name' => 'Other' } }] },
+        'permission_forge/api/resources#create' => -> { [{ 'resource' => { 'name' => 'Supplier', 'read_access' => true } }] },
+        'permission_forge/api/resources#update' => -> { [{ 'resource' => { 'read_access' => true } }] },
+        'permission_forge/api/resource_fields#create' => -> { [API_FIELD] },
+        'permission_forge/api/resource_fields#update' => -> { [API_FIELD] },
+        'permission_forge/api/resource_actions#create' => -> { [API_ACTION] },
+        'permission_forge/api/resource_actions#update' => -> { [API_ACTION] },
+        'permission_forge/api/permission_set_rules#create' => -> { [API_RULE] },
+        'permission_forge/api/permission_set_rules#update' => -> { [API_RULE] },
+        'permission_forge/api/permission_set_groups#create' => -> { [{ 'permission_set_group' => { 'name' => 'Other team' } }] },
+        'permission_forge/api/permission_set_groups#update' => -> { [{ 'permission_set_group' => { 'name' => 'Other team' } }] },
+        'permission_forge/api/permission_set_users#create' => -> { [{ 'user_id' => @other.id }] },
+        'permission_forge/api/permission_set_users#bulk' =>
+          -> { [{ 'user_ids' => [@other.id], 'bulk_action' => 'assign' }] },
+        'permission_forge/api/permission_set_group_users#create' => -> { [{ 'user_id' => @other.id }] }
+      }.freeze
 
       # [verb, path spec, controller, action] for every engine route.
       def self.routes
@@ -157,6 +237,31 @@ module PermissionForge
           end
         end
 
+        test "#{format('%03d', index)} #{verb.upcase} #{spec} (#{controller}##{action}) answers each read parameter alone below 500" do
+          path = build_path(spec, controller)
+          params = FuzzParams.read_by(controller) - PATH_PARAMS
+          failures = valid_contexts(controller, action).flat_map do |base|
+            params.flat_map { |param| single_failures(verb, path, controller, base) { |value| base.merge(param => value) }.map { "#{param} #{_1}" } }
+          end
+
+          assert_empty failures, "#{verb.upcase} #{path}"
+        end
+
+        test "#{format('%03d', index)} #{verb.upcase} #{spec} (#{controller}##{action}) answers each section attribute alone below 500" do
+          path = build_path(spec, controller)
+          failures = valid_contexts(controller, action).flat_map do |base|
+            sections_of(base).flat_map do |section, attributes|
+              attributes.flat_map do |attribute|
+                single_failures(verb, path, controller, base) { |value| base.merge(section => base[section].merge(attribute => value)) }
+                  .map { "#{section}[#{attribute}] #{_1}" }
+              end
+            end
+          end
+
+          assert_empty failures, "#{verb.upcase} #{path}"
+          assert_empty stored_nuls, "#{verb.upcase} #{path} stored a NUL byte"
+        end
+
         next if controller.start_with?('permission_forge/api')
 
         test "#{format('%03d', index)} #{verb.upcase} #{spec} (#{controller}##{action}) answers any Accept header below 500" do
@@ -168,6 +273,30 @@ module PermissionForge
 
           assert_empty failures, "#{verb.upcase} #{path}"
         end
+      end
+
+      # --- the fuzz table covers what the engine reads ------------------------
+
+      test 'every parameter the engine reads is in the fuzz table' do
+        missing = FuzzParams.all_reads.reject { |name, _| PARAMS.include?(name) || PATH_PARAMS.include?(name) }
+
+        assert_empty missing.transform_values(&:uniq),
+                     'add these to PARAMS (and a valid request to #valid_contexts when they are read behind another parameter)'
+      end
+
+      test 'every attribute section the engine reads has a valid request that reaches it' do
+        reached = self.class.routes.flat_map { |_, _, controller, action| valid_contexts(controller, action).flat_map(&:keys) }.uniq
+
+        assert_empty FuzzParams.sections.keys - reached, 'add a valid request with this section to #valid_contexts'
+      end
+
+      # The scanner itself: parameters read only behind another, and through
+      # a reader the scanner must know.
+      test 'the parameter scan finds the reads behind another parameter' do
+        assert_includes FuzzParams.read_by('permission_forge/permission_sets'), 'days'
+        assert_includes FuzzParams.read_by('permission_forge/audit_events'), 'correlation_id'
+        assert_includes FuzzParams.sections['rule'], 'remove_step'
+        assert_includes FuzzParams.sections['permission_set_rule'], 'include_nulls'
       end
 
       # --- the uniqueness race -------------------------------------------------
@@ -278,11 +407,40 @@ module PermissionForge
 
       # The rest of a request whose one parameter is poisoned: valid.
       def valid_params_for(controller, action)
-        case "#{controller}##{action}"
-        when 'permission_forge/api/permission_set_users#create' then { 'user_id' => @other.id }
-        when 'permission_forge/api/permission_set_users#bulk' then { 'user_ids' => [@other.id] }
-        else {}
+        valid_contexts(controller, action).first
+      end
+
+      # Valid requests to each route: every branch that reads more
+      # parameters (a tab, a form section) gets one. The single passes poison
+      # each read parameter, and each attribute of each section, inside every
+      # one of them.
+      def valid_contexts(controller, action)
+        instance_exec(&VALID_CONTEXTS.fetch("#{controller}##{action}") { -> { [{}] } })
+      end
+
+      # The attribute sections of a valid request, with every attribute the
+      # engine reads in each (FuzzParams.sections) and the ones the request sets.
+      def sections_of(base)
+        base.select { |_, value| value.is_a?(Hash) }.to_h do |section, value|
+          [section, (FuzzParams.sections.fetch(section, []) | value.keys)]
         end
+      end
+
+      # The shapes of one poisoned value (`yield` builds the request from it)
+      # answered at 500 or more; an API route that takes a body gets them as
+      # JSON as well (`null` included).
+      def single_failures(verb, path, controller, _base, &build)
+        single_requests(verb, controller, &build).filter_map do |shape, params, as|
+          code = status_of(verb, path, params, as: as)
+          "#{shape}: #{code}" unless code.is_a?(Integer) && code < 500
+        end
+      end
+
+      def single_requests(verb, controller)
+        requests = SINGLE_SHAPES.map { |shape, value| [shape, yield(value), nil] }
+        return requests unless controller.start_with?('permission_forge/api') && verb != 'get'
+
+        requests + JSON_SHAPES.map { |shape, value| ["#{shape} (json)", yield(value), :json] }
       end
 
       # nil when the answer is what `kind` expects, else what it was
@@ -333,8 +491,8 @@ module PermissionForge
         end
       end
 
-      def status_of(verb, path, params, headers: {})
-        send(verb, path, params: params, headers: headers)
+      def status_of(verb, path, params, headers: {}, as: nil)
+        send(verb, path, params: params, headers: headers, as: as)
         response.status
       rescue StandardError => e
         code = ActionDispatch::ExceptionWrapper.status_code_for_exception(e.class.name)

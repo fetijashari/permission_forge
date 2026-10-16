@@ -49,7 +49,7 @@ module PermissionForge
                  else
                    'its migration is generated and run (bin/rails generate permission_forge:upgrade, then bin/rails db:migrate)'
                  end
-        "[PermissionForge] audit_events is :auto but the table '#{table}' was not found: no audit events are " \
+        "audit_events is :auto but the table '#{table}' was not found: no audit events are " \
           "recorded until #{remedy}. Changes still work."
       end
 

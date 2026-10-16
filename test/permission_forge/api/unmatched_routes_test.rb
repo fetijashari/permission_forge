@@ -29,6 +29,18 @@ module PermissionForge
         end
       end
 
+      # Through 0.15.0-rc they matched no route: Rails' RoutingError, its
+      # own 404 page (R2 review, P2-2).
+      test 'OPTIONS and TRACE under the API answer the JSON 404 envelope' do
+        %i[options trace].each do |verb|
+          process verb, "#{ROOT}/permission_sets"
+
+          assert_response :not_found, verb
+          assert_equal 'application/json', response.media_type, verb
+          assert_equal EXPECTED.call, response.parsed_body, verb
+        end
+      end
+
       test 'it writes no audit event and changes nothing' do
         assert_no_difference -> { PermissionForge::AuditEvent.unscoped.count } do
           post "#{ROOT}/audit_events", params: { audit_event: { event: 'fake' } }, as: :json
