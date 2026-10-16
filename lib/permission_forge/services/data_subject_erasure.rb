@@ -329,7 +329,7 @@ module PermissionForge
       # yet; the events the erasure itself writes (assignment.revoked, ...) are
       # cleared as well.
       def dry_run_result
-        table = PermissionForge::AuditEvent.table_exists?
+        table = PermissionForge::DatabaseReach.table_exists?(PermissionForge::AuditEvent)
         {
           assignments_count: permission_set_assignments.count,
           group_assignments_count: group_assignments.count,

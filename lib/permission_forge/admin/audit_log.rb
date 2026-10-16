@@ -37,9 +37,7 @@ module PermissionForge
       # log can be read while recording is switched off; without the table
       # there is nothing to read and every list is empty.
       def self.table?
-        PermissionForge::AuditEvent.table_exists?
-      rescue StandardError
-        false
+        PermissionForge::DatabaseReach.table_exists?(PermissionForge::AuditEvent)
       end
 
       # Why the log is not recording, or nil when it records:

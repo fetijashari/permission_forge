@@ -36,7 +36,7 @@ module PermissionForge
 
           @verified = signature
           true
-        rescue ActiveRecord::StatementInvalid, ActiveRecord::NoDatabaseError, ActiveRecord::ConnectionNotEstablished
+        rescue *PermissionForge::DatabaseReach::READ_ERRORS
           true # schema not readable yet (before the install migration); not remembered
         end
 
@@ -72,7 +72,10 @@ module PermissionForge
         # The audit log is tenant-scoped as well (a truncated tenant id would
         # show one tenant another's events); it is checked only once its table
         # exists, so an install that has not run the upgrade yet keeps the
-        # rest of the check.
+        # rest of the check. Asked of the model itself, not of DatabaseReach:
+        # a check that cannot look raises to verify!'s rescue, which passes
+        # without remembering it (a quiet "no" would be remembered, and the
+        # audit table never checked).
         def tenant_scoped_models
           models = [PermissionForge::PermissionSet, PermissionForge::PermissionSetUser,
                     PermissionForge::PermissionSetGroup, PermissionForge::PermissionSetGroupUser,

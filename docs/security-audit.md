@@ -55,6 +55,7 @@ Every finding that can be Medium or worse and is about a record the admin can op
 | `config` | `log_filtering_off` | Low | `filter_parameters_integration` is false. |
 | `config` | `api_sequential_ids` | Low | The API is on and `api_record_identifier` is `:id`. |
 | `config` | `api_rule_values_exposed` | Low | The API is on and `api_redact_rule_field_values` is false. |
+| `config` | `api_authorization_unset` | Info | The API is on and `api_auth` is set, but an authorization lambda it needs is not: `api_action_authorization` / `api_assignment_authorization` while `api_require_authorization` is `true` (the default), `api_stats_authorization` while `api_stats_require_admin` is `true` (the default). The API answers 403, naming the option, to everything that lambda guards (it fails closed); the finding lists each missing lambda and what it guards. The server's boot log says the same. |
 | `privilege` | `bypass_grants` | Medium or Low | View All / Modify All grants in active granting sets. |
 | `privilege` | `temporary_sets` | Medium or Low | Active sets whose names look temporary (dev, debug, test, tmp, sandbox, demo, "full access"). |
 | `privilege` | `broad_delete` | Low | A set grants delete on at least 10 resources and at least 75% of its resources. |

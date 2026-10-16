@@ -142,7 +142,7 @@ PermissionForge.configure do |config|
   # config.api_action_authorization = ->(controller, action, record) { PermissionForge.current_user&.admin? }
   # config.api_assignment_authorization = ->(controller, permission_set, user_ids) { PermissionForge.current_user&.admin? }
   #
-  # api_auth proves identity only: until both authorization lambdas are set,
-  # every API change and assignment is refused (403).
+  # config.api_stats_authorization = ->(controller) { PermissionForge.current_user&.admin? }  # GET /api/stats
+  # api_auth proves identity only: until each lambda above is set, what it guards is refused (403).
   # config.api_require_authorization = true  # default
 end

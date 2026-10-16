@@ -602,7 +602,9 @@ one policy:
   A server in production or staging gets the log only. Each warning is written there once per process.
 - **A warning about the admin screens or the JSON API is the server's:** HTTP Basic auth without credentials, a shared
   Basic-auth login without `audit_actor_resolver`, an API-only host missing the admin's middlewares, tenantless admin
-  access and the API enabled without its authorization lambdas describe what a web server process serves. Every other
+  access and the API enabled without its authorization lambdas (a SECURITY warning under
+  `api_require_authorization = false`; otherwise a note naming what the API refuses) describe what a web server
+  process serves. Every other
   process (a console, `bin/rails runner`, a rake task, `db:seed`, a job worker) writes them to the log only, never to
   standard error: it serves no admin, and credentials set for the server alone (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`)
   would read as missing there. Every other warning (the cache, masking, rules, the audit table, RLS) is about data
@@ -657,7 +659,8 @@ Users who relied on old defaults can restore them in their initializer.
 
 ## Deploying
 
-- **The app boots without a reachable database** (for example `assets:precompile` in a Docker build, or a deploy during a failover). The boot checks ping the database once; when it cannot be reached, the checks that read it (the security warnings) are skipped with one log line, and auto-applied masking is applied at the first request or job that reaches the database. A database host that drops packets costs the adapter's connect timeout once at boot; a refused connection is immediate.
+- **The app boots without a reachable or configured database** (a deploy during a failover, a production runner before the deploy sets `DATABASE_URL`, the commented-out production paths of a `rails new --skip-kamal` database.yml). The boot checks ping the database once; when it cannot be used — refused, not created, or not configured (the sqlite3 adapter's `No database file specified`) — the checks that read it (the security warnings) are skipped with one line that names the cause, `The database could not be reached at boot, or the gem's models could not be loaded (<error>: <message>)`, and auto-applied masking is applied at the first request or job that reaches the database; until the `Resource` table can be read, a request or job does not read the masking token from the cache store either (a Solid Cache store whose database is not configured stays quiet). A database host that drops packets costs the adapter's connect timeout once at boot; a refused connection is immediate.
+- **An asset build never touches the database.** A process that runs nothing but `assets:precompile`, `assets:clean` or `assets:clobber` (the Dockerfile's `RAILS_ENV=production SECRET_KEY_BASE_DUMMY=1 bin/rails assets:precompile`) runs the configuration warnings only: no ping, no database check, no masking sync. A task that reads data inside such a build (one hung onto `assets:precompile` with `enhance`) therefore does not get the auto-applied concern: include `MaskedAttributes` in the model for that. A command that also names another task (`bin/rails assets:precompile db:seed`), or a task that depends on `assets:precompile`, is not an asset build and runs every check.
 - **Use a shared cache store in production** (`:rails_cache` over Redis, Memcached or Solid Cache, or a store instance). Invalidations reach every process through it, and so does masking that is auto-applied when a `Resource` row names a new model: every process checks one token in the store at the start of each request or job. Under `:memory` or `:null` (or a `:memory_store` / `:null_store`), other processes pick a newly named model up only at their next boot (in development: within 2 seconds, from the database — see [Cache Consistency](#cache-consistency)).
 - **Names must not be blank.** A Permission Set, Permission Set Group, field or action whose name is blank is refused when it is created or renamed (422 in the API). Rows whose name is already blank stay editable in their other attributes.
 

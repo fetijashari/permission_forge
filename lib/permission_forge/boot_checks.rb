@@ -2,6 +2,8 @@
 
 require_relative 'warnings'
 require_relative 'api_only_admin'
+require_relative 'database_reach'
+require_relative 'api_authorizations'
 
 module PermissionForge
   # What the engine checks while the host app boots: run (from
@@ -9,11 +11,19 @@ module PermissionForge
   #
   # The configuration checks need nothing. The database steps are advisory
   # warnings or idempotent work, and they must never abort a boot: a Docker
-  # build precompiles assets with no database, a worker can start while the
-  # database fails over. The database is pinged once (db_available?); a step
-  # that loses it midway is skipped (DATABASE_STEP_ERRORS) and the next step
-  # runs. Anything else a step raises (a ConfigurationError) still stops the
-  # boot.
+  # build precompiles assets with no database, a fresh `rails new
+  # --skip-kamal` app has no production database file until the deploy sets
+  # DATABASE_URL, a worker can start while the database fails over. The
+  # database is pinged once (DatabaseReach.problem: whatever connecting
+  # raises, an adapter's refusal of its configuration included); a step that
+  # loses it midway is skipped (DATABASE_STEP_ERRORS) and the next step runs.
+  # Anything else a step raises (a ConfigurationError) still stops the boot.
+  #
+  # A process that runs nothing but asset tasks (asset_build?:
+  # `bin/rails assets:precompile`, the Dockerfile's build step) runs the
+  # configuration checks only: it reads no data and serves nothing, and a
+  # build has no database to ping (an unreachable host could hold the build
+  # for a TCP timeout).
   #
   # Every warning goes through Warnings.emit, which decides the channel (the
   # log; the terminal where the log is not read) and writes nothing while a
@@ -27,9 +37,14 @@ module PermissionForge
   #
   # @api private
   module BootChecks
-    # Errors that mean "the database is not there (yet)": gone, refused, not
-    # created, not migrated.
-    DATABASE_STEP_ERRORS = [ActiveRecord::ConnectionNotEstablished, ActiveRecord::StatementInvalid].freeze
+    # Errors that mean "the database is not there (yet)" once it answered the
+    # ping: gone, refused, not created, not migrated (DatabaseReach::READ_ERRORS).
+    DATABASE_STEP_ERRORS = DatabaseReach::READ_ERRORS
+
+    # The asset tasks of Propshaft and Sprockets (each boots the app through
+    # :environment). A process whose Rake top-level tasks are all among them
+    # is an asset build (asset_build?).
+    ASSET_TASKS = %w[assets:precompile assets:clean assets:clobber].freeze
 
     # The boot steps that read the database, in order. Each runs on its
     # own: one that loses the database is skipped (database_step).
@@ -58,7 +73,10 @@ module PermissionForge
         return MaskingSync.reset! if generator_running?
 
         warn_configuration(config)
-        return database_unreachable unless db_available?
+        return MaskingSync.reset! if asset_build?
+
+        problem = database_problem
+        return database_unreachable(problem) if problem
 
         DATABASE_STEPS.each { |name, step| database_step(name) { step.call(config) } }
       end
@@ -70,6 +88,19 @@ module PermissionForge
       # @return [Boolean]
       def generator_running?
         Warnings.generator_running?
+      end
+
+      # Whether this process runs nothing but asset tasks (ASSET_TASKS): the
+      # tasks Rake was asked for on the command line (`bin/rails
+      # assets:precompile`), not a task that only depends on one. False
+      # outside Rake.
+      #
+      # @return [Boolean]
+      def asset_build?
+        return false unless defined?(::Rake.application)
+
+        tasks = ::Rake.application.top_level_tasks.map { |task| task.sub(/\[.*\z/m, '') }
+        tasks.any? && tasks.all? { |task| ASSET_TASKS.include?(task) }
       end
 
       # HasTenantScoping silently skips the scope when the gem is absent,
@@ -122,6 +153,24 @@ module PermissionForge
                       'permission sets and assign them (privilege escalation). Configure both ' \
                       'authorization lambdas, or remove api_require_authorization = false ' \
                       '(the default, true, denies mutations until they are set).', severity: :security, audience: :server)
+      end
+
+      # The API is on and api_auth admits callers, but a lambda the API
+      # needs is unset (ApiAuthorizations.unset): what it guards is refused
+      # (403). It fails closed; the note says so before the first refused
+      # request does. Under api_require_authorization = false the missing
+      # change and assignment lambdas are api_authorization_gap's instead.
+      #
+      # @param config [Configuration]
+      def warn_api_authorizations_unset(config)
+        lines = ApiAuthorizations.lines(config)
+        return if lines.empty?
+
+        Warnings.emit(:api_authorization_unset,
+                      'The JSON API is on and api_auth admits callers, but these authorization lambdas are not ' \
+                      "set, so the API refuses (403, naming the option) what each guards — #{lines.join('; ')}. " \
+                      'Set each one in config/initializers/permission_forge.rb (docs/admin-api.md#requiring-authorization-lambdas).',
+                      audience: :server)
       end
 
       # One query for the distinct names of the rows in the clear that reach
@@ -182,14 +231,12 @@ module PermissionForge
         match.filter_parameter? ? "is named by the application's filter_parameters" : "matches the GDPR pattern '#{match.pattern}'"
       end
 
-      # Connects and pings. `ActiveRecord::Base.connection` alone is not enough:
-      # since Rails 7.2 it hands back a connection that has not connected yet,
-      # so an unreachable database looked available.
-      def db_available?
-        PermissionForge::PermissionSet.connection_pool.with_connection(&:verify!)
-        true
-      rescue ActiveRecord::ActiveRecordError
-        false
+      # What connecting to the gem's database raised, nil when it answered
+      # (DatabaseReach.problem).
+      #
+      # @return [Exception, nil]
+      def database_problem
+        DatabaseReach.problem
       end
 
       def database_step(name)
@@ -200,13 +247,18 @@ module PermissionForge
       end
 
       # The boot step did not run: the first request or job that reaches the
-      # database applies auto-applied masking (MaskingSync).
-      def database_unreachable
+      # database applies auto-applied masking (MaskingSync). The cause is
+      # named: "not configured" (an adapter's ArgumentError) reads otherwise
+      # than "refused". The ping loads the gem's models (and Active Record
+      # with them, as Rails' lazy load would): an error raised there — a
+      # host's on_load(:active_record) hook — is named the same way.
+      def database_unreachable(problem)
         MaskingSync.reset!
         Warnings.emit(:database_unreachable,
-                      'The database could not be reached at boot; the boot checks that read it (security ' \
-                      'warnings) were skipped. Auto-applied masking is applied at the first request or job ' \
-                      'that reaches the database.')
+                      "The database could not be reached at boot, or the gem's models could not be loaded " \
+                      "(#{problem.class}: #{problem.message.lines.first&.strip}); " \
+                      'the boot checks that read it (security warnings) were skipped. Auto-applied masking is ' \
+                      'applied at the first request or job that reaches the database.')
       end
 
       # The boot warnings that only read the configuration.
@@ -214,6 +266,7 @@ module PermissionForge
         CacheWarnings.call(config)
         warn_basic_auth_without_credentials(config)
         warn_api_authorization_gap(config)
+        warn_api_authorizations_unset(config)
         config.tenantless_admin_warning&.then { |message| warn_tenantless_admin(message) }
         QueryScopingWarnings.warn_unscoped_detection_raise_in_production(config)
       end

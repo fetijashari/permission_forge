@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'database_reach'
+
 module PermissionForge
   # Auto-applied masking: mixes MaskedAttributes into the models
   # config.auto_apply_masked_attributes selects and wraps the virtual readers
@@ -44,11 +46,12 @@ module PermissionForge
       def apply(only: nil)
         config = PermissionForge.configuration
         return true unless enabled?(config)
-        return false unless PermissionForge::Resource.table_exists?
+        # No database to use (not configured, unreachable), or no table yet.
+        return false unless DatabaseReach.table_exists?(PermissionForge::Resource)
 
         apply_selected(config, only).all? & unknown_listed_names(config, only).empty?
-      rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished
-        # Tables may not exist yet during early boot or pre-migration.
+      rescue *DatabaseReach::READ_ERRORS
+        # The database went away while the rows were read.
         false
       end
 
@@ -188,20 +191,21 @@ module PermissionForge
       #
       # @return [String, nil] why the concern cannot be included now
       def unmaskable_reason(klass)
-        return 'its table cannot be read' unless readable_table?(klass)
-
-        'an earlier attempt failed halfway; restart the process' if klass.include?(PermissionForge::Concerns::MaskedAttributes)
+        unreadable_table(klass) ||
+          ('an earlier attempt failed halfway; restart the process' if klass.include?(PermissionForge::Concerns::MaskedAttributes))
       end
 
-      # The table exists and can be read. A table found missing is looked up
-      # again next time (the cached answer is dropped): a migration may run.
-      def readable_table?(klass)
-        return true if klass.table_exists?
+      # Why the table cannot be read, nil when it exists and can be. A table
+      # found missing is looked up again next time (the cached answer is
+      # dropped): a migration may run. Its database may be another one than
+      # the gem's (a host on several databases); a check that raised names
+      # the error (DatabaseReach): the model's own table_name, its database
+      # not configured.
+      def unreadable_table(klass)
+        cause = nil
+        return if DatabaseReach.table_exists?(klass) { |error| cause = error }
 
-        klass.reset_column_information
-        false
-      rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished
-        false
+        cause ? "its table cannot be read (#{cause.class}: #{cause.message.lines.first&.strip})" : 'its table cannot be read'
       end
 
       # Warns once per model and process (MaskingSync retries every request).

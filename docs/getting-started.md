@@ -225,6 +225,8 @@ A controller made by `bin/rails generate scaffold` needs a few changes before th
   end
   ```
 
+  The scaffold's migration needs the same change before `bin/rails db:migrate`: `owner:references` writes `t.references :owner, null: false, foreign_key: true`, a foreign key to a table `owners`, and the first insert fails (`no such table: main.owners` on SQLite). Point it at the users table: `t.references :owner, null: false, foreign_key: { to_table: :users }`.
+
   And one line in `ApplicationController`, after `include Authentication` when you use Rails 8's authentication generator (the session must be resumed before the guard runs). [Handling Denials](./row-level-rules.md#rescuing-them-yourself) shows the whole file, with the handler that answers a denial in your layout; read [Using Rails 8's authentication generator](#using-rails-8s-authentication-generator) before you deploy it — the guard also reaches the sign-in page:
 
   ```ruby fragment

@@ -101,6 +101,17 @@ module PermissionForge
       end
     end
 
+    # Field test round 8 (E#66): a production boot with config.cache_store =
+    # :memory_store described the store as "the Rails development default".
+    test 'a :memory_store is called the development default in a development boot only' do
+      production = boot_log(env: 'production', backend: :rails_cache, rails_cache: ActiveSupport::Cache::MemoryStore.new)
+      development = boot_log(env: 'development', backend: :rails_cache, rails_cache: ActiveSupport::Cache::MemoryStore.new)
+
+      assert_match(/the cache store is an in-memory store \(Rails\.cache is a :memory_store\): it cannot tell/, production)
+      assert_no_match(/development default/, production)
+      assert_match(/\(Rails\.cache is a :memory_store, the Rails development default\)/, development)
+    end
+
     # The boot logs before `bin/rails server` attaches its console logger,
     # and `bin/rails runner` never does: the warnings were in
     # log/development.log only (Warnings.emit decides the channel).
