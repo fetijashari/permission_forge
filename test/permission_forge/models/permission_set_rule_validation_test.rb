@@ -151,8 +151,9 @@ module PermissionForge
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
-    test 'field_name user.email is valid' do
-      rule = build_rule(field_name: 'user.email')
+    # A table of another model: left to the query, which may join it.
+    test 'field_name users.email is valid' do
+      rule = build_rule(field_name: 'users.email')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
@@ -208,7 +209,7 @@ module PermissionForge
     end
 
     test 'field_name with a schema or database before the table is valid' do
-      %w[customers.supplier_id public.customers.supplier_id mydb.customers.Supplier_Id a.b.c.d].each do |name|
+      %w[customers.supplier_id public.customers.supplier_id mydb.customers.Supplier_Id a.b.customers.supplier_id].each do |name|
         assert build_rule(field_name: name).valid?, name
       end
     end

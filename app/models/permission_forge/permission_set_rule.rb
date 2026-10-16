@@ -46,11 +46,17 @@ module PermissionForge
       !self.class.filter_join_type?(join_type)
     end
 
+    # What a rule names is checked for a new rule and when it changes (the
+    # *_check_due? predicates): a row saved before a check, or written past
+    # the model (the tables are shared with other applications; a newer
+    # version in a rolling deploy), stays editable in its other attributes.
+    # Such a row matches nothing (Operators::RuleProblem — the applier, the
+    # audit's rule check and the admin's Home all read it).
     validates :operator, inclusion: {
       in: OPERATORS,
       message: I18n.t('permission_forge.validations.permission_set_rule.invalid_operator',
                       default: 'is not a valid operator')
-    }
+    }, if: :operator_check_due?
     # An operator that takes no value (Operators::Validations.valueless?)
     # stores an empty one: the column is NOT NULL, and the natural API payload
     # for a null check has no field_value.
@@ -64,7 +70,7 @@ module PermissionForge
       in: JOIN_TYPES,
       message: I18n.t('permission_forge.validations.permission_set_rule.invalid_join_type',
                       default: 'is not a valid join type')
-    }, allow_nil: true, allow_blank: false
+    }, allow_nil: true, allow_blank: false, if: :join_type_check_due?
     validates :field_name, presence: true
     validates :field_name, format: {
       with: /\A[a-zA-Z_][a-zA-Z0-9_.]*\z/,
@@ -110,6 +116,14 @@ module PermissionForge
       [name, path, self.class.filter_join_type?(join) ? nil : join, model]
     end
 
+    def operator_check_due?
+      new_record? || will_save_change_to_operator?
+    end
+
+    def join_type_check_due?
+      new_record? || will_save_change_to_join_type?
+    end
+
     # On a new rule and when what it names changes: a row that already names
     # a missing column stays editable in its other attributes (it matches
     # nothing; the audit reports it). A copy onto another model's Resource is checked.
@@ -145,31 +159,30 @@ module PermissionForge
       errors.add(:field_accessor_path, problem.validation_message)
     end
 
-    # A name the model's table does not have (along the rule's path) would
-    # make the rule match nothing — the database rejects the comparison. Only
-    # checked when the column can be told (Operators::RuleColumn.for_rule): a
-    # model that cannot be loaded now, or a name qualified with a table that
-    # is none of the rule's (an alias the query joins), is left to the query.
+    # A name the model's table does not have (along the rule's path), or one
+    # qualified with a table that is not there on a rule that joins nothing,
+    # would make the rule match nothing — the database rejects the
+    # comparison. Only checked when the column can be told
+    # (Operators::RuleColumn.for_rule): a model that cannot be loaded now, a
+    # name qualified with a real table that is none of the rule's (the query
+    # may join it), or an alias a rule's own joins may give, is left to the query.
     def validate_field_name_column
       return if field_name.blank? || errors[:field_name].any?
 
-      target = missing_column_target
-      return unless target
-
-      errors.add(:field_name, I18n.t('permission_forge.validations.permission_set_rule.unknown_column',
-                                     model: target.model.name, default: 'is not a column of %<model>s'))
+      problem = column_problem
+      errors.add(:field_name, problem.validation_message) if problem
     end
 
-    # The rule's column when it is missing, after reading the table again:
-    # the schema cache may predate a column a migration just added (a running
-    # server, an old process in a rolling deploy).
-    def missing_column_target
-      target = PermissionForge::Operators::RuleColumn.for_rule(self)
-      return unless target&.missing?
+    # The rule's column problem (Operators::RuleProblem.of_column), after
+    # reading the schema again for what it names: the schema cache may
+    # predate a column a migration just added, or a table (a running server,
+    # an old process in a rolling deploy).
+    def column_problem
+      problem = PermissionForge::Operators::RuleProblem.of_column(self)
+      return unless problem
 
-      target.model.reset_column_information
-      target = PermissionForge::Operators::RuleColumn.for_rule(self)
-      target if target&.missing?
+      PermissionForge::Operators::RuleColumn.reread_schema(problem)
+      PermissionForge::Operators::RuleProblem.of_column(self)
     end
 
     def valueless_operator?

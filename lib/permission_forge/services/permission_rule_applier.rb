@@ -8,12 +8,22 @@ module PermissionForge
     # a malformed field_name can never reach SQL as a literal even if a rule was
     # created through a path that bypasses model validation.
     #
+    # A stored rule never raises here. A value of a rule row the applier
+    # cannot interpret — a join type or operator this version does not know,
+    # a path that cannot be followed, a field name that is not a name or
+    # names a column its table does not have or a table that is not there, a
+    # value the column cannot hold — makes the rule match nothing: every
+    # holder is denied every record of the resource, never handed an error
+    # (a 500 for every holder, on every query under auto_query_scoping). The
+    # same reading describes such a rule to the admin and the audit
+    # (Operators::RuleProblem).
+    #
     # @api private
     class PermissionRuleApplier
       # join_type => the relation method that makes the join. The model
       # validates join_type, but a rule row can be written past the model (the
       # tables are shared with other applications): the value is looked up
-      # here, never sent to the relation, and anything else raises.
+      # here, never sent to the relation, and anything else matches nothing.
       JOIN_METHODS = {
         PermissionForge::Operators::Constants::JOINS => :joins,
         PermissionForge::Operators::Constants::LEFT_JOINS => :left_joins,
@@ -108,19 +118,14 @@ module PermissionForge
         query.where(*@args).exists?
       end
 
+      # A join type that is none of JOIN_METHODS (written past the model, or
+      # by a newer version) matches nothing: it is never sent to the relation.
       def build_rule_query(query, rule)
         join_type = rule[:join_type].to_s
         return apply_filter(query, rule) if PermissionForge::PermissionSetRule.filter_join_type?(join_type)
 
-        apply_join(query, rule, join_method(join_type))
-      end
-
-      # @raise [PermissionForge::ConfigurationError] for a join_type that is not one
-      def join_method(join_type)
-        JOIN_METHODS.fetch(join_type) do
-          raise PermissionForge::ConfigurationError,
-                "Rule join_type #{join_type.inspect} is not a join type. Allowed: #{JOIN_METHODS.keys.join(', ')}"
-        end
+        join_method = JOIN_METHODS[join_type]
+        join_method ? apply_join(query, rule, join_method) : query.none
       end
 
       def apply_filter(query, rule)
@@ -183,15 +188,33 @@ module PermissionForge
       # one naming a column its table does not have matches nothing under a
       # built-in operator (Operators::ValueTyping.no_column?) — the database
       # would reject the query, and every holder would get an error instead
-      # of a denial.
+      # of a denial. So does one qualified with a table that is not there
+      # (RuleColumn#unresolvable?), and a rule whose operator the registry
+      # does not have (written past the model, or by a newer version).
       def build_query(query, quoted_column, rule, models)
         operator = rule[:operator]
-        strategy = @operator_registry.fetch(operator)
+        strategy = strategy_for(operator)
         target = PermissionForge::Operators::RuleColumn.find(rule[:field_name], models)
+        return query.none if strategy.nil? || target.unresolvable?
+
         value = PermissionForge::Operators::ValueTyping.call(operator, formatted_field_value(rule), target)
         return query.none if value.equal?(PermissionForge::Operators::ValueTyping::UNUSABLE)
 
         strategy.call(query, quoted_column, rule, value)
+      end
+
+      # The operator's strategy from the registry — Operators::Registry, or an
+      # injected one: anything answering `strategies` (a Hash of them) or
+      # `fetch(name)` (a Hash, an object of the host's) — and nil for an
+      # operator it does not have, whether it answers nil or raises for one
+      # (ArgumentError as Registry.fetch does, KeyError as a Hash does).
+      def strategy_for(operator)
+        registry = @operator_registry
+        return registry.strategies[operator] if registry.respond_to?(:strategies)
+
+        registry.fetch(operator)
+      rescue ArgumentError, KeyError
+        nil
       end
 
       # The only magic value is 'current_user', substituted with the current

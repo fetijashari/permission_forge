@@ -33,7 +33,7 @@ module PermissionForge
       end
 
       test 'a qualifier naming no table, on a rule that joins nothing, is unresolvable' do
-        %w[nosuch.name customer.name Customers.name pf_no_such.name].each do |field_name|
+        %w[nosuch.name customer.name pf_no_such.name].each do |field_name|
           target = RuleColumn.find(field_name, [Customer])
 
           assert_predicate target, :unresolvable?, field_name

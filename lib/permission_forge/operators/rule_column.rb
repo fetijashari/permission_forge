@@ -16,14 +16,20 @@ module PermissionForge
     # text after all. A lookup that is more generous than the database costs
     # nothing: the database then rejects the name itself.
     #
-    # When the table is none of the rule's, nothing is known ({UNKNOWN}) and
-    # the value is left as it is: the name may be a table the query joins
-    # itself (an association's alias, a default scope's join) — the database
-    # resolves it or rejects it. A table of the rule's that has no such column
-    # is {#missing?}: the database would reject the query, so a built-in
-    # operator matches nothing for it (ValueTyping.no_column?). A field_name
-    # that is not a name ({.name?}) is {#malformed?}: such a rule matches
-    # nothing.
+    # When the table is none of the rule's but exists, nothing is known
+    # ({UNKNOWN}) and the value is left as it is: the query may join it
+    # itself (a default scope's join, a host's `joins`) — the database
+    # resolves the name or rejects it. When no such table exists either, the
+    # name is {#unresolvable?} ({UNRESOLVABLE}) and the rule matches nothing
+    # — the database would reject the query (`no such column: nosuch.name`),
+    # and every holder would get an error instead of a denial — unless the
+    # rule follows an association path: then the name may be the alias
+    # ActiveRecord gives a table joined twice (`parents_customers` on a
+    # self-join), which is no data source, so it is left to the database as
+    # UNKNOWN. A table of the rule's that has no such column is {#missing?}:
+    # the database would reject the query, so a built-in operator matches
+    # nothing for it (ValueTyping.no_column?). A field_name that is not a
+    # name ({.name?}) is {#malformed?}: such a rule matches nothing.
     class RuleColumn
       # Adapters whose database compares a quoted name as it is written. On
       # every other one — MySQL, SQLite — `Flag` is the column `flag`.
@@ -59,10 +65,44 @@ module PermissionForge
         # @return [RuleColumn]
         def find(field_name, models)
           return MALFORMED unless name?(field_name)
+          return UNKNOWN if models.empty?
 
           *qualifier, name = field_name.to_s.split('.')
-          model = table_model(qualifier.last, models)
-          model ? on(model, name) : UNKNOWN
+          table = qualifier.last
+          model = table_model(table, models)
+          return on(model, name) if model
+
+          models.size > 1 || data_source?(models.last, table) ? UNKNOWN : UNRESOLVABLE
+        end
+
+        # Whether the connection has a data source (a table or view) named
+        # `table`, by the schema cache: asked only for a qualifier that is
+        # none of the rule's tables. A negative answer is cached with the
+        # rest of the schema; {.reread_schema} forgets it before a refusal.
+        #
+        # @param model [Class] a model on the connection
+        # @param table [String] the name as written
+        def data_source?(model, table)
+          model.connection.schema_cache.data_source_exists?(table)
+        end
+
+        # Reads the schema again for what a column problem names
+        # (RuleProblem.of_column), before a rule is refused for it: the
+        # schema cache may predate a column a migration just added, or a
+        # table (a running server, an old process in a rolling deploy). A
+        # model's columns for a missing column; the data sources for a
+        # table that is not there.
+        #
+        # @param problem [RuleProblem]
+        # @return [void]
+        def reread_schema(problem)
+          model = problem.model
+          return unless model
+
+          case problem.kind
+          when :missing_column then model.reset_column_information
+          when :unknown_table then model.connection.schema_cache.clear_data_source_cache!(problem.name)
+          end
         end
 
         # The column a rule row names, looked up the way PermissionRuleApplier
@@ -106,13 +146,13 @@ module PermissionForge
           path.blank? ? [] : path.to_s.split('.')
         end
 
-        # The model the rule's Resource is named after, when it is one.
+        # The model the rule's Resource is named after, when it is one with a
+        # table (PermissionForge::ModelLookup, the one definition).
         #
         # @param rule [PermissionForge::PermissionSetRule]
         # @return [Class, nil]
         def rule_model(rule)
-          model = rule.resource&.name.to_s.safe_constantize
-          model if model.is_a?(Class) && model < ActiveRecord::Base && !model.abstract_class?
+          PermissionForge::ModelLookup.model_for(rule.resource&.name)
         end
 
         private
@@ -150,13 +190,24 @@ module PermissionForge
         @model = model
       end
 
-      # Nothing is known about the column: the name's table is none of the rule's.
+      # Nothing is known about the column: the name's table is none of the
+      # rule's — it exists (the query may join it), or the rule follows a
+      # path and the name may be an alias the join gives.
       UNKNOWN = new(nil, nil, nil).freeze
       # The rule's field_name is not a name.
       MALFORMED = new(nil, nil, nil).freeze
+      # The name's table is none of the rule's and no table of the database
+      # (a rule that joins nothing): the database would reject the query.
+      UNRESOLVABLE = new(nil, nil, nil).freeze
 
       def malformed?
         equal?(MALFORMED)
+      end
+
+      # The name is qualified with a table that is not there (see UNRESOLVABLE):
+      # such a rule matches nothing.
+      def unresolvable?
+        equal?(UNRESOLVABLE)
       end
 
       # The name's table is one of the rule's ({#model}), and it has no such

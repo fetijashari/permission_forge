@@ -527,11 +527,14 @@ module PermissionForge
         assert_equal %w[five], labels('users.id', 'equal', @user.id.to_s, **join)
       end
 
-      # Where the columns cannot be told, the rule is left to the database as before.
+      # Where the columns cannot be told, the rule is left to the database as
+      # before: a real table that is none of the rule's (the query may join
+      # it). A qualifier naming no table at all matches nothing.
       test 'a table that is none of the rule\'s, or a custom operator, is still left to the database' do
         assert_raises(ActiveRecord::StatementInvalid) do
-          PfRuleRecord.transaction(requires_new: true) { labels('elsewhere.flag', 'equal', 'true') }
+          PfRuleRecord.transaction(requires_new: true) { labels('customers.flag', 'equal', 'true') }
         end
+        assert_empty labels('elsewhere.flag', 'equal', 'true'), 'no such table: matches nothing'
         custom = PermissionForge::Operators::Registry.strategies.merge(
           'equal' => PermissionForge::Operators::Registry.strategies.fetch('equal'),
           'anything' => ->(query, _column, _rule, value) { query.where(label: value) }
@@ -600,8 +603,8 @@ module PermissionForge
       end
 
       test 'a dotted field name whose table is not on the path keeps its value as written' do
-        sql = scoped(field_name: 'elsewhere.small_count', operator: 'equal', field_value: '5_id').to_sql
-        list = scoped(field_name: 'elsewhere.small_count', operator: 'in', field_value: ' 5_id , 6').to_sql
+        sql = scoped(field_name: 'customers.small_count', operator: 'equal', field_value: '5_id').to_sql
+        list = scoped(field_name: 'customers.small_count', operator: 'in', field_value: ' 5_id , 6').to_sql
 
         assert_includes sql, "= '5_id'"
         assert_includes list, "IN ('5_id', '6')"
@@ -724,14 +727,14 @@ module PermissionForge
         }
         registry = custom_registry('in' => spy, 'not_in' => spy, 'between' => spy)
 
-        { 'small_count' => [1, 2], 'amount' => [1, 2], 'label' => %w[1 2], 'elsewhere.small_count' => %w[1 2] }.each do |column, expected|
+        { 'small_count' => [1, 2], 'amount' => [1, 2], 'label' => %w[1 2], 'customers.small_count' => %w[1 2] }.each do |column, expected|
           %w[in not_in].each do |operator|
             scoped(registry:, field_name: column, operator: operator, field_value: ' 1 , 2 ').to_a
 
             assert_equal expected, seen[column], "#{column} #{operator}"
           end
         end
-        { 'small_count' => [1, 2], 'label' => %w[1 2], 'elsewhere.small_count' => [1, 2] }.each do |column, expected|
+        { 'small_count' => [1, 2], 'label' => %w[1 2], 'customers.small_count' => [1, 2] }.each do |column, expected|
           scoped(registry:, field_name: column, operator: 'between', field_value: '1,2').to_a
 
           assert_equal expected, seen[column], "#{column} between"

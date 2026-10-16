@@ -57,17 +57,24 @@ module PermissionForge
     validates_dependency :edit_access, requires: :read_access
     validates_dependency :mask_access, requires: :read_access
 
+    # The strategy is checked for a new row and when it, or mask_access,
+    # changes (mask_strategy_check_due?): a row whose strategy this app no
+    # longer knows — written past the model, or a custom strategy since
+    # removed from config.custom_mask_strategies — stays editable in its
+    # other attributes. Its values are masked fully until it is fixed
+    # (Services::MaskValue); `rake permission_forge:audit` lists it
+    # (unknown_mask_strategies), the field drawer flags it.
     validates :mask_strategy, presence: {
                                 message: I18n.t('permission_forge.validations.resource_field.mask_strategy_required',
                                                 default: 'must be present when mask access is enabled')
                               },
-                              if: :mask_access?
+                              if: :mask_strategy_check_due?
     validates :mask_strategy, inclusion: {
                                 in: ->(_) { PermissionForge::Services::MaskValue.strategies.keys },
                                 message: I18n.t('permission_forge.validations.resource_field.invalid_mask_strategy',
                                                 default: 'is not a valid mask strategy')
                               },
-                              if: :mask_access?
+                              if: :mask_strategy_check_due?
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
@@ -84,6 +91,10 @@ module PermissionForge
 
     def mask_access?
       mask_access == true
+    end
+
+    def mask_strategy_check_due?
+      mask_access? && (new_record? || will_save_change_to_mask_strategy? || will_save_change_to_mask_access?)
     end
   end
 end

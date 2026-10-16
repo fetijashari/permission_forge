@@ -173,8 +173,9 @@ module PermissionForge
                       'Sales › Customer.supplier.owner.users.deactivated equal "maybe": Active owner · 1 person',
                       'Sales › Customer.supplier.owner.deactivated equal "current_user": Me · 1 person',
                       'Sales › Customer.supplier.owner_id equal "no": Off · 1 person',
-                      'Sales › Customer.supplier_id. equal "5": Dot · 1 person',
                       *case_item], finding.items
+        # A name that is not a name (a trailing dot) names no column: the missing-column finding's.
+        assert_equal ['Sales › Customer.supplier_id. equal "5": Dot · 1 person'], item_for(audit, :missing_rule_columns).items
       end
 
       test 'a rule that is not in effect, or held by nobody, weighs less' do
@@ -219,7 +220,9 @@ module PermissionForge
         resource = create_resource(permission_set: set, read_access: true)
         rule_with(gone, name: 'Gone', field_name: 'owner_id', field_value: 'x')
         rule_with(resource, name: 'No column', field_name: 'no_such_column', field_value: 'x')
-        rule_with(resource, name: 'Elsewhere', field_name: 'elsewhere.supplier_id', field_value: 'x')
+        # With a path, a qualifier naming no table may be an alias the join gives: left to the query.
+        rule_with(resource, name: 'Elsewhere', field_name: 'elsewhere.supplier_id', field_value: 'x', join_type: 'joins',
+                            field_accessor_path: 'supplier')
         # A path that cannot be followed matches nothing; the rule is not typed against its own model.
         rule_with(resource, name: 'No path', field_name: 'supplier_id', field_value: 'x', join_type: 'joins', field_accessor_path: 'nowhere')
         rule_with(resource, name: 'Half a path', field_name: 'deactivated', field_value: 'maybe', join_type: 'left_joins',
@@ -248,7 +251,7 @@ module PermissionForge
         rule_with(resource, name: 'Joined', field_name: 'domain', field_value: 'x', **through_supplier)
         rule_with(resource, name: 'Typed', field_name: 'supplier_id', field_value: '5_id')
         rule_with(resource, name: 'Fine', field_name: 'owner_id', field_value: '5', **through_supplier)
-        rule_with(resource, name: 'Alias', field_name: 'elsewhere.onwer_id', field_value: '5')
+        rule_with(resource, name: 'Alias', field_name: 'elsewhere.onwer_id', field_value: '5', **through_supplier)
 
         report = audit
         finding = item_for(report, :missing_rule_columns)

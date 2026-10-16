@@ -224,7 +224,10 @@ module PermissionForge
 
         assert_response :success
         assert_select '.pf-badge', text: I18n.t('permission_forge.ui.badges.unknown_mask_strategy')
-        assert_select '#pf-fd-strategy option[selected]', text: /Full/
+        # Field test round 6 (d-api 33–35): the select showed nothing selected, and saving the drawer after
+        # changing only the label rewrote the strategy to full. The stored name is offered as it is, selected.
+        assert_select '#pf-fd-strategy option[selected]', count: 1
+        assert_select '#pf-fd-strategy option[selected][value=gone]', text: /gone .*unknown/
 
         %w[sq mk].each do |locale|
           get pf("/permission_sets/#{@set.id}/resources/Customer/fields/email"), params: { locale: locale }
@@ -232,6 +235,26 @@ module PermissionForge
           assert_no_missing_translations
         end
         assert_empty A11yLint.new(response.body).problems
+      end
+
+      test 'saving the drawer with another change keeps a strategy this app does not know; picking one changes it' do
+        @email.update_columns(mask_strategy: 'gone')
+        path = pf("/permission_sets/#{@set.id}/resources/Customer/fields/email")
+
+        patch path, params: { field: { level: 'masked', mask_strategy: 'gone', label: 'E-mail' } }
+
+        assert_response :redirect
+        assert_equal %w[gone E-mail], [@email.reload.mask_strategy, @email.label]
+
+        patch path, params: { field: { level: 'masked', mask_strategy: 'email', label: 'E-mail' } }
+
+        assert_response :redirect
+        assert_equal 'email', @email.reload.mask_strategy
+
+        # A row whose stored name is not one is still refused when another unknown one is posted.
+        patch path, params: { field: { level: 'masked', mask_strategy: 'nope', label: 'E-mail' } }
+
+        assert_equal 'email', @email.reload.mask_strategy
       end
 
       private

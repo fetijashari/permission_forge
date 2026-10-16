@@ -54,14 +54,14 @@ module PermissionForge
       end
 
       test 'a row that is not in effect, or does not mask, is not reported' do
-        off = create_resource_field(resource: @resource, name: 'email', read_access: true, mask_access: true, mask_strategy: 'email',
-                                                                       is_active: false)
+        off = create_resource_field(resource: @resource, name: 'email', read_access: true, mask_access: true,
+                                    mask_strategy: 'email', is_active: false)
         off.update_columns(mask_strategy: 'gone')
         unmasked = create_resource_field(resource: @resource, name: 'name', read_access: true, mask_access: false)
         unmasked.update_columns(mask_strategy: 'gone')
         parked = create_resource(permission_set: create_permission_set(name: 'Parked', is_active: false), read_access: true)
-        create_resource_field(resource: parked, name: 'email', read_access: true, mask_access: true, mask_strategy: 'email')
-                                .update_columns(mask_strategy: 'gone')
+        parked_email = create_resource_field(resource: parked, name: 'email', read_access: true, mask_access: true, mask_strategy: 'email')
+        parked_email.update_columns(mask_strategy: 'gone')
 
         assert_nil finding(:unknown_mask_strategies)
       end

@@ -98,7 +98,7 @@ module PermissionForge
         error = assert_raises(ArgumentError) { MaskValue.call!('test', strategy: 'unknown') }
 
         assert_match(/Unknown mask strategy: "unknown"/, error.message)
-        assert_equal 'a***@b.com', MaskValue.call!('a@b.com', strategy: 'email')
+        assert_equal 'j***@b.com', MaskValue.call!('john@b.com', strategy: 'email')
       end
 
       test 'known? is the one answer to "is this a strategy"' do

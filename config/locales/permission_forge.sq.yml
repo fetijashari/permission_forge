@@ -21,6 +21,8 @@ sq:
         not_editable: Ky regjistrim nuk mund të redaktohet
         not_found: Regjistrimi nuk u gjet
         not_iso8601_time: nuk është datë ose kohë ISO 8601
+        resource_names_no_model: nuk emërton asnjë model që ky aplikacion mund ta
+          ngarkojë
         route_not_found: Asnjë pikë fundore e API-së nuk i përgjigjet këtij shtegu
           dhe kësaj metode
         section_missing: mungon, është bosh ose nuk është objekt
@@ -521,9 +523,10 @@ sq:
           Asnjë ndryshim nuk regjistrohet.
         title: Regjistri i auditimit nuk po regjistron
       broken_rules_card:
-        description: 'Këto rregulla regjistrimesh përmendin një fushë ose lidhje që
-          nuk ekziston. Secili nuk përputhet me asgjë: kujtdo që i zbatohet i refuzohet
-          çdo regjistrim i burimit.'
+        description: 'Këto rregulla regjistrimesh përmendin një fushë, tabelë, lidhje
+          ose kusht që nuk ekziston, ose një vlerë që fusha e tyre nuk mund ta mbajë.
+          Secili nuk përputhet me asgjë: kujtdo që i zbatohet i refuzohet çdo regjistrim
+          i burimit.'
         fix: Rregullo rregullin
         locked_fix_html: 'I kyçur (%{flag}): menaxhohet nga sistemi ose API që e krijoi,
           prandaj rregullojeni rregullin atje (ose zhbllokojeni grupin në kod). Një
@@ -901,6 +904,7 @@ sq:
           field: Zgjidh fushën për t'u kontrolluar.
           list: Shto të paktën një vlerë në listë.
           name_blank: Jepi një emër rregullit.
+          operator: Zgjidhni një kusht nga lista.
           range: Plotëso të dy skajet e diapazonit.
           value: Shkruaj një vlerë, ose zgjidh “përdoruesi aktual”.
         field: Fusha për t'u kontrolluar
@@ -1267,6 +1271,7 @@ sq:
           aktual është e lexueshme dhe e ndryshueshme si parazgjedhje.'
         turned_off_muting: Cilësimi për këtë fushë në „%{set}“ është i fikur, prandaj
           ky Grup lejesh heshtës nuk heq asgjë prej saj.
+        unknown_strategy: "(e panjohur — maskohet plotësisht derisa të zgjidhni një)"
         used_by_rules: Përdoret nga rregullat
         variants: 'Vlen edhe për:'
         variants_muting: 'Heshtja e kësaj hesht edhe:'
@@ -2058,6 +2063,8 @@ sq:
         not_configured: E pakonfiguruar
         'off': Joaktiv
         sensitive: E ndjeshme
+        unknown_mask_strategy: Strategji maskimi e panjohur — maskohet plotësisht
+          derisa të rregullohet
         virtual: Virtuale
       breadcrumb: Navigimi
       cancel: Anulo
@@ -2239,6 +2246,12 @@ sq:
           unjoinable_record_dependent_scope: "%{name} është lidhje e %{model}, fusha
             e së cilës varet nga regjistrimi: një rregull nuk mund ta ndjekë"
           unknown_association_html: "%{name} nuk është lidhje e %{model}"
+          unknown_join_type_html: "%{name} nuk është mënyrë bashkimi që ky version
+            e njeh"
+          unknown_operator_html: "%{name} nuk është kusht që ky version e njeh"
+          unknown_table_html: "%{name} nuk është tabelë e kësaj baze të dhënash"
+          unusable_value_html: "%{value} nuk është vlerë që %{name} e %{model} mund
+            ta mbajë"
         where: ku
       rules_count:
         one: Rregullat (%{count})
@@ -2288,6 +2301,8 @@ sq:
           nuk mund ta bashkojë'
         unknown_association: përmend %{association}, që nuk është lidhje e %{model}
         unknown_column: nuk është kolonë e %{model}
+        unknown_table: emërton %{name}, që nuk është tabelë e kësaj baze të dhënash
+        unusable_value: nuk është vlerë që %{model}.%{name} mund ta mbajë
         value_not_expected: nuk kërkon vlerë për këtë operator
         value_required: nuk duhet të jetë bosh për këtë operator
       resource:

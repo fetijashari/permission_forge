@@ -27,8 +27,11 @@ module PermissionForge
         @catalog = catalog
         @errors = {}
         if params
-          assign_inputs(RuleFormInput.from_params(normalize(params)))
-          @operator = 'equal' unless operators.include?(@operator)
+          attrs = normalize(params)
+          assign_inputs(RuleFormInput.from_params(attrs))
+          # As posted: a condition that is not one is refused (valid?), never
+          # rewritten to another. A saved one is kept as stored, too.
+          @operator = attrs['operator'].to_s if attrs.key?('operator')
         else
           assign_inputs(RuleFormInput.from_rule(rule))
         end
@@ -108,6 +111,7 @@ module PermissionForge
         @errors = {}
         @errors[:name] = :name_blank if @name.blank?
         @errors[:field] = :field if column.nil?
+        @errors[:operator] = :operator unless operators.include?(@operator)
         validate_value
         @errors.empty?
       end

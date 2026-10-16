@@ -29,9 +29,14 @@ module PermissionForge
 
       # All or nothing, under one audit correlation id (an enclosing block's,
       # if any): a field that cannot be saved leaves no field and no event.
+      # A Resource named after no model this app can load
+      # (PermissionForge::ModelLookup: `Custmer`, `Kernel`, a model without
+      # its table) has no columns: no fields, a log line — never an error
+      # (the API answers 422 before it gets here; `rake permission_forge:audit`
+      # lists the Resource under unknown_models).
       def call
-        model_class = @resource.name.safe_constantize
-        return [] unless model_class
+        model_class = PermissionForge::ModelLookup.model_for(@resource.name)
+        return no_model unless model_class
 
         fields = PermissionForge::Audit.correlate { PermissionForge::ResourceField.transaction { generate_fields(model_class) } }
         PermissionForge.configuration.record_gdpr_pattern_checksum
@@ -51,6 +56,11 @@ module PermissionForge
       end
 
       private
+
+      def no_model
+        Rails.logger&.warn("[PermissionForge] #{@resource.name} names no model this app can load: no fields generated")
+        []
+      end
 
       def generate_fields(model_class)
         existing_names = @resource.resource_fields.pluck(:name)

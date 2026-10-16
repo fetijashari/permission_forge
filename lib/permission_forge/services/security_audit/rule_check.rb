@@ -4,19 +4,26 @@ module PermissionForge
   module Services
     module SecurityAuditChecks
       # Record (row-level) rules: whether the app's query scoping applies them,
-      # rules naming a column their table does not have, rules whose value
-      # makes them match nothing, rules View All makes pointless, and likely
-      # misconfigurations.
+      # rules that match nothing (Operators::RuleProblem, the one taxonomy —
+      # each kind lands in one finding), rules naming a table of another
+      # model, rules View All makes pointless, and likely misconfigurations.
       class RuleCheck < BaseCheck
         TEXT_OPERATORS = %w[contains starts_with ends_with].freeze
-        # What `current_user` is typed as here: an id is a number or its text,
-        # whoever the user is, and never a boolean or a date.
-        ANY_USER_ID = 0
+
+        # The kinds of Operators::RuleProblem each finding reports: one
+        # finding per kind. A new kind goes in exactly one list (the
+        # taxonomy guard fails for a kind no finding names).
+        FINDING_KINDS = {
+          missing_rule_columns: %i[missing_column unknown_association unjoinable_association unknown_table],
+          unknown_rule_operators: %i[unknown_operator unknown_join_type],
+          unusable_rule_values: %i[unusable_value]
+        }.freeze
 
         def call
           return [no_rules] unless active_rules.exists?
 
-          [unenforced, missing_columns, unusable_values, bypassed, text_operator_on_ids].compact
+          [unenforced, missing_columns, unknown_operators, unusable_values, foreign_table_names, bypassed,
+           text_operator_on_ids].compact
         end
 
         private
@@ -68,43 +75,90 @@ module PermissionForge
             "#{people_label(item.people_count)}"
         end
 
-        # Rules saved before PermissionSetRule checked the column and the
-        # path, or written past the model (the tables are shared with other
-        # applications): the same rules as the admin's Home lists
-        # (AttentionItems#broken_rules, Operators::RuleProblem).
+        # The rules in effect Home lists as matching nothing
+        # (AttentionItems#broken_rules), of the kinds one finding reports.
+        def broken(code)
+          attention.broken_rules.select { |item| FINDING_KINDS.fetch(code).include?(item.problem.kind) }
+        end
+
+        def held?(findings)
+          findings.any? { |item| item.people_count.positive? }
+        end
+
+        # Rules saved before PermissionSetRule checked the column, the table
+        # and the path, or written past the model (the tables are shared with
+        # other applications).
         def missing_columns
-          findings = attention.broken_rules
+          findings = broken(:missing_rule_columns)
           return if findings.empty?
 
-          held = findings.any? { |item| item.people_count.positive? }
-          finding(held ? :high : :medium, :missing_rule_columns, 'Rules naming a column or association that does not exist',
-                  'The field name of these rules is not a column of their table, or their association path names an ' \
-                  'association their model does not have (or an empty segment) or one a join cannot be built through ' \
+          finding(held?(findings) ? :high : :medium, :missing_rule_columns,
+                  'Rules naming a column, table or association that does not exist',
+                  'The field name of these rules is not a column of their table (or not a name: a trailing or doubled ' \
+                  'dot), names a table this database does not have, or their association path names an association ' \
+                  'their model does not have (or an empty segment) or one a join cannot be built through ' \
                   '(polymorphic, a scope that takes the record — also along a :through —, a :through, :source or ' \
                   'inverse_of naming nothing, a class that cannot be loaded) — a typo, or a column or association ' \
                   'since renamed or removed. Such a rule ' \
                   'matches nothing: everyone it applies to is denied every record of the resource. Correct the rule ' \
                   'or remove it (see "Using the wrong field name" in docs/row-level-rules.md).',
-                  items: findings.map { |item| unusable_item(item.rule) })
+                  items: findings.map { |item| rule_item(item.rule) })
+        end
+
+        # Rules whose operator or join type this version does not have:
+        # written by a newer version (a rolling deploy), by another
+        # application on the shared tables, or past the model.
+        def unknown_operators
+          findings = broken(:unknown_rule_operators)
+          return if findings.empty?
+
+          finding(held?(findings) ? :high : :medium, :unknown_rule_operators,
+                  'Rules with an operator or join type this version does not know',
+                  'The operator or join type of these rules is none this version of PermissionForge has — written ' \
+                  'by a newer version (a rolling deploy), by another application on the shared tables, or past the ' \
+                  'model. Such a rule matches nothing: everyone it applies to is denied every record of the resource ' \
+                  '(never an error). Finish the upgrade, or correct the rule.',
+                  items: findings.map { |item| unknown_operator_item(item) })
+        end
+
+        def unknown_operator_item(item)
+          rule = item.rule
+          note = " (join type #{rule.join_type.inspect})" if item.problem.kind == :unknown_join_type
+          rule_item(rule, note)
         end
 
         def unusable_values
-          rules = rules_in_effect.select { |rule| unusable_value?(rule) }
-          return if rules.empty?
+          findings = broken(:unusable_rule_values)
+          return if findings.empty?
 
-          held = rules.any? { |rule| held?(rule) }
-          finding(held ? :medium : :low, :unusable_rule_values, 'Rules that match nothing',
+          finding(held?(findings) ? :medium : :low, :unusable_rule_values, 'Rules that match nothing',
                   'The value of these rules is not one their column can hold: text on a number column, a word that ' \
                   'is no boolean, an unknown enum label, a date that is not ISO 8601 (on MySQL and SQLite), a list ' \
-                  'or range with the wrong number of values — or the field name is not a name (a trailing or ' \
-                  'doubled dot). Such a rule matches nothing: everyone it applies to is denied every record of ' \
-                  'the resource. Correct the rule or remove it (see "How Values Are Compared" in ' \
-                  'docs/row-level-rules.md).',
-                  items: rules.map { |rule| unusable_item(rule) })
+                  'or range with the wrong number of values. Such a rule matches nothing: everyone it applies to is ' \
+                  'denied every record of the resource. Correct the rule or remove it (see "How Values Are ' \
+                  'Compared" in docs/row-level-rules.md).',
+                  items: findings.map { |item| rule_item(item.rule) })
         end
 
-        def held?(rule)
-          people_counts.fetch(rule.resource.permission_set_id, 0).positive?
+        # Rules in effect whose field name is qualified with a table that is
+        # none of the rule's but exists (Operators::RuleColumn::UNKNOWN):
+        # left to the database — the query may join that table itself — so
+        # the value is compared untyped, and a column the table does not
+        # have raises in every query of the holders.
+        def foreign_table_names
+          rules = rules_in_effect.select { |rule| foreign_table?(rule) }
+          return if rules.empty?
+
+          finding(:info, :foreign_table_names, 'Rules naming a table of another model',
+                  'The field name of these rules is qualified with a table that is none of the rule\'s — not the ' \
+                  'model\'s, nor one along its relationship path — so it is left to the database: the query has to ' \
+                  'join that table itself, the value is compared as text, and a column the table does not have ' \
+                  'raises in every query of the holders. Name the relationship in field_accessor_path instead, so ' \
+                  'the column is checked and the value typed.', items: rules.map { |rule| rule_item(rule) })
+        end
+
+        def foreign_table?(rule)
+          rule.field_name.to_s.include?('.') && Operators::RuleColumn.for_rule(rule).equal?(Operators::RuleColumn::UNKNOWN)
         end
 
         # The rules applied right now (AttentionItems#rules_in_effect).
@@ -112,38 +166,12 @@ module PermissionForge
           attention.rules_in_effect
         end
 
-        # Typed the way the application layer types it (Operators::ValueTyping).
-        # A model that is not there, or cannot be read, says nothing about the
-        # value — that is the integrity check's finding, not one of this check.
-        # A missing column or path is missing_columns' finding.
-        def unusable_value?(rule)
-          target = rule_column(rule)
-          return false if target.nil? || target.missing?
-
-          operator = rule.operator
-          value = rule.field_value
-          value = ANY_USER_ID if Operators::ValueTyping.current_user?(operator, value)
-          Operators::ValueTyping.call(operator, value, target).equal?(Operators::ValueTyping::UNUSABLE)
-        rescue ActiveRecord::ActiveRecordError, NameError, ArgumentError
-          false
-        end
-
-        # The column the rule names, found the way PermissionRuleApplier finds
-        # it (Operators::RuleColumn.for_rule), once per rule. A rule whose
-        # association path cannot be followed has none (nil): it is
-        # missing_columns' finding.
-        def rule_column(rule)
-          @rule_columns ||= {}
-          return @rule_columns[rule.id] if @rule_columns.key?(rule.id)
-
-          @rule_columns[rule.id] = Operators::RuleColumn.for_rule(rule)
-        end
-
-        def unusable_item(rule)
+        # "Sales › Customer.supplier.owner_id equal "no": Off · 1 person"
+        def rule_item(rule, note = nil)
           resource = rule.resource
           path = rule.field_accessor_path.presence if rule.join_rule?
           field = [resource.name, path, rule.field_name].compact.join('.')
-          "#{resource.permission_set.name} › #{field} #{rule.operator} #{rule.field_value.inspect}: #{rule.name} · " \
+          "#{resource.permission_set.name} › #{field} #{rule.operator} #{rule.field_value.inspect}: #{rule.name}#{note} · " \
             "#{people(resource.permission_set_id)}"
         end
 

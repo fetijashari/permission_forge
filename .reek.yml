@@ -60,6 +60,7 @@ detectors:
       - PermissionForge::BadgesHelper
       - PermissionForge::ChangesHelper
       - PermissionForge::PeopleHelper
+      - PermissionForge::RuleProblemsHelper
       - PermissionForge::SentencesHelper
       - PermissionForge::SettingsHelper
       - PermissionForge::UiHelper

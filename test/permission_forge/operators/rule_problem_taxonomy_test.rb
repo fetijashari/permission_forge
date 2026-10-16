@@ -112,12 +112,20 @@ module PermissionForge
       def assert_matches_nothing(kind, rule)
         @user.invalidate_permissions
         model = model_for(kind)
-        rules = @user.permissions_hash_for(model.name.to_sym)[:permission_set_rules]
+        rules = cached_rules(model)
 
-        assert_equal [rule.uuid], rules.map { |hash| hash[:uuid] }, 'the hash carries the rule'
-        assert_empty model.permission_scoped.to_a, "#{kind}: permission_scoped"
+        assert_equal [rule.name], rules.map { |hash| hash[:name] }, 'the hash carries the rule'
         assert_empty Services::PermissionRuleApplier.scope(model_class: model, rules: rules, current_user: @user).to_a
+        assert_denied(kind, model)
+      end
+
+      def assert_denied(kind, model)
+        assert_empty model.permission_scoped.to_a, "#{kind}: permission_scoped"
         assert_raises(NotAuthorizedError, "#{kind}: find_by") { model.find_by(id: record_for(kind).id) }
+      end
+
+      def cached_rules(model)
+        @user.permissions_hash_for(model.name.to_sym)[:permission_set_rules]
       end
 
       def assert_audit_names(rule)
@@ -132,7 +140,7 @@ module PermissionForge
       # and not reported as skipped.
       def assert_rls_false(kind, rule)
         result = Services::RlsPolicyGenerator.call(model_class: model_for(kind))
-        select_policy = result[:statements].find { |statement| statement.include?('permission_forge_select') }
+        select_policy = result[:statements].find { |statement| statement.match?(/\ACREATE POLICY permission_forge_select\b/) }
 
         assert_match(/OR \(FALSE\)\)/, select_policy, "#{kind}: the rule compiles to FALSE")
         assert_not_includes result[:skipped_rules].map { |skipped| skipped[:rule] }, rule.name, 'not skipped: compiled'

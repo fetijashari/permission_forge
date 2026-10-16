@@ -1,14 +1,12 @@
 module PermissionForge
-  # How the admin draws a record rule that matches nothing because it names a
-  # column or a relationship that is not there (Operators::RuleProblem, the
-  # definition the audit's missing_rule_columns and Home share): a state with
-  # a glyph and a word, and why — never the rule's sentence, which would read
+  # How the admin draws a record rule that matches nothing (Operators::RuleProblem,
+  # the one taxonomy the audit's rule check and Home share): a state with a
+  # glyph and a word, and why — never the rule's sentence, which would read
   # like a rule that works. SentencesHelper asks here first.
   #
   # @api private
   module RuleProblemsHelper
-    # Why the rule matches nothing because it names a column or a
-    # relationship that is not there (Operators::RuleProblem, the definition
+    # Why the rule matches nothing (Operators::RuleProblem, the definition
     # the audit and Home share), or nil. Asked once per rule object.
     def pf_rule_problem(rule)
       @pf_rule_problems ||= {}.compare_by_identity
@@ -17,34 +15,28 @@ module PermissionForge
       @pf_rule_problems[rule] = PermissionForge::Operators::RuleProblem.for(rule)
     end
 
-    # A name that is not there, shown as stored (`onwer_id`, `ownr`) so the
-    # admin recognises the typo; humanized it would read like a real field.
-    VERBATIM_PROBLEMS = %i[missing_column unknown_association].freeze
-
-    # "`stauts` is not a column of Customer" (a real relationship by its label).
+    # "`stauts` is not a column of Customer": a name that is not there as
+    # stored (RuleProblem#verbatim?: `onwer_id`, `ownr`, `regex`, `nosuch`),
+    # so the admin recognises the typo — humanized it would read like a real
+    # field; a real column or relationship by its label; a value as stored,
+    # in code, next to its column's label. The sentence is the problem's
+    # (RuleProblem#ui_key). The model may be none this app can load.
     def pf_rule_problem_text(problem)
-      return pf_rule_problem_cause_text(problem) if problem.cause
-
       model = problem.model
-      name = problem.name
-      verbatim = VERBATIM_PROBLEMS.include?(problem.kind)
-      label = verbatim ? content_tag(:code, name, class: 'pf-mono-key') : pf_attribute_label(model, name)
-      pf_ui("rules.problems.#{problem.kind}#{'_html' if verbatim}", name: label, model: pf_resource_label(model.name))
+      args = { name: pf_rule_problem_name(problem), model: (pf_resource_label(model.name) if model) }
+      args[:value] = content_tag(:code, problem.value, class: 'pf-mono-key') if problem.value
+      pf_ui("rules.problems.#{problem.ui_key}", **args)
+    end
+
+    def pf_rule_problem_name(problem)
+      return content_tag(:code, problem.name, class: 'pf-mono-key') if problem.verbatim?
+
+      problem.model ? pf_attribute_label(problem.model, problem.name) : problem.name
     end
 
     # "Matches nothing: `stauts` is not a column of Customer"
     def pf_rule_problem_line(problem)
       safe_join([pf_ui('rules.matches_nothing'), ': ', pf_rule_problem_text(problem)])
-    end
-
-    # A path problem with a cause (Operators::RuleProblem#cause): an empty
-    # segment ("The relationship path has an empty step …"), or why the
-    # relationship cannot be followed ("Subject is a polymorphic relationship
-    # of Comment: …"), by RuleProblem#key.
-    def pf_rule_problem_cause_text(problem)
-      model = problem.model
-      pf_ui("rules.problems.#{problem.key}", name: pf_attribute_label(model, problem.name),
-                                             model: pf_resource_label(model.name))
     end
 
     # The rule a one-line summary shows: one that matches nothing first.

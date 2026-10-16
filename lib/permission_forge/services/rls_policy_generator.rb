@@ -276,10 +276,14 @@ module PermissionForge
         @conn.quote_table_name(PermissionForge::Resource.table_name)
       end
 
-      # A value the column cannot hold, or a column the table does not have,
-      # makes the rule FALSE — the app layer matches nothing for it, NULL rows
-      # included.
+      # A rule the app layer matches nothing for (Operators::RuleProblem: the
+      # one taxonomy — a join type or operator this version does not know, a
+      # path no join is built through, a qualifier naming no table, a column
+      # the table does not have, a value it cannot hold) makes the rule FALSE
+      # — NULL rows included.
       def rule_sql(rule)
+        return 'FALSE' if Operators::RuleProblem.for(rule)
+
         operator, field_name = rule.values_at(:operator, :field_name)
         value = typed_value(operator, rule.field_value, Operators::RuleColumn.find(field_name, [@model_class]))
         return 'FALSE' if value.equal?(UNUSABLE)
@@ -347,10 +351,14 @@ module PermissionForge
         PermissionForge::PermissionSetRule.active.where(resource_id: resources.select(:id)).includes(:permission_set)
       end
 
-      # A field_name that is not a name is translated, whatever the rule is:
-      # to FALSE, as the app layer matches nothing for it.
+      # nil for a rule that is compiled, else why it is skipped (reported in
+      # :skipped_rules). A rule the app layer matches nothing for
+      # (Operators::RuleProblem) is compiled whatever it is — to FALSE
+      # (rule_sql) — never skipped, which would leave the policy wider than
+      # the app layer. An operator the app layer has (a custom one registered
+      # in Operators::Registry) but this module has no SQL for is skipped.
       def untranslatable_reason(rule)
-        return unless Operators::RuleColumn.name?(rule.field_name)
+        return if Operators::RuleProblem.for(rule)
         return :join_rule if rule.join_rule?
         return :dotted_field_name if rule.field_name.to_s.include?('.')
         return :unknown_operator unless OPERATOR_SQL.key?(rule.operator)

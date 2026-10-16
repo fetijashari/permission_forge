@@ -49,11 +49,21 @@ module PermissionForge
       # Locked when the field, its Resource or its Permission Set is (is_editable: false).
       def locked? = !EditableLock.locked_record(field, resource).nil?
 
-      # The mask strategy the select starts on: the saved one, else the
+      # The mask strategy the select starts on: the saved one — also one this
+      # app does not know (unknown_strategy?), which stays as stored unless
+      # the admin picks another and is masked fully meanwhile — else the
       # recommended one for a sensitive column, else 'full'.
       def strategy
-        field&.mask_strategy || row.match&.strategy || DEFAULT_STRATEGY
+        field&.mask_strategy.presence || row.match&.strategy || DEFAULT_STRATEGY
       end
+
+      # The choices of the strategy select (MaskStrategyChoices): the saved
+      # one this app does not know is offered as stored, so saving the drawer
+      # with another change never rewrites it.
+      def strategy_choices = @strategy_choices ||= MaskStrategyChoices.new(field)
+
+      # The saved strategy is none this app knows: masked fully until fixed.
+      def unknown_strategy? = strategy_choices.unknown?
 
       # Other names of the model that follow this one (`_id` → `_uuid`,
       # `_cents` → base name), as the engine applies them (FieldVariants).

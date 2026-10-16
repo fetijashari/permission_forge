@@ -19,7 +19,8 @@ module PermissionForge
         }.freeze
 
         def call
-          [duplicate_fields, duplicate_actions, dependency_violations, unknown_models, unknown_fields].compact
+          [duplicate_fields, duplicate_actions, dependency_violations, unknown_models, unknown_fields,
+           unknown_mask_strategies].compact
         end
 
         private
@@ -131,9 +132,40 @@ module PermissionForge
           "#{set.name}#{' (muting)' if set.is_muting} › #{resource.name}.#{field.name} · #{people(set.id)}"
         end
 
+        # Field rows in effect that mask with a strategy this app does not
+        # know (Services::MaskValue.known?): written past the model, or a
+        # custom strategy since removed from config.custom_mask_strategies.
+        # Their values are masked fully until the row or the configuration is
+        # fixed — medium, high when people hold the set (they read ********
+        # where a lighter mask was meant, and nobody is told why).
+        def unknown_mask_strategies
+          fields = unknown_strategy_rows
+          return if fields.empty?
+
+          held = fields.any? { |field| people_counts.fetch(field.resource.permission_set_id, 0).positive? }
+          finding(held ? :high : :medium, :unknown_mask_strategies, 'Fields masked with a strategy this app does not know',
+                  'No built-in mask strategy and no entry of config.custom_mask_strategies has these names — a row ' \
+                  'written past the model, or a custom strategy since removed. Such a field is masked fully ' \
+                  '(********) until the row or the configuration is fixed: pick a strategy in the field drawer, or ' \
+                  'add the custom strategy back.',
+                  items: fields.map { |field| unknown_strategy_item(field) })
+        end
+
+        def unknown_strategy_rows
+          PermissionForge::ResourceField.in_effect.where(mask_access: true).includes(resource: :permission_set)
+                                        .order(:resource_id, :id)
+                                        .reject { |field| Services::MaskValue.known?(field.mask_strategy) }
+        end
+
+        def unknown_strategy_item(field)
+          resource = field.resource
+          "#{resource.permission_set.name} › #{resource.name}.#{field.name}: #{field.mask_strategy.inspect} · " \
+            "#{people(resource.permission_set_id)}"
+        end
+
+        # The one definition of "a model with a table" (PermissionForge::ModelLookup).
         def model?(name)
-          klass = name.safe_constantize
-          klass.is_a?(Class) && klass < ActiveRecord::Base
+          PermissionForge::ModelLookup.model?(name)
         end
       end
     end

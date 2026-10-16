@@ -107,6 +107,7 @@ module PermissionForge
       arel_matches: 'column.matches(',
       arel_named_function: "Arel::Nodes::NamedFunction.new('COALESCE'",
       schema_cache: 'connection.schema_cache.columns_hash(',
+      schema_cache_data_sources: Regexp.union('schema_cache.data_source_exists?(', 'schema_cache.clear_data_source_cache!('),
       association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!',
                                             'reflection.chain.any?', 'link.through_reflection?', 'link.source_reflection'),
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
@@ -163,6 +164,8 @@ module PermissionForge
       arel_matches: 'adapt Operators::Registry (LIKE operators)',
       arel_named_function: 'adapt PermissionSetUser.last_reviewed_column',
       schema_cache: 'adapt Operators::RuleColumn.on',
+      schema_cache_data_sources: 'adapt Operators::RuleColumn.data_source? / .reread_schema (a field name qualified with a ' \
+                                 'table that is not there matches nothing; the validation reads again before it refuses)',
       association_join_checks: 'adapt Operators::RulePath#through / #unjoinable_cause / #record_dependent? to what ' \
                                'Associations::JoinDependency#build checks before it joins and the scopes a :through ' \
                                'evaluates along its chain (a path it raises for must stay broken, one it joins followed)',
@@ -1350,6 +1353,28 @@ module PermissionForge
       assert_equal [:string, 'email'], [columns['email'].type, columns['email'].name],
                    canary(:schema_cache, 'a Column no longer answers name / type',
                           'Operators::ValueCasters pick a caster by column type: adapt RuleColumn')
+    end
+
+    canary_test :schema_cache_data_sources,
+                'connection.schema_cache.data_source_exists?(name) / clear_data_source_cache!(name): whether a table is there' do
+      pool.with_connection do |connection|
+        cache = connection.schema_cache
+
+        assert cache.data_source_exists?('pf_canary_records'), canary(
+          :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers true for a table that is there',
+          'Operators::RuleColumn.data_source? asks it before a qualified field name is left to the database: adapt it'
+        )
+        assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
+          :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers false for a table that is not there',
+          'a rule qualified with a table that is not there must match nothing: adapt Operators::RuleColumn.data_source?'
+        )
+        cache.clear_data_source_cache!('pf_canary_no_such_table')
+
+        assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
+          :schema_cache_data_sources, 'schema_cache.clear_data_source_cache!(name) no longer takes one name',
+          'Operators::RuleColumn.reread_schema forgets a cached answer before a rule is refused: adapt it'
+        )
+      end
     end
 
     canary_test :association_join_checks,

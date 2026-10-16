@@ -21,7 +21,7 @@ module PermissionForge
 
       teardown do
         Current.user = nil
-        PermissionForge.configuration.auto_query_scoping = false
+        PermissionForge.configuration.auto_query_scoping = :off
       end
 
       test 'an operator this version does not know matches nothing, under any join type' do
@@ -77,12 +77,15 @@ module PermissionForge
           assert_empty Customer.permission_scoped.to_a, what
           assert_raises(NotAuthorizedError, what) { Customer.find_by(id: @mine.id) }
           assert_raises(NotAuthorizedError, what) { Customer.find_by!(id: @mine.id) }
+          # The default scope applies filter rules only (a join rule is "unenforced" there, as documented).
+          next if stored.join_rule?
+
           PermissionForge.configuration.auto_query_scoping = :filter_only
 
           assert_equal 0, Customer.count, "#{what}: count under :filter_only"
           assert_empty Customer.all.to_a, "#{what}: all under :filter_only"
           assert_not Customer.where(nil).exists?, "#{what}: exists? under :filter_only"
-          PermissionForge.configuration.auto_query_scoping = false
+          PermissionForge.configuration.auto_query_scoping = :off
         end
         assert Customer.unscoped.exists?(@mine.id)
       end

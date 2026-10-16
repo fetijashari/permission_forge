@@ -21,6 +21,7 @@ en:
         not_editable: This record is not editable
         not_found: Record not found
         not_iso8601_time: is not an ISO 8601 date or time
+        resource_names_no_model: names no model this app can load
         route_not_found: No API endpoint answers this path and method
         section_missing: is missing, empty or not an object
         stats_authorization_missing: GET /api/stats needs config.api_stats_authorization,
@@ -514,9 +515,9 @@ en:
           No change is recorded.
         title: The audit log is not recording
       broken_rules_card:
-        description: 'These record rules name a field or a relationship that does
-          not exist. Each one matches nothing: everyone it applies to is denied every
-          record of the resource.'
+        description: 'These record rules name a field, table, relationship or condition
+          that does not exist, or a value their field cannot hold. Each one matches
+          nothing: everyone it applies to is denied every record of the resource.'
         fix: Fix rule
         locked_fix_html: 'Locked (%{flag}): it is managed by the system or API that
           created it, so fix the rule there (or unlock the set in code). A copy made
@@ -887,6 +888,7 @@ en:
           field: Pick the field to check.
           list: Add at least one value to the list.
           name_blank: Give the rule a name.
+          operator: Pick a condition from the list.
           range: Enter both ends of the range.
           value: Enter a value, or pick “the current user”.
         field: Field to check
@@ -1245,6 +1247,7 @@ en:
           with the current configuration it is readable and editable by default.'
         turned_off_muting: The setting for this field in “%{set}” is turned off, so
           this Muting Permission Set takes nothing away from it.
+        unknown_strategy: "(unknown — masked fully until you pick one)"
         used_by_rules: Used by rules
         variants: 'Also applies to:'
         variants_muting: 'Muting this also mutes:'
@@ -2010,6 +2013,7 @@ en:
         not_configured: Not configured
         'off': 'Off'
         sensitive: Sensitive
+        unknown_mask_strategy: Unknown mask strategy — masked fully until fixed
         virtual: Virtual
       breadcrumb: Breadcrumb
       cancel: Cancel
@@ -2189,6 +2193,10 @@ en:
           unjoinable_record_dependent_scope: "%{name} is a relationship of %{model}
             whose scope depends on the record: a rule cannot follow it"
           unknown_association_html: "%{name} is not a relationship of %{model}"
+          unknown_join_type_html: "%{name} is not a way of joining this version knows"
+          unknown_operator_html: "%{name} is not a condition this version knows"
+          unknown_table_html: "%{name} is not a table of this database"
+          unusable_value_html: "%{value} is not a value %{name} of %{model} can hold"
         where: where
       rules_count:
         one: Rules (%{count})
@@ -2238,6 +2246,8 @@ en:
         unknown_association: names %{association}, which is not an association of
           %{model}
         unknown_column: is not a column of %{model}
+        unknown_table: names %{name}, which is no table of this database
+        unusable_value: is not a value %{model}.%{name} can hold
         value_not_expected: does not require a value for this operator
         value_required: must not be blank for this operator
       resource:
