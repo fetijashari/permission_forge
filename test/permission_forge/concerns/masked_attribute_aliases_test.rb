@@ -353,8 +353,18 @@ module PermissionForge
       test 'an alias of the primary key is left to Rails' do
         record = record_of(::PfConcernThenAlias)
 
+        plain = row(::PfPlainAliases)
+
         assert_equal record.id, record.id_value
-        assert_equal record.id, record[:id_value]
+        # Up to Rails 8.1 `id_value` is an alias of `id`, so `[]` reads the id;
+        # from Rails 8.2 a model with a one-column key gets a plain `id_value`
+        # reader instead, and `[]` finds no attribute of that name.
+        if plain[:id_value].nil?
+          assert_nil record[:id_value]
+        else
+          assert_equal plain.id, plain[:id_value]
+          assert_equal record.id, record[:id_value]
+        end
       end
 
       test 'an alias of the primary key gets no accessor: the method Rails generates answers' do
