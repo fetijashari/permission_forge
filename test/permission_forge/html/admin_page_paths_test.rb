@@ -102,11 +102,12 @@ module PermissionForge
 
       def problems_of(state, locale)
         send(state.verb, pf(state.path), params: state.params.merge(locale: locale))
-        label = "#{locale} #{state.verb.upcase} #{state.path}"
-        return ["#{label}: answered #{response.status}, want 422"] unless response.status == 422
-        return [] unless state.renders?
+        problems = response.status == 422 ? rendered_problems(state) : ["answered #{response.status}, want 422"]
+        problems.map { |problem| "#{locale} #{state.verb.upcase} #{state.path}: #{problem}" }
+      end
 
-        body_problems(response.body).map { |problem| "#{label}: #{problem}" }
+      def rendered_problems(state)
+        state.renders? ? body_problems(response.body) : []
       end
 
       def body_problems(body)

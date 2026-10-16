@@ -108,11 +108,18 @@ module PermissionForge
       # Every page and every rendered error state, once (the markup does not
       # change with the locale).
       def screens
-        pages = paths.map do |path|
+        page_screens + error_screens
+      end
+
+      def page_screens
+        paths.map do |path|
           get pf(path)
           ["GET #{path}", response.body]
         end
-        pages + error_states.select(&:renders?).map do |state|
+      end
+
+      def error_screens
+        error_states.select(&:renders?).map do |state|
           send(state.verb, pf(state.path), params: state.params)
           ["#{state.verb.upcase} #{state.path}", response.body]
         end

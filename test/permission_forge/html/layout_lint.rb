@@ -74,11 +74,18 @@ module PermissionForge
       # A scrollable region is a tab stop with a name (pf_scroll_frame): the
       # keyboard and screen-reader cue; the stylesheet paints the visual one.
       def uncued(doc)
-        doc.css(FRAME).flat_map do |frame|
-          [("#{describe(frame)} has no tabindex=0" unless frame['tabindex'] == '0'),
-           ("#{describe(frame)} has no aria-label or aria-labelledby" if frame['aria-label'].to_s.strip.empty? && frame['aria-labelledby'].to_s.strip.empty?),
-           ("#{describe(frame)} is no region" unless frame.name == 'section' || frame['role'] == 'region')].compact
-        end
+        doc.css(FRAME).flat_map { |frame| frame_problems(frame) }
+      end
+
+      def frame_problems(frame)
+        what = describe(frame)
+        [("#{what} has no tabindex=0" unless frame['tabindex'] == '0'),
+         ("#{what} has no aria-label or aria-labelledby" unless named?(frame)),
+         ("#{what} is no region" unless frame.name == 'section' || frame['role'] == 'region')].compact
+      end
+
+      def named?(node)
+        %w[aria-label aria-labelledby].any? { |attribute| node[attribute].to_s.strip != '' }
       end
 
       # A scroll container that is not positioned is no containing block for

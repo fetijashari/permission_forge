@@ -112,28 +112,27 @@ module PermissionForge
         { rule: { name: '', field_name: 'name', operator: 'equal', value: 'x' } }
       end
 
-      def requests # rubocop:disable Metrics/MethodLength
+      def requests
+        refused.map { |site, verb, path, params| Request.new(site: site, verb: verb, path: path, params: params, status: 422) } +
+          [Request.new(site: 'audit_events#invalid_filters', verb: :get, path: '/audit.csv', params: { actor_id: %w[1 2] },
+                       status: 422, renders: false),
+           Request.new(site: 'people#refresh_cache', verb: :post, path: "#{person}/refresh_cache", params: {}, status: 200)]
+      end
+
+      # [site, verb, path, params] of every refused form or filter the admin re-renders.
+      def refused
         [
-          Request.new(site: 'assignments#create', verb: :post, path: '/assignments',
-                      params: { expiry: 'custom', custom_date: '' }, status: 422),
-          Request.new(site: 'audit_events#invalid_filters', verb: :get, path: '/audit', params: { from: '2026-02-30' }, status: 422),
-          Request.new(site: 'audit_events#invalid_filters', verb: :get, path: '/audit.csv', params: { actor_id: %w[1 2] },
-                      status: 422, renders: false),
-          Request.new(site: 'bulk_assignments#create', verb: :post, path: "#{set_path}/bulk_assignment",
-                      params: { identifiers: 'nobody@x.test' }, status: 422),
-          Request.new(site: 'people#erase', verb: :post, path: "#{person}/erasure", params: { confirmation: 'someone else' }, status: 422),
-          Request.new(site: 'permission_set_groups#render_blank_name', verb: :post, path: '/groups', params: { name: '' }, status: 422),
-          Request.new(site: 'permission_set_rules#save_rule', verb: :post, path: "#{resource_base}/rules", params: rule_params, status: 422),
-          Request.new(site: 'permission_set_rules#save_rule', verb: :patch, path: "#{resource_base}/rules/#{id(:rule)}",
-                      params: rule_params, status: 422),
-          Request.new(site: 'permission_sets#conditions', verb: :patch, path: "#{set_path}/conditions",
-                      params: { allowed_ips: "10.0.0.0/8\n10.0.0.300" }, status: 422),
-          Request.new(site: 'permission_sets#create', verb: :post, path: '/permission_sets', params: { type: 'granting', name: '' }, status: 422),
-          Request.new(site: 'resource_actions#render_invalid', verb: :post, path: "#{resource_base}/actions",
-                      params: { resource_action: { name: 'Bad Key!' } }, status: 422),
-          Request.new(site: 'resources#create', verb: :post, path: "#{set_path}/resources",
-                      params: { model_name: 'Customer', preset: 'read' }, status: 422),
-          Request.new(site: 'people#refresh_cache', verb: :post, path: "#{person}/refresh_cache", params: {}, status: 200)
+          ['assignments#create', :post, '/assignments', { expiry: 'custom', custom_date: '' }],
+          ['audit_events#invalid_filters', :get, '/audit', { from: '2026-02-30' }],
+          ['bulk_assignments#create', :post, "#{set_path}/bulk_assignment", { identifiers: 'nobody@x.test' }],
+          ['people#erase', :post, "#{person}/erasure", { confirmation: 'someone else' }],
+          ['permission_set_groups#render_blank_name', :post, '/groups', { name: '' }],
+          ['permission_set_rules#save_rule', :post, "#{resource_base}/rules", rule_params],
+          ['permission_set_rules#save_rule', :patch, "#{resource_base}/rules/#{id(:rule)}", rule_params],
+          ['permission_sets#conditions', :patch, "#{set_path}/conditions", { allowed_ips: "10.0.0.0/8\n10.0.0.300" }],
+          ['permission_sets#create', :post, '/permission_sets', { type: 'granting', name: '' }],
+          ['resource_actions#render_invalid', :post, "#{resource_base}/actions", { resource_action: { name: 'Bad Key!' } }],
+          ['resources#create', :post, "#{set_path}/resources", { model_name: 'Customer', preset: 'read' }]
         ]
       end
     end
