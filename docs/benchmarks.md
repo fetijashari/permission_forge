@@ -15,7 +15,7 @@ All figures below are microbenchmarks on one machine, against in-memory SQLite a
 
 ## How to Run
 
-```bash
+```bash fragment
 cd /path/to/permission_forge
 
 # All nine scripts, each in its own process

@@ -297,7 +297,7 @@ Inside a request two caches would answer the rebuild with what it already saw, s
 
 **A host app that derives its own cache entry** in an override of `regenerate_permissions` (after `super`) has the same race on its own write. It can use the same stamp:
 
-```ruby
+```ruby fragment
 def regenerate_permissions
   stamp = permission_invalidation_stamp
   super
@@ -341,7 +341,7 @@ Whether a transaction changes anything depends on what it reads. A transaction t
 
 **Asking for a rebuild inside a snapshot transaction settles at the commit** (`Cache::Settlement`). `regenerate_permissions` says that something changed — it is how to refresh after `update_all`, `insert_all` or `delete_all`, which run no callbacks. Inside such a transaction it can leave nothing in the cache, and by itself that would tell nobody: another request can cache the rows as they still are before the commit, and keep them until `cache_ttl`. So the user is invalidated once the **outermost** transaction has committed, with an ordinary `invalidate_permissions` (a new stamp, then the removal, which also catches a rebuild that straddles the commit):
 
-```ruby
+```ruby fragment
 ActiveRecord::Base.transaction do
   PermissionForge::PermissionSetUser.where(permission_set: set).delete_all # no callbacks
   user.regenerate_permissions   # builds for this request; the store is not touched
@@ -359,7 +359,7 @@ end                             # COMMIT, then: user.invalidate_permissions
 
 **A host app that writes a cache entry of its own** from an override of `regenerate_permissions` has to make the same decision for that entry: `PermissionForge::OpenTransaction.withholding` answers the open transaction when the hash just built must not be shared (nil otherwise).
 
-```ruby
+```ruby fragment
 def regenerate_permissions
   super
   Rails.cache.write(my_key, derive_from(permissions_hash)) unless PermissionForge::OpenTransaction.withholding
@@ -622,7 +622,7 @@ Each concrete controller only defines 4 template methods: `collection_scope`, `c
 
 When `user.regenerate_permissions` is called — or `user.permissions_hash` misses the cache and rebuilds read-through — the following hash is computed and cached:
 
-```ruby
+```ruby fragment
 {
   profile: { id: 1, uuid: "...", name: "Alice", email: "alice@example.com" },
   preferences: {},

@@ -36,7 +36,7 @@ PermissionForge can also redact sensitive fields from **Rails logs and error rep
 
 Both flags default to `true`, so the integration is active out of the box. Set `filter_parameters_integration = false` to opt out:
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   config.gdpr_defaults = true                  # required — patterns come from gdpr_field_patterns
@@ -46,7 +46,7 @@ end
 
 ### Manual (one-liner)
 
-```ruby
+```ruby fragment
 # config/initializers/filter_parameter_logging.rb
 Rails.application.config.filter_parameters += PermissionForge.gdpr_filter_parameters
 ```
@@ -71,7 +71,7 @@ The `email` mask strategy outputs `j***@example.com` — the domain is visible. 
 
 **Recommendation:** For external-facing APIs or high-sensitivity environments, use the `full` strategy for email fields instead:
 
-```ruby
+```ruby fragment
 PermissionForge::ResourceField.create!(
   resource: resource, name: 'email', label: 'Email',
   read_access: true, mask_access: true, mask_strategy: 'full'
@@ -80,7 +80,7 @@ PermissionForge::ResourceField.create!(
 
 Or register a custom strategy that also masks the domain:
 
-```ruby
+```ruby fragment
 config.custom_mask_strategies = {
   'email_full' => ->(value) { value.present? ? '***@***.***' : '********' }
 }

@@ -33,7 +33,7 @@ Available in English, Albanian and Macedonian; light, dark and auto themes.
 
 Add this to your `config/routes.rb`:
 
-```ruby
+```ruby fragment
 # config/routes.rb
 Rails.application.routes.draw do
   mount PermissionForge::Engine, at: "/permissions"
@@ -62,7 +62,7 @@ Now visit `http://localhost:3000/permissions` to open the admin.
 
 The generated initializer has them commented under "Admin screens", Option A: uncomment the two lines and set `PF_ADMIN_USER` and `PF_ADMIN_PASSWORD` in the environment. Or read them from Rails encrypted credentials:
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   config.http_basic_auth_user     = Rails.application.credentials.dig(:permission_forge, :username)
@@ -72,7 +72,7 @@ end
 
 Store credentials in Rails encrypted credentials:
 
-```bash
+```bash fragment
 EDITOR=vim rails credentials:edit
 ```
 
@@ -86,7 +86,7 @@ permission_forge:
 
 If you want to handle authentication yourself (via Devise, Warden, or custom logic), disable HTTP Basic and set a custom base controller:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.http_basic_auth_enabled = false
   config.base_controller_class = "::AdminController"  # Your auth'd controller
@@ -101,7 +101,7 @@ Now all PermissionForge admin controllers inherit from `AdminController` instead
 
 Rails 8's `bin/rails generate authentication` puts `before_action :require_authentication` in your `ApplicationController`, and for a signed-out visitor its `request_authentication` redirects to `new_session_path`. Inside the engine that path does not resolve, so a signed-out `GET /permissions` is a 500. Inherit from a base controller that overrides it, and check that the signed-in user is an admin:
 
-```ruby
+```ruby file=app/controllers/admin/base_controller.rb
 # app/controllers/admin/base_controller.rb
 class Admin::BaseController < ApplicationController
   before_action :require_permissions_admin
@@ -122,7 +122,7 @@ class Admin::BaseController < ApplicationController
 end
 ```
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 config.http_basic_auth_enabled = false
 config.base_controller_class   = '::Admin::BaseController'
@@ -132,7 +132,7 @@ config.base_controller_class   = '::Admin::BaseController'
 
 ### Using Devise Route Constraints
 
-```ruby
+```ruby fragment
 # config/routes.rb
 authenticate :user, ->(u) { u.admin? } do
   mount PermissionForge::Engine, at: "/permissions"
@@ -224,7 +224,7 @@ By default you add an action by typing its key (**+ Add action**). That form sta
 
 ### Listing your controller actions
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.controller_action_discovery = true
 end
@@ -276,7 +276,7 @@ Only keys that discovery lists for that resource can be added this way. Any othe
 
 ### Admin options
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # Which models "Add a resource" offers (default: every app model with a table)
   config.admin_model_resolver = -> { [Customer, Invoice, Deal] }
@@ -299,7 +299,7 @@ end
 
 ### People in lists and pickers
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # Which people appear (default: user_model.order(:id)), capped by user_list_limit (500)
   config.user_list_resolver = -> { User.active.order(:last_name, :first_name) }
@@ -319,7 +319,7 @@ A resolver that returns an Array instead of a relation is searched in Ruby and l
 
 Every colour, radius and font is a `--pf-*` custom property on `.pf-root` (light and dark sets). To re-theme, override the empty partial `permission_forge/shared/_head_extra` in your app and link a stylesheet:
 
-```erb
+```erb fragment
 <%# app/views/permission_forge/shared/_head_extra.html.erb %>
 <link rel="stylesheet" href="<%= asset_path('permission_forge_theme.css') %>">
 ```
@@ -336,7 +336,7 @@ Main tokens: `--pf-bg`, `--pf-surface`, `--pf-surface-2`, `--pf-border`, `--pf-t
 
 Copy any view to your app at the same path and Rails uses yours:
 
-```bash
+```bash fragment
 mkdir -p app/views/permission_forge/home
 cp $(bundle show permission_forge)/app/views/permission_forge/home/index.html.erb app/views/permission_forge/home/
 ```
@@ -345,7 +345,7 @@ cp $(bundle show permission_forge)/app/views/permission_forge/home/index.html.er
 
 The privacy audit's **This is intended** button stores `resource_fields.sensitive_acknowledged_at`. New installs get it; existing installs add it with:
 
-```bash
+```bash fragment
 bin/rails generate permission_forge:upgrade
 bin/rails db:migrate
 ```

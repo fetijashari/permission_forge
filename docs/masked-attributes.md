@@ -34,7 +34,7 @@ At boot this is followed by `Auto-applied masking is not complete at boot ...`. 
 
 You can change this behavior via `config.auto_apply_masked_attributes`:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # :auto / true  — auto-apply to every model with a Resource record (default)
   config.auto_apply_masked_attributes = :auto
@@ -51,7 +51,7 @@ end
 
 Auto-apply is convenient: a model is masked as soon as a `Resource` row names it, in every process. It costs one cache-store read per request and job, and a model is masked only once a row names it. In production, include `MaskedAttributes` in every model that holds personal data and turn auto-apply off (or list those models):
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 config.auto_apply_masked_attributes = false   # or ['Customer', 'Order']
 
@@ -65,7 +65,7 @@ The model is masked from the moment it loads, whatever the rows say, and no requ
 
 ## Manual include (when auto-apply is off)
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   include PermissionForge::Concerns::PermissionScopedFindable  # row-level
   include PermissionForge::Concerns::MaskedAttributes          # field-level
@@ -126,7 +126,7 @@ A subclass on its parent's table (`VipCustomer < Customer`) answers to its own `
 
 An alias is not a field of its own. Reading or writing it is reading or writing the attribute it points to, at that attribute's level:
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   alias_attribute :mail, :email
 end
@@ -181,7 +181,7 @@ When the user lacks `read_access` on a field:
 - **`attributes` / `as_json` / `to_json`**: the key is **omitted entirely** by default. This matches `Security.stripInaccessible()` — the field literally doesn't exist in the hash. Set `config.omit_hidden_in_attributes_hash = false` to include the key with a sentinel value instead.
 - **`read_attribute` / `[]`**: returns `config.hidden_attribute_value` (default: `nil`). Set this to a custom sentinel (e.g. `RedactedValue.new`) if `nil` is ambiguous in your domain.
 
-```ruby
+```ruby fragment
 # Default
 customer.read_attribute(:domain)  # => nil
 customer.attributes               # => { 'name' => 'Acme', 'email' => 'c***@acme.com' }
@@ -204,7 +204,7 @@ The same precedence as `FiltersResponseAttributes`:
 | `true` | `true` | Masked via `MaskValue` (`mask_strategy`) |
 | `true` | `false` | Raw value |
 
-```ruby
+```ruby fragment
 customer.read_attribute(:email)
 # => "c***@acme.com"  when read_access: true, mask_access: true, mask_strategy: 'email'
 # => "contact@acme.com"  when read_access: true, mask_access: false
@@ -234,7 +234,7 @@ A virtual field is a field that is not a column: a method, a store accessor, an 
 
 `config.mask_virtual_attributes` extends the model-level enforcement to virtual readers:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # false / nil    — off (default)
   config.mask_virtual_attributes = false
@@ -257,7 +257,7 @@ A name is never wrapped when it is the primary key, a column, a method `ActiveRe
 
 The engine wraps the readers at boot and whenever the concern is applied to a newly named model (in every process, through `MaskingSync`), for every selected model that has the concern — auto-applied or included by the model itself. If you include the concern yourself on a model that has no `Resource` row yet, or want other names covered, call it at the end of the class body:
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   include PermissionForge::Concerns::MaskedAttributes
 
@@ -277,7 +277,7 @@ If the model's `extra_fields_method` raises while the readers are being wrapped,
 
 To check one reader from the console:
 
-```ruby
+```ruby fragment
 PermissionForge::Concerns::MaskedAttributes::VirtualReaders.masked?(Customer, :full_address)
 # => true when the reader is wrapped and the config selects Customer
 ```
@@ -310,7 +310,7 @@ Attribute-API attributes go through `read_attribute`, exactly like columns. (`at
 
 Code that needs the real value (the model's own validations and callbacks, exports run for a signed-in user) asks for it explicitly:
 
-```ruby
+```ruby fragment
 before_save :normalize_address
 
 def normalize_address
@@ -364,7 +364,7 @@ Validators judge the stored value of the attribute they validate: a masked or hi
 
 When a field returns an unexpected value (nil where you expected raw, raw where you expected masked), ask the concern to explain its decision from the console:
 
-```ruby
+```ruby fragment
 PermissionForge::Concerns::MaskedAttributes.explain(customer, :email)
 # => { attribute: :email, field_configured: true, field_entry: { read_access: true, ... },
 #      unconfigured_field_strategy: :block, raw_value: "contact@acme.com",
@@ -385,7 +385,7 @@ For a 1000-row index page calling `customers.map(&:as_json)`, expect 5–15ms ad
 
 ## Configuration reference
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # Auto-apply mode. :auto/true (default), array of names, or false/nil.
   config.auto_apply_masked_attributes = :auto

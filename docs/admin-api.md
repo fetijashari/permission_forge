@@ -8,7 +8,7 @@ The API runs alongside the HTML admin UI — you can use both, either, or neithe
 
 Add these settings to your initializer:
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   config.api_enabled = true
@@ -18,7 +18,7 @@ end
 
 Then mount the engine (if not already mounted):
 
-```ruby
+```ruby fragment
 # config/routes.rb
 mount PermissionForge::Engine, at: '/permissions'
 ```
@@ -33,7 +33,7 @@ The API supports three authentication strategies. Choose the one that fits your 
 
 Pass a lambda that receives the controller instance and returns `true`/`false`:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.api_enabled = true
   config.api_auth = lambda { |_controller|
@@ -48,7 +48,7 @@ The lambda has full access to the controller, so you can check headers, tokens, 
 
 `api_auth` only proves who the caller is. Changes and assignments also need `api_action_authorization` and `api_assignment_authorization` (see [Security Considerations](#security-considerations)): until both are set they are refused with 403, and the message names the option that is missing.
 
-```ruby
+```ruby fragment
 # Example: API key authentication
 config.api_auth = lambda { |controller|
   api_key = controller.request.headers['X-API-Key']
@@ -66,7 +66,7 @@ config.api_auth = lambda { |controller|
 
 If your app already has an admin base controller with authentication built in (e.g., Devise + role checking), inherit from it:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.api_enabled = true
   config.api_base_controller_class = '::Api::V1::Admin::BaseController'
@@ -80,7 +80,7 @@ Your `Api::V1::Admin::BaseController` handles authentication and authorization �
 
 If `api_auth` is `nil` (the default), **all API requests return 401 Unauthorized** (no body). This is the safe default — the API is locked until you explicitly configure authentication.
 
-```ruby
+```ruby fragment
 # This is the default — API routes exist but return 401
 config.api_enabled = true
 # config.api_auth = nil  # <- default, all requests get 401
@@ -101,7 +101,7 @@ On the default `api_base_controller_class` (`::ActionController::Base`) your app
 - **Inherit your sign-in (Option B).** Set `api_base_controller_class` to an application controller that resumes the session (Rails 8's `Authentication` concern, Devise's `authenticate_user!`). `current_user_resolver` then names the signed-in user, for the audit log and for your authorization lambdas.
 - **Resolve the actor from the credential `api_auth` verified.** For a token or key client, map that credential to who it belongs to:
 
-  ```ruby
+  ```ruby fragment
   config.audit_actor_resolver = ->(controller) {
     key = ApiKey.active.find_by(key: controller.request.headers['X-API-Key'])
     key && { type: 'api', id: key.id, label: key.name }  # or key.user, to name a person
@@ -224,7 +224,7 @@ All URLs below assume the engine is mounted at `/permissions`. Replace with your
 
 The stats endpoint is closed to everyone `api_auth` admits until you say who may read it:
 
-```ruby
+```ruby fragment
 config.api_stats_require_admin = true  # default
 # Who may read GET /api/stats (called with the controller; truthy allows)
 config.api_stats_authorization = ->(controller) { PermissionForge.current_user&.admin? }
@@ -238,7 +238,7 @@ While `api_stats_authorization` is not set the endpoint answers 403 with `"GET /
 
 Through 0.14.1 the only way in was an `api_auth` that set `@admin = true` on the controller (`controller.instance_variable_set(:@admin, true)`). That still works while `api_stats_authorization` is not set, with a deprecation warning, and is removed in 0.16.
 
-```bash
+```bash fragment
 # Get overview counts
 GET /permissions/api/stats
 
@@ -259,7 +259,7 @@ curl http://localhost:3000/permissions/api/stats
 
 #### Permission Sets
 
-```bash
+```bash fragment
 # List all permission sets
 GET /permissions/api/permission_sets
 
@@ -323,7 +323,7 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/clone
 
 #### Resources (nested under permission set)
 
-```bash
+```bash fragment
 # List resources for a permission set
 GET /permissions/api/permission_sets/:ps_uuid/resources
 
@@ -387,7 +387,7 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
 
 #### Resource Fields (nested under resource)
 
-```bash
+```bash fragment
 # List fields for a resource
 GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/fields
 
@@ -427,7 +427,7 @@ DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/fields/:uuid
 
 Custom actions beyond CRUD (e.g., sync, export, approve):
 
-```bash
+```bash fragment
 # List actions for a resource
 GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/actions
 
@@ -463,7 +463,7 @@ A row that already carries such a name (created before this rule) can still be r
 
 Row-level query rules:
 
-```bash
+```bash fragment
 # List rules for a resource
 GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules
 
@@ -506,7 +506,7 @@ Rule `field_value`s can contain sensitive data (user IDs, account numbers, busin
 
 #### Permission Set Users (assign users to sets)
 
-```bash
+```bash fragment
 # List users in a permission set
 GET /permissions/api/permission_sets/:ps_uuid/users
 
@@ -556,7 +556,7 @@ Anything else is a 422 and nothing is assigned: `"tuesday"`, `"next tuesday-ish"
 
 #### Bulk User Assignment
 
-```bash
+```bash fragment
 # Bulk assign users to a permission set
 POST /permissions/api/permission_sets/:ps_uuid/users/bulk
 
@@ -599,7 +599,7 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
 
 #### Permission Set Groups
 
-```bash
+```bash fragment
 # List all groups
 GET /permissions/api/permission_set_groups
 
@@ -644,7 +644,7 @@ curl -X POST http://localhost:3000/permissions/api/permission_set_groups/abc-123
 
 **Membership is organisational: it grants no access.** Adding someone to a group does not give them the group's Permission Sets; permissions come only from assignments (`POST …/permission_sets/:uuid/users`, above). A 201 here means "now listed as a member", not "can now do what the group's sets allow". To give someone a group's access, assign each of its sets. See [Permission Set Groups](permission-set-groups.md).
 
-```bash
+```bash fragment
 # List the members of a group
 GET /permissions/api/permission_set_groups/:group_uuid/users
 
@@ -662,7 +662,7 @@ DELETE /permissions/api/permission_set_groups/:group_uuid/users/:uuid
 
 The [audit log](audit-log.md) over the API. `GET` only: no route writes, updates or deletes an event. It needs `api_enabled`, passes `api_auth`, and then `config.audit_log_authorization`: when it is set, only an exact `true` allows (anything else, or an error, is **403** and an `api.auth_failed` event with reason `audit_log_not_authorized`); when it is not set (the default), anyone who passes `api_auth` can read the whole log. Each call that returns 2xx is recorded as `audit.viewed` (`scope: api`).
 
-```bash
+```bash fragment
 # A page of events, newest first
 GET /permissions/api/audit_events?event=assignment.revoked&from=2026-07-01&to=2026-09-30&page=1&per_page=100
 
@@ -707,7 +707,7 @@ Writes through the API record their own events: the API sets the actor (`audit_a
 
 The API ships with lightweight built-in serializers (no dependencies). If your app uses ActiveModel::Serializer (AMS), you can override any serializer:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.api_serializer_overrides = {
     permission_set: MyApp::PermissionSetSerializer,
@@ -727,7 +727,7 @@ AMS 0.10's default adapter (`:attributes`) ignores `root:` and `meta:`: the resp
 
 All collection endpoints are paginated by default with a built-in LIMIT/OFFSET paginator. The `per_page` parameter is hard-capped at `api_max_per_page` (default: 100) to prevent DoS via large result sets.
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.api_max_per_page = 100     # Hard cap — clients cannot exceed this
   config.api_default_per_page = 15  # Default when per_page param is omitted
@@ -738,7 +738,7 @@ end
 
 To use a custom pagination handler (e.g., Kaminari, will_paginate):
 
-```ruby
+```ruby fragment
 # With Kaminari
 config.api_pagination_handler = ->(scope, page, per_page) { scope.page(page).per(per_page) }
 
@@ -748,7 +748,7 @@ config.api_pagination_handler = ->(scope, page, per_page) { scope.paginate(page:
 
 The pagination metadata reads `total_count` from what the handler returns (Kaminari answers it). will_paginate's collections answer `total_entries` instead, which is not read: `total_count` then falls back to the size of the page. Return an object that answers `total_count`, for example:
 
-```ruby
+```ruby fragment
 config.api_pagination_handler = lambda { |scope, page, per_page|
   records = scope.paginate(page: page, per_page: per_page)
   records.define_singleton_method(:total_count) { records.total_entries }
@@ -760,7 +760,7 @@ config.api_pagination_handler = lambda { |scope, page, per_page|
 
 Pass `page` and `per_page` query params:
 
-```bash
+```bash fragment
 curl "http://localhost:3000/permissions/api/permission_sets?page=2&per_page=10"
 ```
 
@@ -785,7 +785,7 @@ The response always includes pagination metadata:
 
 `api_base_controller_class` defaults to `ActionController::Base`. This means API controllers do **NOT** inherit your app's authentication chain (Devise, Warden, etc.) by default. You should override this to inherit your auth stack:
 
-```ruby
+```ruby fragment
 config.api_base_controller_class = '::Api::BaseController'
 ```
 
@@ -793,7 +793,7 @@ config.api_base_controller_class = '::Api::BaseController'
 
 `api_action_authorization` decides which creates, updates, destroys, clones and field generations a caller may make. Until it is set, every one of them is refused with 403 (`api_require_authorization`, below):
 
-```ruby
+```ruby fragment
 config.api_action_authorization = ->(controller, action, record) {
   PermissionForge.current_user&.admin?
 }
@@ -805,7 +805,7 @@ The lambda receives the controller instance, action name (`:create`, `:update`, 
 
 `api_assignment_authorization` decides who may change who holds a Permission Set or belongs to a group. Until it is set, every assignment endpoint is refused with 403:
 
-```ruby
+```ruby fragment
 config.api_assignment_authorization = ->(controller, target, user_ids) {
   PermissionForge.current_user&.admin?
 }
@@ -813,7 +813,7 @@ config.api_assignment_authorization = ->(controller, target, user_ids) {
 
 When nothing signs a user in (no authenticating base controller), decide from the authenticated client instead, for example a key with its own scope:
 
-```ruby
+```ruby fragment
 config.api_action_authorization = ->(controller, _action, _record) {
   ApiKey.active.exists?(key: controller.request.headers['X-API-Key'], scope: 'permissions:write')
 }
@@ -828,7 +828,7 @@ config.api_assignment_authorization = ->(controller, _target, _user_ids) {
 
 `api_auth` proves identity, not admin rights. So by default the API refuses changes until both lambdas are set:
 
-```ruby
+```ruby fragment
 config.api_require_authorization = true  # default
 ```
 
@@ -856,7 +856,7 @@ If your base controller declares `protect_from_forgery with: :exception`, the AP
 
 ## Full Configuration Example
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   # Core settings
@@ -900,7 +900,7 @@ PermissionForge invalidates affected users' cached permissions whenever a permis
 
 **Example:** Disabling a resource via the API immediately revokes access for all affected users:
 
-```bash
+```bash fragment
 # Before: user can read Customer
 curl -X PATCH /permissions/api/permission_sets/abc/resources/def \
   -d '{ "resource": { "is_active": false } }'

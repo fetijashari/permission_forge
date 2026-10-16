@@ -26,7 +26,7 @@ Row-level rules solve this.
 
 The concern overrides the class methods `find_by` and `find_by!`, and adds a `permission_scoped` relation. It does **not** rewrite `find` (by primary key), bare `where`, `first`, `all`, association traversal, or `find_by` called on a relation or an association — Rails resolves those through relation methods the concern does not hook. With `auto_query_scoping = :off` (the default) these all skip the rules:
 
-```ruby
+```ruby fragment
 Customer.where(active: true).find_by(uuid: uuid)  # no rules
 supplier.customers.find_by(uuid: uuid)            # no rules
 Customer.where(nil).find_by!(uuid: uuid)          # no rules
@@ -37,7 +37,7 @@ Customer.find_sole_by(uuid: uuid)                 # no rules
 - Use the class-level **`Customer.find_by` / `Customer.find_by!`** for single-record lookups.
 - Start from **`Model.permission_scoped`** to get a rule-constrained relation you can chain freely:
 
-```ruby
+```ruby fragment
 Customer.permission_scoped                      # rules applied
 Customer.permission_scoped.where(active: true)  # rules carried through
 Customer.permission_scoped.order(:name).first   # still scoped
@@ -50,7 +50,7 @@ Customer.permission_scoped.find(id)             # scoped find by PK
 
 Add `PermissionScopedFindable` to any model you want to protect:
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   include PermissionForge::Concerns::PermissionScopedFindable
 end
@@ -60,7 +60,7 @@ end
 
 ## Step 2: Create a Rule
 
-```ruby
+```ruby fragment
 PermissionForge::PermissionSetRule.create!(
   permission_set: sales_pset,
   resource: customer_resource,
@@ -77,7 +77,7 @@ No refresh step is needed: saving the rule invalidates the cached permissions of
 
 ## Step 3: It Just Works
 
-```ruby
+```ruby fragment
 Current.user = user  # user.id = 42
 
 # This record is owned by the current user
@@ -115,7 +115,7 @@ Customer.find_by(uuid: customer_b.uuid)
 
 For `in` and `not_in`, pass a **comma-separated** `field_value`:
 
-```ruby
+```ruby fragment
 PermissionForge::PermissionSetRule.create!(
   # ...
   operator: 'in',
@@ -143,7 +143,7 @@ PermissionForge::PermissionSetRule.create!(
 
 For `between`, pass **exactly two comma-separated values** (low, high), each a value of the column's type:
 
-```ruby
+```ruby fragment
 PermissionForge::PermissionSetRule.create!(
   # ...
   operator: 'between',
@@ -224,7 +224,7 @@ This is how you create "show me only my records" rules without hardcoding user I
 
 Sometimes the field you want to filter on isn't directly on the model — it's on a related model. For example, you want to filter Customers by the user associated with the organization's members.
 
-```ruby
+```ruby fragment
 PermissionForge::PermissionSetRule.create!(
   permission_set: pset,
   resource: customer_resource,
@@ -303,7 +303,7 @@ Like every mapped exception, an unrescued denial is not reported to `Rails.error
 
 **Opting out.** A `rescue_from` in your controller runs first and decides (below). To answer a different status without a handler, set it in `config/application.rb` or `config/environments/*.rb` — `config/initializers` run after Rails has read the setting:
 
-```ruby
+```ruby fragment
 # config/application.rb — e.g. hide that the record exists
 config.action_dispatch.rescue_responses['PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError'] = :not_found
 ```
@@ -312,8 +312,10 @@ config.action_dispatch.rescue_responses['PermissionForge::Concerns::PermissionSc
 
 An HTML app (`ActionController::Base`), here with Rails 8's authentication generator:
 
-```ruby
+```ruby file=app/controllers/application_controller.rb
 class ApplicationController < ActionController::Base
+  include Authentication # the generator's concern: authenticated?, resume_session, require_authentication
+
   rescue_from PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError do |error|
     respond_to do |format|
       format.html do
@@ -343,7 +345,7 @@ class ApplicationController < ActionController::Base
 end
 ```
 
-```erb
+```erb file=app/views/errors/forbidden.html.erb
 <%# app/views/errors/forbidden.html.erb: rendered in your layout %>
 <h1>You are not allowed to see this page</h1>
 <% if authenticated? %>
@@ -365,14 +367,29 @@ The template has no link to the start page on purpose: for someone who holds no 
 
 **After that sign-in the address bar still shows the sign-in page.** Turbo renders a 4xx answer to a form submission in place without changing the URL, so the 403 page of the root is shown at `/session/new`. Pressing Reload then asks for the sign-in page again, and the generator's `SessionsController#new` (`allow_unauthenticated_access`) neither resumes the session nor sends a signed-in visitor anywhere: the sign-in form comes back with nobody shown as signed in, although the session is valid. Send a signed-in visitor on from the sign-in page:
 
-```ruby
+```ruby file=app/controllers/sessions_controller.rb
 class SessionsController < ApplicationController
   allow_unauthenticated_access only: %i[ new create ]
+  rate_limit to: 10, within: 3.minutes, only: :create, with: -> { redirect_to new_session_path, alert: "Try again later." }
 
   def new
     redirect_to after_authentication_url if authenticated? # signed in already: never the sign-in form
   end
+
   # create and destroy as generated
+  def create
+    if user = User.authenticate_by(params.permit(:email_address, :password))
+      start_new_session_for user
+      redirect_to after_authentication_url
+    else
+      redirect_to new_session_path, alert: "Try another email address or password."
+    end
+  end
+
+  def destroy
+    terminate_session
+    redirect_to new_session_path, status: :see_other
+  end
 end
 ```
 
@@ -382,7 +399,7 @@ Do not answer a denial with `redirect_back fallback_location: root_path`. When t
 
 **Keep the sign-in pages out of the guard.** With the guard in `ApplicationController`, Rails 8's `SessionsController` is guarded too (the guard maps it to the generator's `Session` model), and under `action_guard_nil_user_strategy = :deny` every signed-out request to it is refused. Nobody can sign in: the sign-in page shows the 403 page ("Sign in to see it", with a link to the same page) instead of the form. Sign out ends the session, then lands on that page; with a handler that answers an empty 403, Sign out seems to do nothing: Turbo keeps the old page, "Signed in as …" still in the header. Exclude the controllers in the initializer (`passwords` too, so that a `Password` model added later does not lock out password resets):
 
-```ruby
+```ruby fragment
 config.controller_discovery_exclude += %w[sessions passwords] # the sign-in pages stay reachable signed out
 ```
 
@@ -392,7 +409,7 @@ Write the message yourself. `error.action` is the key that was checked (`index`,
 
 A JSON API (`ActionController::API`):
 
-```ruby
+```ruby file=app/controllers/api/base_controller.rb
 class Api::BaseController < ActionController::API
   rescue_from PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError do |error|
     render json: { error: { status: 403, messages: error.failure_messages.presence || ['Forbidden'] } },
@@ -422,7 +439,7 @@ If a resource has `view_all: true` or `modify_all: true`, **all row-level rules 
 
 `view_all` and `modify_all` are read the same way: either one lets the user past the rules of `find_by`, `find_by!` and `permission_scoped` (the gem does not tell reads from writes there).
 
-```ruby
+```ruby fragment
 resource = PermissionForge::Resource.create!(
   permission_set: admin_pset,
   name: 'Customer',
@@ -434,7 +451,7 @@ resource = PermissionForge::Resource.create!(
 
 Check at runtime:
 
-```ruby
+```ruby fragment
 user.can_view_all?('Customer')   # => true
 user.can_modify_all?('Customer') # => true
 ```
@@ -448,7 +465,7 @@ Rules are bypassed when:
 2. The user has `view_all` or `modify_all` on the resource
 3. The user has no active rule for the model (no rules means no restriction)
 
-```ruby
+```ruby fragment
 # In a job — no current user, default nil_user_strategy :bypass
 Current.user = nil
 Customer.find_by(uuid: 'abc')  # Works normally, no rules applied

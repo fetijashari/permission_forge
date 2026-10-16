@@ -111,25 +111,9 @@ module DocBlocks
   # same character and nothing else, so a ```ruby inside a ````markdown block
   # is content, not a block.
   def parse(text, file:)
-    blocks = []
-    heading = nil
-    open = nil
-    text.lines.each_with_index do |raw, index|
-      line = raw.chomp
-      if open
-        if closes?(line, open)
-          blocks << build_block(file, open, heading)
-          open = nil
-        else
-          open[:body] << raw
-        end
-      elsif (match = line.match(FENCE))
-        open = { line: index + 1, fence: match[:fence], info: match[:info].strip, body: +'' }
-      elsif line.match?(HEADING)
-        heading = line.strip
-      end
-    end
-    blocks
+    parser = Parser.new(file)
+    text.lines.each_with_index { |raw, index| parser.feed(raw, index + 1) }
+    parser.blocks
   end
 
   def closes?(line, open)
@@ -137,9 +121,36 @@ module DocBlocks
     stripped.start_with?(open[:fence]) && stripped.delete(open[:fence][0]).empty?
   end
 
-  def build_block(file, open, heading)
-    lang, *tokens = open[:info].split(/\s+/)
-    Block.new(file: file, line: open[:line], lang: lang.to_s, tokens: tokens, body: open[:body], heading: heading)
+  # Reads a document line by line: the heading in force, the open fence and
+  # the blocks closed so far.
+  class Parser
+    attr_reader :blocks
+
+    def initialize(file)
+      @file = file
+      @blocks = []
+      @heading = nil
+      @open = nil
+    end
+
+    def feed(raw, number)
+      line = raw.chomp
+      if @open
+        DocBlocks.closes?(line, @open) ? close : @open[:body] << raw
+      elsif (match = line.match(FENCE))
+        @open = { line: number, fence: match[:fence], info: match[:info].strip, body: +'' }
+      elsif line.match?(HEADING)
+        @heading = line.strip
+      end
+    end
+
+    private
+
+    def close
+      lang, *tokens = @open[:info].split(/\s+/)
+      @blocks << Block.new(file: @file, line: @open[:line], lang: lang.to_s, tokens: tokens, body: @open[:body], heading: @heading)
+      @open = nil
+    end
   end
 
   def literal?(claim) = LITERAL.match?(claim.to_s.strip)
@@ -150,24 +161,32 @@ module DocBlocks
   end
 
   def block_problems(block)
-    problems = []
-    problems << "#{block.location}: spell the language `#{LANG_ALIASES[block.lang]}`, not `#{block.lang}`" if LANG_ALIASES.key?(block.lang)
-    problems.concat(marker_problems(block))
-    problems << "#{block.location}: a `#{block.marker}` ruby block must be valid Ruby (#{syntax_error(block.body)})" if ruby_program?(block) && syntax_error(block.body)
-    problems.concat(handler_problems(block))
-    problems
+    [alias_problem(block), *marker_problems(block), syntax_problem(block), *handler_problems(block)].compact
+  end
+
+  def alias_problem(block)
+    "#{block.location}: spell the language `#{LANG_ALIASES[block.lang]}`, not `#{block.lang}`" if LANG_ALIASES.key?(block.lang)
+  end
+
+  def syntax_problem(block)
+    return unless ruby_program?(block)
+
+    error = syntax_error(block.body)
+    "#{block.location}: a `#{block.marker}` ruby block must be valid Ruby (#{error})" if error
   end
 
   def marker_problems(block)
-    if block.tokens.empty?
-      return [] unless block.must_mark?
+    return token_problems(block) unless block.tokens.empty?
+    return [] unless block.must_mark?
 
-      return ["#{block.location}: ```#{block.lang} block has no marker: say `run`, `fragment` or `file=<path>`"]
-    end
+    ["#{block.location}: ```#{block.lang} block has no marker: say `run`, `fragment` or `file=<path>`"]
+  end
 
+  def token_problems(block)
+    tokens = block.tokens
     problems = []
-    problems << "#{block.location}: `#{block.tokens.first}` is not a marker (run, fragment, file=<path>)" unless block.marked?
-    problems << "#{block.location}: one marker per block, got `#{block.tokens.join(' ')}`" if block.tokens.size > 1
+    problems << "#{block.location}: `#{tokens.first}` is not a marker (run, fragment, file=<path>)" unless block.marked?
+    problems << "#{block.location}: one marker per block, got `#{tokens.join(' ')}`" if tokens.size > 1
     problems.concat(path_problems(block)) if block.file?
     problems
   end
@@ -176,11 +195,20 @@ module DocBlocks
     path = block.path.to_s
     return ["#{block.location}: file= needs a path"] if path.empty?
 
-    problems = []
-    problems << "#{block.location}: file=#{path} must be a path inside the app (relative, no ..)" if path.start_with?('/') || path.split('/').include?('..')
+    [location_problem(block, path), extension_problem(block, path)].compact
+  end
+
+  def location_problem(block, path)
+    return unless path.start_with?('/') || path.split('/').include?('..')
+
+    "#{block.location}: file=#{path} must be a path inside the app (relative, no ..)"
+  end
+
+  def extension_problem(block, path)
     extensions = FILE_EXTENSIONS[block.lang]
-    problems << "#{block.location}: file=#{path} should end in #{extensions.join(' or ')} for a #{block.lang} block" if extensions && extensions.none? { |ext| path.end_with?(ext) }
-    problems
+    return if extensions.nil? || extensions.any? { |ext| path.end_with?(ext) }
+
+    "#{block.location}: file=#{path} should end in #{extensions.join(' or ')} for a #{block.lang} block"
   end
 
   def duplicate_file_problems(blocks)

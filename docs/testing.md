@@ -6,7 +6,7 @@ Create the permission records with the model classes, as your app would. Permiss
 
 Example Minitest setup (for host apps):
 
-```ruby
+```ruby fragment
 class CustomerPermissionsTest < ActiveSupport::TestCase
   setup do
     @user = User.create!(name: 'Test User', email: 'test@example.com') # or a fixture / factory of your own
@@ -45,7 +45,7 @@ end
 
 For contributors, from a checkout of the gem:
 
-```bash
+```bash fragment
 bundle install
 bundle exec rake test
 ```
@@ -58,7 +58,7 @@ The SQLite suite runs in forked workers (`test/support/parallel_workers.rb`: 8 b
 
 **Rails internals canary.** `test/permission_forge/rails_internals_canary_test.rb` has one test per private or undocumented Rails API the gem relies on, each naming the gem code that relies on it. Run it first after a Rails upgrade and on each `gemfiles/rails_*.gemfile`; CI runs it on Rails `main` in an allow-failure job. For example:
 
-```bash
+```bash fragment
 BUNDLE_GEMFILE=gemfiles/rails_main.gemfile bundle exec ruby -Itest -e 'require "test_helper"; SimpleCov.minimum_coverage(0); require "./test/permission_forge/rails_internals_canary_test.rb"'
 ```
 

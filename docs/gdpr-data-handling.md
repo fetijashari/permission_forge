@@ -14,7 +14,7 @@ This guide explains how to use the built-in `/gdpr-data-handling` Claude Code sk
 
 Open your terminal in your project directory and run Claude Code:
 
-```bash
+```bash fragment
 claude
 ```
 
@@ -172,7 +172,7 @@ Before citing the log, read [What is not recorded](audit-log.md#what-is-not-reco
 
 Some GDPR checks can be run directly in a Rails console:
 
-```ruby
+```ruby fragment
 # Full GDPR field audit — findings are keyed by :type (:unmasked_field,
 # :unmapped_column, :implicit_virtual_grant, :view_all_on_pii_resource,
 # :cross_set_unmasking: permission_set unmasks, masked_in lists the sets that mask)
@@ -224,7 +224,9 @@ PermissionForge::Services::ConsentWithdrawalHandler.call(
 
 # Preview erasure of a user's permission data (Art. 17); a dry run writes no event. It counts the
 # audit-log name labels the run would clear (actor_labels_to_clear, record_labels_to_clear); a real
-# run returns actor_labels_cleared / record_labels_cleared, which the rake task prints
+# run returns actor_labels_cleared / record_labels_cleared, which the rake task prints.
+# As a rake task: USER_ID=42 bin/rails permission_forge:erasure (a dry run: DRY_RUN=true is the
+# default; DRY_RUN=false executes; ACTOR= and REASON= name who ran it on the events)
 PermissionForge::Services::DataSubjectErasure.call(user: user, dry_run: true)
 
 # What the audit log holds about a person
@@ -237,7 +239,7 @@ PermissionForge::Services::AuditEventPurger.call(older_than: 2.years, dry_run: t
 
 ## Running Audits in CI
 
-```bash
+```bash fragment
 claude --print "/gdpr-data-handling full" > gdpr-audit-report.md
 ```
 

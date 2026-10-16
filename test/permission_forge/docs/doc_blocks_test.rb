@@ -39,7 +39,8 @@ module PermissionForge
       end
 
       test 'a language alias is refused so a grep for ```ruby finds every block' do
-        assert_equal ['fixture.md:1: spell the language `bash`, not `sh`', 'fixture.md:1: ```sh block has no marker: say `run`, `fragment` or `file=<path>`'],
+        assert_equal ['fixture.md:1: spell the language `bash`, not `sh`',
+                      'fixture.md:1: ```sh block has no marker: say `run`, `fragment` or `file=<path>`'],
                      problems("```sh\nls\n```\n")
       end
 
@@ -84,8 +85,8 @@ module PermissionForge
         assert_includes problems(unguarded),
                         'fixture.md:1: a redirect to the sign-in page must skip the sign-in page itself (request.path != new_session_path) (R5 #65)'
 
-        current = handler("if error.reason == :nil_user_denied && request.path != new_session_path\n      redirect_to new_session_path\n" \
-                          "    else\n      render 'errors/forbidden', status: :forbidden\n    end\n    format.any { head :forbidden }")
+        current = handler("if error.reason == :nil_user_denied && request.path != new_session_path\n      redirect_to new_session_path\n    " \
+                          "else\n      render 'errors/forbidden', status: :forbidden\n    end\n    format.any { head :forbidden }")
         assert_empty problems(current)
       end
 
@@ -97,8 +98,10 @@ module PermissionForge
         assert_equal [true, false, false, true], claims.map(&:assert?)
         assert_equal "user.can_read?('Customer')", claims.first.source
         assert_equal 'true', claims.first.claim
-        %w[true false nil 42 -1.5 :sym "s" 'it'].each { |literal| assert DocBlocks.literal?(literal), literal }
-        ['[1, :a, "x"]', '{ read_access: true, edit_access: false }', "{ 'a' => 1 }", '[]', '{}'].each { |literal| assert DocBlocks.literal?(literal), literal }
+        ['true', 'false', 'nil', '42', '-1.5', ':sym', '"s"', "'it'"].each { |literal| assert DocBlocks.literal?(literal), literal }
+        ['[1, :a, "x"]', '{ read_access: true, edit_access: false }', "{ 'a' => 1 }", '[]', '{}'].each do |literal|
+          assert DocBlocks.literal?(literal), literal
+        end
         ['#<User id: 1>', '[#<User>]', 'true or false', '{ a: [1] }', 'nil means nothing'].each { |text| assert_not DocBlocks.literal?(text), text }
       end
 
@@ -120,8 +123,8 @@ module PermissionForge
       private
 
       def handler(body)
-        "```ruby fragment\nclass ApplicationController < ActionController::Base\n  rescue_from PermissionForge::ActionNotAuthorizedError do |error|\n" \
-          "    #{body}\n  end\nend\n```\n"
+        "```ruby fragment\nclass ApplicationController < ActionController::Base\n  " \
+          "rescue_from PermissionForge::ActionNotAuthorizedError do |error|\n    #{body}\n  end\nend\n```\n"
       end
     end
   end
