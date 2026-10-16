@@ -132,18 +132,22 @@ module PermissionForge
         assert_not_includes body, 'Sales rep shows this field.'
       end
 
+      # On a field the granting sets show unmasked (phone, read-only): a mask
+      # on a field they already mask changes nothing and is not credited
+      # (review R4 P2-4, admin_view_models_test.rb WHY_STATES).
       test 'a muting set that forces a mask says so, in every locale' do
         muting = create_resource(permission_set: muting_set, read_access: false, edit_access: false)
-        create_resource_field(resource: muting, name: 'email', read_access: false, edit_access: false, mask_access: true)
+        create_resource_field(resource: muting, name: 'phone', read_access: false, edit_access: false, mask_access: true)
+        create_resource_field(resource: @resource, name: 'phone', read_access: true)
         create_permission_set_user(user: @ana, permission_set: muting_set)
 
         LOCALES.each do |locale|
-          get pf("/people/#{@ana.id}"), params: { tab: 'effective', why: 'Customer.field.email', locale: locale }
+          get pf("/people/#{@ana.id}"), params: { tab: 'effective', why: 'Customer.field.phone', locale: locale }
 
           assert_response :success
           assert_no_missing_translations
           I18n.with_locale(locale) do
-            assert_includes why_reasons('Customer.field.email'), t('ui.level_sentences.mask', set: 'No PII exports')
+            assert_includes why_reasons('Customer.field.phone'), t('ui.level_sentences.mask', set: 'No PII exports')
           end
         end
       end

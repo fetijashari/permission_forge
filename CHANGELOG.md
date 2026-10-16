@@ -980,6 +980,11 @@ and the RLS re-sync.
 
 ### Fixed
 
+- **"Review and save" titled the browser tab with a raw value** (`{one: "Review %{count} change", …}`) in every locale:
+  the page title now counts the changes. Every admin template is now rendered by the whole-UI walks (the reviews,
+  previews, Home cards, the audit log off or refused), so their lints cover it.
+  <!-- pin: test/permission_forge/html/admin_page_paths_test.rb#every POST answered with a page renders it -->
+  <!-- pin: test/permission_forge/html/admin_page_paths_test.rb#every template under app/views is rendered by a walked screen -->
 - **A stored rule never raises at read time.** A rule row with an operator this version does not know (`regex`) raised
   `ArgumentError`, one with a join type that is none (`inner`) raised `ConfigurationError` — from `permission_scoped`,
   `find_by`, `find_by!`, and under `auto_query_scoping = :filter_only` from `Customer.count` and every other query —

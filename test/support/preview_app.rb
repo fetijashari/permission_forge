@@ -3,8 +3,8 @@
 # Serves the admin for a browser: boots test/dummy in development on a
 # throwaway SQLite file with the sample data of the whole-UI tests
 # (AdminTestCase + AdminPagePaths, plus a person with a long name and a long
-# email), prints the screens to walk (AdminPaths: paths, error states, flows)
-# as one JSON line, then serves the app with Puma until stopped.
+# email), prints the screens to walk (AdminPaths: paths, error states, flows,
+# posted pages) as one JSON line, then serves the app with Puma until stopped.
 #
 #   bundle exec ruby test/support/preview_app.rb [--port 4017]
 #   PREVIEW:{"base":"http://127.0.0.1:4017/permission_forge","paths":[…],"error_states":[…],"flows":[…]}
@@ -47,6 +47,7 @@ PermissionForge.configure do |config|
   config.api_auth = ->(_controller) { true }
   config.unconfigured_field_strategy = :block
   config.filter_parameters_integration = false
+  config.controller_action_discovery = true # AdminPagePaths: the Actions screens draw where each action runs
 end
 PermissionForge::Audit.reset! # the table check ran at boot, before the schema was loaded
 
@@ -119,11 +120,13 @@ destroyed = PermissionForge::AuditEvent.where(event: 'permission_set_rule.destro
 long = Seeds.user('Aleksandra-Katarina Mitrevska-Dimitrievska', 'aleksandra.katarina.mitrevska@very-long-company-domain.example')
 Seeds.assignment(long, set)
 
-screens = PermissionForge::Html::AdminPaths.new(ana: ana.id, assignment: assignment.id, set: set.id, muting: muting.id,
+screens = PermissionForge::Html::AdminPaths.new(ana: ana.id, assignment: assignment.id, set: set.id, resource: resource.id,
+                                                email: email.id, muting: muting.id,
                                                 locked: locked.id, group: group.id, action: action.id, rule: rule.id,
                                                 broken: broken.id, updated_event: updated&.uuid, destroyed_event: destroyed&.uuid)
 puts "PREVIEW:#{{ base: "http://127.0.0.1:#{port}/permission_forge", paths: screens.paths,
-                  error_states: screens.error_states.map(&:to_h), flows: screens.flows.map(&:to_h) }.to_json}"
+                  error_states: screens.error_states.map(&:to_h), flows: screens.flows.map(&:to_h),
+                  posted_pages: screens.posted_pages.map(&:to_h) }.to_json}"
 $stdout.flush
 
 require 'rackup'

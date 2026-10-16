@@ -13,9 +13,9 @@ module PermissionForge
 
       test 'every screen is clean, in English and Macedonian' do
         failures = %w[en mk].flat_map do |locale|
-          paths.flat_map do |path|
-            get pf(path), params: { locale: locale }
-            A11yLint.new(response.body).problems.map { |problem| "#{locale} #{path}: #{problem}" }
+          screens = paths.map { |path| get(pf(path), params: { locale: locale }) && [path, response.body] }
+          (screens + extra_screens(locale: locale)).flat_map do |label, body|
+            A11yLint.new(body).problems.map { |problem| "#{locale} #{label}: #{problem}" }
           end
         end
         assert_empty failures, failures.join("\n")
@@ -55,6 +55,8 @@ module PermissionForge
          '<main> landmarks'].each do |expected|
           assert_includes problems, expected
         end
+        raw = '<!doctype html><html lang=en><title>{"one" => "Review %{count} change"}</title><body><main><h1>x</h1></main></body></html>'
+        assert_includes A11yLint.new(raw).problems.join("\n"), '<title> is a raw value'
       end
     end
   end

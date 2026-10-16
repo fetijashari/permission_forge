@@ -10,17 +10,27 @@ module PermissionForge
     # language is the gem's own or host data: rendered under the pseudo-locale
     # xx (test/support/pseudo_locale.rb: en with every value wrapped), every
     # screen of AdminPaths, every error state, every flow's toast, every
-    # export and every API error class leave no prose once the wrapped words
-    # are removed — only the fixtures' names, stored column names and
-    # digits. A Rails-core key (rails-i18n is absent from the suite), a
-    # `humanize`, an English literal in a view or a locale file show up
-    # unwrapped, by word.
+    # posted page, every screen a setting draws, every export and every API
+    # error class leave no prose once the wrapped words are removed — only
+    # host data and digits. A Rails-core key (rails-i18n is absent from the
+    # suite), a `humanize`, an English literal in a view or a locale file
+    # show up unwrapped, by word.
+    #
+    # Host data on a screen (review R4 P2-1): the names of records and
+    # people (IDENTITY) anywhere; anything else of the host — a label, a
+    # description, a rule's message, an event's data, a column name — only
+    # where it is marked (SKIPPED: <code>, .pf-mono, [data-pf-host-data]),
+    # or as a whole value: an interpolated value, a segment of the <title>,
+    # an attribute that is exactly a stored string. So a stored word never
+    # hides the same word written in a view.
     class LocaleLeakTest < AdminTestCase
       include AdminPagePaths
 
       LOCALE = PseudoLocale::LOCALE.to_s
-      # Stored names are shown verbatim in these: never a translation.
-      SKIPPED = 'script, style, code, kbd, pre, .pf-mono, .pf-mono-key, [data-pf-host-data]'.freeze
+      # Stored names are shown verbatim in these, and a form field holds what
+      # was typed: never a translation.
+      SKIPPED = 'script, style, code, kbd, pre, textarea, .pf-mono, .pf-mono-key, .pf-audit-code, [data-pf-host-data]'.freeze
+      TITLE_SEPARATOR = ' · '
       TEXT_ATTRIBUTES = %w[aria-label aria-description aria-roledescription placeholder title alt].freeze
       # English the dummy application itself holds: its name (the "Back to"
       # link), the brand, and the time zone's name.
@@ -63,6 +73,12 @@ module PermissionForge
         assert_empty failures, failures.join("\n")
       end
 
+      test 'every posted page and every screen a setting draws show only translated words and host data' do
+        failures = extra_screens(locale: LOCALE).flat_map { |label, body| report(label, leaks_in(body)) }
+
+        assert_empty failures, failures.join("\n")
+      end
+
       test 'the CSV exports show only translated words and host data' do
         failures = []
         { "/people/#{@ana.id}.csv" => :all, "/permission_sets/#{@set.id}.csv?tab=audit" => :all,
@@ -71,7 +87,7 @@ module PermissionForge
           assert_response :success, path
           assert_equal 'text/csv', response.media_type, path
           text = part == :all ? response.body : response.body.lines.first(EXPORT_HEAD_LINES).join
-          failures += report("GET #{path}", PseudoLocale.leaks(text, vocabulary))
+          failures += report("GET #{path}", PseudoLocale.leaks(text, data_vocabulary))
         end
 
         assert_empty failures, failures.join("\n")
@@ -84,7 +100,7 @@ module PermissionForge
           assert_not_empty response.body, "#{label}: a bodiless answer"
           messages = JSON.parse(response.body).fetch('error').fetch('messages')
           strings(messages).flat_map do |text|
-            problems = PseudoLocale.leaks(text, vocabulary)
+            problems = PseudoLocale.leaks(text, data_vocabulary)
             problems << 'not a translation' unless text.include?(PseudoLocale::OPEN)
             report("#{label} #{text.inspect}", problems)
           end
@@ -104,6 +120,14 @@ module PermissionForge
         assert_empty leaks_in(render_inline("<p><%= t('permission_forge.ui.cancel') %> <code>full_address</code> 12:30 · 3</p>"))
         assert_empty leaks_in(render_inline("<p><%= t('permission_forge.ui.audit.who_when', who: 'Ana Krasniqi', " \
                                             "when: t('permission_forge.ui.dates.today')) %></p>"))
+        # A stored word (the field label "Name", a rule's "Access denied by
+        # test rule", the action label "Export") hides no English literal:
+        # host data counts where it is marked, or as a whole value.
+        assert_equal %w[Name], leaks_in(render_inline("<p><%= 'name'.humanize %></p>"))
+        assert_equal %w[Access denied], leaks_in(render_inline('<table><tr><th>Access denied</th></tr></table>'))
+        assert_equal %w[Export], leaks_in(render_inline('<button>Export</button>'))
+        assert_empty leaks_in(render_inline('<b data-pf-host-data>Export</b> <a aria-label="Export">x</a>'))
+        assert_empty leaks_in(render_inline("<p><%= t('permission_forge.ui.audit.who_when', who: 'Access denied by test rule', when: 1) %></p>"))
       end
 
       API = '/permission_forge/api'.freeze
@@ -121,29 +145,67 @@ module PermissionForge
       def leaks_in(html)
         doc = Nokogiri::HTML(html)
         doc.css(SKIPPED).each(&:remove)
-        PseudoLocale.leaks(visible_texts(doc).join(' '), vocabulary)
+        title = doc.at_css('title')&.remove&.text.to_s.split(TITLE_SEPARATOR)
+        values = title + attribute_texts(doc)
+        texts = doc.xpath('//text()').map(&:text) + values.reject { |value| host_values.include?(value.strip) }
+        PseudoLocale.leaks(texts.join(' '), vocabulary, host: host_values)
       end
 
-      def visible_texts(doc)
-        doc.xpath('//text()').map(&:text) +
-          doc.css(TEXT_ATTRIBUTES.map { |name| "[#{name}]" }.join(', ')).flat_map { |node| TEXT_ATTRIBUTES.filter_map { |name| node[name] } } +
+      def attribute_texts(doc)
+        doc.css(TEXT_ATTRIBUTES.map { |name| "[#{name}]" }.join(', ')).flat_map { |node| TEXT_ATTRIBUTES.filter_map { |name| node[name] } } +
           doc.css('input[type="submit"][value]').map { |node| node['value'] }
+      end
+
+      # Every string the fixtures stored, every column and association name,
+      # every action key the host's controllers map, whole: host data as a
+      # value.
+      def host_values
+        keys = PermissionForge::Admin::ControllerCatalog.new.entries.map { |entry| entry.key.to_s }
+        @host_values ||= (stored_strings + model_words + keys).map(&:strip).to_set
       end
 
       def render_inline(template)
         I18n.with_locale(PseudoLocale::LOCALE) { PermissionForge::ApplicationController.render(inline: template, layout: false) }
       end
 
-      # Host data a screen may show as it is: every string the fixtures
-      # stored (the eight models, the audit events' labels and data, the
-      # people), the host's model and column names, the export identifiers.
+      # Host data a screen may show bare: the names the fixtures stored (of
+      # the records and the people: IDENTITY), the host's model names, what
+      # a refused form echoes, the languages' own names. Everything else a
+      # screen shows of the host — a description, a label, a rule's message,
+      # an event's data, a column name — is marked (<code>, .pf-mono,
+      # [data-pf-host-data]: SKIPPED), so a word of it never hides a leak
+      # (review R4: the stored strings and column names allowed 81 words).
       def vocabulary
-        @vocabulary ||= PseudoLocale.vocabulary(stored_strings + model_words + export_words + people_words + request_words + HOST_WORDS)
+        @vocabulary ||= PseudoLocale.vocabulary(identity_strings + model_names + people_words + request_words + HOST_WORDS)
+      end
+
+      # The exports and the API answer with data: their columns, codes and
+      # every stored string count too.
+      def data_vocabulary
+        @data_vocabulary ||= vocabulary | PseudoLocale.vocabulary(stored_strings + model_words + export_words)
+      end
+
+      # The columns that name a record or a person: what the admin shows as
+      # a title, a link, a pill (never free text).
+      IDENTITY = {
+        'PermissionForge::PermissionSet' => %w[name], 'PermissionForge::PermissionSetGroup' => %w[name],
+        'PermissionForge::Resource' => %w[name], 'PermissionForge::ResourceField' => %w[name],
+        'PermissionForge::ResourceAction' => %w[name], 'PermissionForge::PermissionSetRule' => %w[name field_name],
+        'PermissionForge::AuditEvent' => %w[actor_label record_label], 'User' => %w[name email]
+      }.freeze
+
+      def identity_strings
+        IDENTITY.flat_map { |model, columns| model.constantize.unscoped.pluck(*columns).flatten.compact }
+      end
+
+      def model_names
+        Rails.application.eager_load!
+        ApplicationRecord.descendants.filter_map(&:name)
       end
 
       # What the error states and flows post (echoed back by a refused form).
       def request_words
-        (error_states + flows).flat_map { |state| state.params.values.map(&:to_s) }
+        (error_states + flows + posted_pages).flat_map { |state| json_strings(state.params) }
       end
 
       # A person's initials (from the stored name), the languages' own names

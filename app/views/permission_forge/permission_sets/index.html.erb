@@ -52,7 +52,7 @@
                 <%= link_to set.name, permission_forge.permission_set_path(set), class: 'pf-fw-600' %>
                 <%= pf_set_badges(set) %>
               </span>
-              <% if set.description.present? %><span class="pf-fs-13 pf-text-2"><%= set.description %></span><% end %>
+              <% if set.description.present? %><span class="pf-fs-13 pf-text-2" data-pf-host-data><%= set.description %></span><% end %>
               <% if set.resources.any? %>
                 <span class="pf-mono-key pf-fs-11"><%= set.resources.map(&:name).join(' · ') %></span>
               <% end %>

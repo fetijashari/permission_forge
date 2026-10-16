@@ -105,10 +105,10 @@ module PermissionForge
         "permission_forge.#{scope}#{key}"
       end
 
-      # Every page and every rendered error state, once (the markup does not
-      # change with the locale).
+      # Every page, every rendered error state and every extra screen, once
+      # (the markup does not change with the locale).
       def screens
-        page_screens + error_screens
+        page_screens + error_screens + extra_screens
       end
 
       def page_screens

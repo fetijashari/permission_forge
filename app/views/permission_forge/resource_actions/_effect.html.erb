@@ -19,7 +19,7 @@
   <% unless %i[permitted unmanaged_allowed unmanaged_blocked].include?(row.effect) %>
     <%# The action is managed and this set does not permit it: say who does. %>
     <span class="pf-text-3">
-      <%= row.permitted_by.any? ? t('.permitted_by', sets: row.permitted_by.map(&:name).join(', ')) : t('.permitted_by_nobody') %>
+      <%= row.permitted_by.any? ? t('.permitted_by', sets: pf_to_sentence(row.permitted_by.map(&:name))) : t('.permitted_by_nobody') %>
     </span>
   <% end %>
 </span>

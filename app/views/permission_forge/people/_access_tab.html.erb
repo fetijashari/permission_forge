@@ -10,7 +10,7 @@
       <div class="pf-assignment">
         <div class="pf-assignment__main">
           <div class="pf-row pf-row--tight"><%= pf_set_chip(set, large: true, expired: assignment.expired?) %></div>
-          <% if set.description.present? %><span class="pf-fs-13 pf-text-2"><%= set.description %></span><% end %>
+          <% if set.description.present? %><span class="pf-fs-13 pf-text-2" data-pf-host-data><%= set.description %></span><% end %>
           <% if set.conditional? %>
             <span class="pf-row pf-row--tight pf-fs-13 pf-text-accent">◷ <%= pf_condition_sentence(set) %> <%= pf_fail_open_badge if pf_fail_open? %></span>
           <% end %>

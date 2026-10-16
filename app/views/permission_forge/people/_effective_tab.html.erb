@@ -76,7 +76,7 @@
                               class: 'pf-effective__field', data: { pf_why: key }, 'aria-current': (@why == key ? 'true' : nil) do %>
                     <span class="pf-row pf-row--tight pf-grow">
                       <% field_label = pf_field_label_for(res.name, field.name) %>
-                      <% unless field_label.verbatim? %><span><%= field_label.text %></span><% end %>
+                      <% unless field_label.verbatim? %><span data-pf-host-data><%= field_label.text %></span><% end %>
                       <code class="pf-mono-key"><%= field.name %></code>
                       <% if field.virtual %><%= pf_badge(t('permission_forge.ui.badges.virtual')) %><% end %>
                     </span>

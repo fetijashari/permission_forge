@@ -8,13 +8,16 @@ module PermissionForge
     # sample data, so the whole-UI tests (AdminPagePaths, on the suite's
     # fixtures) and the browser probe (test/support/preview_app.rb, on its
     # seeds) walk the same screens. admin_page_paths_test.rb checks that every
-    # GET route of the engine and every 422 render site is on it.
+    # GET route of the engine and every 422 render site is on it, and that
+    # the walk renders every template.
     class AdminPaths
       # A request and the answer the admin gives it. `site` is the controller
       # and the method that renders the answer (`controller#method`, as
       # admin_page_paths_test.rb scans them); `status` the final status (after
-      # a redirect); `renders` false for a bodiless answer (an export's 422).
-      Request = Struct.new(:site, :verb, :path, :params, :status, :renders, keyword_init: true) do
+      # a redirect); `renders` false for a bodiless answer (an export's 422);
+      # `kind` :refused (a re-rendered form), :flow (a change that redirects
+      # to a toast) or :page (a POST the admin answers with a page, 200).
+      Request = Struct.new(:site, :verb, :path, :params, :status, :renders, :kind, keyword_init: true) do
         def renders? = renders != false
 
         def to_h = super.compact
@@ -22,8 +25,8 @@ module PermissionForge
 
       attr_reader :ids
 
-      # @param ids [Hash] :ana, :assignment, :set, :muting, :locked, :group,
-      #   :action, :rule, :broken (record ids); :updated_event,
+      # @param ids [Hash] :ana, :assignment, :set, :resource, :email, :muting,
+      #   :locked, :group, :action, :rule, :broken (record ids); :updated_event,
       #   :destroyed_event (event uuids, nil when none was recorded)
       def initialize(**ids)
         @ids = ids
@@ -35,12 +38,18 @@ module PermissionForge
 
       # The 422 answers: one entry per render site, with the params that reach it.
       def error_states
-        requests.select { |request| request.status == 422 }
+        requests.select { |request| request.kind == :refused }
       end
 
       # Changes that redirect to a page with a toast (the sticky layers after a POST).
       def flows
-        requests.select { |request| request.status == 200 }
+        requests.select { |request| request.kind == :flow }
+      end
+
+      # Forms the admin answers with a page of their own, not a redirect: the
+      # two reviews, the bulk assignment preview, the rule builder's refresh.
+      def posted_pages
+        requests.select { |request| request.kind == :page }
       end
 
       private
@@ -85,7 +94,8 @@ module PermissionForge
         [
           base, "#{base}?tab=actions", "#{base}?tab=rules", "#{base}/delete", "#{base}/fields/email",
           "#{base}/fields/domain?explain_user_id=#{id(:ana)}",
-          "#{base}/actions/new", "#{base}/actions/#{id(:action)}", "#{base}/actions/#{id(:action)}/delete",
+          "#{base}/actions/new", "#{base}/actions/new?key=merge", "#{base}/actions/#{id(:action)}",
+          "#{base}/actions/#{id(:action)}/delete",
           "#{base}/rules/new", "#{base}/rules/#{id(:rule)}/edit", "#{base}/rules/#{id(:rule)}/delete",
           "#{base}/rules/preview?rule%5Bfield_name%5D=supplier_id&rule%5Boperator%5D=equal&rule%5Bcurrent_user%5D=1"
         ]
@@ -114,10 +124,22 @@ module PermissionForge
       end
 
       def requests
-        refused.map { |site, verb, path, params| Request.new(site: site, verb: verb, path: path, params: params, status: 422) } +
+        refused.map { |site, verb, path, params| Request.new(site: site, verb: verb, path: path, params: params, status: 422, kind: :refused) } +
           [Request.new(site: 'audit_events#invalid_filters', verb: :get, path: '/audit.csv', params: { actor_id: %w[1 2] },
-                       status: 422, renders: false),
-           Request.new(site: 'people#refresh_cache', verb: :post, path: "#{person}/refresh_cache", params: {}, status: 200)]
+                       status: 422, renders: false, kind: :refused),
+           Request.new(site: 'people#refresh_cache', verb: :post, path: "#{person}/refresh_cache", params: {}, status: 200, kind: :flow)] +
+          pages.map { |site, path, params| Request.new(site: site, verb: :post, path: path, params: params, status: 200, kind: :page) }
+      end
+
+      # [site, path, params] of every POST answered with a page (200).
+      def pages
+        [
+          ['permission_sets#review', "#{set_path}/review",
+           { pf: { resources: { id(:resource) => { read_access: '1', create_access: '1', edit_access: '1', delete_access: '0' } } } }],
+          ['resources#review', "#{resource_base}/review", { pf: { fields: { id(:email) => { level: 'read' } } } }],
+          ['bulk_assignments#preview', "#{set_path}/bulk_assignment/preview", { identifiers: "bo@acme.test\nghost@x.test" }],
+          ['permission_set_rules#refresh', "#{resource_base}/rules/refresh", rule_params]
+        ]
       end
 
       # [site, verb, path, params] of every refused form or filter the admin re-renders.

@@ -56,6 +56,22 @@ module PermissionForge
         end
       end
 
+      test 'every template under app/views is rendered by a walked screen' do
+        missing = all_templates - NOT_WALKED.keys - rendered_templates { walk_every_screen }
+
+        assert_empty missing, "templates no walked screen renders (add the screen or its fixture to AdminPaths / " \
+                              "AdminPagePaths, or say why in NOT_WALKED): #{missing.join(', ')}"
+        assert_empty NOT_WALKED.keys - all_templates, 'NOT_WALKED names a template that is gone: remove it'
+      end
+
+      test 'every POST answered with a page renders it' do
+        posted_pages.each do |page|
+          post pf(page.path), params: page.params
+          assert_response :success, "POST #{page.path}"
+          assert_empty body_problems(response.body), "POST #{page.path}"
+        end
+      end
+
       # Negative fixtures: a page dropped from the list leaves its route
       # unreached; an error state dropped leaves its render site uncovered.
       test 'the meta tests bite' do
@@ -65,9 +81,54 @@ module PermissionForge
         without_resources = error_states.reject { |state| state.site == 'resources#create' }.map(&:site)
         assert_includes unprocessable_sites - without_resources, 'resources#create'
         assert_includes unprocessable_sites, 'permission_set_rules#save_rule', 'a site is named by its enclosing def'
+
+        home_only = rendered_templates { get pf('/') }
+        assert_includes all_templates - home_only, 'permission_sets/review.html.erb', 'a screen not walked leaves its template'
+        assert_includes home_only, 'home/_secret_rules_card.html.erb', 'a card is rendered through its partial'
       end
 
+      # Templates (relative to app/views/permission_forge, layouts by their
+      # path under app/views) the walk does not render, and why. None today:
+      # every template is on a walked screen.
+      NOT_WALKED = {}.freeze
+      VIEWS_ROOT = File.join(ROOT_DIR, 'app/views').freeze
+      RENDER_EVENTS = /\Arender_(template|partial|collection|layout)\.action_view\z/
+
       private
+
+      def all_templates
+        Dir[File.join(VIEWS_ROOT, '**/*.erb')].map { |file| template_name(file) }.sort
+      end
+
+      def template_name(file)
+        file.delete_prefix("#{VIEWS_ROOT}/").delete_prefix('permission_forge/')
+      end
+
+      # The templates rendered while the block runs (ActionView's own events).
+      def rendered_templates(&)
+        rendered = Set.new
+        callback = lambda do |*, payload|
+          [payload[:identifier], payload[:layout]].compact.each do |file|
+            rendered << template_name(file.to_s) if file.to_s.start_with?(VIEWS_ROOT)
+          end
+        end
+        ActiveSupport::Notifications.subscribed(callback, RENDER_EVENTS, &)
+        rendered.to_a
+      end
+
+      # Every screen of the whole-UI walks: the pages, a drawer as the script
+      # loads it, the error states, the flows' toasts, the posted pages and
+      # the screens a setting draws.
+      def walk_every_screen
+        paths.each { |path| get pf(path) }
+        get pf("/people/#{@ana.id}/remove_all"), headers: { 'X-PF-Fragment' => '1' }
+        error_states.select(&:renders?).each { |state| send(state.verb, pf(state.path), params: state.params) }
+        flows.each do |flow|
+          send(flow.verb, pf(flow.path), params: flow.params)
+          follow_redirect!
+        end
+        extra_screens
+      end
 
       # "people#show" for every GET route the engine draws for the admin (the
       # JSON API has its own enumeration, security/route_fuzz_test.rb).

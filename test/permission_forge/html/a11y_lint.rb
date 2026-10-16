@@ -29,8 +29,10 @@ module PermissionForge
       private
 
       def check_document
+        title = @doc.at_css('title')&.text.to_s.strip
         [('<html> has no lang' if @doc.at_css('html')['lang'].to_s.empty?),
-         ('<title> is empty' if @doc.at_css('title')&.text.to_s.strip.empty?)].compact
+         ('<title> is empty' if title.empty?),
+         ("<title> is a raw value (#{title[0, 40].inspect}): a plural key without count:?" if title.match?(/[{}]|=>/))].compact
       end
 
       def check_headings
