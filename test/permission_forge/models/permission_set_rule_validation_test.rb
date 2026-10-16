@@ -151,6 +151,30 @@ module PermissionForge
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
+    # A NUL byte cannot reach SQL as a literal (the statement is cut short):
+    # refused for a new or changed value; a stored one matches nothing and
+    # the row stays editable in its other attributes.
+    test 'a field_value with a NUL byte is refused on a new or changed rule, and a stored one stays editable' do
+      %w[equal in contains].each do |operator|
+        rule = build_rule(operator: operator, field_value: "a\0b")
+
+        assert_not rule.valid?, operator
+        assert_equal [I18n.t('permission_forge.validations.permission_set_rule.nul_byte')], rule.errors[:field_value], operator
+      end
+
+      rule = build_rule(field_value: 'ab')
+      rule.save!
+      rule.update_columns(field_value: "a\0b")
+      rule.reload
+      rule.name = 'Renamed'
+
+      assert rule.valid?, rule.errors.full_messages.inspect
+
+      rule.field_value = "c\0d"
+
+      assert_not rule.valid?
+    end
+
     # A table of another model: left to the query, which may join it.
     test 'field_name users.email is valid' do
       rule = build_rule(field_name: 'users.email')

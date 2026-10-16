@@ -57,8 +57,12 @@ module PermissionForge
       end
 
       test 'a name that is not a name is malformed, whatever it is qualified with' do
-        %w[a..b .name name. nosuch..name].each do |field_name|
-          assert_predicate RuleColumn.find(field_name, [Customer]), :malformed?, field_name
+        ['a..b', '.name', 'name.', 'nosuch..name', "na\nme", "na\0me", "customers.na\tme", "name\r", ''].each do |field_name|
+          assert_not RuleColumn.name?(field_name), field_name.inspect
+          assert_predicate RuleColumn.find(field_name, [Customer]), :malformed?, field_name.inspect
+        end
+        ['name', 'customers.name', 'Name', 'na me', 'nämé', 'name-x'].each do |field_name|
+          assert RuleColumn.name?(field_name), field_name.inspect
         end
       end
 

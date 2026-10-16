@@ -90,6 +90,33 @@ module PermissionForge
         assert Customer.unscoped.exists?(@mine.id)
       end
 
+      # A NUL byte in a value is quoted into the statement, which the
+      # database reads cut short (ActiveRecord::StatementInvalid for every
+      # holder); a control character in a field name is no name. Both match
+      # nothing, under a built-in operator and a custom one alike.
+      test 'a value with a NUL byte, or a field name with a control character, matches nothing' do
+        echo = { 'echo' => ->(query, col, _rule, value) { query.where("#{col} = ?", value) } }.merge(
+          'equal' => PermissionForge::Operators::Registry.fetch('equal')
+        )
+        values = { 'equal' => "mi\0ne", 'in' => "mine,x\0y", 'between' => "a\0,z", 'contains' => "i\0n", 'echo' => "mi\0ne" }
+
+        values.each do |operator, value|
+          relation = scoped(rule(operator: operator, field_value: value), registry: PermissionForge::Operators::Registry.strategies.merge(echo))
+
+          assert_empty relation.to_a, "#{operator} #{value.inspect}"
+        end
+        ["na\nme", "na\0me", "customers.na\tme", "na me"].each do |field_name|
+          %w[equal echo].each do |operator|
+            relation = scoped(rule(field_name: field_name, operator: operator, field_value: 'mine'),
+                              registry: PermissionForge::Operators::Registry.strategies.merge(echo))
+
+            assert_empty relation.to_a, "#{field_name.inspect} #{operator}"
+          end
+        end
+        assert_equal [@mine], scoped(rule(operator: 'echo', field_value: 'mine'),
+                                     registry: PermissionForge::Operators::Registry.strategies.merge(echo)).to_a
+      end
+
       test 'a registry injected as a Hash is asked the same way' do
         registry = { 'equal' => PermissionForge::Operators::Registry.fetch('equal') }
 
