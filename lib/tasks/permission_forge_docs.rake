@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
-# The gem's own documentation generators. They exist only in a checkout of the
-# gem (where docs/ is), never in a host application's `rails -T`: the gem ships
-# without docs/.
+# The gem's own documentation generators, run from the gem's Rakefile
+# (`bundle exec rake docs:configuration`). They are defined only in a checkout
+# of the gem (where docs/ is) and never inside a Rails application — not in a
+# host's `rails -T` (the gem ships without docs/), not in the dummy app's.
 docs_root = File.expand_path('../../docs', __dir__)
-if File.directory?(docs_root)
+inside_rails = defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+if File.directory?(docs_root) && !inside_rails
   namespace :docs do
     desc 'Regenerate the Option reference of docs/configuration.md from SettingsCatalog and Configuration.new'
     task :configuration do
