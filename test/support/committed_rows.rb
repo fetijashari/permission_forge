@@ -8,44 +8,86 @@
 # test made before its DDL survives. The next tests then see them ("Name is
 # already used by another Permission Set", a Home card too many).
 #
-# After each test (after the fixture rollback) the row count of every table
-# is compared with the counts taken before the first test. A difference is
-# removed (rows above the id the table had then), so the next test starts
-# clean, and:
+# Before the first test each table's state is taken: its signature (the row
+# count and, for a one-column primary key, its lowest and highest value —
+# a test that deletes one row and adds another changes the highest) and,
+# for a table of at most SNAPSHOT_LIMIT rows, the key of every row (the
+# primary key, or every column for a table without one). After each test
+# (after the fixture rollback) one query reads every signature again. A
+# table whose signature differs is put back: the rows that were not there
+# are removed (by key; above the highest id for a larger table), and a
+# table that still differs — a row the test deleted, which cannot be made
+# again — is reported and taken as it is now, so only the test that left
+# the change fails, never the ones after it:
 # - on MySQL, after a test that ran DDL: that is the database's behaviour,
 #   nothing more is said;
-# - otherwise the test fails, naming the tables it left rows in.
+# - otherwise the test fails, naming the tables, and the rows it deleted.
 module CommittedRows
   INTERNAL = %w[schema_migrations ar_internal_metadata].freeze
   DDL = /\A\s*(?:CREATE|ALTER|DROP|RENAME|TRUNCATE)\b/i
+  # Tables up to this many rows keep the key of every row.
+  SNAPSHOT_LIMIT = 500
 
-  Baseline = Struct.new(:counts, :max_ids)
+  # `key`: the columns that tell a row apart; `pk`: the one-column primary
+  # key (nil otherwise); `signature`: [count, min pk, max pk]; `rows`: the
+  # Set of key tuples, nil above SNAPSHOT_LIMIT.
+  Table = Struct.new(:name, :key, :pk, :signature, :rows, keyword_init: true)
 
   class << self
-    # Taken once per process, before its first test (in a forked worker:
-    # from the copy of the parent's database it starts from).
+    # { table => Table }, taken once per process before its first test (in a
+    # forked worker: from the copy of the parent's database it starts from).
     def baseline
-      @baseline ||= begin
-        tables = connection.tables - INTERNAL
-        Baseline.new(counts(tables), tables.to_h { |table| [table, max_id(table)] })
-      end
+      @baseline ||= capture(connection.tables - INTERNAL)
     end
 
-    # The tables whose row count differs from the baseline: { table => [then, now] }.
+    # Replaces the baseline (tests of this guard put theirs back).
+    attr_writer :baseline
+
+    # The tables whose signature differs from the baseline:
+    # { table => [then, now] } (each [count, min pk, max pk]).
     def changed
-      tables = baseline.counts.keys & connection.tables
-      counts(tables).filter_map { |table, now| [table, [baseline.counts[table], now]] unless now == baseline.counts[table] }.to_h
+      present = connection.tables
+      tables = baseline.values.select { |table| present.include?(table.name) }
+      signatures(tables).filter_map do |table, now|
+        [table.name, [table.signature, now]] unless now == table.signature
+      end.to_h
     end
 
-    # Removes the rows each changed table gained since the baseline.
-    def remove!(tables)
-      with_foreign_keys_off do
-        tables.each do |table|
-          next unless (floor = baseline.max_ids[table])
+    # Puts the changed tables back where it can; what it cannot is taken as
+    # the new baseline. Nil when nothing changed, else the report.
+    #
+    # @return [String, nil]
+    def check!
+      changed = self.changed
+      return if changed.empty?
 
-          connection.execute("DELETE FROM #{connection.quote_table_name(table)} WHERE id > #{Integer(floor)}")
+      deleted = remove!(changed.keys)
+      message = "left committed rows (table => [before, after]): #{changed.inspect}"
+      deleted.empty? ? message : "#{message}; deleted rows the database had before (table => keys): #{deleted.inspect}"
+    end
+
+    # Removes the rows each table gained since the baseline, then takes a
+    # table that still differs (rows it lost) as it is now.
+    #
+    # @return [Hash{String => Array}] the baseline rows each table lost
+    def remove!(names)
+      deleted = {}
+      with_foreign_keys_off do
+        names.each do |name|
+          table = baseline.fetch(name)
+          lost = restore(table)
+          deleted[name] = lost if lost.any?
         end
       end
+      rebaseline!(names & changed.keys)
+      deleted
+    end
+
+    # Takes `names` as they are now.
+    def rebaseline!(names)
+      return if names.empty?
+
+      @baseline = baseline.merge(capture(names))
     end
 
     def mysql? = connection.adapter_name.match?(/mysql|trilogy/i)
@@ -60,18 +102,68 @@ module CommittedRows
 
     def connection = ActiveRecord::Base.connection
 
-    def counts(tables)
-      return {} if tables.empty?
-
-      selects = tables.map { |table| "(SELECT COUNT(*) FROM #{connection.quote_table_name(table)})" }
-      tables.zip(connection.select_rows("SELECT #{selects.join(', ')}").first.map(&:to_i)).to_h
+    def capture(names)
+      tables = names.map { |name| describe(name) }
+      signatures(tables).to_h do |table, signature|
+        table.signature = signature
+        table.rows = keys_of(table) if signature.first <= SNAPSHOT_LIMIT
+        [table.name, table]
+      end
     end
 
-    # The table's highest id; nil for a table without an integer id.
-    def max_id(table)
-      return unless connection.columns(table).any? { |column| column.name == 'id' && column.type == :integer }
+    def describe(name)
+      pk = connection.primary_key(name)
+      key = pk.nil? ? connection.columns(name).map(&:name) : Array(pk).map(&:to_s)
+      Table.new(name: name, key: key, pk: pk.is_a?(String) ? pk : nil)
+    end
 
-      connection.select_value("SELECT MAX(id) FROM #{connection.quote_table_name(table)}").to_i
+    # One query for every table: [[table, [count, min pk, max pk]]].
+    def signatures(tables)
+      return [] if tables.empty?
+
+      selects = tables.flat_map { |table| signature_sql(table) }
+      values = connection.select_rows("SELECT #{selects.join(', ')}").first
+      tables.zip(values.each_slice(3).map { |count, min, max| [count.to_i, min, max] })
+    end
+
+    def signature_sql(table)
+      from = connection.quote_table_name(table.name)
+      return ["(SELECT COUNT(*) FROM #{from})", 'NULL', 'NULL'] unless table.pk
+
+      pk = connection.quote_column_name(table.pk)
+      ["(SELECT COUNT(*) FROM #{from})", "(SELECT MIN(#{pk}) FROM #{from})", "(SELECT MAX(#{pk}) FROM #{from})"]
+    end
+
+    def keys_of(table)
+      columns = table.key.map { |column| connection.quote_column_name(column) }.join(', ')
+      connection.select_rows("SELECT #{columns} FROM #{connection.quote_table_name(table.name)}").to_set
+    end
+
+    # The rows the table did not have are removed; the baseline rows it no
+    # longer has are answered.
+    def restore(table)
+      return remove_above_max(table) unless table.rows
+
+      now = keys_of(table)
+      (now - table.rows).each { |row| delete_row(table, row) }
+      (table.rows - now).to_a
+    end
+
+    def remove_above_max(table)
+      max = table.signature.last
+      return [] unless table.pk && max.is_a?(Integer)
+
+      connection.execute("DELETE FROM #{connection.quote_table_name(table.name)} " \
+                         "WHERE #{connection.quote_column_name(table.pk)} > #{Integer(max)}")
+      []
+    end
+
+    def delete_row(table, row)
+      conditions = table.key.zip(row).map do |column, value|
+        quoted = connection.quote_column_name(column)
+        value.nil? ? "#{quoted} IS NULL" : "#{quoted} = #{connection.quote(value)}"
+      end
+      connection.execute("DELETE FROM #{connection.quote_table_name(table.name)} WHERE #{conditions.join(' AND ')}")
     end
 
     def with_foreign_keys_off(&)
@@ -81,9 +173,9 @@ module CommittedRows
     end
   end
 
-  # Prepended to ActiveSupport::TestCase: the count is taken after the
-  # fixture rollback (ActiveRecord::TestFixtures#after_teardown), and a
-  # failure raised here fails the test that left the rows.
+  # Prepended to ActiveSupport::TestCase: the check runs after the fixture
+  # rollback (ActiveRecord::TestFixtures#after_teardown), and a failure
+  # raised here fails the test that left the rows.
   module Check
     def before_setup
       CommittedRows.baseline
@@ -102,13 +194,10 @@ module CommittedRows
     private
 
     def check_committed_rows
-      changed = CommittedRows.changed
-      return if changed.empty?
+      report = CommittedRows.check!
+      return if report.nil? || (@pf_ddl_ran && CommittedRows.mysql?)
 
-      CommittedRows.remove!(changed.keys)
-      return if @pf_ddl_ran && CommittedRows.mysql?
-
-      flunk "left committed rows (table => [before, after]): #{changed.inspect}"
+      flunk report
     end
   end
 end
