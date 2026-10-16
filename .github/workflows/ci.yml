@@ -222,7 +222,8 @@ jobs:
       - name: Run tests on MySQL
         run: bundle exec rake test
 
-  # Layout in a real browser. test/support/preview_app.rb serves the dummy app
+  # Layout in a real browser, and the documentation's denial flows with Turbo.
+  # test/support/preview_app.rb serves the dummy app
   # with the sample data of the whole-UI tests and prints the screens;
   # test/browser/layout_probe.js renders every page, error state and flow at
   # 360 and 600px in en, sq and mk under the runner's Chrome (playwright-core,
@@ -270,6 +271,16 @@ jobs:
         run: >-
           node test/browser/layout_probe.js --log tmp/browser/preview.log --widths 360,600 --locales en,sq,mk
           --out tmp/browser/layout.json --shots tmp/browser
+
+      # The documentation's denial flows (docs/row-level-rules.md "Handling
+      # Denials") in Chrome with Turbo: test/support/docs_app.rb serves the
+      # generated Rails 8 app with every documented file applied; the
+      # request-level guard is test/permission_forge/docs/doc_samples_test.rb.
+      - name: Serve the docs app
+        run: bundle exec ruby test/support/docs_app.rb --serve 4018 > tmp/browser/docs.log 2>&1 &
+
+      - name: Drive the documentation's denial flows in Chrome
+        run: node test/browser/docs_flows.spec.js --log tmp/browser/docs.log --shots tmp/browser
 
       - name: Keep the report and the screenshots of the failures
         if: ${{ failure() }}
