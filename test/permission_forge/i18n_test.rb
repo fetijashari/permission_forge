@@ -331,6 +331,36 @@ module PermissionForge
       end
     end
 
+    # ── N. Words left behind (review R4 P2-7) ──
+    #
+    # A translated value keeps no English term the file has its own word
+    # for (Permission Set is "Grup lejesh" / "сет на дозволи"; commit,
+    # deploy, fail-open), and no word typed twice ("кој кој"). Albanian
+    # doubles its particles on purpose ("të të kërkohet", "SSO-së së").
+
+    LEFT_BEHIND = /fail-open|\bcommit\b|\bdeploy\b|Permission Set(?! Group)/
+    DOUBLED = /(?<!\p{L})(\p{L}{2,}) \1(?!\p{L})/i
+    PARTICLES = %w[të së].freeze
+
+    def left_behind(values)
+      values.select do |_, value|
+        next false unless value.is_a?(String)
+
+        value.match?(LEFT_BEHIND) || value.scan(DOUBLED).flatten.any? { |word| !PARTICLES.include?(word.downcase) }
+      end.keys
+    end
+
+    SUPPORTED_LOCALES.reject { |l| l == :en }.each do |locale|
+      test "#{locale} keeps no English term and no doubled word" do
+        assert_empty left_behind(raw_values(locale))
+      end
+    end
+
+    test 'the left-behind lint bites' do
+      assert_equal %w[a b c], left_behind('a' => 'e ka tashmë këtë Permission Set', 'b' => 'но кој кој запис', 'c' => '(fail-open)',
+                                          'd' => 'të të kërkohet', 'e' => 'Grup lejesh')
+    end
+
     # ── L. Locale switcher helper ──
 
     test 'pf_locale_label returns correct labels' do

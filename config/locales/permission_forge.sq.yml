@@ -1926,7 +1926,7 @@ sq:
           vetëm te kërkimet find_by dhe permission_scoped: pyetjet e tjera kthejnë
           çdo regjistrim.'
         conditional_sets_strict_mode: Grupet me kushte trajtohen si aktive kur mungojnë
-          informacionet e kërkesës (fail-open).
+          informacionet e kërkesës (mungesa e tyre e lë aksesin të hapur).
         http_basic_auth_enabled: Këto ekrane janë ose të bllokuara (kërkesa për fjalëkalim
           aktive, por pa kredenciale) ose të pambrojtura (pa fjalëkalim dhe pa kontrollues
           admini të personalizuar).
@@ -1942,7 +1942,8 @@ sq:
         secure: I sigurt
         snippet_current: Fragmenti tregon vlerën aktuale.
         snippet_recommended: Fragmenti tregon vlerën e rekomanduar.
-        step_deploy: Bëj commit dhe deploy (ose rinis serverin lokalisht).
+        step_deploy: Ruaj ndryshimin në kod dhe publiko aplikacionin (ose rinis serverin
+          lokalisht).
         step_edit: Ndrysho skedarin më lart.
         step_reload: Rifresko këtë faqe për ta konfirmuar.
       sections:
@@ -2447,12 +2448,12 @@ sq:
         value_not_expected: nuk kërkon vlerë për këtë operator
         value_required: nuk duhet të jetë bosh për këtë operator
       permission_set_user:
-        taken: e ka tashmë këtë Permission Set
+        taken: e ka tashmë këtë Grup lejesh
       requires: kërkon që %{requires} të jetë e aktivizuar
       resource:
         invalid_name: duhet të jetë emër i vlefshëm klase modeli (p.sh. Customer ose
           Admin::Report)
-        name_taken: ekziston tashmë në këtë Permission Set
+        name_taken: ekziston tashmë në këtë Grup lejesh
       resource_field:
         invalid_mask_strategy: nuk është strategji e vlefshme maskimi
         mask_strategy_required: duhet të jetë e pranishme kur aksesi i maskimit është
