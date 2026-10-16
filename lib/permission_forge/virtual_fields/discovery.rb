@@ -31,7 +31,8 @@ module PermissionForge
 
       # @return [Array<String>] discovered names, never a column
       def call
-        SOURCES.flat_map { |source| send(source) }.uniq - @klass.column_names
+        names = SOURCES.flat_map { |source| send(source) }.uniq
+        names - SchemaRead.columns_among(@klass, names)
       rescue StandardError
         []
       end

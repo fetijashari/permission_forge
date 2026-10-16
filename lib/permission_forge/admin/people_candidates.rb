@@ -31,7 +31,7 @@ module PermissionForge
         end
 
         def search(query)
-          columns = SEARCH_COLUMNS & @relation.klass.column_names
+          columns = PermissionForge::SchemaRead.columns_among(@relation.klass, SEARCH_COLUMNS)
           id = query.to_i if query.match?(NUMERIC)
           return Relation.new(@relation.none) if columns.empty? && id.nil?
 

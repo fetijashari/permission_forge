@@ -84,7 +84,7 @@ module PermissionForge
 
       # Every email column the user table has (`email`, `email_address`).
       def email_columns
-        PersonLabel::EMAIL_ATTRIBUTES.map(&:to_s) & model.column_names
+        PermissionForge::SchemaRead.columns_among(model, PersonLabel::EMAIL_ATTRIBUTES.map(&:to_s))
       end
 
       # "Ana Krasniqi" against separate first/last name columns.
@@ -98,11 +98,11 @@ module PermissionForge
       end
 
       def first_last_columns
-        FIRST_LAST_COLUMNS.find { |cols| (cols - model.column_names).empty? }
+        FIRST_LAST_COLUMNS.find { |cols| PermissionForge::SchemaRead.columns_among(model, cols).size == cols.size }
       end
 
       def name_column
-        (%w[name full_name display_name] & model.column_names).first
+        PermissionForge::SchemaRead.columns_among(model, %w[name full_name display_name]).first
       end
 
       def picked(ids)
