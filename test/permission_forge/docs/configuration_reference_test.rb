@@ -108,10 +108,14 @@ module PermissionForge
       def stale_message(rendered, actual)
         generated = rendered.lines
         file = actual.lines
-        differing = (0...[generated.size, file.size].max).reject { |index| generated[index] == file[index] }
+        differing = differing_lines(generated, file)
         shown = differing.first(3).map { |index| line_difference(index, generated[index], file[index]) }
         "docs/configuration.md is stale: run `bundle exec rake docs:configuration` and commit the result.\n" \
           "#{differing.size} line(s) differ (generated #{generated.size} lines, file #{file.size}); the first:\n#{shown.join("\n")}"
+      end
+
+      def differing_lines(generated, file)
+        (0...[generated.size, file.size].max).reject { |index| generated[index] == file[index] }
       end
 
       def line_difference(index, generated, file)
