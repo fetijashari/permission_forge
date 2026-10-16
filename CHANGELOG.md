@@ -1163,10 +1163,12 @@ and the RLS re-sync.
   `:name`) on the user model, the default builder stored the ciphertext JSON there before 0.15; reading it decrypted
   would put the plaintext in the cache store. `permissions_hash[:profile][:email]` and `[:name]` are now `nil` for an
   encrypted attribute (an encrypted `email` gives way to a plain `email_address`); the admin's labels, which are never
-  cached, still read it decrypted (`Admin::PersonLabel`, `decrypt: false` for the profile). The generated initializer's
-  `profile_builder` is the host's own code and calls the public readers, which decrypt. **Opt out:** set a
-  `config.profile_builder` of your own that returns what the cache store may hold.
+  cached, still read it decrypted (`Admin::PersonLabel`, `decrypt: false` for the profile). The generated initializer
+  no longer sets `profile_builder` (the line is a commented example), so a new install uses this default; an initializer
+  generated before keeps its own lambda, which calls the public readers (they decrypt): remove the line to get the
+  default. **Opt out:** set a `config.profile_builder` of your own that returns what the cache store may hold.
   <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#the default profile_builder leaves encrypted attributes out; the admin label reads them decrypted -->
+  <!-- pin: test/permission_forge/release_readiness/claims_regression_test.rb#CLAIMS-32 the generated initializer works without a Current class and keeps uuid in the profile -->
 - **A LIKE operator on a column that is not text is refused on `operator`, naming the column's type.** `seats
   contains '1'` on an integer column (PostgreSQL), or any LIKE operator on a `json` column, was refused as "is not a
   value Customer.seats can hold" on `field_value`, although the value was fine (field test round 7, D#22). It is now

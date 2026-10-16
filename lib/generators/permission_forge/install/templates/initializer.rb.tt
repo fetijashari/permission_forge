@@ -48,10 +48,9 @@ PermissionForge.configure do |config|
   # reports the assignments still held by users it calls inactive.
   config.user_active_check = ->(user) { user.respond_to?(:active_for_authentication?) ? user.active_for_authentication? : true }
 
-  # The profile cached with each user's permissions (uuid: nil if users have none; email or email_address).
-  config.profile_builder = ->(user) {
-    { id: user.id, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email).presence || user.try(:email_address) }
-  }
+  # The profile cached with each user's permissions: by default { id:, uuid:, name:, email: } (uuid nil
+  # if users have none; email or email_address), an attribute the user model encrypts left out (nil).
+  # config.profile_builder = ->(user) { { id: user.id, uuid: user.try(:uuid), name: user.try(:name) } }
 
   # Prefix of the PermissionForge tables ('' for none).
   config.table_name_prefix = '<%= table_prefix %>'

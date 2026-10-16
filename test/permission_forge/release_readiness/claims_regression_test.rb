@@ -266,7 +266,11 @@ module PermissionForge
 
         assert_includes template, 'defined?(::Current)'
         assert_no_match(/^\s*config\.current_user_resolver = -> \{ Current\.user \}/, template)
-        assert_match(/config\.profile_builder = ->\(user\) \{\n\s*\{ id: user\.id, uuid: user\.try\(:uuid\)/, template)
+        # The template leaves the profile to the default builder (which keeps uuid and leaves an
+        # encrypted attribute out of the cached hash); the line is a commented example.
+        assert_no_match(/^\s*config\.profile_builder =/, template)
+        profile = install_template_configuration.profile_builder.call(create_user(uuid: 'u-32', name: 'Ada', email: 'ada@example.com'))
+        assert_equal({ id: profile[:id], uuid: 'u-32', name: 'Ada', email: 'ada@example.com' }, profile)
       end
 
       # ---- #35: README named `:mask`; the value is :mask_all ---------------------------
