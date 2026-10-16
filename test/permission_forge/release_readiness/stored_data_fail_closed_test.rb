@@ -59,8 +59,8 @@ module PermissionForge
       # entry out of the hash (the granting Resource renamed off its model, a
       # granting set whose condition cannot be judged). The grant goes
       # (can_read? is false), and with it the rules the entry carried.
-      RULES_ONLY = 'record reads apply rules only under the default record_reads_without_read_access = :rules_only ' \
-                   '(config.no_read_access_strategy); :deny (strict preset) denies — the :deny run holds these paths closed'
+      RULES_ONLY = 'record reads apply rules only under the default no_read_access_strategy = :rules_only; ' \
+                   ':deny (strict preset) denies — the :deny run holds these paths closed'
       # A row renamed off what it names: the Muting Permission Set's Resource
       # (or its domain field row) mutes nothing on Customer any more, so
       # domain is readable again; the granting Resource's (or email row's)
