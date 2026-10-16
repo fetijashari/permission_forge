@@ -57,8 +57,9 @@ GitHub Release.
    `lib/permission_forge/version.rb` and turns `## [Unreleased]` in `CHANGELOG.md` into `## [X.Y.Z] - YYYY-MM-DD`
    (with a new empty `## [Unreleased]` above it). Open the pull request against `main` and wait for CI: its `lint` job
    builds and checks the gem exactly as the release does (`.github/scripts/build_gem.sh`).
-2. **Squash-merge** it into `main` once the other maintainer has approved it (every pull request needs one approval
-   after its last push, from someone other than its author; nobody can bypass it).
+2. **Squash-merge** it into `main` once another maintainer has approved it (every pull request needs one approval
+   after its last push, from someone other than its author; only the owner can merge without it, through the pull
+   request, and GitHub records the bypass).
 3. **Tag the squash commit** with an annotated tag, from a terminal, and push the tag:
 
    ```bash
@@ -165,7 +166,7 @@ In place on GitHub:
 - **Rulesets on `refs/tags/v*`:** "release tags" blocks deletion, update and force-push, with no bypass; "release tag
   creation" blocks creation, with the Repository admin role as the only bypass. They are separate because a bypass
   applies to every rule of its ruleset.
-- **Ruleset "main"**, with no bypass: pull request with one approval (a code owner, `.github/CODEOWNERS`; given after
+- **Ruleset "main"**, bypassed only by the Repository admin role (the owner), for pull requests only: pull request with one approval (a code owner, `.github/CODEOWNERS`; given after
   the last push; stale approvals dismissed; review threads resolved), squash merges only (linear history, signed
   commits: GitHub signs the squash commit), the CI checks required, and no open CodeQL alert of severity error or
   high security severity. Merge commits and rebase merges are off in the repository settings too.
