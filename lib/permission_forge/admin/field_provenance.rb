@@ -34,7 +34,7 @@ module PermissionForge
       # masked; no_edit took editing away and left it readable.
       MUTE_EFFECTS = {
         'hide' => ->(before, after) { before[:read_access] == true && !after[:read_access] },
-        'mask' => ->(_before, after) { PermissionForge::FieldLevel.effective_level(after) == 'masked' },
+        'mask' => ->(before, after) { before[:mask_access] != true && PermissionForge::FieldLevel.effective_level(after) == 'masked' },
         'no_edit' => ->(before, after) { before[:edit_access] == true && after[:read_access] == true && !after[:edit_access] }
       }.freeze
 

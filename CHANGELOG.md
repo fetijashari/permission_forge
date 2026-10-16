@@ -1112,7 +1112,8 @@ and the RLS re-sync.
   masks or hides a field no set shows made the panel read "⊘ Hidden by muting" and "Contractors forces this field
   masked." for a field that was hidden because nobody granted it; a muting row that takes editing away was listed for
   a field nobody could edit; with two mutes the weaker one was named first; two masking sets were listed in an
-  unstable order, so the first strategy named could differ from the one applied. The badge and the first reason now
+  unstable order, so the first strategy named could differ from the one applied; a mask on a field already masked, or
+  a mute on a subclass field its base's grants already hide, was credited too. The badge and the first reason now
   always word the entry's level (and strategy).
   <!-- pin: test/permission_forge/html/admin_view_models_test.rb#every WHY level word equals the level the hash entry gives, for every state -->
 - **Effective access says how each Permission Set shows a field.** The WHY panel of a field said "✓ Sales rep shows
