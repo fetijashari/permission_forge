@@ -829,5 +829,7 @@
 .pf-reason__body { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; max-width: 420px; }
 .pf-reason--compact .pf-reason__summary { font-size: 12px; }
 .pf-reason--compact .pf-reason__body { margin-top: 6px; min-width: 200px; }
-.pf-reason-form { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+/* min-width: 0 — as a flex item (a card header, .pf-actions) the form may shrink to the line, so a
+   people <select> with long labels shrinks with it instead of pushing the form past the page. */
+.pf-reason-form { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
 .pf-reason-form .pf-reason--compact[open] { flex-basis: 100%; }

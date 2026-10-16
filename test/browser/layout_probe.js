@@ -55,14 +55,26 @@ const measure = (pass) => {
     }
     return false;
   };
-  // The nearest ancestor that scrolls sideways, or null when an ancestor clips first.
-  const scrollFrameOf = (el) => {
+  // Why an element whose right edge passes the viewport cannot be reached, or
+  // null. Walking up: a frame that scrolls makes everything in it reachable
+  // (what matters from there is the frame's own edge); a box that clips must
+  // contain the element (text an ellipsis truncates on purpose is exempt); at
+  // the top, the edge must be inside the viewport.
+  const unreachable = (el, rect) => {
+    let right = rect.right;
     for (let e = el.parentElement; e && e !== document.documentElement; e = e.parentElement) {
-      const overflow = getComputedStyle(e).overflowX;
-      if (overflow === 'auto' || overflow === 'scroll') return e;
-      if (overflow === 'hidden' || overflow === 'clip') return null;
+      const cs = getComputedStyle(e);
+      const overflow = cs.overflowX;
+      const box = e.getBoundingClientRect();
+      if (overflow === 'auto' || overflow === 'scroll') {
+        if (e.scrollWidth <= e.clientWidth && right > box.right + 1) return `cut off by ${describe(e)}, which does not scroll`;
+        right = Math.min(right, box.right);
+      } else if (overflow === 'hidden' || overflow === 'clip') {
+        if (right > box.right + 1) return cs.textOverflow === 'ellipsis' ? null : `cut off by ${describe(e)} (overflow hidden)`;
+        right = Math.min(right, box.right);
+      }
     }
-    return null;
+    return right > vw + 1 ? 'outside any scroll frame' : null;
   };
   if (sw > vw + 1) failures.push({ kind: 'document-overflow', detail: `the document scrolls sideways: scrollWidth ${sw} > ${vw}` });
   const layers = [];
@@ -73,10 +85,9 @@ const measure = (pass) => {
     if (rect.width === 0 && rect.height === 0) continue;
     if (cs.position === 'sticky' || cs.position === 'fixed') layers.push({ el, rect });
     if (cs.position !== 'fixed' && rect.right > vw + 1) {
-      const frame = scrollFrameOf(el);
-      const reachable = frame && frame.getBoundingClientRect().right <= vw + 1 && frame.scrollWidth > frame.clientWidth;
+      const why = unreachable(el, rect);
       const childPasses = [...el.children].some((child) => child.getBoundingClientRect().right > vw + 1);
-      if (!reachable && !childPasses) failures.push({ kind: 'unframed-edge', detail: `${chainOf(el)} ends at ${Math.round(rect.right)}px in a ${vw}px viewport${frame ? ' (its frame does not scroll)' : ''}: ${(el.textContent || '').trim().slice(0, 40)}` });
+      if (why && !childPasses) failures.push({ kind: 'unframed-edge', detail: `${chainOf(el)} ends at ${Math.round(rect.right)}px in a ${vw}px viewport, ${why}: ${(el.textContent || '').trim().slice(0, 40)}` });
     }
     if (el.tagName === 'INPUT' && el.placeholder) {
       const probe = document.createElement('span');
