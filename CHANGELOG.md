@@ -1048,8 +1048,9 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   `between`, a list stored joined with commas (`["active", "lead"]` → `"active,lead"`: it was a 422 "can't be blank");
   `permission_set_group_id` goes on taking the group's id or uuid, `null` or `""` clearing it. Outside a section, a
   copy's `name` that is not text (`…/clone`; it became the default name) and a bulk `user_ids` element that is no id (it
-  was left out), `""` beside an id included, are 422s too (a JSON `null` in the list is removed by Rails' parameter
-  parsing before the API reads it). The admin reads its flags the same way (the field drawer, a group, an action, the set
+  was left out) — an object, a list, a fraction, a boolean — are 422s too; a blank string beside an id is ignored, as
+  Rails' own `collection_singular_ids=` ignores it (a form built with `collection_check_boxes` sends one), and a JSON
+  `null` in the list is removed by Rails' parameter parsing before the API reads it. The admin reads its flags the same way (the field drawer, a group, an action, the set
   editor): a crafted `group[is_active]=nope` switched the group on; it now goes back with "is_active must be true or
   false. Nothing was changed." A static guard keeps `.permit` out of the API controllers. **No opt-out:** send each
   attribute in its shape (docs/admin-api.md "Attribute shapes"); a dropped or miscast value was a silent no-op or an
@@ -1059,7 +1060,7 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#a list for field_value under in, not_in or between is joined with commas -->
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#a copy name that is not text is a 422 keyed by name, and nothing is copied -->
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids with an element that is no id is a 422 keyed by user_ids, and nobody is assigned -->
-  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids holding a blank string beside an id is a 422 keyed by user_ids, and nobody is assigned -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids holding a blank string beside an id ignores the blank, as Rails does -->
   <!-- pin: test/permission_forge/api/input_shapes_test.rb#no .permit in the API controllers outside pf_record_attributes -->
   <!-- pin: test/permission_forge/security/route_fuzz_test.rb#~answers a wrong shape of each section attribute with a 422 keyed by it -->
   <!-- pin: test/permission_forge/html/admin_boolean_params_test.rb#a group flag the admin cannot read is a flash, and the group is unchanged -->
