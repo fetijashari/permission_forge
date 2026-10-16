@@ -403,11 +403,14 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/models/permission_set_rule_column_test.rb#a qualifier naming no table is refused; a join rule may name a table or an alias its query gives -->
   <!-- pin: test/permission_forge/services/permission_rule_applier_test.rb#a filter rule qualified with a table of another model matches nothing in every gem-built query -->
   <!-- pin: test/permission_forge/services/permission_rule_applier_test.rb#a join rule qualified with a name the ON clause mentions, which is no table or alias, matches nothing -->
-- **A rule value its column cannot hold is refused on save** (`field_value`; the API answers 422) for a new rule and
-  when what it compares changes — `'5_id'` on an integer column, `'maybe'` on a boolean, `'banana'` on a `uuid`, a
-  `between` bound or list element. A stored one stays editable, matches nothing and is listed by the audit
-  (`unusable_rule_values`) and Home; a copy keeps it. `current_user` is refused only where no id fits. **No opt-out:**
-  such a rule denies every record to its holders.
+- **A rule value its column cannot hold is refused on save** (`field_value`: "is not a value Customer.supplier_id can
+  hold"; the JSON API answers 422), for a new rule and when its value, operator, field name, path, join type or
+  resource changes — `'5_id'` on an integer column, `'maybe'` on a boolean one, `'banana'` on a `uuid` one, a
+  `between` bound or a list element the column cannot hold. Such a rule matched nothing for everyone it applies to. A
+  rule saved before (or written past the model) stays editable in its other attributes, still matches nothing, and is
+  still listed by the audit (`unusable_rule_values`) and on Home; a copy keeps its original's value. `current_user` is
+  refused only where no id could be held (a boolean, date, address, json or enum column). **No opt-out:** the rule
+  could only ever deny every record to its holders; saving it hid a lock-out behind a successful save.
   <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#unusable_value: a new rule is refused with the problem's message -->
 - **What a rule or field row names is checked when it changes.** `operator` and `join_type` (`PermissionSetRule`) and
   `mask_strategy` (`ResourceField`, also when `mask_access` changes) are validated for a new row and when the
@@ -470,9 +473,12 @@ and the RLS re-sync.
   <!-- pin: test/permission_forge/services/rls_policy_generator_test.rb#view_all bypass branch checks granting and muting sets -->
   <!-- pin: test/rls/rls_rule_parity_test.rb#PostgreSQL's relative date words are read per statement by the app layer and by the policy -->
 - **PostgreSQL: a `uuid`, `inet`, `cidr` or native enum value the column cannot hold matches nothing** where it raised
-  for every holder (`'banana'` for a `uuid`, an address with host bits for a `cidr`, a word that is no label); refused
-  on save, listed by the audit (`unusable_rule_values`) and Home. **No opt-out:** such a value never matched a row; a
-  custom operator still receives it as written.
+  `ActiveRecord::StatementInvalid` for every holder (`find_by`, `permission_scoped`, every query under
+  `auto_query_scoping`) — `'banana'` against a `uuid` column, an address IPAddr cannot read against an `inet` column, an
+  address with host bits against a `cidr` column, a word that is not a label against a native enum column. Such a rule
+  is refused on save and listed by `rake permission_forge:audit` (`unusable_rule_values`, Medium while held) and on
+  Home. **No opt-out:** a value PostgreSQL cannot read never matched a row; a custom operator (an injected
+  `operator_registry:`) still receives the value as written.
   <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#'banana' against a uuid column matches nothing, is refused on save and is listed by the audit -->
   <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#each of these rules is named by RuleProblem and refused on save -->
 - **PostgreSQL: a rule value the gem cannot type itself is asked of PostgreSQL, once per process** (a `CAST` in a
