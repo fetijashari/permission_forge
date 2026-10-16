@@ -53,7 +53,7 @@ module PermissionForge
         # sensitive column added Read-only under gdpr_defaults, Read-only for
         # a timestamp added Editable. A blank name is no row.
         def build_new_field(resource, column, level)
-          return nil unless valid_level?(level) && level != 'leave'
+          return nil unless valid_level?(level) && FieldLevel.row?(level, muting: muting?)
 
           attrs = rows_of(resource).attrs(column, Values.effective_level(level, resource, muting: muting?))
           return nil unless attrs

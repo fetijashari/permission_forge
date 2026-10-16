@@ -114,20 +114,20 @@ module PermissionForge
         get pf("/people/#{@ana.id}"), params: { tab: 'effective', open: ['Customer'], why: 'Customer.field.email' }
 
         assert_response :success
-        muted = "⊘ #{t('people.effective_tab.hidden_by_muting')}"
+        muted = "⊘ #{t('ui.states.effective.hidden_by_muting')}"
         assert_equal muted, row_badge('email').text.strip
         assert_equal muted, why_badge('Customer.field.email').text.strip
         assert_includes why_badge('Customer.field.email')['class'], 'pf-level-badge--muted'
         # A field no set grants keeps the neutral badge, in its row and its panel.
-        assert_equal "∅ #{t('ui.levels.hidden')}", row_badge('phone').text.strip
-        assert_equal "∅ #{t('ui.levels.hidden')}", why_badge('Customer.field.phone').text.strip
+        assert_equal "∅ #{t('ui.states.field_level.hidden')}", row_badge('phone').text.strip
+        assert_equal "∅ #{t('ui.states.field_level.hidden')}", why_badge('Customer.field.phone').text.strip
       end
 
       test 'a masked field keeps its strategy in the row and its sample in the Why panel' do
         get pf("/people/#{@ana.id}"), params: { tab: 'effective', open: ['Customer'] }
 
-        assert_match(/\A•• #{t('ui.levels.masked')} \(#{t('ui.mask_strategies.email')}\)\z/, row_badge('email').text.strip)
-        assert_match(/\A•• #{t('ui.levels.masked')} \(#{t('ui.mask_strategies.email')}\) · \S+@\S+\z/,
+        assert_match(/\A•• #{t('ui.states.field_level.masked')} \(#{t('ui.mask_strategies.email')}\)\z/, row_badge('email').text.strip)
+        assert_match(/\A•• #{t('ui.states.field_level.masked')} \(#{t('ui.mask_strategies.email')}\) · \S+@\S+\z/,
                      why_badge('Customer.field.email').text.strip)
       end
 
@@ -152,7 +152,7 @@ module PermissionForge
             assert_response :success
             assert_no_missing_translations
             I18n.with_locale(locale) do
-              unknown = t('audit_log.actor_types.unknown')
+              unknown = t('ui.states.actor.unknown')
               who = css_select('section[aria-labelledby=pf-event-who]').first
               hint = who.css('p').find { |p| p.at_css('code') }
               assert hint, 'the explanation is shown'
@@ -171,7 +171,7 @@ module PermissionForge
             get pf("/permission_sets/#{@set.id}"), params: { locale: locale }
 
             I18n.with_locale(locale) do
-              unknown = t('audit_log.actor_types.unknown')
+              unknown = t('ui.states.actor.unknown')
               hint = css_select('.pf-audit-footer__hint').first
               assert hint
               assert_not hint.text.strip.start_with?(unknown), "#{locale}: the footer's explanation repeats #{unknown}"

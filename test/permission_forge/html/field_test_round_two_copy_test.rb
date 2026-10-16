@@ -159,7 +159,9 @@ module PermissionForge
           get pf("/permission_sets/#{@set.id}"), params: { locale: 'en' }
 
           footer = css_select('.pf-audit-footer').first
-          assert_match "Last edited by #{t('audit_log.actor_types.unknown')}", footer.text.squish
+          # Created and last edited by nobody known: "Unknown" is said once (the creation).
+          assert_equal 1, footer.text.squish.scan(t('ui.states.actor.unknown')).size, footer.text.squish
+          assert_match t('shared.audit_footer.edited_at', updated_at: t('ui.dates.today')), footer.text.squish
           hint = footer.css('.pf-audit-footer__hint').first
           assert hint, 'the footer explains the unknown actor'
           assert_equal 'PermissionForge.with_audit_actor', hint.css('code').text

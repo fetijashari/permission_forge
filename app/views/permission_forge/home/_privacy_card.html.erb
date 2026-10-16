@@ -41,7 +41,7 @@
           <% if finding.turned_off? %>
             <%= pf_off_badge %>
           <% elsif finding.unconfigured? %>
-            <%= pf_badge(t('permission_forge.ui.badges.not_configured'), variant: :unconfigured,
+            <%= pf_badge(pf_state(:field_level, :none).word, variant: :unconfigured,
                          href: pf_setting_path(finding.implicit_grant? ? 'extra_fields_default_access' : 'unconfigured_field_strategy')) %>
           <% end %>
         </div>

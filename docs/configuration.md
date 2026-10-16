@@ -934,6 +934,12 @@ It does not govern model masking (`masked_attributes_nil_user_strategy`) or resp
 
 **Database session variable.** Name of the variable that tells the database who the current user is.
 
+#### rule_secret_column_patterns
+
+**Default:** `[/\Apassword_digest\z/, /_digest\z/, /token/, /\Aencrypted_/, /_secret/]`
+
+**Secret column patterns.** Record rules may not compare columns matching these patterns (password digests, tokens, encrypted values). An empty list allows them.
+
 ### Controller actions
 
 See [controller-actions.md](controller-actions.md).

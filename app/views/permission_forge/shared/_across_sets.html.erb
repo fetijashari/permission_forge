@@ -19,13 +19,8 @@
             <%= pf_off_badge unless row[:in_effect] %>
           </span>
         </span>
-        <% if level.nil? %>
-          <%= pf_level_badge('none', label: t('permission_forge.ui.badges.not_configured')) %>
-        <% elsif set.is_muting %>
-          <%= pf_level_badge(level == 'hide' ? 'muted' : level, label: (t('.muted_hidden') if level == 'hide')) %>
-        <% else %>
-          <%= pf_level_badge(level, strategy: (field.mask_strategy if level == 'masked')) %>
-        <% end %>
+        <%# The set's level, worded as its Fields tab and the field drawer word it. %>
+        <%= pf_level_badge(level || 'none', strategy: (field.mask_strategy if %w[masked mask].include?(level))) %>
         <span class="pf-option__aside"><%= pf_people_text(row[:people]) %></span>
       <% end %>
     <% end %>

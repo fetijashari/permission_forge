@@ -83,20 +83,16 @@ module PermissionForge
 
     # Who acted, as recorded: the name snapshot, with what kind of actor it
     # was when that is not a person ("ops (password prompt)", "API client").
+    # Admin::ActorLabel, the one definition.
     def pf_audit_actor_name(event)
-      type = event.actor_type.to_s
-      label = event.actor_label.presence
-      return t("permission_forge.audit_log.actor_named.#{type}", name: label, default: label) if label
-      return t('permission_forge.audit_log.person_id', id: event.actor_id) if type == 'user' && event.actor_id.present?
-
-      pf_audit_actor_type_label(type)
+      PermissionForge::Admin::ActorLabel.for(event)
     end
 
     # An event that named no actor (code outside a request with no
     # PermissionForge.with_audit_actor, or an actor resolver that failed):
     # pf_audit_actor_name reads it as the actor type "Unknown".
     def pf_audit_unknown_actor?(event)
-      !event.nil? && event.actor_type.to_s == 'unknown' && event.actor_label.blank?
+      PermissionForge::Admin::ActorLabel.unknown?(event)
     end
 
     # Where "Unknown" comes from, said the same way wherever it shows (the
@@ -108,7 +104,7 @@ module PermissionForge
 
     # A type, category or source outside the catalogue is shown as stored.
     def pf_audit_actor_type_label(type)
-      t("permission_forge.audit_log.actor_types.#{type}", default: type.to_s)
+      PermissionForge::Admin::ActorLabel.type_label(type)
     end
 
     def pf_audit_category_label(category)

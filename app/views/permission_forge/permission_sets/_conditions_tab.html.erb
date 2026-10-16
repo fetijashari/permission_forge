@@ -32,15 +32,18 @@
       </label>
       <div class="pf-row" data-pf-show-when="hours_enabled=1">
         <label for="pf-hours-from"><%= t('.from') %></label>
-        <select id="pf-hours-from" name="allowed_hours_start" class="pf-select pf-select--sm pf-select--auto" <%= 'disabled' if locked %>>
+        <select id="pf-hours-from" name="allowed_hours_start" class="pf-select pf-select--sm pf-select--auto" <%= 'disabled' if locked %>
+                <%= pf_attrs_when(errors[:hours], aria: { invalid: true, describedby: 'pf-hours-error' }) %>>
           <% (0..23).each do |h| %><option value="<%= h %>" <%= 'selected' if h == from %>><%= pf_hour(h) %></option><% end %>
         </select>
         <label for="pf-hours-to"><%= t('.to') %></label>
-        <select id="pf-hours-to" name="allowed_hours_end" class="pf-select pf-select--sm pf-select--auto" <%= 'disabled' if locked %>>
+        <select id="pf-hours-to" name="allowed_hours_end" class="pf-select pf-select--sm pf-select--auto" <%= 'disabled' if locked %>
+                <%= pf_attrs_when(errors[:hours], aria: { invalid: true, describedby: 'pf-hours-error' }) %>>
           <% (0..23).each do |h| %><option value="<%= h %>" <%= 'selected' if h == to %>><%= pf_hour(h) %></option><% end %>
         </select>
         <span class="pf-fs-12 pf-text-3"><%= t('.server_time', zone: Time.zone.name) %></span>
       </div>
+      <% if errors[:hours] %><p class="pf-error" id="pf-hours-error" role="alert"><%= errors[:hours] %></p><% end %>
       <% if hours_on && to <= from %>
         <span class="pf-fs-13 pf-text-2">☾ <%= t('.overnight', from: pf_hour(from), to: pf_hour(to)) %></span>
       <% end %>

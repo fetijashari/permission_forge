@@ -168,12 +168,6 @@ en:
       actor_named:
         api: "%{name} (API)"
         basic_auth: "%{name} (password prompt)"
-      actor_types:
-        api: API client
-        basic_auth: Password prompt
-        system: System
-        unknown: Unknown
-        user: Person
       boolean:
         'false': 'No'
         'true': 'Yes'
@@ -562,6 +556,16 @@ en:
           other: "%{count} people have this set."
         rule: "“%{rule}” on %{resource} in “%{set}”"
         title: Rules that match nothing
+      conditions_card:
+        description: These sets hold a condition that cannot be judged (an IP entry
+          that is no address, no entry at all, or a broken hour window).
+        granting: It never passes, so it grants nothing.
+        muting: 'A Muting Permission Set: it applies to every request.'
+        open: Fix conditions
+        people:
+          one: "%{count} person has this set."
+          other: "%{count} people have this set."
+        title: Activation conditions nobody can judge
       ending_card:
         description: Assignments that end in the next 7 days.
         extend: Extend 30 days
@@ -617,6 +621,17 @@ en:
           one: "%{count} thing to review"
           other: "%{count} things to review"
         title: Needs attention
+      mask_strategies_card:
+        description: No built-in mask strategy and no custom strategy has these names,
+          so their values are masked fully until you pick a strategy or add the custom
+          one back.
+        field: "“%{field}” on %{resource} in “%{set}”"
+        fix: Fix field
+        people:
+          one: "%{count} person has this set."
+          other: "%{count} people have this set."
+        strategy_html: Strategy %{strategy}
+        title: Fields masked with an unknown strategy
       privacy_card:
         by_name_note: Fields are flagged by column name, so some may not be personal
           data (a company's name, for example).
@@ -661,6 +676,18 @@ en:
           the app uses find_by or permission_scoped. Other queries (where, all, associations)
           return every record.
         title: Record rules not applied everywhere
+      secret_rules_card:
+        column_html: Compares %{column}
+        description: These record rules compare a column that holds a secret. They
+          still apply, but who can see which record gives the secret away. Compare
+          another column, or remove the rule.
+        fix: Fix rule
+        open: Open rules
+        people:
+          one: "%{count} person has this set."
+          other: "%{count} people have this set."
+        rule: "“%{rule}” on %{resource} in “%{set}”"
+        title: Rules on secret columns
       stale_card:
         assigned: Assigned %{date} by %{by}
         description: Not reviewed in over %{days} days. Confirm these people still
@@ -756,19 +783,16 @@ en:
         from: from %{set}
         muted_by: Hidden by %{set}
         none: No set shows it
-        unconfigured: Not configured · %{behaviour}
+        unconfigured: "%{state} · %{behaviour}"
         virtual: Virtual field, readable by default
       effective_tab:
         conditional: "%{sets} only count while their activation conditions are true.
           They're included here."
         fields_visible: "%{visible} of %{total} fields visible"
         grid_label: Effective access
-        hidden_by_muting: Hidden by muting
         intro: What %{name} can do right now, with all sets combined. Select any cell
           to see why.
         legend: Legend
-        legend_muted: Muted
-        legend_none: Not given
         why: Why
         why_empty: Select a cell, field or action to see which Permission Set caused
           it.
@@ -1344,21 +1368,12 @@ en:
         filter_label: Filter fields
         filters:
           all: All
-          edit: Editable
-          hidden: Hidden
-          hide: Hidden
-          leave: Unchanged
-          mask: Force mask
-          masked: Masked
-          read: Read-only
-          sensitive: Sensitive
-          unconfigured: Not configured
         implicit_grant: Editable by default
         level: Access level
         level_aria: Access level for %{field}
         mutes_nothing: Mutes nothing
         no_match: No fields match.
-        not_configured: Not configured · %{behaviour}
+        not_configured: "%{state} · %{behaviour}"
         read_off: Turn on Read for %{resource} to choose which fields people see.
         search: Search fields
         select_all: Select all shown fields
@@ -1763,6 +1778,10 @@ en:
           desc: Name of the variable that tells the database who the current user
             is.
           name: Database session variable
+        rule_secret_column_patterns:
+          desc: Record rules may not compare columns matching these patterns (password
+            digests, tokens, encrypted values). An empty list allows them.
+          name: Secret column patterns
         snapshot_transactions:
           desc: 'Whether a database transaction keeps seeing the data as it was when
             it began. Permissions computed inside such a transaction are not cached.
@@ -1890,6 +1909,9 @@ en:
         record_rules: Record rules & query scoping
       show:
         api_disabled_html: API is disabled (%{key}).
+        attention:
+          one: Home lists %{count} item that needs attention.
+          other: Home lists %{count} items that need attention.
         changed_count:
           one: "%{count} changed"
           other: "%{count} changed"
@@ -1900,12 +1922,16 @@ en:
         intro_html: Settings are defined in %{file}. Changes require a deploy/restart.
           This page shows the current values and how to change them.
         no_match: No settings match.
+        open_home: Open Home
         read_only: Read-only
         search: Search settings
         section_meta: "%{settings} · %{changed}"
         secure_count:
           one: "%{count} security and privacy setting looks good."
           other: "%{count} security and privacy settings look good."
+        secure_count_set:
+          one: "%{count} security and privacy setting is set as recommended."
+          other: "%{count} security and privacy settings are set as recommended."
         settings_count:
           one: "%{count} setting"
           other: "%{count} settings"
@@ -1939,18 +1965,17 @@ en:
         set: Set
     shared:
       across_sets:
-        muted_hidden: 'Muted: hidden'
         none: No Permission Set includes this resource.
       active: Active
       audit_footer:
         created: Created by %{created_by} · %{created_at}
         disabled: Created-by and edited-by aren't being recorded.
         edited: Last edited by %{updated_by} · %{updated_at}
+        edited_at: Last edited %{updated_at}
         history: History
       crud_cell:
         allowed: Allowed
         muted: Muted
-        needs_read: Turn on Read first
         needs_read_short: Needs Read
         'no': 'No'
         unchanged: Unchanged
@@ -2045,7 +2070,6 @@ en:
           record: Record
           type: Type
           where: Where
-        system: System
         types:
           action: Action
           assignment: Assignment
@@ -2063,9 +2087,7 @@ en:
         fail_open: Fail-open
         fail_open_long: 'Fail-open: active when request info is missing'
         fail_open_title: conditional_sets_strict_mode is off
-        locked: Locked
         muting: Muting
-        not_configured: Not configured
         'off': 'Off'
         sensitive: Sensitive
         unknown_mask_strategy: Unknown mask strategy — masked fully until fixed
@@ -2173,16 +2195,6 @@ en:
         masked: "%{set} shows this field masked (%{strategy})."
         no_edit: "%{set} stops people editing this field."
         read: "%{set} shows this field read-only."
-      levels:
-        edit: Editable
-        hidden: Hidden
-        hide: Hide
-        leave: Unchanged
-        mask: Force mask
-        masked: Masked
-        muted: Muted
-        none: Not configured
-        read: Read-only
       locked:
         title: 'Locked: managed by the system/API'
       mask_strategies:
@@ -2203,6 +2215,7 @@ en:
         nov: Nov
         oct: Oct
         sep: Sep
+      needs_read_first: Turn on Read first
       next: Next
       no_group: Not in a group
       open_person: Open person
@@ -2267,9 +2280,28 @@ en:
       search_people: Name or email
       setting: Setting
       states:
-        blocked: Blocked
-        granted: Allowed
-        none: 'No'
+        actor:
+          api: API client
+          basic_auth: Password prompt
+          system: System
+          unknown: Unknown
+          user: Person
+        effective:
+          blocked: Blocked
+          granted: Allowed
+          hidden_by_muting: Hidden by muting
+          none: 'No'
+        field_level:
+          edit: Editable
+          hidden: Hidden
+          hide: Hide
+          leave: Unchanged
+          mask: Force mask
+          masked: Masked
+          none: Not configured
+          read: Read-only
+        lock:
+          locked: Locked
       unconfigured:
         block: Blocked by default
         mask_all: Fully masked
@@ -2332,6 +2364,8 @@ en:
         invalid_operator: is not a valid operator
         nul_byte: must not contain a NUL byte
         numeric_or_date_required: must be a numeric or date value for comparison operators
+        secret_column: 'names a column that holds a secret (a password digest, a token,
+          an encrypted value): a record rule never compares one'
         unjoinable_association: names %{association}, an association of %{model} that
           a rule cannot join
         unjoinable_class_not_loadable: names %{association}, an association of %{model}

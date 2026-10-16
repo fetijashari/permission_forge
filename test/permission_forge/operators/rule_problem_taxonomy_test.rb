@@ -44,6 +44,18 @@ module PermissionForge
                         unknown_table unusable_value].sort, RuleProblem::KINDS.sort
       end
 
+      # A kind without a remedy has no control for the builder to point at
+      # (RuleProblem#remedy fetches it): a new kind fails here, not on a page.
+      test 'every kind has a remedy, and every remedy is a kind with a fix sentence in every locale' do
+        assert_equal RuleProblem::KINDS.sort, RuleProblem::REMEDIES.keys.sort
+        RuleProblem::REMEDIES.each_value.uniq.each do |remedy|
+          %i[en sq mk].each do |locale|
+            assert I18n.exists?("permission_forge.permission_set_rules.builder.problem_fixes.#{remedy}", locale),
+                   "#{locale}: permission_set_rules.builder.problem_fixes.#{remedy}"
+          end
+        end
+      end
+
       FIXTURES.each_key do |kind|
         test "#{kind}: a row written past the model is named, denies, is listed, compiles to FALSE" do
           rule = broken_rule(kind, permission_set: @set, resource: resource_for(kind))

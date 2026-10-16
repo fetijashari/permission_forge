@@ -62,6 +62,24 @@ module PermissionForge
         def locked? = !EditableLock.locked_record(rule).nil?
       end
 
+      # A field row in effect masked with a strategy this app does not know.
+      MaskStrategyFinding = Struct.new(:field, :people_count, keyword_init: true) do
+        def resource = field.resource
+        def permission_set = field.resource.permission_set
+      end
+
+      # A set whose activation condition nobody can judge: a muting one
+      # applies to every request, a granting one never passes.
+      ConditionsFinding = Struct.new(:permission_set, :people_count, keyword_init: true)
+
+      # A rule in effect that compares a column holding a secret
+      # (PermissionForge::SecretColumns), stored before the model refused one.
+      SecretRuleFinding = Struct.new(:rule, :people_count, keyword_init: true) do
+        def resource = rule.resource
+        def permission_set = rule.resource.permission_set
+        def locked? = !EditableLock.locked_record(rule).nil?
+      end
+
       def self.acknowledgement_supported?
         PermissionForge::SchemaRead.column?(PermissionForge::ResourceField, 'sensitive_acknowledged_at', ignored: false)
       rescue StandardError
@@ -86,9 +104,12 @@ module PermissionForge
         @sensitive = sensitive
       end
 
+      # Every list Home draws a card for (the navigation counts them all).
+      CARDS = %i[audit_findings broken_rules secret_rules unknown_mask_strategies broken_conditions privacy_findings
+                 unenforced_rules ending_soon expired stale tidy].freeze
+
       def total
-        [audit_findings.size, broken_rules.size, privacy_findings.size, unenforced_rules.size, ending_soon.size,
-         expired.size, stale.size, tidy.size].sum
+        CARDS.sum { |card| public_send(card).size }
       end
 
       def all_good?
@@ -128,6 +149,36 @@ module PermissionForge
           next unless problem
 
           BrokenRuleFinding.new(rule: rule, problem: problem, people_count: people_counts.fetch(rule.resource.permission_set_id, 0))
+        end
+      end
+
+      # Rules in effect that compare a column holding a secret — the audit's
+      # secret_rule_columns finding, the same rules. They still apply.
+      def secret_rules
+        @secret_rules ||= begin
+          secrets = PermissionForge::SecretColumns.new(configuration: @configuration)
+          rules_in_effect.select { |rule| secrets.rule?(rule) }.map do |rule|
+            SecretRuleFinding.new(rule: rule, people_count: people_counts.fetch(rule.resource.permission_set_id, 0))
+          end
+        end
+      end
+
+      # --- Field rows and conditions the engine cannot read as written ----------
+
+      # Field rows in effect masked with a strategy this app does not know
+      # (ResourceField.with_unknown_mask_strategy, the audit's
+      # unknown_mask_strategies): masked fully until fixed.
+      def unknown_mask_strategies
+        @unknown_mask_strategies ||= PermissionForge::ResourceField.with_unknown_mask_strategy.map do |field|
+          MaskStrategyFinding.new(field: field, people_count: people_counts.fetch(field.resource.permission_set_id, 0))
+        end
+      end
+
+      # Sets whose activation conditions nobody can judge
+      # (PermissionSet.with_broken_conditions, the audit's incomplete_conditions).
+      def broken_conditions
+        @broken_conditions ||= PermissionForge::PermissionSet.with_broken_conditions.map do |set|
+          ConditionsFinding.new(permission_set: set, people_count: people_counts.fetch(set.id, 0))
         end
       end
 

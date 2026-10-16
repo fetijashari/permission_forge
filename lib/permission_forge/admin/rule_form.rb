@@ -64,10 +64,15 @@ module PermissionForge
       # column of the table, as the validation accepts them) — not the
       # fields that get rows: a column config.ignored_fields leaves out
       # (`id`) is offered, flagged (#ignored_field?); a virtual field never.
+      # A column holding a secret (PermissionForge::SecretColumns) is not
+      # offered — the model refuses a rule on one — except the one the rule
+      # already names, so a rule stored before stays editable as it is.
       def field_options
         return [] unless target_model
 
-        PermissionForge::Operators::RuleColumn.names_for(target_model.klass).map { |name| target_model.column(name) }
+        secrets = PermissionForge::SecretColumns.new
+        names = PermissionForge::Operators::RuleColumn.names_for(target_model.klass)
+        names.reject { |name| name != @field_name && secrets.secret?(name) }.map { |name| target_model.column(name) }
       end
 
       # Whether the column gets no field row (config.ignored_fields).

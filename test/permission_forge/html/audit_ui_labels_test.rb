@@ -41,7 +41,7 @@ module PermissionForge
         assert_match "⚠ #{ui('assignment.never_reviewed')}", card
         assert_match I18n.t('permission_forge.home.stale_card.assigned', date: date(300.days.ago), by: 'Bo Berisha'), card
         assert_match I18n.t('permission_forge.home.stale_card.assigned', date: date(200.days.ago),
-                                                                         by: I18n.t('permission_forge.audit_log.actor_types.unknown')), card
+                                                                         by: I18n.t('permission_forge.ui.states.actor.unknown')), card
         assert_no_match date(1.day.ago), card
       end
 

@@ -89,7 +89,8 @@ module PermissionForge
         PermissionForge.configuration.gdpr_defaults = true
         muting = create_resource(permission_set: create_permission_set(name: 'Muting', is_muting: true), name: 'Customer')
 
-        %w[leave mask hide].each do |level|
+        assert_nil ResourceFieldGenerator.build(resource: muting, column: 'email', level: 'leave'), 'Unchanged is no row'
+        %w[mask hide].each do |level|
           row = ResourceFieldGenerator.build(resource: muting, column: 'email', level: level)
           assert_equal level, PermissionForge::FieldLevel.level_of(PermissionForge::ResourceField.new(row), muting: true)
           assert_equal 'email', row[:mask_strategy]

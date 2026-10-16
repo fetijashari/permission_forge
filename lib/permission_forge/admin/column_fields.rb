@@ -13,8 +13,6 @@ module PermissionForge
     #
     # @api private
     class ColumnFields
-      # The muting levels that are a row (Unchanged is none).
-      MUTING_ROW_LEVELS = %w[mask hide].freeze
       # The muting preset that hides the sensitive names and leaves the others.
       HIDE_SENSITIVE = 'hide_sensitive'
 
@@ -42,7 +40,7 @@ module PermissionForge
 
       # @return [String, nil] the level the column's row gets, nil for no row
       def column_level(column, level)
-        return level if @muting ? MUTING_ROW_LEVELS.include?(level) : FieldLevel.valid?(level, muting: false)
+        return level if FieldLevel.row?(level, muting: @muting)
 
         'hide' if @muting && level == HIDE_SENSITIVE && @sensitive.sensitive?(column)
       end

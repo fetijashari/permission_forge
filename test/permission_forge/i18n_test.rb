@@ -271,6 +271,58 @@ module PermissionForge
       assert_equal SUPPORTED_LOCALES.sort, QUOTES.keys.sort
     end
 
+    # ── M. One state, one label (the label registry) ──
+    #
+    # The words of a state the admin shows (a field level, an effective
+    # outcome, a lock, an actor kind, a CRUD cell, an action state) live in
+    # the label namespaces: Admin::StateLabel's registry (ui.states.<kind>)
+    # and the namespaces it replaced. A second key with the same English
+    # value there is a second name for one state that can drift (R3 #38:
+    # "Unchanged 0 · Not configured 8" for one state). Two namespaces keep
+    # their own words until the 0.16 merge; the allow-list says why.
+
+    LABEL_NAMESPACES = %w[ui.states ui.levels ui.badges shared.crud_cell resource_actions.states
+                          resources.fields_tab.filters audit_log.actor_types].freeze
+    LABEL_ALLOWLIST = {
+      'shared.crud_cell' => 'the CRUD toggle cell keeps its words (StateLabel kind :crud reads them) until the ' \
+                            '0.16 merge into ui.states.crud; its Allowed / No / Muted / Unchanged repeat other kinds',
+      'resource_actions.states' => 'the action states keep their words (StateLabel kind :action reads them) until ' \
+                                   'the 0.16 merge into ui.states.action; Blocked / Unchanged repeat other kinds'
+    }.freeze
+
+    def in_namespace?(key, namespaces)
+      namespaces.any? { |namespace| key.start_with?("permission_forge.#{namespace}.") }
+    end
+
+    # { normalised English value => [keys] } for every value that more than
+    # one key of the label namespaces (outside the allow-list) holds.
+    def label_duplicates(values)
+      labels = values.select { |key, _| in_namespace?(key, LABEL_NAMESPACES) && !in_namespace?(key, LABEL_ALLOWLIST.keys) }
+      labels.group_by { |_, value| value.to_s.strip.downcase }.select { |_, pairs| pairs.size > 1 }
+            .transform_values { |pairs| pairs.map(&:first) }
+    end
+
+    test 'one state, one label: no English label repeats within the label namespaces' do
+      duplicates = label_duplicates(en_values)
+
+      assert_empty duplicates, 'a state named under two keys (keep one, render it through Admin::StateLabel): ' \
+                               "#{duplicates.map { |value, keys| "#{value.inspect} #{keys.join(', ')}" }.join('; ')}"
+    end
+
+    test 'the label lint bites: a second key for Not configured fails it' do
+      values = en_values.merge('permission_forge.ui.levels.none2' => 'Not configured')
+
+      assert_includes label_duplicates(values).keys, 'not configured'
+    end
+
+    test 'every allow-listed label namespace is still in the locale and says why' do
+      LABEL_ALLOWLIST.each do |namespace, reason|
+        assert reason.to_s.strip.present?, "#{namespace}: give the allow-list entry a reason"
+        assert en_values.keys.any? { |key| key.start_with?("permission_forge.#{namespace}.") },
+               "stale allow-list entry #{namespace}: the namespace is gone (merged), remove it"
+      end
+    end
+
     # ── L. Locale switcher helper ──
 
     test 'pf_locale_label returns correct labels' do

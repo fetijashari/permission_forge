@@ -46,6 +46,17 @@ module PermissionForge
     # rows that reach someone's hash.
     scope :exposing_in_clear, -> { active.where(read_access: true, mask_access: false) }
 
+    # The rows in effect that mask with a strategy this app does not know
+    # (Services::MaskValue.known?): written past the model, or a custom
+    # strategy since removed. Masked fully until fixed. The one reading the
+    # security audit's unknown_mask_strategies and Home's card both take.
+    #
+    # @return [Array<ResourceField>] with their Resource and Permission Set loaded
+    def self.with_unknown_mask_strategy
+      in_effect.where(mask_access: true).includes(resource: :permission_set).order(:resource_id, :id)
+               .reject { |field| PermissionForge::Services::MaskValue.known?(field.mask_strategy) }
+    end
+
     # The one definition of "readable in the clear": an active row that
     # grants read and no mask. On a granting set's row only — a muting row
     # takes access away, so the question does not arise there. The GDPR

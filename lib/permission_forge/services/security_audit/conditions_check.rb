@@ -19,7 +19,7 @@ module PermissionForge
         private
 
         def incomplete_conditions
-          sets = PermissionForge::PermissionSet.conditional.order(:id).select(&:conditions_broken?)
+          sets = PermissionForge::PermissionSet.with_broken_conditions # Home's card reads the same
           return if sets.empty?
 
           finding(:medium, :incomplete_conditions, 'Activation conditions nobody can judge',

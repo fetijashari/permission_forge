@@ -206,9 +206,9 @@ module PermissionForge
         def badge_problems
           muted = @level == 'hidden' && LEVEL.effective_level(@before) != 'hidden'
           expected = if muted
-                       I18n.t('permission_forge.people.effective_tab.hidden_by_muting')
+                       I18n.t('permission_forge.ui.states.effective.hidden_by_muting')
                      else
-                       I18n.t("permission_forge.ui.levels.#{@capped ? 'read' : @level}")
+                       I18n.t("permission_forge.ui.states.field_level.#{@capped ? 'read' : @level}")
                      end
           problems = []
           problems << "badge #{badge}, the entry gives #{expected}" unless badge == expected

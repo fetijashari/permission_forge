@@ -118,7 +118,7 @@ module PermissionForge
           assert_no_missing_translations
           I18n.with_locale(locale) do
             row = css_select("section[aria-labelledby='pf-card-broken-rules'] .pf-card__row").first
-            assert row.at_css('.pf-badge').text.include?(t('ui.badges.locked')), 'the row carries the Locked badge'
+            assert row.at_css('.pf-badge').text.include?(t('ui.states.lock.locked')), 'the row carries the Locked badge'
             assert_includes row.css('code').map(&:text), 'is_editable: false'
             assert_includes row.text.squish, t('home.broken_rules_card.locked_fix_html', flag: 'is_editable: false').squish
           end
@@ -238,7 +238,7 @@ module PermissionForge
         page_hint = css_select('section[aria-labelledby=pf-event-who] p').find { |p| p.at_css('code') }.text.squish
 
         assert_equal page_hint, footer_hint
-        assert_not footer_hint.start_with?(t('audit_log.actor_types.unknown'))
+        assert_not footer_hint.start_with?(t('ui.states.actor.unknown'))
       ensure
         PermissionForge.configuration.current_user_resolver = old_resolver
       end

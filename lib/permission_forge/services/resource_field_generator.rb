@@ -16,8 +16,9 @@ module PermissionForge
       # (GdprFieldAuditor, the admin's privacy audit). Without it every
       # field is Hidden; under `gdpr_defaults` the privacy default masks what
       # is granted Read, and nothing is granted here. On a Muting Permission
-      # Set `grant_all` takes everything away (Hide) and its absence writes
-      # the row that mutes nothing (Unchanged). Rails' timestamps
+      # Set `grant_all` takes everything away (Hide); without it nothing is
+      # written — Unchanged is no row (FieldLevel.row?), as in the admin.
+      # Rails' timestamps
       # (created_at / updated_at) are at most read-only on a granting set
       # (PermissionForge::TimestampFields).
       #
@@ -106,8 +107,8 @@ module PermissionForge
       end
 
       # The level generated rows get: full access or none; on a Muting
-      # Permission Set the level that takes everything away, or the one that
-      # mutes nothing.
+      # Permission Set the level that takes everything away, or Unchanged,
+      # which the row builder writes no row for.
       def level
         if muting?
           @grant_all ? 'hide' : 'leave'

@@ -41,6 +41,16 @@ module PermissionForge
       muting ? 'leave' : nil
     end
 
+    # Whether a level is a row: every level of the set's kind, except
+    # Unchanged in a Muting Permission Set — it mutes nothing, which is what
+    # no row means. The one definition every path that creates rows reads
+    # (the row builder, the admin's presets and bulk add, the generator).
+    #
+    # @return [Boolean]
+    def row?(level, muting:)
+      valid?(level, muting: muting) && !(muting && level.to_s == 'leave')
+    end
+
     def flags_for(level, muting:)
       (muting ? MUTING : GRANTING).fetch(level.to_s) { raise ArgumentError, "Unknown field level: #{level.inspect}" }
     end

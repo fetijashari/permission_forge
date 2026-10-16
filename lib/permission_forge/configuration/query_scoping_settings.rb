@@ -18,6 +18,9 @@ module PermissionForge
     module QueryScopingSettings
       AUTO_QUERY_SCOPING_VALUES = %i[off filter_only].freeze
       UNSCOPED_QUERY_DETECTION_VALUES = %i[off log raise].freeze
+      # Columns a record rule never compares (PermissionForge::SecretColumns):
+      # password digests, tokens, encrypted values, secrets.
+      DEFAULT_RULE_SECRET_COLUMN_PATTERNS = [/\Apassword_digest\z/, /_digest\z/, /token/, /\Aencrypted_/, /_secret/].freeze
 
       # Level 1 — ENFORCE.
       #   :off         — (default) only find_by/find_by!/permission_scoped apply rules
@@ -59,6 +62,25 @@ module PermissionForge
       # requires namespaced custom settings).
       attr_accessor :rls_session_variable
 
+      # The column names a record rule may not compare (PermissionForge::
+      # SecretColumns, matched against the column name in lower case): a new
+      # rule on one, or a change of a rule's column or path to one, is
+      # refused, and the admin's rule builder does not offer them. Rules
+      # stored before keep evaluating; the audit and Home list them. `[]`
+      # opts out.
+      attr_reader :rule_secret_column_patterns
+
+      # @param patterns [Array<Regexp>]
+      # @raise [ConfigurationError] for anything that is not a list of regular expressions
+      def rule_secret_column_patterns=(patterns)
+        unless patterns.is_a?(Array) && patterns.all?(Regexp)
+          raise PermissionForge::ConfigurationError,
+                "Invalid rule_secret_column_patterns: #{patterns.inspect}. Give a list of regular expressions ([] opts out)."
+        end
+
+        @rule_secret_column_patterns = patterns
+      end
+
       def auto_query_scoping=(value)
         @auto_query_scoping = normalize_scoping_value(
           value, AUTO_QUERY_SCOPING_VALUES, 'auto_query_scoping'
@@ -90,6 +112,7 @@ module PermissionForge
         @unscoped_query_detection_environments = %w[development test]
         @database_row_level_security = false
         @rls_session_variable = 'permission_forge.user_id'
+        @rule_secret_column_patterns = DEFAULT_RULE_SECRET_COLUMN_PATTERNS.dup
       end
 
       # Fail closed on typos: an unknown value must never silently enable a

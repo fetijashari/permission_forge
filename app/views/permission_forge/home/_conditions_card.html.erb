@@ -1,0 +1,27 @@
+<% items = @attention.broken_conditions %>
+<section class="pf-card" aria-labelledby="pf-card-conditions">
+  <div class="pf-card__header">
+    <div class="pf-stack pf-stack--tight pf-grow">
+      <div class="pf-row">
+        <span class="pf-text-warn" aria-hidden="true">⚠</span>
+        <h2 class="pf-h2" id="pf-card-conditions"><%= t('.title') %></h2>
+        <span class="pf-count-pill pf-count-pill--warn"><%= items.size %></span>
+      </div>
+      <p class="pf-card__desc"><%= t('.description') %></p>
+    </div>
+  </div>
+  <% items.each do |item| %>
+    <% set = item.permission_set %>
+    <div class="pf-card__row pf-card__row--top">
+      <div class="pf-stack pf-stack--tight pf-grow">
+        <div class="pf-row pf-row--tight">
+          <strong><%= set.name %></strong>
+          <%= pf_set_badges(set) %>
+        </div>
+        <span class="pf-fs-13 pf-text-2"><%= set.is_muting ? t('.muting') : t('.granting') %></span>
+        <span class="pf-fs-13 pf-text-2"><%= t('.people', count: item.people_count) %></span>
+      </div>
+      <%= link_to t('.open'), permission_forge.permission_set_path(set, tab: 'conditions'), class: 'pf-btn pf-btn--sm' %>
+    </div>
+  <% end %>
+</section>

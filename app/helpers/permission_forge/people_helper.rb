@@ -9,7 +9,7 @@ module PermissionForge
     end
 
     def pf_person_name(user)
-      user ? pf_person(user).name : pf_ui('audit.system')
+      user ? pf_person(user).name : PermissionForge::Admin::ActorLabel.system
     end
 
     def pf_avatar(user, size: nil)

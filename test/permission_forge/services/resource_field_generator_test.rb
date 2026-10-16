@@ -74,8 +74,16 @@ module PermissionForge
       # On a muting set read on means "take read away": a read-only timestamp
       # row there would mute created_at / updated_at for every holder.
       test 'on a Muting Permission Set the timestamps follow grant_all like every other column' do
-        assert(generated_timestamps(grant_all: false, muting: true).none? { |field| field.read_access || field.edit_access })
         assert(generated_timestamps(grant_all: true, muting: true).all? { |field| field.read_access && field.edit_access })
+      end
+
+      # Unchanged mutes nothing, which is what no row means: the generator
+      # writes none, as the admin's presets and bulk add never did (FieldLevel.row?).
+      test 'without grant_all a Muting Permission Set gets no rows at all, the timestamps included' do
+        resource = create_resource(permission_set: create_permission_set(name: 'Muting nothing', is_muting: true), name: 'Customer')
+
+        assert_empty PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: false)
+        assert_empty resource.resource_fields.reload
       end
 
       test 'generating fields on a muting set leaves the timestamps readable for its holders' do

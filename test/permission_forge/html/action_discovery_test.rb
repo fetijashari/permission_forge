@@ -100,7 +100,7 @@ module PermissionForge
 
         assert_equal ['Guests', 'Managers', 'Sales rep', 'Contractors', 'Interns'],
                      css_select('.pf-listbox .pf-option .pf-fw-600').map(&:text)
-        assert_equal ['– Not configured', '– Not permitted', '✎ ✓ Permitted', '⊘ ⊘ Blocked', '– Unchanged'],
+        assert_equal ['– Not configured', '– Not permitted', '✓ Permitted', '⊘ Blocked', '– Unchanged'],
                      css_select('.pf-listbox .pf-option .pf-level-badge').map(&:text)
         assert_select '.pf-listbox .pf-badge--off', count: 0
       end

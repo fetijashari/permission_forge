@@ -54,7 +54,8 @@ module PermissionForge
 
         assert_response :success
         assert_select "input[type=radio][name='pf[new_fields][#{resource.id}][email][level]'][value=leave][checked]", 1
-        not_muted = t('resources.fields_tab.not_configured', behaviour: t('resources.fields_tab.mutes_nothing'))
+        not_muted = t('resources.fields_tab.not_configured', state: t('ui.states.field_level.none'),
+                                                             behaviour: t('resources.fields_tab.mutes_nothing'))
         assert_select '.pf-badge', text: not_muted, count: 0
         assert_select "a.pf-badge[href*='unconfigured_field_strategy']", count: 0
         assert_not_includes body, t('ui.unconfigured.block')

@@ -81,6 +81,7 @@ module PermissionForge
         d(:unscoped_query_detection_environments, 'record_rules', :list),
         d(:database_row_level_security, 'record_rules', :bool, ladder: 'database'),
         d(:rls_session_variable, 'record_rules', :str),
+        d(:rule_secret_column_patterns, 'record_rules', :list),
 
         d(:controller_action_discovery, 'controller_actions', :bool),
         d(:controller_action_resolver, 'controller_actions', :hook,
@@ -181,7 +182,9 @@ module PermissionForge
 
           :warn
         },
-        'unconfigured_field_strategy' => ->(config) { config.unconfigured_field_strategy.to_s == 'pass_through' ? :warn : nil },
+        # :warn lets an unconfigured field through as :pass_through does (it only logs it): the audit's
+        # unconfigured_fields_pass and Home's privacy card count both.
+        'unconfigured_field_strategy' => ->(config) { %w[pass_through warn].include?(config.unconfigured_field_strategy.to_s) ? :warn : nil },
         'masked_write_protection' => ->(config) { config.masked_write_protection.to_s == 'off' ? :warn : :ok },
         'audit_trail_enabled' => ->(config) { config.audit_trail_enabled ? :ok : :warn },
         'audit_events' => ->(config) { AuditLog.recording_problem(config) ? :warn : :ok },
@@ -250,6 +253,20 @@ module PermissionForge
 
       def secure_count
         rows.count(&:ok?)
+      end
+
+      # What Home lists as needing attention (AttentionItems#total, the
+      # page's own items): the health summary says it, so Settings never
+      # calls the setup good while Home warns (R1 #93).
+      #
+      # @return [Integer]
+      def attention_count
+        attention.total
+      end
+
+      # Nothing to fix: no risky setting and nothing on Home.
+      def healthy?
+        risky_rows.empty? && attention_count.zero?
       end
 
       def recommended_value(key)

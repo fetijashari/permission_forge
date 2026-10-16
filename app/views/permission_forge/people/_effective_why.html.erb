@@ -30,11 +30,8 @@
     <% reasons << ['–', t('.field_capped'), nil] if field.capped %>
     <% reasons << ['◇', t('.field_virtual'), nil] if field.implicit %>
     <% reasons << ['↳', t('.field_variant', base: field.variant_of), nil] if field.variant_of %>
-    <% if field.unreadable %>
-      <% reasons << ['∅', field.decided_by ? t('.field_base_unreadable', resource: pf_resource_label(field.decided_by)) : t('.field_own_unreadable'), nil] %>
-    <% elsif field.decided_by %>
-      <% reasons << ['↑', t('.field_decided_by', resource: pf_resource_label(field.decided_by)), nil] %>
-    <% end %>
+    <% chain = pf_field_chain_reason(field) %>
+    <% reasons << [*chain, nil] if chain %>
     <% reasons << ['–', t('.field_none'), nil] if reasons.empty? %>
     <%= render 'why_item', key: "#{res.name}.field.#{field.name}", title: "#{pf_resource_label(res.name)} › #{field_label}",
                badge: pf_effective_field_badge(field, sample: true),

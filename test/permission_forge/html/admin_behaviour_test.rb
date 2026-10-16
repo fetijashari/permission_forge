@@ -192,7 +192,7 @@ module PermissionForge
 
         assert_select extend_form(@assignment), count: 0
         assert_select '.pf-card__row', text: /Ana Krasniqi/ do
-          assert_select '.pf-badge', text: /#{t('ui.badges.locked')}/
+          assert_select '.pf-badge', text: /#{t('ui.states.lock.locked')}/
         end
         assert_select extend_form(muted), count: 1, message: 'extending a Muting Permission Set narrows access'
       end
@@ -218,7 +218,7 @@ module PermissionForge
         assert_select "input[name='set_ids[]'][value='#{@set.id}'][disabled]"
         assert_select "input[name='set_ids[]'][value='#{open_set.id}']:not([disabled])"
         assert_select '.pf-option', text: /Sales rep/ do
-          assert_select '.pf-badge', text: /#{t('ui.badges.locked')}/
+          assert_select '.pf-badge', text: /#{t('ui.states.lock.locked')}/
         end
         assert_includes body, t('assignments.new.locked_hint')
 

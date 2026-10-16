@@ -4,10 +4,10 @@
 <% setting = pf_setting_path('unconfigured_action_strategy') %>
 <%# The four row states share their words with the "Across all Permission Sets" list. %>
 <% badges = {
-     permitted: ["✓ #{t('permission_forge.resource_actions.states.permitted')}", { variant: :grant }],
-     not_permitted: ["– #{t('permission_forge.resource_actions.states.not_permitted')}", {}],
-     blocked: ["⊘ #{t('permission_forge.resource_actions.states.blocked')}", { variant: :block }],
-     unchanged: ["– #{t('permission_forge.resource_actions.states.unchanged')}", {}],
+     permitted: [pf_state(:action, :permitted).to_s, { variant: :grant }],
+     not_permitted: [pf_state(:action, :not_permitted).to_s, {}],
+     blocked: [pf_state(:action, :blocked).to_s, { variant: :block }],
+     unchanged: [pf_state(:action, :unchanged).to_s, {}],
      managed_elsewhere: ["– #{muting ? t('.managed_elsewhere_muting') : t('.managed_elsewhere')}", {}],
      unmanaged_allowed: ["○ #{t('.unmanaged_allowed')}", { variant: :unconfigured, href: setting }],
      unmanaged_blocked: ["⊘ #{t('.unmanaged_blocked')}", { variant: :block, href: setting }]
