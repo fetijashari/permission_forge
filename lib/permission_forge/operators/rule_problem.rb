@@ -14,7 +14,7 @@ module PermissionForge
       unjoinable_record_dependent_scope: 'names %<association>s, an association of %<model>s whose scope (or one ' \
                                          'along its :through) takes the record: a rule cannot join it',
       unjoinable_class_not_loadable: 'names %<association>s, an association of %<model>s whose class cannot be loaded',
-      unknown_column: 'is not a column of %<model>s',
+      unknown_column: 'names %<name>s, which is not a column of %<model>s',
       unknown_table: 'names %<name>s, which is no table of this database',
       invalid_operator: 'is not a valid operator',
       invalid_join_type: 'is not a valid join type',

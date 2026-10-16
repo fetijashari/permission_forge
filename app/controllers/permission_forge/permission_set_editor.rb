@@ -20,7 +20,7 @@ module PermissionForge
       live = @permission_set.permission_set_users.active_assignments.includes(:user).order(:created_at)
       @people_count = live.count
       @impact_people = live.limit(3).map(&:user).compact
-      @lost = @permission_set.is_muting ? [] : @permission_set.resources.select(&:is_active).map { |r| helpers.pf_resource_plural(r.name) }
+      @lost = @permission_set.is_muting ? [] : @permission_set.resources.in_effect.map { |r| helpers.pf_resource_plural(r.name) }
     end
 
     def load_resources_tab

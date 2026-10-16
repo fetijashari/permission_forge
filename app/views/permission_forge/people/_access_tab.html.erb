@@ -24,7 +24,7 @@
           <%= pf_reviewed(assignment) %>
         </div>
         <div class="pf-assignment__actions">
-          <%= pf_lock_badge if pf_locked_record?(set) %>
+          <%= pf_lock_badge(assignment) %>
           <%# Only the end dates the lock lets through: a locked set never offers a choice it then refuses. %>
           <% choices = PermissionForge::Admin::EditableLock.expiry_choices(assignment) %>
           <% if choices.any? %>
@@ -48,8 +48,11 @@
               <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-keep-reason-#{assignment.id}" %>
             <% end %>
           <% end %>
-          <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.remove_assignment_path(assignment, return_to: permission_forge.person_path(@person)),
-                            class: 'pf-btn pf-btn--ghost-danger' %>
+          <%# Removing a holder of a locked Muting Permission Set gives access back: refused, so not offered (EditableLock.permits?). %>
+          <% if PermissionForge::Admin::EditableLock.permits?(assignment, :revoke) %>
+            <%= pf_modal_link t('permission_forge.ui.remove'), permission_forge.remove_assignment_path(assignment, return_to: permission_forge.person_path(@person)),
+                              class: 'pf-btn pf-btn--ghost-danger' %>
+          <% end %>
         </div>
       </div>
     <% end %>

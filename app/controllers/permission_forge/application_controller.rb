@@ -190,10 +190,6 @@ module PermissionForge
       raise ActionController::RoutingError, 'Not Found'
     end
 
-    def pf_locked?(record)
-      PermissionForge::Admin::EditableLock.locked?(record)
-    end
-
     # Redirects with an alert when the record (or any of `records`), or what
     # it belongs to (Admin::EditableLock: its Resource, Permission Set, the
     # Group of a membership), is locked, and records the refusal

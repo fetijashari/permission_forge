@@ -35,8 +35,19 @@ module PermissionForge
       content_tag(:span, content, class: classes, title: opts[:title])
     end
 
-    def pf_lock_badge(title: pf_ui('locked.title'))
+    # The Locked badge. With a record: only when it is locked (pf_locked?,
+    # the chain), so a row's badge and its disabled controls agree.
+    def pf_lock_badge(record = nil, title: pf_ui('locked.title'))
+      return if !record.nil? && !pf_locked?(record)
+
       pf_badge([pf_lock_icon, pf_ui('badges.locked')], title: title)
+    end
+
+    # Whether a record is locked: itself, its Resource, its Permission Set or
+    # (a membership) its group flagged is_editable: false — Admin::EditableLock,
+    # the one definition the controllers refuse by.
+    def pf_locked?(record)
+      PermissionForge::Admin::EditableLock.locked?(record)
     end
 
     def pf_off_badge
@@ -61,12 +72,8 @@ module PermissionForge
                                                                title: pf_condition_sentence(permission_set))
         badges << pf_fail_open_badge if pf_fail_open?
       end
-      badges << pf_lock_badge if pf_locked_record?(permission_set)
+      badges << pf_lock_badge(permission_set)
       safe_join(badges, ' ')
-    end
-
-    def pf_locked_record?(record)
-      record.respond_to?(:is_editable) && record.is_editable == false
     end
 
     # Permission Set chip. state: :normal / :inactive / :expired (auto from set).

@@ -63,6 +63,10 @@ module PermissionForge
 
     scope :muting, -> { where(is_muting: true) }
     scope :granting, -> { where(is_muting: false) }
+    # The order sets merge in when a permission hash is built ("first mask
+    # strategy wins" depends on it): the one definition — the cache accessor
+    # and Admin::EffectiveAccess both read it.
+    scope :in_hash_order, -> { order(:created_at, :id) }
     # Mirrors #conditional?: a text of blanks is no condition (TRIM), one
     # hour of the two is one (it cannot be judged, and must be selected per
     # request to fail closed).
@@ -119,10 +123,17 @@ module PermissionForge
     # @return [String]
     def self.conditions_present_sql
       quoted = ->(column) { "#{connection.quote_table_name(table_name)}.#{connection.quote_column_name(column)}" }
-      text_present = ->(column) { "COALESCE(TRIM(#{quoted.call(column)}), '') <> ''" }
+      text_present = ->(column) { "COALESCE(TRIM(#{without_blank_lines_sql(quoted.call(column))}), '') <> ''" }
       "(#{text_present.call('requires_session_flag')} OR #{text_present.call('allowed_ips')} " \
         "OR #{quoted.call('allowed_hours_start')} IS NOT NULL OR #{quoted.call('allowed_hours_end')} IS NOT NULL)"
     end
+
+    # A text of blanks is no condition, to SQL as to #conditional? (blank?):
+    # TRIM takes the spaces, these REPLACEs the newlines and tabs a textarea leaves.
+    def self.without_blank_lines_sql(column_sql)
+      ["\n", "\r", "\t"].reduce(column_sql) { |sql, char| "REPLACE(#{sql}, #{connection.quote(char)}, '')" }
+    end
+    private_class_method :without_blank_lines_sql
 
     def active?
       is_active

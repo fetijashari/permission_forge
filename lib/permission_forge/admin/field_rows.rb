@@ -15,7 +15,8 @@ module PermissionForge
                        keyword_init: true) do
         def configured? = !field.nil?
         def sensitive? = !match.nil?
-        def locked? = field && field.is_editable == false
+        # Locked when the row, its Resource or its Permission Set is (EditableLock).
+        def locked? = !field.nil? && EditableLock.locked?(field)
         def active? = field.nil? || field.is_active
 
         # A setting the engine applies: it exists and is turned on. A row that

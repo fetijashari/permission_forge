@@ -29,7 +29,8 @@
       <button type="submit" class="pf-btn pf-btn--sm"><%= t('permission_forge.ui.duplicate') %></button>
       <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-duplicate-reason' %>
     <% end %>
-    <% unless locked %>
+    <%# Deleting also changes the list of a locked Permission Set Group the set is in: refused then too (EditableLock.permits?). %>
+    <% if PermissionForge::Admin::EditableLock.permits?(set, :delete) %>
       <%= pf_modal_link t('permission_forge.ui.delete'), permission_forge.delete_permission_set_path(set), class: 'pf-btn pf-btn--sm pf-btn--danger' %>
     <% end %>
   </div>

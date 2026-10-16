@@ -37,7 +37,7 @@ module PermissionForge
           return [] unless resource
 
           fields = Array(bulk['keys']).filter_map { |key| resource.resource_fields.find { |field| field.name == key.to_s } }
-          fields.reject { |field| field.is_editable == false }
+          fields.reject { |field| locked?(field) }
         end
 
         def changes_for_field(field, attrs)

@@ -10,7 +10,7 @@
       <span role="columnheader"><span class="pf-sr-only"><%= t('.open') %></span></span>
     </div>
     <% @resources.each do |resource| %>
-      <% res_locked = locked || pf_locked_record?(resource) %>
+      <% res_locked = pf_locked?(resource) %>
       <% path = permission_forge.permission_set_resource_path(set, resource.name) %>
       <% label = pf_resource_label(resource) %>
       <% plural = pf_resource_plural(resource.name) %>
@@ -20,7 +20,7 @@
           <span class="pf-row pf-row--tight">
             <%= link_to label, path %>
             <%= pf_off_badge unless resource.is_active %>
-            <%= pf_lock_badge if pf_locked_record?(resource) %>
+            <%= pf_lock_badge(resource) %>
           </span>
           <span class="pf-fs-12 pf-text-3"><%= render 'resource_summary', resource: resource, muting: muting %></span>
         </span>

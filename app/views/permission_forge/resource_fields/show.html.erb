@@ -144,8 +144,13 @@
         <p class="pf-fs-13 pf-text-3"><%= t('.no_rules') %></p>
       <% else %>
         <% d.rules.each do |rule| %>
-          <%= link_to permission_forge.edit_permission_set_resource_rule_path(set, resource.name, rule), class: 'pf-panel pf-stack pf-stack--tight' do %>
-            <b><%= rule.name %></b><%= pf_rule_sentence(rule, resource.name) %>
+          <%# A locked rule (or chain) has no edit page to open: the sentence alone, with the badge. %>
+          <% if pf_locked?(rule) %>
+            <div class="pf-panel pf-stack pf-stack--tight"><span class="pf-row pf-row--tight"><b><%= rule.name %></b><%= pf_lock_badge %></span><%= pf_rule_sentence(rule, resource.name) %></div>
+          <% else %>
+            <%= link_to permission_forge.edit_permission_set_resource_rule_path(set, resource.name, rule), class: 'pf-panel pf-stack pf-stack--tight' do %>
+              <b><%= rule.name %></b><%= pf_rule_sentence(rule, resource.name) %>
+            <% end %>
           <% end %>
         <% end %>
       <% end %>

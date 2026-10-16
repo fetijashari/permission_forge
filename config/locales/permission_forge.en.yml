@@ -926,6 +926,7 @@ en:
           value: Enter a value, or pick “the current user”.
         field: Field to check
         follow: Follow a relationship
+        ignored_field: no field row (ignored_fields)
         ignored_warning: View All is on for this resource, so record rules are ignored
           until it's turned off.
         include_nulls: Also show records where %{field} is empty
@@ -2287,7 +2288,7 @@ en:
           cannot join it'
         unknown_association: names %{association}, which is not an association of
           %{model}
-        unknown_column: is not a column of %{model}
+        unknown_column: names %{name}, which is not a column of %{model}
         unknown_table: names %{name}, which is no table of this database
         unusable_value: is not a value %{model}.%{name} can hold
         value_not_expected: does not require a value for this operator

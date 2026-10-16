@@ -6,8 +6,6 @@ module PermissionForge
     # a read-only query; actions (extend, keep, clean up, acknowledge) live in
     # the controllers.
     class AttentionItems
-      ENDING_DAYS = 7
-
       # `field` — the field row, when there is one, switched on or off.
       # `implicit_grant` — no active field row, and the field is readable and
       # editable anyway because the model declares it as an extra (virtual) field.
@@ -70,6 +68,17 @@ module PermissionForge
         false
       end
 
+      # The threshold of "due for review", in days: config.admin_stale_assignment_days,
+      # or the default while it is nil. The one definition — Home's Stale
+      # card, the People page (pf_stale?), the audit's stale_assignments and
+      # StaleAssignmentAuditor all read it.
+      #
+      # @param configuration [Configuration]
+      # @return [Integer]
+      def self.stale_days(configuration = PermissionForge.configuration)
+        configuration.try(:admin_stale_assignment_days) || Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS
+      end
+
       def initialize(configuration: PermissionForge.configuration, catalog: ModelCatalog.new,
                      sensitive: SensitiveColumns.new(configuration: configuration))
         @configuration = configuration
@@ -105,7 +114,7 @@ module PermissionForge
       def unenforced_rules
         @unenforced_rules ||= begin
           enforced = rule_enforced_resources
-          counts = unenforced_rule_scope.where(resource_id: enforced.keys).group(:resource_id).count
+          counts = unenforced_rule_counts(enforced.keys)
           findings = counts.map { |id, count| RulesFinding.build(enforced.fetch(id), count, people_counts) }
           findings.sort_by { |finding| [finding.permission_set.name, finding.resource.name] }
         end
@@ -122,15 +131,14 @@ module PermissionForge
         end
       end
 
-      # Active rules of active resources in active granting sets: the rules
-      # that are applied right now (a muting set's rules never are). Not the
-      # ones View All skips — nobody is denied by those.
+      # Active rules of the granting resources in effect: the rules that are
+      # applied right now (a muting set's rules never are). Not the ones View
+      # All skips — nobody is denied by those.
       def rules_in_effect
         @rules_in_effect ||= begin
-          resources = PermissionForge::Resource.in_effect.merge(PermissionForge::PermissionSet.granting)
-          PermissionForge::PermissionSetRule.active.where(resource_id: resources.select(:id))
-                                            .includes(resource: :permission_set).order(:resource_id, :id)
-                                            .reject { |rule| rule.resource.rules_bypassed? }
+          enforced = granting_resources.reject(&:rules_bypassed?).map(&:id)
+          PermissionForge::PermissionSetRule.active.where(resource_id: enforced)
+                                            .includes(resource: :permission_set).order(:resource_id, :id).to_a
         end
       end
 
@@ -141,8 +149,7 @@ module PermissionForge
       # --- Assignments --------------------------------------------------------
 
       def ending_soon
-        @ending_soon ||= assignments.where(expires_at: Time.current..ENDING_DAYS.days.from_now.end_of_day)
-                                    .order(:expires_at).to_a
+        @ending_soon ||= assignments.ending_within.order(:expires_at).to_a
       end
 
       def expired
@@ -155,7 +162,7 @@ module PermissionForge
       end
 
       def stale_days
-        @configuration.admin_stale_assignment_days || Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS
+        self.class.stale_days(@configuration)
       end
 
       # --- Permission Sets to tidy up -----------------------------------------
@@ -174,32 +181,44 @@ module PermissionForge
         PermissionForge::PermissionSetUser.includes(:permission_set, :user)
       end
 
-      # Resources whose rules are in force (View All / Modify All skip them),
-      # by id. A Resource named after no model this app can load (`Custmer`)
-      # has no query to scope: the audit's integrity/unknown_models names it.
+      # Readable Resources whose rules are in force (View All / Modify All
+      # skip them), by id. A Resource named after no model this app can load
+      # (`Custmer`) has no query to scope: the audit's integrity/unknown_models names it.
       def rule_enforced_resources
-        granting_resources.reject { |resource| resource.rules_bypassed? || @catalog.find(resource.name).nil? }
+        readable_resources.reject { |resource| resource.rules_bypassed? || @catalog.find(resource.name).nil? }
                           .index_by(&:id)
       end
 
-      def unenforced_rule_scope
-        rules = PermissionForge::PermissionSetRule.active
-        auto_query_scoping? ? rules.join_type_rules : rules
+      # Active rules the app's query scoping does not apply, counted per
+      # resource: every one while auto_query_scoping is off, the join rules
+      # (PermissionSetRule#join_rule?, the one definition) when it is on.
+      def unenforced_rule_counts(resource_ids)
+        rows = PermissionForge::PermissionSetRule.active.where(resource_id: resource_ids)
+        rows = rows.join_type_rules if auto_query_scoping?
+        rows.pluck(:resource_id, :join_type)
+            .select { |_, join_type| !auto_query_scoping? || !PermissionForge::PermissionSetRule.filter_join_type?(join_type) }
+            .group_by(&:first).transform_values(&:size)
       end
 
       def people_counts
         @people_counts ||= PermissionForge::PermissionSetUser.active_assignments.group(:permission_set_id).count
       end
 
+      # The granting Resource rows that count right now (Resource.in_effect,
+      # the one definition), with their sets and fields loaded.
       def granting_resources
-        @granting_resources ||= PermissionForge::Resource.active.where(read_access: true)
-                                                         .where(permission_set_id: PermissionForge::PermissionSet.active.granting.select(:id))
+        @granting_resources ||= PermissionForge::Resource.in_effect.merge(PermissionForge::PermissionSet.granting)
                                                          .includes(:permission_set, :resource_fields).to_a
+      end
+
+      # Those of them people can read: where an unmasked sensitive field shows.
+      def readable_resources
+        @readable_resources ||= granting_resources.select(&:read_access)
       end
 
       def unmasked_sensitive_fields
         acknowledged = self.class.acknowledgement_supported?
-        granting_resources.flat_map do |resource|
+        readable_resources.flat_map do |resource|
           resource.resource_fields.filter_map do |field|
             sensitive_finding(resource, field.name, field: field) if exposed?(field, acknowledged)
           end
@@ -223,7 +242,7 @@ module PermissionForge
         passes = %w[pass_through warn].include?(@configuration.unconfigured_field_strategy.to_s)
         return [] unless passes || @configuration.grant_extra_fields_by_default?
 
-        granting_resources.flat_map { |resource| unconfigured_findings(resource, passes) }
+        readable_resources.flat_map { |resource| unconfigured_findings(resource, passes) }
       end
 
       # `passes` — whether unconfigured_field_strategy lets a field with no row through.

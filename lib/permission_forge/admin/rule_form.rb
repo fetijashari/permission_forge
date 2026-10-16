@@ -27,11 +27,7 @@ module PermissionForge
         @catalog = catalog
         @errors = {}
         if params
-          attrs = normalize(params)
-          assign_inputs(RuleFormInput.from_params(attrs))
-          # As posted: a condition that is not one is refused (valid?), never
-          # rewritten to another. A saved one is kept as stored, too.
-          @operator = attrs['operator'].to_s if attrs.key?('operator')
+          assign_inputs(RuleFormInput.from_params(normalize(params)))
         else
           assign_inputs(RuleFormInput.from_rule(rule))
         end
@@ -64,8 +60,19 @@ module PermissionForge
         @target_model
       end
 
+      # The columns a rule may compare (Operators::RuleColumn.names_for: every
+      # column of the table, as the validation accepts them) — not the
+      # fields that get rows: a column config.ignored_fields leaves out
+      # (`id`) is offered, flagged (#ignored_field?); a virtual field never.
       def field_options
-        target_model ? target_model.columns.reject(&:virtual?) : []
+        return [] unless target_model
+
+        PermissionForge::Operators::RuleColumn.names_for(target_model.klass).map { |name| target_model.column(name) }
+      end
+
+      # Whether the column gets no field row (config.ignored_fields).
+      def ignored_field?(column)
+        target_model.ignored_column_names.include?(column.name)
       end
 
       def column

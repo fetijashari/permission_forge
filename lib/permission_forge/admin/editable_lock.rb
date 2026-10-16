@@ -23,10 +23,20 @@ module PermissionForge
     # those changes goes the other way: adding a holder or keeping them
     # longer narrows, removing one or ending their assignment sooner widens.
     #
+    # "Locked" has one definition, here, for the controllers, the API, the
+    # read models and the views alike: .locked?(record) walks the chain, and
+    # .permits?(record, action) says whether the admin may offer an action
+    # on a record — the one table the controllers' refusals and the views'
+    # "show, disable or leave out" both read (html/locked_pages_test.rb
+    # checks every control of every page rendered for a locked record
+    # against it).
+    #
     # @example
     #   EditableLock.locked_record(field)          # => the locked Resource or Permission Set, or nil
+    #   EditableLock.locked?(field)                # => true when the field, its Resource or its set is locked
     #   EditableLock.chain(rule)                   # => [rule, resource, permission_set]
     #   EditableLock.widening_lock(set, :revoke)   # => the set when it is locked and muting, else nil
+    #   EditableLock.permits?(assignment, :revoke) # => false on a locked Muting Permission Set
     module EditableLock
       # What each record belongs to, for the lock: the first that is present.
       PARENTS = {
@@ -41,6 +51,13 @@ module PermissionForge
       # What a record is listed in: deleting it changes that list, so a
       # locked container refuses the deletion (a set in a locked group).
       CONTAINERS = { 'PermissionForge::PermissionSet' => :permission_set_group }.freeze
+
+      # The changes to who holds a set (.widens_access?): judged by direction,
+      # on the set the record is or belongs to.
+      HOLDER_CHANGES = %i[grant revoke change_expiry].freeze
+      # Actions a lock never refuses: a copy is editable, a review changes no
+      # access, offboarding and a cache refresh narrow or change nothing.
+      ALWAYS_PERMITTED = %i[duplicate review revoke_all refresh consent erasure].freeze
 
       module_function
 
@@ -59,15 +76,45 @@ module PermissionForge
       # @return [ActiveRecord::Base, nil] the first locked record in their chains
       def locked_record(*records)
         records.flatten.compact.each do |record|
-          locked = chain(record).find { |link| locked?(link) }
+          locked = chain(record).find { |link| flagged?(link) }
           return locked if locked
         end
         nil
       end
 
-      # @return [Boolean] whether the record itself is flagged is_editable: false
+      # Whether the record is locked: itself, or what it belongs to (its
+      # chain) flagged is_editable: false. The one answer for a view's
+      # "locked" and a controller's refusal.
+      #
+      # @param record [ActiveRecord::Base, nil]
+      # @return [Boolean]
       def locked?(record)
+        !locked_record(record).nil?
+      end
+
+      # @return [Boolean] whether the record itself carries the flag (is_editable: false)
+      def flagged?(record)
         record.respond_to?(:is_editable) && record.is_editable == false
+      end
+
+      # Whether the admin may offer `action` on `record`: a change to the
+      # holders of a set (:grant, :revoke, :change_expiry with from:/to:)
+      # goes by direction (.widening_lock); ALWAYS_PERMITTED actions always
+      # may; :delete also asks the record's container (.container_of); any
+      # other action (:edit, :add, :toggle, :sync, :acknowledge, ...) changes
+      # what the record holds and is refused while the record is locked.
+      #
+      # @param record [ActiveRecord::Base] the record the action is on (an
+      #   assignment or its set for a holder change)
+      # @param action [Symbol]
+      # @param expiry [Hash] from:, to: for :change_expiry
+      # @return [Boolean]
+      def permits?(record, action, **expiry)
+        return true if ALWAYS_PERMITTED.include?(action)
+        return widening_lock(permission_set_of(record), action, **expiry).nil? if HOLDER_CHANGES.include?(action)
+        return false if locked?(record)
+
+        action != :delete || !flagged?(container_of(record))
       end
 
       # Moving a set from one Permission Set Group to another changes both
@@ -81,7 +128,7 @@ module PermissionForge
         to = RecordId.cast(to)
         return nil if to == from
 
-        PermissionForge::PermissionSetGroup.where(id: [from, to].compact).detect { |group| locked?(group) }
+        PermissionForge::PermissionSetGroup.where(id: [from, to].compact).detect { |group| flagged?(group) }
       end
 
       # The container whose list deleting `record` would change, or nil.
@@ -90,6 +137,12 @@ module PermissionForge
       def container_of(record)
         association = CONTAINERS[record.class.name]
         association && record.public_send(association)
+      end
+
+      # The set a holder change is on: the record when it is one, else the
+      # set an assignment belongs to.
+      def permission_set_of(record)
+        record.respond_to?(:permission_set) ? record.permission_set : record
       end
 
       # How a change moves a person's holding of a set: +1 they hold it more

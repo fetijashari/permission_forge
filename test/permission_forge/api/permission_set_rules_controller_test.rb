@@ -59,7 +59,7 @@ module PermissionForge
         end
 
         assert_response :unprocessable_entity
-        assert_equal({ 'field_name' => ['is not a column of Customer'] }, JSON.parse(response.body).dig('error', 'messages'))
+        assert_equal({ 'field_name' => ['names onwer_id, which is not a column of Customer'] }, JSON.parse(response.body).dig('error', 'messages'))
       end
 
       # A path naming no association used to be saved (201) and then turned
@@ -84,7 +84,7 @@ module PermissionForge
         patch path, params: { permission_set_rule: { field_name: 'supplierid' } }
 
         assert_response :unprocessable_entity
-        assert_equal ['is not a column of Customer'], JSON.parse(response.body).dig('error', 'messages', 'field_name')
+        assert_equal ['names supplierid, which is not a column of Customer'], JSON.parse(response.body).dig('error', 'messages', 'field_name')
 
         rule.update_columns(field_name: 'onwer_id')
         patch path, params: { permission_set_rule: { field_value: '5', is_active: false } }

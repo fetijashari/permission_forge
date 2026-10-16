@@ -109,6 +109,17 @@ module PermissionForge
           end
         end
 
+        # The columns a rule may compare on a model: every column of its
+        # table as the database knows them (a model's `ignored_columns`
+        # among them, as in .find) — the names the admin's rule builder
+        # offers and the model's validation accepts, one list.
+        #
+        # @param model [Class] a model with a table
+        # @return [Array<String>]
+        def names_for(model)
+          model.connection.schema_cache.columns_hash(model.table_name).keys
+        end
+
         # The column a rule row names, looked up the way PermissionRuleApplier
         # looks it up: in the model its Resource is named after and along its
         # association path (join rules only). nil when that cannot be told —

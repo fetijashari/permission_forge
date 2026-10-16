@@ -389,9 +389,9 @@ module PermissionForge
       # @return [Array<PermissionForge::PermissionSet>]
       def pf_active_non_expired_permission_sets
         active_psu_ids = permission_set_users.active_assignments.select(:permission_set_id)
-        # Deterministic order so "first mask_strategy wins" in FieldPermissionMerger
-        # is stable across requests and DB adapters (was DB-insertion-order dependent).
-        PermissionForge::PermissionSet.active.where(id: active_psu_ids).order(:created_at, :id).to_a
+        # Deterministic order (PermissionSet.in_hash_order) so "first mask_strategy wins" in
+        # FieldPermissionMerger is stable across requests and DB adapters.
+        PermissionForge::PermissionSet.active.where(id: active_psu_ids).in_hash_order.to_a
       end
 
       # The 0.13 name of pf_active_non_expired_permission_sets, kept for host

@@ -32,7 +32,17 @@ module PermissionForge
     # join_type is a join rule: auto_query_scoping skips it, so it only applies
     # through find_by/find_by! and permission_scoped.
     FILTER_JOIN_TYPES = [nil, '', 'filter'].freeze
-    scope :join_type_rules, -> { where.not(join_type: FILTER_JOIN_TYPES) }
+    # The rows that are not filter rules, as far as SQL can tell (a join_type
+    # of blanks is a filter to .filter_join_type? too: a caller that counts
+    # asks it, see Admin::AttentionItems#unenforced_rule_counts).
+    scope :join_type_rules, lambda {
+      where.not(join_type: FILTER_JOIN_TYPES).where(Arel::Nodes::NamedFunction.new('TRIM', [arel_table[:join_type]]).not_eq(''))
+    }
+
+    # include_nulls is off unless asked for — in code, through the API and in
+    # the admin's rule builder alike (the one default; the column's own
+    # default, true on installs before 0.15, is not read for a new row).
+    attribute :include_nulls, :boolean, default: false
 
     # Whether a join_type means "filter on the model's own table": nothing,
     # blank or 'filter'. The one definition — the applier, the default scope

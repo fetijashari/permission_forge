@@ -9,7 +9,6 @@ module PermissionForge
     # (see PeopleCandidates).
     class PeopleDirectory
       FILTERS = %w[all ending expired muting no_access].freeze
-      ENDING_WINDOW_DAYS = 7
       DEFAULT_PER_PAGE = 25
       # Beyond this the offset overflows the database's integer; the page is
       # empty long before.
@@ -19,9 +18,7 @@ module PermissionForge
 
       # Assignments whose people a filter keeps ('no_access' keeps everyone else).
       FILTER_ASSIGNMENTS = {
-        'ending' => lambda {
-          PermissionForge::PermissionSetUser.where(expires_at: Time.current..ENDING_WINDOW_DAYS.days.from_now.end_of_day)
-        },
+        'ending' => -> { PermissionForge::PermissionSetUser.ending_within },
         'expired' => -> { PermissionForge::PermissionSetUser.expired },
         'muting' => lambda {
           PermissionForge::PermissionSetUser.active_assignments.where(permission_set_id: PermissionForge::PermissionSet.muting.select(:id))
