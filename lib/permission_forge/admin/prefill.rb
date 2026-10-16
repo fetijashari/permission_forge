@@ -63,14 +63,30 @@ module PermissionForge
       # @param value [Object] the posted value
       # @return [Object] the stored value, or `value`
       def self.posted(record, attribute, value)
+        return value unless blank_text?(value) && record&.persisted?
+
         attribute = attribute.to_s
-        return value unless (value.nil? || (value.is_a?(String) && value.strip.empty?)) && record&.persisted?
-
         stored = record.attribute_in_database(attribute)
-        return stored if stored.blank? && !stored.equal?(false)
-
-        GENERATED[attribute]&.call(record, stored.to_s) ? stored : value
+        keep = blank_text?(stored) || GENERATED[attribute]&.call(record, stored.to_s)
+        keep ? stored : value
       end
+
+      # {.posted} for each of `keys` the posted Hash has: the Hash, changed in place.
+      #
+      # @param record [ActiveRecord::Base, nil]
+      # @param attrs [Hash, ActionController::Parameters] the posted attributes
+      # @param keys [Array<Symbol>]
+      # @return [Hash, ActionController::Parameters] attrs
+      def self.posted_attributes(record, attrs, *keys)
+        keys.each { |key| attrs[key] = posted(record, key, attrs[key]) if attrs.key?(key) }
+        attrs
+      end
+
+      # nil, or a String of whitespace only.
+      def self.blank_text?(value)
+        value.nil? || (value.is_a?(String) && value.strip.empty?)
+      end
+      private_class_method :blank_text?
     end
   end
 end

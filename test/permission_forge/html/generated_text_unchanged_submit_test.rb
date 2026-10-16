@@ -53,15 +53,22 @@ module PermissionForge
       # rendered, with `overrides` — to `to` when given (the set page's
       # "review" form, sent straight to "apply").
       def submit_as_rendered(page, action, to: nil, **overrides)
+        form, pairs = rendered_form(page, action)
+        pairs = pairs.reject { |name, _| overrides.key?(name) } + overrides.to_a
+        post to ? pf(to) : form['action'], params: URI.encode_www_form(pairs), headers: { 'CONTENT_TYPE' => FORM_TYPE }
+        assert_response :redirect
+      end
+
+      FORM_TYPE = 'application/x-www-form-urlencoded'.freeze
+
+      # [form, its pairs as rendered] of the form on `page` posting to `action`.
+      def rendered_form(page, action)
         get pf(page)
         assert_response :success
         doc = Nokogiri::HTML(response.body)
         form = doc.css('form').find { |node| node['action'] == pf(action) }
         assert form, "no form posting to #{action} on #{page}"
-        pairs = form_pairs(doc, form).reject { |name, _| overrides.key?(name) } + overrides.to_a
-        post to ? pf(to) : form['action'], params: URI.encode_www_form(pairs),
-                             headers: { 'CONTENT_TYPE' => 'application/x-www-form-urlencoded' }
-        assert_response :redirect
+        [form, form_pairs(doc, form)]
       end
 
       def assert_no_change(record, attribute, &)

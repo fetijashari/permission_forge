@@ -36,10 +36,7 @@ module PermissionForge
     # A blank label over a generated one, or a blank over nothing, is no
     # change (Admin::Prefill.posted).
     def update
-      attrs = action_params.except(:name)
-      %i[label description].each do |key|
-        attrs[key] = PermissionForge::Admin::Prefill.posted(@action_record, key, attrs[key]) if attrs.key?(key)
-      end
+      attrs = PermissionForge::Admin::Prefill.posted_attributes(@action_record, action_params.except(:name), :label, :description)
       @action_record.assign_attributes(attrs)
       @action_record.save!
       redirect_to pf_back_or(resource_path), notice: t('permission_forge.flash.actions.updated', action: @action_record.display_name)

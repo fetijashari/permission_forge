@@ -244,11 +244,15 @@ module PermissionForge
         def eager_load_app_models
           return unless defined?(Rails) && Rails.root && Rails.respond_to?(:autoloaders)
 
-          dir = Rails.root.join('app', 'models').to_s
-          loader = Rails.autoloaders.main
-          loader.eager_load_dir(dir) if File.directory?(dir) && loader.respond_to?(:eager_load_dir)
+          eager_load_dir(Rails.autoloaders.main, Rails.root.join('app', 'models').to_s)
         rescue StandardError => e
           Rails.logger&.debug("[PermissionForge] model eager load skipped: #{e.class}")
+        end
+
+        private
+
+        def eager_load_dir(loader, dir)
+          loader.eager_load_dir(dir) if File.directory?(dir) && loader.respond_to?(:eager_load_dir)
         end
       end
     end

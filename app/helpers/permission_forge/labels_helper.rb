@@ -113,10 +113,10 @@ module PermissionForge
     # field or an action it takes away): the entry named is the set's active
     # Resource of the leaf's chain whose row does the muting (the block
     # answers for a Resource row; nearest the leaf first), else the leaf.
-    def pf_muting_set_name(set, leaf_name, &mutes)
+    def pf_muting_set_name(set, leaf_name, &)
       chain = pf_chain_names(leaf_name)
       rows = set.resources.select { |resource| resource.is_active != false && chain.include?(resource.name) }
-      entry = rows.sort_by { |resource| chain.index(resource.name) }.find(&mutes)
+      entry = rows.sort_by { |resource| chain.index(resource.name) }.find(&)
       pf_set_entry_name(set, entry&.name || leaf_name, chain)
     end
 
@@ -126,9 +126,12 @@ module PermissionForge
     def pf_row_mutes_field?(resource, field_name)
       return true if resource.read_access || resource.edit_access
 
-      resource.resource_fields.any? do |field|
-        field.is_active != false && field.name == field_name.to_s && (field.read_access || field.edit_access || field.mask_access)
-      end
+      resource.resource_fields.any? { |field| field.is_active != false && field.name == field_name.to_s && pf_field_mutes?(field) }
+    end
+
+    # Whether a muting field row takes anything away (read, edit, or forces the mask).
+    def pf_field_mutes?(field)
+      field.read_access || field.edit_access || field.mask_access
     end
 
     # Whether a Muting Permission Set's Resource row blocks the action (an

@@ -11,6 +11,7 @@ module PermissionForge
     include PermissionForge::AuditSentencesHelper
     include PermissionForge::ChangesHelper
     include PermissionForge::AuditHelper
+    include PermissionForge::AuditRecordsHelper
     include PermissionForge::AuditAttributionHelper
     include PermissionForge::SettingsHelper
 

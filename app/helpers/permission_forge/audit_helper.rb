@@ -1,6 +1,6 @@
 module PermissionForge
-  # Labels and links for audit rows (Person → Audit, Permission Set → Audit,
-  # CSV) and for audit events (the audit log, the timelines, an event).
+  # Labels for audit events (the audit log, the timelines, an event); the
+  # rows of the Audit tabs' record lists are AuditRecordsHelper's.
   #
   # @api private
   module AuditHelper
@@ -9,104 +9,6 @@ module PermissionForge
     CATEGORY_VARIANTS = { 'change' => :changed, 'admin' => :warn, 'system' => :default, 'access' => :mask }.freeze
     # The message Audit::EventQuery gives a filter that needs a value.
     QUERY_BLANK_MESSAGE = 'permission_forge.validations.blank'.freeze
-    # [record label, where] per audited type, for a page; evaluated in the
-    # view context. Names and labels read as everywhere else in the admin:
-    # a set's, group's or rule's install-default name in the page's
-    # language (pf_record_name), a field's or action's generated label as
-    # no label (Admin::FieldLabel, Admin::ActionLabel; a verbatim name in
-    # <code>).
-    AUDIT_LABELS = {
-      'permission_set' => ->(record) { [pf_record_name(record), nil] },
-      'group' => ->(record) { [pf_record_name(record), nil] },
-      'resource' => ->(record) { [pf_resource_label(record), pf_record_name(record.permission_set).presence] },
-      'field' => ->(record) { [pf_field_label(record.resource&.name, record.name, row: record), pf_audit_resource_where(record.resource)] },
-      'action' => ->(record) { [pf_audit_action_label(record), pf_audit_resource_where(record.resource)] },
-      'rule' => ->(record) { [pf_record_name(record), pf_audit_resource_where(record.resource)] },
-      'assignment' => ->(record) { [pf_person_name(record.user), pf_record_name(record.permission_set).presence] },
-      'group_membership' => ->(record) { [pf_person_name(record.user), pf_record_name(record.permission_set_group).presence] }
-    }.freeze
-
-    # The same for the CSV export: the values as stored (an export is data,
-    # as the log's exports keep a stored reason).
-    AUDIT_CSV_LABELS = {
-      'permission_set' => ->(record) { [record.name, nil] },
-      'group' => ->(record) { [record.name, nil] },
-      'resource' => ->(record) { [pf_resource_label(record), record.permission_set&.name] },
-      'field' => ->(record) { [record.label.presence || record.name, pf_audit_csv_resource_where(record.resource)] },
-      'action' => ->(record) { [record.label.presence || record.name, pf_audit_csv_resource_where(record.resource)] },
-      'rule' => ->(record) { [record.name, pf_audit_csv_resource_where(record.resource)] },
-      'assignment' => ->(record) { [pf_person_name(record.user), record.permission_set&.name] },
-      'group_membership' => ->(record) { [pf_person_name(record.user), record.permission_set_group&.name] }
-    }.freeze
-
-    # Link target per audited type; evaluated in the view context.
-    AUDIT_PATHS = {
-      'permission_set' => ->(record) { permission_forge.permission_set_path(record) },
-      'resource' => ->(record) { permission_forge.permission_set_resource_path(record.permission_set_id, record.name) },
-      'field' => ->(record) { pf_audit_nested_path(record.resource, :field, record.name) },
-      'action' => ->(record) { pf_audit_nested_path(record.resource, :action, record.id) },
-      'rule' => ->(record) { pf_audit_nested_path(record.resource, :rule, record.id) },
-      'assignment' => ->(record) { permission_forge.person_path(record.user_id) },
-      'group' => ->(record) { permission_forge.group_path(record) },
-      'group_membership' => ->(record) { permission_forge.group_path(record.permission_set_group_id) }
-    }.freeze
-
-    def pf_audit_type_label(type)
-      t("permission_forge.ui.audit.types.#{type}")
-    end
-
-    # [type label, record label, where] of a page's row (AUDIT_LABELS).
-    def pf_audit_describe(entry)
-      label, where = pf_audit_lookup(AUDIT_LABELS, entry.type, entry.record)
-      [pf_audit_type_label(entry.type), label, where]
-    end
-
-    # [type label, record label, where] of a CSV row: stored values (AUDIT_CSV_LABELS).
-    def pf_audit_csv_describe(entry)
-      label, where = pf_audit_lookup(AUDIT_CSV_LABELS, entry.type, entry.record)
-      [pf_audit_type_label(entry.type), label, where]
-    end
-
-    # "<set> › <model>" for a row under a Resource, the set named as the admin names it.
-    def pf_audit_resource_where(resource)
-      return nil unless resource
-
-      "#{pf_record_name(resource.permission_set)} › #{pf_resource_label(resource)}"
-    end
-
-    # The same with the set's stored name, for the CSV.
-    def pf_audit_csv_resource_where(resource)
-      return nil unless resource
-
-      "#{resource.permission_set&.name} › #{pf_resource_label(resource)}"
-    end
-
-    # An action's label (Admin::ActionLabel), a verbatim key in <code>.
-    def pf_audit_action_label(action)
-      label = PermissionForge::Admin::ActionLabel.for(action)
-      label.verbatim? ? tag.code(label.text, class: 'pf-mono-key') : label.text
-    end
-
-    def pf_audit_path(entry)
-      pf_audit_lookup(AUDIT_PATHS, entry.type, entry.record)
-    end
-
-    # Runs the registry entry for `type` in the view context; nil for unknown types.
-    def pf_audit_lookup(registry, type, record)
-      handler = registry[type]
-      instance_exec(record, &handler) if handler
-    end
-
-    def pf_audit_nested_path(resource, kind, key)
-      return nil unless resource
-
-      case kind
-      when :field then permission_forge.permission_set_resource_field_path(resource.permission_set_id, resource.name, key)
-      when :action then permission_forge.permission_set_resource_action_path(resource.permission_set_id, resource.name, key)
-      when :rule then permission_forge.edit_permission_set_resource_rule_path(resource.permission_set_id, resource.name, key)
-      end
-    end
-
     def pf_audit_who_when(person, time, relative: false)
       t('permission_forge.ui.audit.who_when', who: pf_person_name(person),
                                               when: relative ? pf_relative(time) : pf_date(time))

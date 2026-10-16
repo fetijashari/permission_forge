@@ -88,7 +88,9 @@ module PermissionForge
         assert_includes table, 'sync'
 
         get pf("/permission_sets/#{@set.id}.csv"), params: { tab: 'audit', locale: 'sq' }
-        ['Untitled Permission Set', 'Untitled Rule', 'Email', 'Sync'].each { |text| assert_includes response.body, text, 'the CSV keeps the stored value' }
+        ['Untitled Permission Set', 'Untitled Rule', 'Email', 'Sync'].each do |text|
+          assert_includes response.body, text, 'the CSV keeps the stored value'
+        end
       end
 
       test 'a set and a rule stored under an install default name are named in the page language' do
