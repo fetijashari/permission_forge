@@ -101,9 +101,10 @@ module PermissionForge
         # added since the schema was read is offered.
         #
         # @param model [Class] a model with a table
+        # @param verify [Boolean] false when the caller compared the columns already
         # @return [Array<String>]
-        def names_for(model)
-          PermissionForge::SchemaRead.columns(model, verify: true).keys
+        def names_for(model, verify: true)
+          PermissionForge::SchemaRead.columns(model, verify: verify).keys
         end
 
         # The column a rule row names, looked up the way PermissionRuleApplier
