@@ -62,6 +62,28 @@ module PermissionForge
         assert_equal [@mine], relation.to_a
       end
 
+      # A join rule's qualifier that is none of the rule's tables: the alias
+      # ActiveRecord gives a self-join is compared; a table the joined query
+      # does not contain (no such table, or a real one it does not join)
+      # matches nothing instead of raising for every holder.
+      test 'a join rule qualifier the joined query does not name matches nothing; a self-join alias is compared' do
+        require_relative '../rule_path_models'
+        parent = PfRulePathRecord.create!(label: 'top')
+        child = PfRulePathRecord.create!(label: 'kid', parent: parent)
+        PfRulePathRecord.create!(label: 'orphan')
+        on_parent = lambda do |field_name|
+          PermissionRuleApplier.scope(model_class: PfRulePathRecord, current_user: @user,
+                                      operator_registry: PermissionForge::Operators::Registry,
+                                      rules: [rule(join_type: 'joins', field_accessor_path: 'parent', field_name: field_name,
+                                                   field_value: 'top')])
+        end
+
+        assert_equal [child], on_parent.call('parents_pf_rule_path_records.label').to_a
+        %w[nosuch.label customers.name].each do |field_name|
+          assert_empty on_parent.call(field_name).to_a, field_name
+        end
+      end
+
       test 'the holder of such rules is denied every record, in every read path, never a 500' do
         set = create_permission_set
         create_permission_set_user(user: @user, permission_set: set)

@@ -139,12 +139,34 @@ module PermissionForge
       # runs, and every holder would get an error instead of a denial.
       def apply_join(query, rule, join_method)
         association_chain = PermissionForge::Operators::RuleColumn.path_segments(rule[:field_accessor_path])
-        path = PermissionForge::Operators::RulePath.follow(@model_class, association_chain)
-        return query.none if path.broken?
+        models = joinable_models(association_chain)
+        return query.none unless models
 
-        query = apply_join_to_query(query, join_method, association_chain) if association_chain.any?
-        column = quoted_column(path.models.last.table_name, rule[:field_name])
-        build_query(query, column, rule, path.models)
+        query = joined(query, join_method, association_chain)
+        field_name = rule[:field_name]
+        return query.none if foreign_qualifier?(query, field_name, models)
+
+        build_query(query, quoted_column(models.last.table_name, field_name), rule, models)
+      end
+
+      # The models along a path ActiveRecord can join, or nil (RulePath#broken?).
+      def joinable_models(association_chain)
+        path = PermissionForge::Operators::RulePath.follow(@model_class, association_chain)
+        path.models unless path.broken?
+      end
+
+      # A join rule's field_name qualified with a table that is none of the
+      # rule's own (RuleColumn::UNKNOWN: an alias ActiveRecord gives a table
+      # joined twice, or a table the query does not join at all). The joined
+      # query names its tables and aliases in its SQL; a qualifier it does not
+      # name would make the database reject the query, so the rule matches
+      # nothing instead of raising for every holder.
+      def foreign_qualifier?(query, field_name, models)
+        qualifier = field_name.to_s.split('.')[-2]
+        return false unless qualifier
+        return false unless PermissionForge::Operators::RuleColumn.find(field_name, models).equal?(PermissionForge::Operators::RuleColumn::UNKNOWN)
+
+        !query.to_sql.include?(@model_class.connection.quote_table_name(qualifier))
       end
 
       # Quotes a column reference with the connection's identifier quoting.
@@ -156,6 +178,10 @@ module PermissionForge
         return name.split('.').map { |seg| conn.quote_column_name(seg) }.join('.') if name.include?('.')
 
         "#{conn.quote_table_name(table)}.#{conn.quote_column_name(name)}"
+      end
+
+      def joined(query, join_method, association_chain)
+        association_chain.any? ? apply_join_to_query(query, join_method, association_chain) : query
       end
 
       # @param join_method [Symbol] one of JOIN_METHODS — never a rule's own text

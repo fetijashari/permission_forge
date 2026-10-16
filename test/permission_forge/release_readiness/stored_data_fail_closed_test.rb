@@ -53,17 +53,7 @@ module PermissionForge
       # 'Model.column' => the WP-1 fix its failures wait for (plan-final.md §3 WP-1).
       # The lead removes each entry once WP-1 is merged; an entry whose column
       # no longer fails fails this test.
-      PENDING_ON_WP1 = {
-        'PermissionSetRule.operator' => 'A2.2: an unknown operator raises ArgumentError (Registry.fetch); the applier answers none',
-        'PermissionSetRule.join_type' => 'A2.2: a join type outside JOIN_METHODS raises ConfigurationError; the applier answers none',
-        'PermissionSetRule.field_name' => 'A2.4: a name qualified with no table, or holding a newline, reaches SQL ' \
-                                          '(StatementInvalid); RuleColumn answers UNRESOLVABLE and the applier none',
-        'PermissionSetRule.field_value' => 'A2.2: a value holding a NUL byte is quoted into SQL cut short (StatementInvalid ' \
-                                           '"unrecognized token"); the applier/registry must bind or refuse it',
-        'ResourceField.mask_strategy' => 'A2.1: MaskValue raises for an unknown or blank name; it masks full and reports',
-        'Resource.name' => 'A2.6: ResourceFieldGenerator raises NoMethodError on a Resource named after a module (Kernel); ' \
-                           '[] through ModelLookup'
-      }.freeze
+      PENDING_ON_WP1 = {}.freeze
 
       STRINGS = ['', 'zzz', 'a..b', 'nosuch.col', 'Kernel', 'regex', 'inner', 'gone',
                  "10.0.0.0/8\n192.168.0.0/16", 'office', "x\u0000y", 'ü' * 300].freeze
@@ -539,6 +529,7 @@ module PermissionForge
 
       test 'SKIP names columns that exist' do
         all = self.class.models.flat_map { |model| self.class.columns_of(model).map { |column| "#{model.name.demodulize}.#{column}" } }
+        assert_predicate all, :any?
         SKIP.each do |key, reason|
           assert_includes all, key, "SKIP entry #{key} matches no column: remove it"
           assert reason.to_s.strip.present?, "#{key}: give the SKIP entry a reason"

@@ -40,6 +40,10 @@ module PermissionForge
     RAKE_ANSWER = "a rake task's answer to its invoker: standard error is the task's own channel (RakeAudit)"
     REQUEST_TIME = 'a request-time log, written where the request is: no boot or configuration warning'
     ALLOWLIST = [
+      ['lib/permission_forge/services/mask_value.rb', /Rails\.logger&\.warn\("\[PermissionForge\] \#\{unknown_message/,
+       "#{REQUEST_TIME} (a stored mask strategy that is not registered, once per name)"],
+      ['lib/permission_forge/services/resource_field_generator.rb', /Rails\.logger&\.warn\("\[PermissionForge\] \#\{@resource\.name\} names no model/,
+       "#{REQUEST_TIME} (field generation for a Resource whose name is no loadable model)"],
       ['lib/tasks/permission_forge_audit_events.rake', /warn "Refused: /, RAKE_ANSWER],
       ['lib/tasks/permission_forge.rake', /warn "FAIL_ON must be one of/, RAKE_ANSWER],
       ['lib/tasks/permission_forge.rake', /warn "Failing: /, RAKE_ANSWER],
