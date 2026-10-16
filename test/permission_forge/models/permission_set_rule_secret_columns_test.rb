@@ -5,7 +5,7 @@ require_relative '../secret_column_models'
 
 module PermissionForge
   # A record rule never compares a column that holds a secret (a password
-  # digest, a token, an encrypted value): PermissionForge::SecretColumns,
+  # digest, a token, an `encrypted_*` column): PermissionForge::SecretColumns,
   # config.rule_secret_column_patterns (`[]` opts out). The model refuses
   # one on a new rule and when the column or the path changes; the rule
   # builder does not offer them; a rule stored before keeps evaluating as it

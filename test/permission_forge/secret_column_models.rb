@@ -1,7 +1,7 @@
 require 'test_helper'
 
 # Models with columns that hold secrets (a password digest, tokens, an
-# encrypted value) for the tests of PermissionForge::SecretColumns: a record
+# `encrypted_*` column) for the tests of PermissionForge::SecretColumns: a record
 # rule never compares them. Their tables are made here, once per test
 # process and outside any test transaction (MySQL commits on DDL), so the
 # dummy app's schema stays as it is. Never give them a Resource row in a test
