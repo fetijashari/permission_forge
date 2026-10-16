@@ -175,7 +175,9 @@ module PermissionForge
                       'Sales › Customer.supplier.owner_id equal "no": Off · 1 person',
                       *case_item], finding.items
         # A name that is not a name (a trailing dot) names no column: the missing-column finding's.
-        assert_equal ['Sales › Customer.supplier_id. equal "5": Dot · 1 person'], item_for(audit, :missing_rule_columns).items
+        # On PostgreSQL a column name in another case is another name: no column of the table.
+        missing_case = case_item.empty? ? ['Sales › Customer.Supplier_ID equal "5_id": Case · 1 person'] : []
+        assert_equal ['Sales › Customer.supplier_id. equal "5": Dot · 1 person', *missing_case], item_for(audit, :missing_rule_columns).items
       end
 
       test 'a rule that is not in effect, or held by nobody, weighs less' do

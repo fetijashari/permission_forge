@@ -56,7 +56,11 @@ module PermissionForge
       PENDING_ON_WP1 = {}.freeze
 
       STRINGS = ['', 'zzz', 'a..b', 'nosuch.col', 'Kernel', 'regex', 'inner', 'gone',
-                 "10.0.0.0/8\n192.168.0.0/16", 'office', "x\u0000y", 'ü' * 300].freeze
+                 "10.0.0.0/8\n192.168.0.0/16", 'office', "x\u0000y", 'ü' * 300]
+                # PostgreSQL stores no NUL byte at all (the driver refuses the
+                # string), so no such value can be read back there.
+                .reject { |value| value.include?("\u0000") && ActiveRecord::Base.connection.adapter_name == 'PostgreSQL' }
+                .freeze
       INTEGERS = [-1, 0, 9, 25, 2**40].freeze
       BOOLEANS = [true, false].freeze
       DATETIMES = -> { [nil, 1.year.ago, 1.year.from_now] }

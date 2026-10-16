@@ -484,7 +484,7 @@ module PermissionForge
 
       # A column in another case is a column the table does not have: it
       # matches nothing. A table in another case is no table of the rule's,
-      # and is left to the database, which rejects it.
+      # and no table of the database: such a rule matches nothing.
       test 'on PostgreSQL a name in another case is another name' do
         skip 'MySQL and SQLite have no case in column names (the test before)' unless POSTGRES
 
@@ -492,9 +492,9 @@ module PermissionForge
           assert_empty labels(name, 'equal', 'true'), name
           assert_empty labels(name, 'not_equal', 'true', include_nulls: true), name
         end
-        assert_raises(ActiveRecord::StatementInvalid) do
-          PfRuleRecord.transaction(requires_new: true) { labels('PF_RULE_RECORDS.flag', 'equal', 'true') }
-        end
+        # A table in another case is no table of the database either: the
+        # rule matches nothing (RuleColumn::UNRESOLVABLE), never an error.
+        assert_empty labels('PF_RULE_RECORDS.flag', 'equal', 'true')
       end
 
       # The database would reject the query: every find_by / permission_scoped

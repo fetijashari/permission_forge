@@ -120,7 +120,11 @@ module PermissionForge
 
       # A join type that is none of JOIN_METHODS (written past the model, or
       # by a newer version) matches nothing: it is never sent to the relation.
+      # Neither is a field_name that is not a name (RuleColumn.name?): quoting
+      # one with a NUL byte raises on PostgreSQL.
       def build_rule_query(query, rule)
+        return query.none unless PermissionForge::Operators::RuleColumn.name?(rule[:field_name])
+
         join_type = rule[:join_type].to_s
         return apply_filter(query, rule) if PermissionForge::PermissionSetRule.filter_join_type?(join_type)
 
