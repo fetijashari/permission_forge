@@ -89,6 +89,40 @@ module PermissionForge
         end
       end
 
+      # (b) "This is intended" (sensitive_acknowledged_at) has one definition,
+      # ResourceField#exposes_unacknowledged? / .exposing_unacknowledged: an
+      # acknowledged row in the clear is reported by none of the four
+      # surfaces — the GDPR audit (rake permission_forge:audit_masks), the
+      # security audit's personal_data check, Home's privacy card and the
+      # boot warning — and by all four once the acknowledgement is gone.
+      test '(b) a row marked "This is intended" is reported by no surface, and by every surface without the mark' do
+        resource = create_resource(permission_set: parity_set('acknowledged'), name: 'Customer', read_access: true)
+        row = create_resource_field(resource: resource, name: 'email', read_access: true, mask_access: false, mask_strategy: 'email')
+        PermissionForge::ResourceField.where.not(id: row.id).exposing_in_clear.find_each { |other| other.update!(mask_access: true) }
+
+        row.update!(sensitive_acknowledged_at: Time.current)
+        assert_equal({ audit: false, security: false, home: false, boot: false }, surfaces_reporting(row))
+
+        row.update!(sensitive_acknowledged_at: nil)
+        assert_equal({ audit: true, security: true, home: true, boot: true }, surfaces_reporting(row))
+      end
+
+      test '(b) the boot warning names what matched: the GDPR pattern, or the host filter_parameters' do
+        resource = create_resource(permission_set: parity_set('boot wording'), name: 'Customer', read_access: true)
+        row = create_resource_field(resource: resource, name: 'email', read_access: true, mask_access: false, mask_strategy: 'email')
+        PermissionForge::ResourceField.where.not(id: row.id).exposing_in_clear.find_each { |other| other.update!(mask_access: true) }
+
+        log = capture_rails_log { PermissionForge::BootChecks.warn_unmasked_gdpr_fields(PermissionForge.configuration) }
+        assert_match(/field 'email' on resource 'Customer' matches the GDPR pattern 'email' but is not masked/, log)
+
+        row.update!(name: 'domain')
+        with_filter_parameters(:domain) do
+          log = capture_rails_log { PermissionForge::BootChecks.warn_unmasked_gdpr_fields(PermissionForge.configuration) }
+          assert_match(/field 'domain' on resource 'Customer' is named by the application's filter_parameters but is not masked/, log)
+          assert_no_match(/GDPR pattern/, log)
+        end
+      end
+
       # (g) "Readable in the clear" has one definition,
       # ResourceField#exposes_in_clear?: the audit's unmasked and cross-set
       # findings name exactly those rows. A Hidden row (read off, mask off)
@@ -116,6 +150,24 @@ module PermissionForge
       end
 
       private
+
+      # Which surfaces report `row` as personal data in the clear.
+      def surfaces_reporting(row)
+        { audit: audit_reports?(row), security: security_reports?(row),
+          home: PermissionForge::Admin::AttentionItems.new.privacy_findings.any? { |finding| finding.field&.id == row.id },
+          boot: capture_rails_log { PermissionForge::BootChecks.warn_unmasked_gdpr_fields(PermissionForge.configuration) }
+                .include?("field '#{row.name}'") }
+      end
+
+      def audit_reports?(row)
+        Services::GdprFieldAuditor.call.any? { |f| f[:type] == :unmasked_field && f[:resource_field_id] == row.id }
+      end
+
+      def security_reports?(row)
+        check = Services::SecurityAuditChecks::PersonalDataCheck.new(configuration: PermissionForge.configuration, environment: 'test')
+        findings = check.call.select { |finding| finding.code == :unmasked_personal_data }
+        findings.flat_map(&:items).any? { |item| item.include?(".#{row.name} ") }
+      end
 
       # [presets rows, bulk rows, generator rows or nil] for `level` on fresh
       # sets of the same kind; rows as ROW, sorted.

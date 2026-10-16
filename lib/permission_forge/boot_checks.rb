@@ -131,13 +131,13 @@ module PermissionForge
       # the GDPR audit and the admin.
       def warn_unmasked_gdpr_fields(config)
         sensitive = PermissionForge::SensitiveColumns.new(configuration: config)
-        in_clear = PermissionForge::ResourceField.in_effect.merge(PermissionForge::PermissionSet.granting).exposing_in_clear
-        name = in_clear.distinct.pluck(:name).find { |field_name| sensitive.sensitive?(field_name) }
+        in_clear = PermissionForge::ResourceField.in_effect.merge(PermissionForge::PermissionSet.granting).exposing_unacknowledged
+        name, match = first_sensitive(in_clear.distinct.pluck(:name), sensitive)
         return unless name
 
         resource = in_clear.where(name: name).first&.resource
         Warnings.emit(:unmasked_gdpr_fields,
-                      "GDPR warning: field '#{name}' on resource '#{resource&.name}' matches GDPR pattern " \
+                      "GDPR warning: field '#{name}' on resource '#{resource&.name}' #{matched_by(match)} " \
                       'but is not masked. Consider enabling gdpr_defaults or masking this field manually.')
       rescue ActiveRecord::StatementInvalid
         # Table doesn't exist yet (pre-migration)
@@ -156,6 +156,16 @@ module PermissionForge
       end
 
       private
+
+      # [name, SensitiveColumns::Match] of the first name that looks like personal data.
+      def first_sensitive(names, sensitive)
+        names.lazy.filter_map { |name| (match = sensitive.match(name)) && [name, match] }.first
+      end
+
+      # What made the field personal data (SensitiveColumns::Match#source).
+      def matched_by(match)
+        match.filter_parameter? ? "is named by the application's filter_parameters" : "matches the GDPR pattern '#{match.pattern}'"
+      end
 
       # Connects and pings. `ActiveRecord::Base.connection` alone is not enough:
       # since Rails 7.2 it hands back a connection that has not connected yet,

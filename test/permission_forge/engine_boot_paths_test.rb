@@ -165,7 +165,7 @@ module PermissionForge
       end
 
       assert_match(/GDPR warning/, log)
-      assert_match(/matches GDPR pattern but is not masked/, log)
+      assert_match(/matches the GDPR pattern '[a-z_]+' but is not masked/, log)
       assert_equal 1, log.scan('GDPR warning').count, 'must break after the first warning to avoid flooding'
     end
 

@@ -43,10 +43,11 @@ module PermissionForge
         PermissionForge::ResourceField.in_effect.merge(PermissionForge::PermissionSet.granting)
       end
 
-      # Rows that show the field in the clear (ResourceField.exposing_in_clear:
-      # read on, no mask). A Hidden row is not one: it shows nothing.
+      # Rows that show the field in the clear (read on, no mask) and that no
+      # admin marked "This is intended" (ResourceField.exposing_unacknowledged).
+      # A Hidden row is not one: it shows nothing.
       def audit_unmasked_fields(report)
-        granting_fields.exposing_in_clear.preload(resource: :permission_set).find_each do |field|
+        granting_fields.exposing_unacknowledged.preload(resource: :permission_set).find_each do |field|
           match = @sensitive.match(field.name)
           report << unmasked_finding(field, match) if match
         end
