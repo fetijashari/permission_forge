@@ -121,6 +121,33 @@ module PermissionForge
       assert_includes err, 'ACTOR is not set'
     end
 
+    # Review of the round-7 fixes (P2-5): a model the application has not
+    # loaded is not seen (EncryptedAttributes: an STI subclass's `encrypts`,
+    # models_on), and a rake task boots without eager loading. The audit
+    # loads the application's models first, through the admin's one
+    # definition (ModelCatalog.eager_load_app_models).
+    test 'the audit loads the application models before it reviews' do
+      calls = []
+      original = Services::SecurityAudit.method(:call)
+      catalog = Admin::ModelCatalog
+      original_load = catalog.method(:eager_load_app_models) if catalog.respond_to?(:eager_load_app_models)
+      replace_singleton_method(catalog, :eager_load_app_models) { calls << :eager_load }
+      replace_singleton_method(Services::SecurityAudit, :call) do |**kwargs|
+        calls << :audit
+        original.call(**kwargs)
+      end
+
+      run_task('permission_forge:audit')
+      assert_equal %i[eager_load audit], calls
+    ensure
+      replace_singleton_method(Services::SecurityAudit, :call, original)
+      if original_load
+        replace_singleton_method(catalog, :eager_load_app_models, original_load)
+      else
+        catalog.singleton_class.send(:remove_method, :eager_load_app_models)
+      end
+    end
+
     test 'report tasks record report.generated with the task name and counts' do
       run_task('permission_forge:audit')
       event = last_event('report.generated')
