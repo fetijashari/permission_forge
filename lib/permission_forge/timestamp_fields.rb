@@ -27,14 +27,19 @@ module PermissionForge
 
     READ_ONLY = { read_access: true, edit_access: false, mask_access: false }.freeze
 
+    # When the columns cannot be read (no table, a database that cannot be
+    # asked) every name counts: a generated row of one is then at most
+    # Read-only, never Editable (fail closed — the names that are not
+    # columns get no row anyway).
+    #
     # @param model_class [Class, nil]
     # @return [Array<String>] the timestamp columns of the model
     def self.names(model_class)
       return [] unless model_class.respond_to?(:column_names)
 
       SchemaRead.columns_among(model_class, NAMES)
-    rescue ActiveRecord::ActiveRecordError # no table: the rows take the level as chosen
-      []
+    rescue ActiveRecord::ActiveRecordError
+      NAMES
     end
 
     # @param model_class [Class, nil] the Resource's model

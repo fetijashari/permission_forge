@@ -143,7 +143,7 @@ module PermissionForge
       # @return [Boolean]
       def table?(model, table)
         table = table.to_s
-        cache = model.connection.schema_cache
+        cache = schema_cache(model)
         return true if cache.data_source_exists?(table)
         return false unless @tables.put_if_absent([slot(model), table], true).nil?
 
@@ -201,7 +201,16 @@ module PermissionForge
       end
 
       def table_columns(model)
-        model.connection.schema_cache.columns_hash(model.table_name)
+        schema_cache(model).columns_hash(model.table_name)
+      end
+
+      # The pool's schema cache, never `model.connection`'s: that reader
+      # leases a connection to the thread for good and, from Rails 7.2,
+      # raises under ActiveRecord.permanent_connection_checkout =
+      # :disallowed. The pool's cache takes a connection only for the read
+      # it makes, and is the one the connection's own cache is.
+      def schema_cache(model)
+        model.connection_pool.schema_cache
       end
 
       # Reads the table again when one of `names` is no column of it and was

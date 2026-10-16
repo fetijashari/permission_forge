@@ -91,7 +91,9 @@ module PermissionForge
     # @param name [String]
     # @return [ActiveRecord::Relation]
     def self.named(name)
-      column = "#{connection.quote_table_name(table_name)}.#{connection.quote_column_name('name')}"
+      # The pool's connection, never `connection` (it raises under
+      # ActiveRecord.permanent_connection_checkout = :disallowed).
+      column = connection_pool.with_connection { |conn| "#{conn.quote_table_name(table_name)}.#{conn.quote_column_name('name')}" }
       where("LOWER(TRIM(#{column})) = LOWER(TRIM(?))", name.to_s)
     end
 
@@ -135,16 +137,20 @@ module PermissionForge
     #   written, e.g. `ps`); the quoted table name when nil
     # @return [String]
     def self.conditions_present_sql(table: nil)
-      qualifier = table || connection.quote_table_name(table_name)
-      quoted = ->(column) { "#{qualifier}.#{connection.quote_column_name(column)}" }
-      text_present = ->(column) { "COALESCE(TRIM(#{without_blank_lines_sql(quoted.call(column))}), '') <> ''" }
-      "(#{text_present.call('requires_session_flag')} OR #{text_present.call('allowed_ips')} " \
-        "OR #{quoted.call('allowed_hours_start')} IS NOT NULL OR #{quoted.call('allowed_hours_end')} IS NOT NULL)"
+      # The pool's connection, never `connection` (it raises under
+      # ActiveRecord.permanent_connection_checkout = :disallowed).
+      connection_pool.with_connection do |connection|
+        qualifier = table || connection.quote_table_name(table_name)
+        quoted = ->(column) { "#{qualifier}.#{connection.quote_column_name(column)}" }
+        text_present = ->(column) { "COALESCE(TRIM(#{without_blank_lines_sql(quoted.call(column), connection)}), '') <> ''" }
+        "(#{text_present.call('requires_session_flag')} OR #{text_present.call('allowed_ips')} " \
+          "OR #{quoted.call('allowed_hours_start')} IS NOT NULL OR #{quoted.call('allowed_hours_end')} IS NOT NULL)"
+      end
     end
 
     # A text of blanks is no condition, to SQL as to #conditional? (blank?):
     # TRIM takes the spaces, these REPLACEs the newlines and tabs a textarea leaves.
-    def self.without_blank_lines_sql(column_sql)
+    def self.without_blank_lines_sql(column_sql, connection)
       ["\n", "\r", "\t"].reduce(column_sql) { |sql, char| "REPLACE(#{sql}, #{connection.quote(char)}, '')" }
     end
     private_class_method :without_blank_lines_sql

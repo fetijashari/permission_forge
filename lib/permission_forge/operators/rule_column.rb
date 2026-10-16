@@ -188,7 +188,7 @@ module PermissionForge
         def on(model, name)
           exact = exact_names?(model)
           column = PermissionForge::SchemaRead.column(model, name) { |columns| column_named(columns, name, exact) }
-          new(column, column && model.defined_enums[column.name], model.connection.adapter_name, model)
+          new(column, column && model.defined_enums[column.name], adapter_name(model), model)
         end
 
         def column_named(columns, name, exact)
@@ -200,7 +200,13 @@ module PermissionForge
         end
 
         def exact_names?(model)
-          EXACT_NAMES.include?(model.connection.adapter_name)
+          EXACT_NAMES.include?(adapter_name(model))
+        end
+
+        # Through the pool, never `model.connection` (it raises under
+        # ActiveRecord.permanent_connection_checkout = :disallowed).
+        def adapter_name(model)
+          model.connection_pool.with_connection(&:adapter_name)
         end
       end
 

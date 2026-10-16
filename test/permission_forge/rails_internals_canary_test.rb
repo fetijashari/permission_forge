@@ -106,7 +106,7 @@ module PermissionForge
       arel_between: Regexp.union('Arel::Nodes::Between.new(', 'Arel::Nodes.build_quoted('),
       arel_matches: 'column.matches(',
       arel_named_function: "Arel::Nodes::NamedFunction.new('COALESCE'",
-      schema_cache: 'connection.schema_cache.columns_hash(',
+      schema_cache: 'schema_cache(model).columns_hash(',
       schema_cache_data_sources: Regexp.union('cache.data_source_exists?(', 'cache.clear_data_source_cache!('),
       schema_cache_columns_identity: Regexp.union('columns.object_id', 'fresh.object_id'),
       association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!',
@@ -170,7 +170,7 @@ module PermissionForge
       schema_cache: 'adapt SchemaRead.columns (Operators::RuleColumn.on and every reader of a model\'s columns go through it)',
       schema_cache_data_sources: 'adapt SchemaRead.table? (a field name qualified with a table that is not there matches ' \
                                  'nothing; the schema is read again once before that answer)',
-      schema_cache_columns_identity: 'adapt SchemaRead.reread_for / .confirmed? (a name confirmed missing is tied to the ' \
+      schema_cache_columns_identity: 'adapt SchemaRead.reread! / .confirmed? (a name confirmed missing is tied to the ' \
                                      'columns read: tell a read apart by something else, or a missing name re-reads every time)',
       association_join_checks: 'adapt Operators::RulePath#through / #unjoinable_cause / #record_dependent? to what ' \
                                'Associations::JoinDependency#build checks before it joins and the scopes a :through ' \
@@ -1372,8 +1372,8 @@ module PermissionForge
 
     # --- schema and loading -----------------------------------------------------------------------------------
 
-    canary_test :schema_cache, 'connection.schema_cache.columns_hash(table): Columns by name, with name and type' do
-      columns = pool.with_connection { |connection| connection.schema_cache.columns_hash('pf_canary_records') }
+    canary_test :schema_cache, 'connection_pool.schema_cache.columns_hash(table): Columns by name, with name and type' do
+      columns = pool.schema_cache.columns_hash('pf_canary_records')
 
       assert_equal %w[email id name parent_id prefs], columns.keys.sort, canary(
         :schema_cache, 'schema_cache.columns_hash no longer answers the columns of a table by name',
@@ -1385,30 +1385,28 @@ module PermissionForge
     end
 
     canary_test :schema_cache_data_sources,
-                'connection.schema_cache.data_source_exists?(name) / clear_data_source_cache!(name): whether a table is there' do
-      pool.with_connection do |connection|
-        cache = connection.schema_cache
+                'connection_pool.schema_cache.data_source_exists?(name) / clear_data_source_cache!(name): whether a table is there' do
+      cache = pool.schema_cache
 
-        assert cache.data_source_exists?('pf_canary_records'), canary(
-          :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers true for a table that is there',
-          'SchemaRead.table? (Operators::RuleColumn.data_source?) asks it before a qualified field name is left to the database: adapt it'
-        )
-        assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
-          :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers false for a table that is not there',
-          'a rule qualified with a table that is not there must match nothing: adapt SchemaRead.table?'
-        )
-        cache.clear_data_source_cache!('pf_canary_no_such_table')
+      assert cache.data_source_exists?('pf_canary_records'), canary(
+        :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers true for a table that is there',
+        'SchemaRead.table? (Operators::RuleColumn.data_source?) asks it before a qualified field name is left to the database: adapt it'
+      )
+      assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
+        :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers false for a table that is not there',
+        'a rule qualified with a table that is not there must match nothing: adapt SchemaRead.table?'
+      )
+      cache.clear_data_source_cache!('pf_canary_no_such_table')
 
-        assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
-          :schema_cache_data_sources, 'schema_cache.clear_data_source_cache!(name) no longer takes one name',
-          'SchemaRead.table? forgets a cached "no" before it answers it: adapt it'
-        )
-      end
+      assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
+        :schema_cache_data_sources, 'schema_cache.clear_data_source_cache!(name) no longer takes one name',
+        'SchemaRead.table? forgets a cached "no" before it answers it: adapt it'
+      )
     end
 
     canary_test :schema_cache_columns_identity,
-                'schema_cache.columns_hash(table) answers the same Hash until the table is read again (reset_column_information)' do
-      read = -> { PfCanaryRecord.connection.schema_cache.columns_hash(PfCanaryRecord.table_name) }
+                'the pool\'s schema_cache.columns_hash(table) answers the same Hash until the table is read again (reset_column_information)' do
+      read = -> { PfCanaryRecord.connection_pool.schema_cache.columns_hash(PfCanaryRecord.table_name) }
       first = read.call
 
       assert_same first, read.call, canary(
