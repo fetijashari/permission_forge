@@ -64,7 +64,9 @@ module PermissionForge
         assert last.previous?
         assert_equal 3, log(scope: scope).page('99', per_page: 3).number
         assert_equal 1, log(scope: scope).page('abc', per_page: 3).number
-        assert_equal 1, log(scope: scope).page('9' * 40, per_page: 3).number
+        # one reader (ParamShapes.integer): any whole number past the last page is the last page
+        assert_equal 3, log(scope: scope).page('9' * 40, per_page: 3).number
+        assert_equal 1, log(scope: scope).page('2abc', per_page: 3).number
         all = (1..3).flat_map { |n| log(scope: scope).page(n, per_page: 3).events.map { |e| e.data['n'] } }
         assert_equal [6, 5, 4, 3, 2, 1, 0], all
       end

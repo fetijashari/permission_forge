@@ -52,7 +52,8 @@ module PermissionForge
       def search(query: nil, filter: 'all', **paging)
         filter = 'all' unless FILTERS.include?(filter.to_s)
         candidates = apply_query(apply_filter(base_candidates, filter.to_s), query)
-        paginate(candidates, paging[:page].to_s.to_i.clamp(1, MAX_PAGE), paging.fetch(:per_page, DEFAULT_PER_PAGE))
+        page = ParamShapes.integer(paging[:page], default: 1, range: 1..).clamp(1, MAX_PAGE) # the one reader: "2abc" is page 1
+        paginate(candidates, page, paging.fetch(:per_page, DEFAULT_PER_PAGE))
       end
 
       # Counts for the filter chips (respecting the search query).

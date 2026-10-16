@@ -134,12 +134,11 @@ module PermissionForge
         Page.new(events: events, total: total, number: current, per_page: per_page)
       end
 
-      # 1 for anything that is not a number; at most the last page.
+      # 1 for anything that is not a whole number from 1 (ParamShapes.integer,
+      # the one reader); at most the last page.
       def self.page_number(number, total, per_page)
-        return 1 unless number.to_s.match?(/\A\d{1,9}\z/)
-
         last = [(total + per_page - 1) / per_page, 1].max
-        number.to_i.clamp(1, [last, MAX_PAGE].min)
+        ParamShapes.integer(number, default: 1, range: 1..).clamp(1, [last, MAX_PAGE].min)
       end
 
       # People the log names lately (KNOWN_PEOPLE_WINDOW), for the actor and
