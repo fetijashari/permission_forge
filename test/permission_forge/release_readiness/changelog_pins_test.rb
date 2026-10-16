@@ -28,7 +28,10 @@ module PermissionForge
       FIRST_PINNED = Gem::Version.new('0.15.0')
       HEADINGS = %w[Added Changed Deprecated Removed Fixed Security Documentation].freeze
       PIN = /<!--\s*pin:\s*(?<path>[^#\s]+)#(?<name>.+?)\s*-->/
-      TEST_LITERAL = /^\s*test\s*\(?\s*(?<quote>['"])(?<name>(?:\\.|(?!\k<quote>).)*)\k<quote>/
+      STRING = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/
+      # `test 'name'`, and the canary's `canary_test :key, 'name'`; the name may follow on the next line and be
+      # several literals joined with a backslash.
+      TEST_LITERAL = /^[ \t]*(?:test|canary_test\s+:\w+\s*,)\s*\(?\s*(?<name>(?:#{STRING})(?:\s*\\\s*\n\s*(?:#{STRING}))*)/
       TEST_METHOD = /^\s*def\s+(?<name>test_\w+)/
 
       # Bullets allowed without a pin: { 'start of the bullet' => 'why no test can prove it' }.
@@ -91,31 +94,31 @@ module PermissionForge
         @test_names ||= {}
         @test_names[path] ||= begin
           source = ROOT.join(path).read
-          literals = source.to_enum(:scan, TEST_LITERAL).map { Regexp.last_match[:name] }
+          literals = source.to_enum(:scan, TEST_LITERAL).map do
+            Regexp.last_match[:name].scan(STRING).map { |quoted| quoted[1...-1].gsub(/\\(['"\\])/, '\\1') }.join
+          end
           methods = source.to_enum(:scan, TEST_METHOD).map { Regexp.last_match[:name] }
           { literals: literals, methods: methods }
         end
       end
 
-      def self.method_name(name) = "test_#{name.gsub(/\s+/, '_')}"
+      # A test name as Minitest's method name spells it, without the `test_` prefix.
+      def self.canonical(name) = name.gsub(/\s+/, '_')
 
       def self.interpolated(literal)
-        parts = literal.split(/\#\{[^}]*\}/, -1).map { |part| Regexp.escape(part.gsub(/\\(.)/, '\1')) }
+        parts = literal.split(/\#\{[^}]*\}/, -1).map { |part| Regexp.escape(canonical(part.gsub(/\\(.)/, '\\1'))) }
         /\A#{parts.join('.+')}\z/m
       end
 
       def self.test_defined?(path, name)
         names = test_names(path)
-        if name.start_with?('~')
-          needle = name.delete_prefix('~')
-          return names[:literals].any? { |literal| literal.include?(needle) }
-        end
-        normalized = name.delete_prefix('test ').delete_prefix('test_')
+        return names[:literals].any? { |literal| literal.include?(name.delete_prefix('~')) } if name.start_with?('~')
+
+        wanted = canonical(name.sub(/\Atest[ _]/, ''))
         names[:literals].any? do |literal|
-          [name, normalized].include?(literal) ||
-            [name, method_name(normalized)].include?(method_name(literal)) ||
-            (literal.include?('#{') && interpolated(literal).match?(normalized))
-        end || names[:methods].any? { |method| [name, method_name(normalized)].include?(method) }
+          [canonical(literal), canonical(literal.sub(/\Atest[ _]/, ''))].include?(wanted) ||
+            (literal.include?('#{') && interpolated(literal).match?(wanted))
+        end || names[:methods].any? { |method| method.delete_prefix('test_') == wanted }
       end
 
       def self.anchors(path)
@@ -230,9 +233,12 @@ module PermissionForge
       end
 
       test 'a name built in a loop matches when the pin fills it' do
+        path = 'test/permission_forge/release_readiness/changelog_pins_test.rb'
         literal = '#{verb} #{path} answers the schema'
-        assert_match self.class.interpolated(literal), 'GET /api/stats answers the schema'
-        refute_match self.class.interpolated(literal), 'GET /api/stats answers something else'
+        assert_match self.class.interpolated(literal), self.class.canonical('GET /api/stats answers the schema')
+        refute_match self.class.interpolated(literal), self.class.canonical('GET /api/stats answers something else')
+        assert self.class.test_defined?(path, 'test a name built in a loop matches when the pin fills it')
+        assert self.class.test_defined?(path, 'test_a_name_built_in_a_loop_matches_when_the_pin_fills_it')
       end
     end
   end
