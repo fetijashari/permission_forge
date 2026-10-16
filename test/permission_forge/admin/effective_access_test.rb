@@ -221,21 +221,39 @@ module PermissionForge
       end
 
       # A variant tie (owner_id -> owner_uuid next to an owner_uuid row) goes
-      # to the older row in both. The literal row is created first, so on
-      # SQLite (rows come back in index, i.e. name, order) an unsorted read
-      # would let owner_id win.
-      test 'a variant tie shows the mask strategy the engine uses' do
-        tie = create_permission_set(name: 'Tie')
+      # to the explicit owner_uuid row in both, whichever row is older: the
+      # row is what the admin wrote (plan-final.md D.1; it used to go to the
+      # older row, so an older owner_id row decided owner_uuid).
+      test 'a variant tie shows the explicit row the engine uses, in either row order' do
+        [%w[owner_uuid owner_id], %w[owner_id owner_uuid]].each_with_index do |order, index|
+          tie = create_permission_set(name: "Tie #{index}")
+          resource = create_resource(permission_set: tie, name: 'PfVariantOrder', read_access: true)
+          strategies = { 'owner_uuid' => 'email', 'owner_id' => 'last4' }
+          order.each { |name| create_resource_field(resource: resource, name: name, read_access: true, mask_access: true, mask_strategy: strategies[name]) }
+          assignment = create_permission_set_user(user: @user, permission_set: tie)
+
+          engine = engine_resource('PfVariantOrder')
+
+          assert_equal 'email', engine[:fields]['owner_uuid'][:mask_strategy], "#{order.inspect}: the explicit row wins in the engine"
+          assert_equal 'email', field('owner_uuid', outcome('PfVariantOrder')).mask_strategy, order.inspect
+          assert_nil field('owner_uuid', outcome('PfVariantOrder')).variant_of, 'an explicit row is no variant'
+          assert_field_parity("variant tie #{order.inspect}", 'PfVariantOrder')
+          assignment.destroy!
+        end
+      end
+
+      # P5: an explicit Hidden row next to an Editable base row.
+      test 'an explicit Hidden row for a variant name is hidden, in the engine and here' do
+        tie = create_permission_set(name: 'Hidden variant')
         resource = create_resource(permission_set: tie, name: 'PfVariantOrder', read_access: true)
-        create_resource_field(resource: resource, name: 'owner_uuid', read_access: true, mask_access: true, mask_strategy: 'email')
-        create_resource_field(resource: resource, name: 'owner_id', read_access: true, mask_access: true, mask_strategy: 'last4')
+        create_resource_field(resource: resource, name: 'owner_id', read_access: true, edit_access: true)
+        create_resource_field(resource: resource, name: 'owner_uuid', read_access: false, edit_access: false)
         create_permission_set_user(user: @user, permission_set: tie)
 
-        engine = engine_resource('PfVariantOrder')
-
-        assert_equal 'email', engine[:fields]['owner_uuid'][:mask_strategy], 'the older row wins in the engine'
-        assert_equal 'email', field('owner_uuid', outcome('PfVariantOrder')).mask_strategy
-        assert_field_parity('variant tie', 'PfVariantOrder')
+        assert_equal false, engine_resource('PfVariantOrder')[:fields]['owner_uuid'][:read_access]
+        assert_equal 'hidden', field('owner_uuid', outcome('PfVariantOrder')).level
+        assert_equal 'edit', field('owner_id', outcome('PfVariantOrder')).level
+        assert_field_parity('hidden variant row', 'PfVariantOrder')
       end
 
       test 'records: View All wins over rules, rules otherwise' do
