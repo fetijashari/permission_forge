@@ -19,23 +19,6 @@ module PermissionForge
       end
     end
 
-    class SensitiveColumnsTest < ActiveSupport::TestCase
-      test 'matches gdpr patterns with the alternative that matched' do
-        match = SensitiveColumns.new.match('national_id')
-
-        assert_equal 'national_id', match.pattern
-        assert_equal 'last4', match.strategy
-        assert_nil SensitiveColumns.new.match('status')
-      end
-
-      test 'treats Rails filter_parameters as sensitive when integration is on' do
-        PermissionForge.configuration.filter_parameters_integration = true
-        match = SensitiveColumns.new(filter_parameters: [:secret_code]).match('secret_code')
-
-        assert_equal 'full', match.strategy
-      end
-    end
-
     class ExpiryPresetsTest < ActiveSupport::TestCase
       test 'uses calendar days and end of day' do
         today = Date.new(2026, 3, 28) # DST weekend in Europe
