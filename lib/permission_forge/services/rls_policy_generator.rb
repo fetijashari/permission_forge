@@ -32,7 +32,11 @@ module PermissionForge
     #     resource row's is_active; the membership EXISTS reads both states
     #     per statement, so switching a set or a resource off or on needs no
     #     re-sync and the policy is never wider than the app layer in between.
-    #   - A user in no rule-bearing set sees all rows (rules only restrict).
+    #   - A user in no rule-bearing set sees all rows (rules only restrict),
+    #     under no_read_access_strategy :rules_only (the default). Under :deny
+    #     a signed-in user sees a row only with read access to the model's
+    #     Resource chain, as RecordReadAccess decides it (RlsReadAccessSql,
+    #     read per statement); the strategy is part of the digest.
     #   - Muting sets contribute no rules; conditional sets' rules are included
     #     (more restrictive than the app, never less — documented).
     #   - Missing session variable follows nil_user_strategy: :bypass allows,
@@ -80,10 +84,13 @@ module PermissionForge
       # its expires_at, that instant included (`>= now()`); and only a set
       # without an activation condition as PermissionSet.unconditional reads
       # it (a text of blanks is none, one hour of the two is one) grants the
-      # view_all bypass.
+      # view_all bypass. Under no_read_access_strategy :deny, a session user
+      # without read access to the model's Resource chain sees no row
+      # (RlsReadAccessSql; the strategy is part of the digest).
       GENERATOR_VERSION = 7
 
       include RlsOperatorSql
+      include RlsReadAccessSql
 
       def self.call(model_class:, configuration: PermissionForge.configuration)
         new(model_class: model_class, configuration: configuration).call
@@ -119,8 +126,8 @@ module PermissionForge
       def digest
         parts = [
           GENERATOR_VERSION,
-          @configuration.nil_user_strategy,
-          @configuration.rls_session_variable,
+          *strategy_fingerprint,
+          read_access_sql,
           table_name,
           tenant_predicate_sql,
           rule_sets.map { |set| [set[:id], set[:resource_id], set[:rules].map { |r| rule_fingerprint(r) }.sort] }.sort
@@ -129,6 +136,11 @@ module PermissionForge
       end
 
       private
+
+      # The settings the policy is generated from.
+      def strategy_fingerprint
+        [@configuration.nil_user_strategy, @configuration.no_read_access_strategy, @configuration.rls_session_variable]
+      end
 
       # Adapter connection used for quoting by RlsOperatorSql helpers too.
       def connection
@@ -164,11 +176,17 @@ module PermissionForge
 
       # :bypass  -> uid IS NULL OR (view_all OR rules)
       # :deny/:raise -> uid IS NOT NULL AND (view_all OR rules)
+      # Under no_read_access_strategy :deny the signed-in branch is
+      # (read_access AND (view_all OR rules)) — RlsReadAccessSql, checked
+      # before the rules as RecordReadAccess is: View All never stands in
+      # for read.
       # The explicit uid guard matters: with a NULL uid every membership EXISTS
       # is false, which would make the rules conjunction vacuously TRUE — the
       # deny strategies must therefore hide rows before that branch is reached.
       def using_expression
-        guarded = "(#{view_all_bypass_sql} OR #{rules_conjunction_sql})"
+        rows = "(#{view_all_bypass_sql} OR #{rules_conjunction_sql})"
+        read = read_access_sql
+        guarded = read ? "(#{read} AND #{rows})" : rows
         if @configuration.nil_user_strategy == :bypass
           "((#{uid_sql}) IS NULL OR #{guarded})"
         else
@@ -206,16 +224,8 @@ module PermissionForge
       # return and a tab (PermissionSet.conditions_present_sql), which squish
       # would turn into spaces.
       def view_all_exists_sql(muting:)
-        conditions = [
-          "psu.user_id = (#{uid_sql})", assignment_active_sql,
-          "ps.is_active = TRUE AND ps.is_muting = #{muting ? 'TRUE' : 'FALSE'}",
-          (unconditional_set_sql unless muting),
-          "r.name = #{@conn.quote(resource_name)}", 'r.is_active = TRUE',
-          tenant_predicate_sql.delete_prefix('AND ').presence,
-          bypass_flags_sql(muting)
-        ]
-        "EXISTS ( SELECT 1 FROM #{psu_table} psu JOIN #{ps_table} ps ON ps.id = psu.permission_set_id " \
-          "JOIN #{resources_table} r ON r.permission_set_id = ps.id WHERE #{conditions.compact.join(' AND ')} )"
+        resource_row_exists_sql(muting: muting, names: [resource_name],
+                                extra: [(unconditional_set_sql unless muting), bypass_flags_sql(muting)])
       end
 
       # A granting row bypasses the rules with View All alone: the app layer

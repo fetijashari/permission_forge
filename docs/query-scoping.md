@@ -11,7 +11,7 @@ sets apply together (AND), and for an STI subclass the rules of its own resource
 ancestor's apply together — see [row-level-rules.md](row-level-rules.md#several-permission-sets).
 With `config.no_read_access_strategy = :deny` (part of `config.preset = :strict`), a signed-in
 user whose sets do not grant Read on the model sees no row at all, through `find_by`,
-`permission_scoped` and Level 1 alike — see
+`permission_scoped`, Level 1 and the Level 3 RLS policies alike — see
 [Rules only, not the CRUD flags](row-level-rules.md#rules-only-not-the-crud-flags).
 
 This guide covers the three optional defense levels that close that gap. Each is
@@ -194,8 +194,9 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   A digest of the rule state is stored on the policy; a boot warning fires when the live
   policies drift from the current rules.
 - **Semantics parity:** muting sets contribute no rules but *do* cancel a view_all bypass;
-  users in no rule-bearing set see all rows (rules only restrict), whatever
-  `no_read_access_strategy` says (the policies do not read the CRUD flags); a missing session
+  under `no_read_access_strategy = :rules_only` (the default) users in no rule-bearing set
+  see all rows (rules only restrict); under `:deny` a user without read access sees none
+  (see [Read access in a policy](#read-access-in-a-policy)); a missing session
   variable follows `nil_user_strategy` (`:bypass` allows, `:deny`/`:raise` hides all rows).
 - **The view_all bypass needs a resource row in effect.** A `view_all` grant (`modify_all`
   counts only with it, as in the application layer) bypasses the rules only while its resource row and its set are active and, with tenancy
@@ -239,7 +240,10 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
     `expires_at`, that instant included (`>= now()`, as the application layer); and the
     `view_all` bypass reads "no activation condition" as the application layer does — a
     set with only an end hour no longer bypasses the rules (policies from before version 7
-    are wider there), and a set whose session flag or IP list is only blanks does.
+    are wider there), and a set whose session flag or IP list is only blanks does. Under
+    `no_read_access_strategy = :deny` the policy also hides every row from a user without
+    read access ([Read access in a policy](#read-access-in-a-policy)); policies from before
+    version 7 applied the rules alone there.
   - **Version 6:** a rule whose field name is not a column of the table compiles to
     `FALSE`; the sync used to fail at that table.
   - **Version 5 (0.14):** the view_all bypass requires the resource row to be active and,
@@ -268,6 +272,33 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   `rake permission_forge:rls:sync` with eager loading (`config.rake_eager_load = true`), or
   the rules of a subclass that was not loaded are left out of the report without a word. The same holds for the protected models themselves: the sync
   covers the models that include `PermissionScopedFindable` and are loaded when it runs.
+
+### Read access in a policy
+
+The policies follow `no_read_access_strategy`, read when they are generated:
+
+- **`:rules_only` (the default):** the policy applies the rules alone and never reads
+  `read_access`, as the application layer does — a user in no rule-bearing set sees every row.
+- **`:deny` (the `:strict` preset):** a session user sees a row only with read access to the
+  table's Resource chain, decided per statement the way `RecordReadAccess` decides it: an
+  entry for the model (an active, unexpired assignment to an active granting set with an
+  active `Resource` row for it — with tenancy on, of the row's tenant, as for the view_all
+  bypass), and every entry along the chain granting `read_access`, with no Muting Permission
+  Set taking it (one naming the model or an STI ancestor). View All never stands in for read.
+  Assigning, revoking, switching read on or off and muting need no re-sync.
+- **Activation conditions:** a set with an activation condition never grants read in a policy
+  (the condition cannot be judged there), and a conditional Muting Permission Set always takes
+  it — narrower than the application layer, never wider.
+- **STI:** a policy is per table and compiled for the class that includes the concern, so every
+  row needs that class's chain readable. A row of a loaded STI subclass (its type column names
+  the subclass) also needs each entry of the subclass's own Resources to grant read when the
+  user has one: a subclass whose own entry has no read shows none of its rows, where a read
+  through the base class in the application layer shows them (narrower, never wider). A
+  subclass that is not loaded when the sync runs gets the base class's check only — sync with
+  eager loading.
+- **Switching the option:** the strategy is part of the policy digest, so after you switch it
+  (or the preset) `rls:status` reports every protected table `STALE` until the next
+  `rake permission_forge:rls:sync`. Until then the old policies stay in force.
 
 ### Critical deployment notes
 

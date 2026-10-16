@@ -376,13 +376,23 @@ and the RLS re-sync.
   `permission_scoped` and the default scope are `none`, and `find_by` / `find_by!` raise `NotAuthorizedError` for an
   existing record with one `failure_messages` entry from the locale (`permission_forge.denials.no_read_access`; en,
   sq, mk), `nil` / `RecordNotFound` for a missing one; each is an `access.denied` with reason `no_read_access`. View
-  All and Modify All never stand in for read; with nobody signed in `nil_user_strategy` decides; the RLS policies
-  apply the rules only. One definition, `PermissionForge::RecordReadAccess`. A README checklist row, a Settings page
-  row and a strategy value checked when set.
+  All and Modify All never stand in for read; with nobody signed in `nil_user_strategy` decides. One definition,
+  `PermissionForge::RecordReadAccess`. A README checklist row, a Settings page row and a strategy value checked when
+  set. The PostgreSQL RLS policies follow it: under `:deny` the SELECT / UPDATE / DELETE policies show a session user
+  no row without read access to the table's Resource chain, read per statement as `ResourceChain.readable?` reads it
+  (an active, unexpired assignment to an active granting set with an active Resource row for the model, every entry
+  along the STI chain granting `read_access`, no Muting Permission Set taking it; a conditional set never grants read
+  there, a conditional muting set always takes it — narrower, never wider); under `:rules_only` the policy is
+  unchanged. The strategy is part of the policy digest, so `rls:status` reports `STALE` after it is switched until
+  the next `rls:sync`. Part of `GENERATOR_VERSION` 7 (new in this release, so no further bump).
   <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#no entry, :deny: no rows, find_by raises with the locale message, a missing record is still missing -->
   <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#no entry, :rules_only: every read returns every row, as before -->
   <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#STI: an unreadable base denies the subclass that grants read itself -->
   <!-- pin: test/permission_forge/release_readiness/stored_data_fail_closed_test.rb#~under no_read_access_strategy :deny, no poisoning widens a record read -->
+  <!-- pin: test/rls/rls_read_access_parity_test.rb#a user with no entry for the model: every row under :rules_only, none under :deny, in both layers -->
+  <!-- pin: test/rls/rls_read_access_parity_test.rb#read removed by a Muting Permission Set: none under :deny, in both layers -->
+  <!-- pin: test/rls/rls_read_access_parity_test.rb#STI: a subclass entry without read hides its rows (and its subclasses) under :deny -->
+  <!-- pin: test/permission_forge/services/rls_policy_generator_test.rb#the digest follows no_read_access_strategy, so rls:status reports the policy stale after it changes -->
 
 ### Changed
 
