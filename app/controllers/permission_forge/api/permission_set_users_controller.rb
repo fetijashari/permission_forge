@@ -54,7 +54,7 @@ module PermissionForge
         authorize_assignment!(@permission_set, params[:user_ids])
         # On a locked set only what narrows access passes (an unknown
         # bulk_action is judged as a grant, then refused as a 422).
-        reject_widening!(BULK_ACTIONS.fetch(params[:bulk_action].to_s, :grant)) unless performed?
+        reject_widening!(BULK_ACTIONS.fetch(bulk_action_param, :grant)) unless performed?
         return if performed? || bulk_refused?
 
         render json: { data: bulk_assignment }, status: :ok
@@ -94,24 +94,37 @@ module PermissionForge
       # ({ "bulk_action": [...] }, { "user_ids": [...] }) before anything is
       # changed: a 200 that did nothing would hide a broken payload.
       def bulk_refused?
-        action = BULK_ACTIONS.fetch(params[:bulk_action].to_s) do
+        action = BULK_ACTIONS.fetch(bulk_action_param) do
           raise ParamShapes::InvalidParam.new(:bulk_action, I18n.t('permission_forge.api.errors.bulk_action_invalid'))
         end
         require_user_ids!
         pf_assignment_refused_api?(@permission_set, params[:user_ids], action)
       end
 
+      # params[:bulk_action] when it is text ('' otherwise: a list or an
+      # object is no action, never its #to_s).
+      def bulk_action_param
+        action = params[:bulk_action]
+        action.is_a?(String) ? action : ''
+      end
+
       # user_ids missing, [], "" or only blanks: "must name at least one
-      # user". Anything else that is not a list (one string such as "1,3",
-      # a number, an object): "must be a list" — through 0.14.1 "1,3" was
-      # read as one id and answered 200 with nobody assigned. Ids that name
-      # nobody are not refused: they are reported as `skipped`.
+      # user". Anything else that is not a list of ids — one string such as
+      # "1,3", a number, an object, a list holding an object, a list, a
+      # fraction or a boolean —: "must be a list" — through 0.14.1 "1,3" was
+      # read as one id and answered 200 with nobody assigned, and an element
+      # that was no id was left out without a word. Ids that name nobody are
+      # not refused: they are reported as `skipped`.
       def require_user_ids!
         user_ids = params[:user_ids]
         message = if Array.wrap(user_ids).all?(&:blank?) then I18n.t('permission_forge.api.errors.user_ids_missing')
-                  elsif !user_ids.is_a?(Array) then I18n.t('permission_forge.api.errors.user_ids_not_list')
+                  elsif !user_id_list?(user_ids) then I18n.t('permission_forge.api.errors.user_ids_not_list')
                   end
         raise ParamShapes::InvalidParam.new(:user_ids, message) if message
+      end
+
+      def user_id_list?(user_ids)
+        user_ids.is_a?(Array) && user_ids.all? { |id| id.is_a?(String) || id.is_a?(Integer) }
       end
 
       # The service's counts and its cache outcome (`cache`: `confirmed`,
@@ -125,9 +138,9 @@ module PermissionForge
         result = PermissionForge::Services::BulkPermissionSetAssignment.call(
           permission_set: @permission_set,
           user_ids: user_ids,
-          action: params[:bulk_action],
+          action: bulk_action_param,
           created_by: PermissionForge.current_user,
-          expires_at: (future_expires_at if params[:bulk_action] == 'assign')
+          expires_at: (future_expires_at if bulk_action_param == 'assign')
         )
         # Someone outside user_list_resolver and an id that names no user
         # read the same: the answer says nothing about who exists.

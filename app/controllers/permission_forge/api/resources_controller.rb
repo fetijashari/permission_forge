@@ -60,11 +60,10 @@ module PermissionForge
       end
 
       def record_params
-        pf_require_hash(:resource).permit(
-          :name, :description, :is_active, :is_editable,
-          :read_access, :create_access, :edit_access, :delete_access,
-          :view_all, :modify_all
-        )
+        pf_record_attributes(:resource, PermissionForge::Resource,
+                             :name, :description, :is_active, :is_editable,
+                             :read_access, :create_access, :edit_access, :delete_access,
+                             :view_all, :modify_all)
       end
     end
   end

@@ -66,11 +66,14 @@ module PermissionForge
         assert_empty failures
       end
 
+      # A blank flag is no boolean (ParamShapes.boolean): the flag's own
+      # message, as for any word the admin cannot read.
       test 'admin: a blank Active flag on the group form goes back to the group with the message' do
-        patch "#{ROOT}/groups/#{@group.id}", params: { group: { is_active: '' } }
+        patch "#{ROOT}/groups/#{@group.id}", params: { group: { is_active: '' } },
+                                             headers: { 'HTTP_REFERER' => "http://www.example.com#{ROOT}/groups/#{@group.id}" }
 
         assert_redirected_to "#{ROOT}/groups/#{@group.id}"
-        assert_predicate flash[:alert], :present?
+        assert_includes flash[:alert].to_s, I18n.t('permission_forge.api.errors.boolean_invalid')
         assert @group.reload.is_active
       end
 

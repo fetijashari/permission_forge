@@ -289,7 +289,7 @@ module PermissionForge
         config = PermissionForge.configuration
         config.user_list_resolver = -> { config.user_model.where.not(id: outside.id).order(:id) }
 
-        post "#{users_path}/bulk", params: { user_ids: [@user.id, outside.id, 99_999, '99999', 'abc', ' ', { 'x' => 1 }],
+        post "#{users_path}/bulk", params: { user_ids: [@user.id, outside.id, 99_999, '99999', 'abc', ' '],
                                              bulk_action: 'assign' }, as: :json
 
         assert_response :ok

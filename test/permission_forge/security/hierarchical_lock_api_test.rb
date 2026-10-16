@@ -188,13 +188,17 @@ module PermissionForge
         assert(copy.permission_sets.flat_map(&:resources).all?(&:is_editable))
       end
 
-      test 'a clone name that is not text falls back to the default name, and NULs are dropped' do
+      # Round 7 (S2): a name that is not text is a 422 keyed by name; through
+      # 0.15.0-rc it was dropped for the default name without a word.
+      test 'a clone name that is not text is a 422 keyed by name, and NULs are dropped' do
         post "#{set_path}/clone", params: { name: { 'a' => '1' } }
-        assert_equal 'Seeded (copy)', response.parsed_body.dig('data', 'name')
+        assert_equal [I18n.t('permission_forge.api.errors.text_shape')], response.parsed_body.dig('error', 'messages', 'name')
         post "#{set_path}/clone", params: { name: "Co\u0000py" }
         assert_equal 'Copy', response.parsed_body.dig('data', 'name')
         post "#{ROOT}/permission_set_groups/#{@group.uuid}/clone", params: { name: ['x'] }
-        assert_equal 'System (copy)', response.parsed_body.dig('data', 'name')
+        assert_equal [I18n.t('permission_forge.api.errors.text_shape')], response.parsed_body.dig('error', 'messages', 'name')
+        post "#{set_path}/clone"
+        assert_equal 'Seeded (copy)', response.parsed_body.dig('data', 'name'), 'no name is the default name'
       end
 
       # --- unlocked records are unaffected ------------------------------------------------

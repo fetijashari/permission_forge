@@ -113,7 +113,12 @@ module PermissionForge
           section = source[0, match.begin(0)].scan(SECTION).flatten.last
           [section, keys_in(match[1])] if section
         end
-        permits + source.scan(RECORD_ATTRIBUTES).map { |section, keys| [section, keys.scan(/:(\w+)/).flatten.uniq] }
+        permits + record_attribute_sections(source)
+      end
+
+      # [section, keys] of each `pf_record_attributes(:section, Model, :key, ..., record: x)`.
+      def self.record_attribute_sections(source)
+        source.scan(RECORD_ATTRIBUTES).map { |section, keys| [section, keys.scan(/:(\w+)/).flatten.uniq] }
       end
 
       def self.keys_in(list)

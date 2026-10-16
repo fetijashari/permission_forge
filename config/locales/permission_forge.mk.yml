@@ -15,9 +15,12 @@ mk:
         bulk_action_invalid: мора да биде assign или revoke
         expires_at_past: мора да биде во иднина
         field_generation_failed: Не може да се генерираат полиња за овој ресурс
+        field_value_shape: мора да биде низа, број, true или false; листа од нив (ниту
+          една со запирка) само за in, not_in и between
         flag_shape: мора да биде низа или null
         forbidden: Забрането
         hour_shape: мора да биде цел број од 0 до 23, или null
+        integer_shape: мора да биде цел број
         ip_list_empty: нема ниту една ставка; испратете null за да го отстраните условот
         ip_list_shape: мора да биде низа или листа од низи (IP адреси или CIDR опсези),
           или null
@@ -34,6 +37,7 @@ mk:
           или config.api_stats_require_admin = false
         tenant_required: Ова барање нема закупец. API-то за администрација служи по
           еден закупец.
+        text_shape: мора да биде низа
         unauthorized: Не сте автентицирани
         user_id_invalid: не е id на корисник
         user_id_missing: недостасува
@@ -472,6 +476,7 @@ mk:
         set_added: "„%{set}“ е преместен во оваа група."
         set_removed: "„%{set}“ е отстранет од оваа група."
         updated: Групата е зачувана. Ничиј пристап не е променет.
+      invalid_param: "%{param} %{detail}. Ништо не е променето."
       locked_widening: 'Овој сет на дозволи е заклучен: пристапот може да се отстрани
         или скрати, но не и да се даде или продолжи.'
       locked_widening_muting: 'Овој пригушувачки сет на дозволи е заклучен: носителите

@@ -253,8 +253,8 @@ module PermissionForge
 
         assert_equal expected, PermissionForge::Warnings.channels(context, audience: :server),
                      "env=#{env} server=#{server} generator=#{generator} logger on terminal=#{on_terminal}"
-        assert_equal POLICY.fetch([env, server, generator, on_terminal]), PermissionForge::Warnings.channels(context),
-                     'every other warning keeps the policy' if POLICY.key?([env, server, generator, on_terminal])
+        policy = POLICY[[env, server, generator, on_terminal]]
+        assert_equal policy, PermissionForge::Warnings.channels(context), 'every other warning keeps the policy' if policy
       end
     end
 

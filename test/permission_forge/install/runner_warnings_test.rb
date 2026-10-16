@@ -113,14 +113,19 @@ module PermissionForge
         def build
           root = Dir.mktmpdir('pf_runner_warnings')
           at_exit { FileUtils.remove_entry(root) if File.directory?(root) }
+          write_files(root)
+          [%w[generate permission_forge:install], %w[db:migrate]].each { |command| run!(root, *command) }
+          root
+        end
+
+        # FILES, booting on this run's Gemfile (rails_7.1.gemfile too).
+        def write_files(root)
           gemfile = File.expand_path(ENV.fetch('BUNDLE_GEMFILE', File.join(GEM_ROOT, 'Gemfile')), GEM_ROOT)
           FILES.each do |path, body|
             FileUtils.mkdir_p(File.join(root, File.dirname(path)))
             File.write(File.join(root, path), body.sub('__GEMFILE__', gemfile.dump))
           end
           %w[log tmp].each { |dir| FileUtils.mkdir_p(File.join(root, dir)) }
-          [%w[generate permission_forge:install], %w[db:migrate]].each { |command| run!(root, *command) }
-          root
         end
 
         def run!(root, *command)
@@ -163,16 +168,20 @@ module PermissionForge
 
       # What `bin/rails server` writes until it listens (then it is stopped).
       def server_boot_output(root)
-        port = TCPServer.open('127.0.0.1', 0) { |server| server.addr[1] }
         output = +''
-        Open3.popen2e(self.class.environment, RbConfig.ruby, 'bin/rails', 'server', '-b', '127.0.0.1', '-p', port.to_s,
-                      '-P', "tmp/pids/server_#{port}.pid", chdir: root) do |stdin, merged, thread|
+        Open3.popen2e(self.class.environment, RbConfig.ruby, *server_command, chdir: root) do |stdin, merged, thread|
           stdin.close
           read_until_listening(merged, output)
           Process.kill('TERM', thread.pid)
           thread.join(30) || Process.kill('KILL', thread.pid)
         end
         output
+      end
+
+      # `bin/rails server` on a free local port.
+      def server_command
+        port = TCPServer.open('127.0.0.1', 0) { |server| server.addr[1] }
+        ['bin/rails', 'server', '-b', '127.0.0.1', '-p', port.to_s, '-P', "tmp/pids/server_#{port}.pid"]
       end
 
       def read_until_listening(stream, output)

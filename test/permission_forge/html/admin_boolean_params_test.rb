@@ -49,10 +49,10 @@ module PermissionForge
         assert_not @action.reload.is_permitted
       end
 
-      test "a flag the set editor cannot read is a flash, and nothing is applied" do
+      test 'a flag the set editor cannot read is a flash, and nothing is applied' do
         UNREADABLE.each do |value|
           patch pf("/permission_sets/#{@set.id}/apply"), params: { pf: { resources: { @resource.id => { delete_access: value } } } },
-                                                       headers: referer
+                                                         headers: referer
           assert_refused(value)
         end
         assert_not @resource.reload.delete_access
