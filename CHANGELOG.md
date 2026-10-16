@@ -216,10 +216,13 @@ and the RLS re-sync.
   `GdprFieldAuditor` and the boot warning all ask it.
   <!-- pin: test/permission_forge/sensitive_columns_test.rb#matches gdpr patterns with the alternative that matched, its strategy and the source -->
 - **One row builder for generated field rows** — `ResourceFieldGenerator.build(resource:, column:, level:)` /
-  `.rows(resource)` (`ResourceFieldGenerator::RowBuilder`; `PermissionForge::FieldLevel`, moved from
-  `Admin::FieldLevel`, an alias): the flags of the level, the privacy default (a sensitive column granted Read-only
-  starts Masked under `gdpr_defaults`), timestamps at most read-only, the recommended strategy, the label, no row for
-  Unchanged. The admin's presets, Sync and bulk add and the generator write the same row for the same level.
+  `.rows(resource)` (`ResourceFieldGenerator::RowBuilder`, reading the level tables of `PermissionForge::FieldLevel`,
+  moved from `Admin::FieldLevel`, which stays as an alias): the flags of the level, the privacy default (under
+  `gdpr_defaults`, on a granting set, a sensitive column granted Read-only starts Masked; Editable masks nothing;
+  Hidden stays Hidden), Rails' timestamps at most read-only, the recommended mask strategy on every row, the label,
+  and no row for a level that is none (Unchanged on a muting set). The admin's presets and "Sync fields"
+  (`Admin::ColumnFields`), the Fields tab's bulk add (`Admin::ChangeSet`) and the generator (the API's
+  `generate_fields`, `Resource.grant_full_access!`, the console) write the same row for the same level.
   <!-- pin: test/support/decision_parity/fields.rb#(a) Customer, muting=false, gdpr_defaults=true, read: presets, bulk and the generator write the same rows -->
   <!-- pin: test/permission_forge/services/resource_field_generator_gdpr_test.rb#build: the privacy default masks a sensitive column granted Read-only, and only that -->
 - **`ResourceField#exposes_in_clear?`** and the scope **`ResourceField.exposing_in_clear`** — the one definition of
@@ -589,16 +592,20 @@ and the RLS re-sync.
 - **Generating fields without `grant_all` grants nothing — the personal-data columns included.**
   `ResourceFieldGenerator.call(resource:)`, the API's `POST …/generate_fields` without `grant_all` and the console
   used to create, under `gdpr_defaults`, the columns that look like personal data *readable and masked* while every
-  other column was Hidden. They are now Hidden like the rest, with the recommended mask strategy on the row, as the
-  admin's "Nothing" preset writes. Existing rows are not changed. **Opt out:** add them Read-only (under
-  `gdpr_defaults` they start Masked), or generate with `grant_all: true` and mask what the audit lists.
+  other column was Hidden. They are now Hidden like the rest, with the recommended mask strategy on the row — the same
+  row the admin's "Nothing" preset, "Add all new as Hidden" and bulk Hidden write. Rows already written are not
+  changed. **Opt out:** to have them readable and masked, add them Read-only (the admin's Sync "Add all new as
+  Read-only", bulk Read, or the field drawer: under `gdpr_defaults` a sensitive column granted Read-only starts
+  Masked), or generate with `grant_all: true` and mask what the audit lists.
   <!-- pin: test/permission_forge/services/resource_field_generator_gdpr_test.rb#grant_all false with gdpr_defaults true grants nothing: the email field is Hidden, its strategy recorded -->
 - **Generating fields on a Muting Permission Set writes the level chosen, and no row without `grant_all`.** Without
   `grant_all` the generator wrote, under `gdpr_defaults`, `read_access: true, mask_access: true` rows for the
   personal-data columns of a muting set — rows that *hide* those columns for the set's holders and force a mask — and
   an Unchanged row (every flag off) for every other column, where the admin's presets and bulk add write none.
-  `ResourceFieldGenerator.call(resource:)` now writes no row on a muting set (Unchanged mutes nothing), and
-  `grant_all: true` still writes the Hide rows. Existing rows are not changed. **No opt-out:** a muting row written by a privacy default was a silent removal nobody chose, and the rows it
+  `ResourceFieldGenerator.call(resource:)` (the API's `generate_fields`, the console) now writes no row on a muting set
+  (Unchanged mutes nothing, which is what no row means: `FieldLevel.row?`), and `grant_all: true` still writes the
+  Hide rows. Rows already written are not changed (the audit's `dependency_violations` and Home list the privacy
+  ones). **No opt-out:** a muting row written by a privacy default was a silent removal nobody chose, and the rows it
   no longer writes took nothing away.
   <!-- pin: test/support/decision_parity/fields.rb#(a) Customer, muting=true, gdpr_defaults=true, leave: presets, bulk and the generator write the same rows -->
   <!-- pin: test/permission_forge/services/resource_field_generator_test.rb#without grant_all a Muting Permission Set gets no rows at all, the timestamps included -->
@@ -610,9 +617,11 @@ and the RLS re-sync.
   <!-- pin: test/support/decision_parity/fields.rb#(a) a declared virtual field gets the level chosen on every path under extra_fields_default_access = :grant -->
 - **The admin's "Full access" masks nothing.** Adding a resource with the **Full access** preset, or Sync's "Add all
   new with full access", now gives every field Editable, also the columns that look like personal data under
-  `gdpr_defaults`. They keep the **Sensitive** badge and their recommended strategy, and Home's Privacy audit lists
-  them. **Read-only** still starts them Masked. **Opt out:** add the resource **Read-only** and raise the other fields,
-  or set the reported fields to Masked (Fields tab, filter **Sensitive**).
+  `gdpr_defaults` (the field test's `Customer.name` started Masked). Those columns keep the **Sensitive** badge and
+  their recommended mask strategy, and Home's Privacy audit lists them as shown unmasked, with **Fix** and **This is
+  intended**. **Read-only** (preset and Sync) still starts them Masked; the muting presets are unchanged. **Opt out:**
+  add the resource with **Read-only** and raise the other fields to Editable, or set the reported fields to Masked
+  from the Fields tab (bulk: filter **Sensitive**, select all, Set to Masked).
   <!-- pin: test/permission_forge/html/full_access_privacy_test.rb#the Full access preset masks nothing and keeps the recommended strategy -->
   <!-- pin: test/permission_forge/html/full_access_privacy_test.rb#sync: "with full access" masks nothing, "Read-only" masks the sensitive columns -->
 - **Generated rows always carry the recommended mask strategy** of a sensitive column (`email` for `email`,
@@ -623,8 +632,9 @@ and the RLS re-sync.
   `ignored_fields`, so they got no row and, under the default `unconfigured_field_strategy = :block`, every reader saw
   `null` timestamps. `ignored_fields` no longer lists them, and every path that generates rows (the generator,
   `Resource.grant_full_access!`, the API's `generate_fields`, the admin's presets, Sync and bulk add) gives them one
-  through `TimestampFields`: on a granting set, read-only for a level that grants read, hidden otherwise; on a muting
-  set, the level chosen. Until synced, the admin lists them as not configured. **Opt out:**
+  through `TimestampFields`: on a granting set, read-only unmasked for a level that grants read, hidden otherwise; on
+  a muting set, the level chosen. **What an existing install sees:** right after the upgrade the admin lists
+  `created_at` / `updated_at` as not configured on every resource until its fields are synced. **Opt out:**
   `config.ignored_fields += %w[created_at updated_at]`.
   <!-- pin: test/permission_forge/services/resource_field_generator_test.rb#a user granted the generated fields reads the timestamps under :block, and cannot edit them -->
   <!-- pin: test/permission_forge/admin/column_fields_test.rb#a level that grants read gives the timestamps Read-only, never Editable or Masked -->
