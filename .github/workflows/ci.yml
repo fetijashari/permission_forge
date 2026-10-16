@@ -226,7 +226,7 @@ jobs:
   # test/support/preview_app.rb serves the dummy app
   # with the sample data of the whole-UI tests and prints the screens;
   # test/browser/layout_probe.js renders every page, error state and flow at
-  # 360 and 600px in en, sq and mk under the runner's Chrome (playwright-core,
+  # 360, 390, 600 and 1024px in en, sq and mk under the runner's Chrome (playwright-core,
   # channel chrome: no browser download) and fails on a document that scrolls
   # sideways, an element past the viewport outside a scroll frame, a
   # placeholder wider than its box or two sticky layers that intersect. Allowed
@@ -267,9 +267,9 @@ jobs:
           mkdir -p tmp/browser
           bundle exec ruby test/support/preview_app.rb --port 4017 > tmp/browser/preview.log 2>&1 &
 
-      - name: Render every screen at 360 and 600px in en, sq and mk
+      - name: Render every screen at 360, 390, 600 and 1024px in en, sq and mk
         run: >-
-          node test/browser/layout_probe.js --log tmp/browser/preview.log --widths 360,600 --locales en,sq,mk
+          node test/browser/layout_probe.js --log tmp/browser/preview.log --widths 360,390,600,1024 --locales en,sq,mk
           --out tmp/browser/layout.json --shots tmp/browser
 
       # The documentation's denial flows (docs/row-level-rules.md "Handling

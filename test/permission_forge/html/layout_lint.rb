@@ -11,7 +11,8 @@ module PermissionForge
     #
     #   lint = LayoutLint.new(css: File.read('app/frontend/permission_forge/pf_admin.css'))
     #   lint.page_problems(response.body)  # wide grids outside a frame, frames without the cue
-    #   lint.css_problems                  # scroll containers that are no containing block, no cue
+    #   lint.css_problems                  # scroll containers that are no containing block, no cue,
+    #                                      # a fixed layer centred over the sidebar
     #   LayoutLint.placeholder_problem(:input, text, locale: 'mk')
     class LayoutLint
       WIDE = 480 # px: a grid at least this wide scrolls sideways on a phone
@@ -22,6 +23,7 @@ module PermissionForge
       SCROLLING = /\boverflow(?:-x|-y)?\s*:\s*(?:auto|scroll)\b/
       POSITIONED = /\bposition\s*:\s*(?:relative|sticky|absolute|fixed)\b/
       RULE = /([^{}]+)\{([^{}]*)\}/m
+      SIDEBAR_WIDTH = '--pf-sidebar-width'.freeze
 
       # Why a placeholder does not fit, or nil. A textarea is judged per line.
       def self.placeholder_problem(kind, text, locale:)
@@ -59,7 +61,7 @@ module PermissionForge
       end
 
       def css_problems
-        unpositioned_scroll_containers + missing_cue
+        unpositioned_scroll_containers + missing_cue + uncentered_layers
       end
 
       private
@@ -95,6 +97,18 @@ module PermissionForge
       def unpositioned_scroll_containers
         rules.filter_map do |selectors, body|
           "#{selectors} scrolls but is no containing block: add position: relative" if body.match?(SCROLLING) && !body.match?(POSITIONED)
+        end
+      end
+
+      # A fixed layer centred on the viewport (left: 50%, a toast) covers the
+      # sidebar's footer — the language and theme switch — at desktop widths
+      # unless a rule moves it by the sidebar's width (review R4 P1-5).
+      def uncentered_layers
+        rules.filter_map do |selectors, body|
+          next unless body.match?(/\bposition\s*:\s*fixed\b/) && body.match?(/\bleft\s*:\s*50%/)
+          next if rules.any? { |other, other_body| other.end_with?(selectors) && other_body.include?(SIDEBAR_WIDTH) }
+
+          "#{selectors} is centred on the viewport: move it by the sidebar (var(#{SIDEBAR_WIDTH})) at desktop widths"
         end
       end
 

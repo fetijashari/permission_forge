@@ -18,6 +18,7 @@
   --pf-radius-sm: 6px;
   --pf-radius: 8px;
   --pf-radius-lg: 12px;
+  --pf-sidebar-width: 248px;
 
   --pf-space-1: 4px;
   --pf-space-2: 8px;
@@ -215,7 +216,7 @@
 
 /* ------------------------------------------------------------------ layout */
 .pf-app { min-height: 100vh; display: flex; flex-wrap: wrap; align-content: flex-start; background: var(--pf-bg); }
-.pf-sidebar { flex: 0 0 248px; align-self: stretch; border-right: 1px solid var(--pf-border); background: var(--pf-surface); }
+.pf-sidebar { flex: 0 0 var(--pf-sidebar-width); align-self: stretch; border-right: 1px solid var(--pf-border); background: var(--pf-surface); }
 .pf-sidebar__inner { position: sticky; top: 0; height: 100vh; overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 20px 12px; }
 .pf-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 4px 8px 18px; }
 .pf-brand__home { display: inline-block; }
@@ -756,6 +757,10 @@
 .pf-toasts { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; width: max-content; max-width: min(640px, calc(100% - 32px)); }
 /* A page with a sticky savebar keeps the bottom edge for it: toasts go to the top, so neither hides the other. */
 .pf-root:has(.pf-savebar) .pf-toasts { top: 16px; bottom: auto; }
+/* Beside the sidebar (desktop widths) toasts centre over the main column, never over the sidebar's footer (language, theme). */
+@media (min-width: 1024px) {
+  .pf-root:has(.pf-sidebar) .pf-toasts { left: calc(50% + var(--pf-sidebar-width) / 2); max-width: min(640px, calc(100% - var(--pf-sidebar-width) - 32px)); }
+}
 .pf-toast { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: var(--pf-radius); background: var(--pf-text); color: var(--pf-surface); box-shadow: var(--pf-shadow); font-size: 13px; }
 .pf-toast--alert { background: var(--pf-block); color: #fff; }
 .pf-toast__text { flex: 1; min-width: 0; }

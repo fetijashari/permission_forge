@@ -980,6 +980,9 @@ and the RLS re-sync.
 
 ### Fixed
 
+- **A toast no longer covers the sidebar's language and theme switch at desktop widths** (1024px): toasts centre over
+  the main column (`--pf-sidebar-width`). The browser layout check now also runs at 390 and 1024px.
+  <!-- pin: test/permission_forge/html/layout_lint_test.rb#every scroll container in the stylesheet is a containing block, and the frame paints its cue -->
 - **"Review and save" titled the browser tab with a raw value** (`{one: "Review %{count} change", …}`) in every locale:
   the page title now counts the changes. Every admin template is now rendered by the whole-UI walks (the reviews,
   previews, Home cards, the audit log off or refused), so their lints cover it.
