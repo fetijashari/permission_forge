@@ -20,6 +20,23 @@ module PermissionForge
     module RlsOperatorSql
       # `current_user` in a policy: the SQL the session user's id is read with.
       SessionUser = Struct.new(:sql)
+      # A value the policy computes when it runs (a relative date): its SQL.
+      Dynamic = Struct.new(:sql)
+
+      # PostgreSQL's relative date and time words, as the expression each
+      # stands for when a statement runs. Quoted into a policy, PostgreSQL
+      # resolves the word once, when it parses CREATE POLICY: the policy kept
+      # the sync's date while the app layer, which sends the word with every
+      # query, reads it anew. So the policy computes it per statement instead.
+      RELATIVE_VALUES = {
+        'now' => 'now()', 'today' => 'CURRENT_DATE', 'tomorrow' => '(CURRENT_DATE + 1)', 'yesterday' => '(CURRENT_DATE - 1)'
+      }.freeze
+      # A relative word anywhere in the text (`today 10:00`, `tomorrow UTC`):
+      # no exact per-statement form is built for those — the rule is FALSE in
+      # the policy (narrower than the app layer).
+      RELATIVE_WORD = /\b(?:#{RELATIVE_VALUES.keys.join('|')})\b/i
+      # The column types PostgreSQL reads those words for.
+      TEMPORAL_TYPES = %i[date time datetime timestamp timestamptz].freeze
 
       UNUSABLE = Operators::ValueTyping::UNUSABLE
 
@@ -76,18 +93,18 @@ module PermissionForge
         return UNUSABLE if Operators::ValueTyping.no_column?(operator, target) || unmatchable?(operator, target)
         return session_user(operator, target) if Operators::ValueTyping.current_user?(operator, value)
 
-        Operators::ValueTyping.call(operator, value, target)
+        relative(Operators::ValueTyping.call(operator, value, target), temporal_sql_type(target.column))
       end
 
       def value_sql(value)
         case value
-        when SessionUser then value.sql
+        when SessionUser, Dynamic then value.sql
         else connection.quote(value)
         end
       end
 
       def list_sql(values, separator = ', ')
-        values.map { |value| connection.quote(value) }.join(separator)
+        values.map { |value| value_sql(value) }.join(separator)
       end
 
       def like_sql(col, value, prefix:, suffix:)
@@ -100,6 +117,31 @@ module PermissionForge
       end
 
       private
+
+      # A typed value (or each of a list's) with PostgreSQL's relative words
+      # (RELATIVE_VALUES) as the expression PostgreSQL computes per statement,
+      # cast to the column's type; text with such a word that is not the
+      # word alone is UNUSABLE (FALSE). Only on a date or time column: on
+      # any other a word is text, or was refused by the read back.
+      def relative(value, sql_type)
+        return value unless sql_type
+        return relative_one(value, sql_type) unless value.is_a?(Array)
+
+        typed = value.map { |element| relative_one(element, sql_type) }
+        typed.any? { |element| element.equal?(UNUSABLE) } ? UNUSABLE : typed
+      end
+
+      # The column's SQL type when it is a date or time column, else nil.
+      def temporal_sql_type(column)
+        column.sql_type if column && TEMPORAL_TYPES.include?(column.type)
+      end
+
+      def relative_one(value, sql_type)
+        return value unless value.is_a?(String) && value.match?(RELATIVE_WORD)
+
+        expression = RELATIVE_VALUES[value.strip.downcase]
+        expression ? Dynamic.new("CAST(#{expression} AS #{sql_type})") : UNUSABLE
+      end
 
       # A LIKE operator on a column PostgreSQL cannot match a pattern with
       # (ValueCasters.pattern? for PostgreSQL, the database every policy is

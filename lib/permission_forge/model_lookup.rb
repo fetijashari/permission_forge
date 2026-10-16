@@ -8,7 +8,9 @@ module PermissionForge
   # model, a model whose table is not there yet, a name that is no constant,
   # a constant whose file raises while it loads — is no model: the callers
   # describe or skip, they never fail on it (a Resource named `Kernel` made
-  # the field generator raise NoMethodError and the API answer 500).
+  # the field generator raise NoMethodError and the API answer 500). A table
+  # found missing is asked of the database again once (SchemaRead.table?).
+  # The one place a Resource name is constantized (a G4 needle).
   #
   # @example
   #   ModelLookup.model_for('Customer')  # => Customer
@@ -26,7 +28,7 @@ module PermissionForge
     # @return [Class, nil] the model, or nil when the name is no model with a table
     def model_for(name)
       klass = name.to_s.safe_constantize
-      klass if klass.is_a?(Class) && klass < ActiveRecord::Base && !klass.abstract_class? && klass.table_exists?
+      klass if klass.is_a?(Class) && klass < ActiveRecord::Base && !klass.abstract_class? && SchemaRead.table?(klass, klass.table_name)
     rescue *UNTELLABLE
       nil
     end

@@ -8,6 +8,7 @@ module PermissionForge
 
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Concerns::HasUuid
+    include PermissionForge::Concerns::KeepsCopiedValues
     include PermissionForge::Concerns::ValidatesColumnLengths
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -94,6 +95,9 @@ module PermissionForge
     # other attributes. Its values are masked fully until it is fixed
     # (Services::MaskValue); `rake permission_forge:audit` lists it
     # (unknown_mask_strategies), the field drawer flags it.
+    # A copy keeps its original's strategy (KeepsCopiedValues): it masks
+    # fully, as the original does.
+    keeps_copied :mask_access, :mask_strategy
     validates :mask_strategy, presence: {
                                 message: ->(*) { I18n.t('permission_forge.validations.resource_field.mask_strategy_required') }
                               },
@@ -122,6 +126,8 @@ module PermissionForge
     end
 
     def mask_strategy_check_due?
+      return false if copied_unchanged?(:mask_access, :mask_strategy)
+
       mask_access? && (new_record? || will_save_change_to_mask_strategy? || will_save_change_to_mask_access?)
     end
   end

@@ -64,7 +64,10 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     codes: ['{1,2}', '{3}', '{}', '1', 'abc', '', '{1,2},{3}', '5,50', 'current_user'],
     tags: ['{a,b}', '{c}', 'a', '', '{a,b},{c}', 'current_user'],
     aliases: ['{a,b}', 'a', '', 'current_user'],
-    settings: ['{"a": 1}', '{}', 'a', '', 'current_user']
+    settings: ['{"a": 1}', '{}', 'a', '', 'current_user'],
+    # Read by PostgreSQL, but not comparable (review R1 #4).
+    doc: ['<a/>', 'a', '<a/>,<b/>', '', 'current_user'],
+    spot: ['(1,2)', '(1,2),(3,4)', 'a', '', 'current_user']
   }.freeze
 
   # One rule of every Operators::RuleProblem kind — the rules the app layer
@@ -275,23 +278,32 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     end
   end
 
-  # A date in PostgreSQL's own words goes to PostgreSQL as written in both
-  # layers. The app layer sends it with every query; a policy is parsed once,
-  # so there `tomorrow` is the day after the policy was made — as it always was.
-  test "PostgreSQL's own date words are read per query by the app layer and once by a policy" do
-    rules = [{ field_name: 'born_on', operator: 'less_than', field_value: 'tomorrow' }]
-    tomorrow = connection.select_value("SELECT 'tomorrow'::date::text")
+  # Review R1 #6: a date in PostgreSQL's own relative words goes to
+  # PostgreSQL as written in the app layer, read anew by every query. Quoted
+  # into a policy, PostgreSQL resolved it once, when it parsed CREATE
+  # POLICY — the policy kept the sync's date and grew wider every day. It
+  # compiles to the expression PostgreSQL computes per statement instead;
+  # a relative word with more text compiles to FALSE (narrower).
+  test "PostgreSQL's relative date words are read per statement by the app layer and by the policy" do
+    { 'tomorrow' => 'CURRENT_DATE + 1', ' TODAY ' => 'CURRENT_DATE', 'yesterday' => 'CURRENT_DATE - 1', 'now' => 'now()' }
+      .each do |word, expression|
+        rules = [{ field_name: 'born_on', operator: 'less_than', field_value: word }]
 
-    assert_includes scoped(**rules.first).to_sql, "< 'tomorrow'"
-    assert_equal app_layer_rows(rules), rows_through_policy(rules)
+        assert_equal app_layer_rows(rules), rows_through_policy(rules), word
+        stored = connection.select_value(<<~SQL)
+          SELECT pg_get_expr(polqual, polrelid) FROM pg_policy
+          WHERE polname = 'permission_forge_select' AND polrelid = 'pf_rule_records'::regclass
+        SQL
 
-    stored = connection.select_value(<<~SQL)
-      SELECT pg_get_expr(polqual, polrelid) FROM pg_policy
-      WHERE polname = 'permission_forge_select' AND polrelid = 'pf_rule_records'::regclass
-    SQL
-
-    assert_includes stored, "born_on < '#{tomorrow}'::date"
-    assert_not_includes stored, 'tomorrow'
+        assert_includes stored, expression, word
+        assert_not_includes stored, connection.select_value('SELECT CURRENT_DATE::text'), "#{word}: no date frozen at sync"
+      end
+    assert_equal [%w[five zero], %w[five zero]], compare(:born_on, 'less_than', 'yesterday', false)
+    assert_equal [%w[five zero], %w[five zero]], compare(:born_on, 'between', '2020-01-01, today', false)
+    assert_equal 'FALSE', generator.send(:rule_sql, PermissionForge::PermissionSetRule.new(
+                                                      permission_set: @permission_set, resource: @resource, field_name: 'seen_at',
+                                                      operator: 'less_than', field_value: 'today 10:00'
+                                                    )), 'a relative word with more text: narrower'
   end
 
   # It failed the sync (and raised in the app layer) before
@@ -319,7 +331,7 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     set = create_permission_set(name: 'Modify only')
     create_permission_set_user(user: @user, permission_set: set)
     create_resource(permission_set: set, name: 'PfRuleRecord', view_all: true, modify_all: true)
-                   .update_columns(view_all: false)
+      .update_columns(view_all: false)
     Current.user = @user
 
     assert_equal %w[current_user five], app_layer_scoped_labels
@@ -403,7 +415,8 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     record('five', small_count: 5, owner_id: @user.id, amount: '5.5', ratio: 0.5, rate: 0.1, flag: true, notes: '50%_off',
                    born_on: '2026-01-10', seen_at: Time.utc(2026, 1, 10, 10), opens_at: '09:00', status: :active, tier: :basic,
                    codes: [1, 2], tags: %w[a b], ref: '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', code: 'ab',
-                   aliases: %w[a b], settings: { 'a' => 1 }, ip: '10.0.0.1', net: '10.0.0.0/24', mood: 'calm')
+                   aliases: %w[a b], settings: { 'a' => 1 }, ip: '10.0.0.1', net: '10.0.0.0/24', mood: 'calm',
+                   doc: '<a/>', spot: '(1,2)')
     record('zero', small_count: 0, owner_id: @other.id, amount: 0, ratio: 0.0, rate: 0.5, flag: false, notes: '50x_OFF',
                    born_on: '2025-06-01', seen_at: Time.utc(2025, 6, 1), opens_at: '17:30', status: :archived, tier: :gold,
                    codes: [3], tags: %w[c], ref: '00000000-0000-0000-0000-000000000000', code: 'xyz',

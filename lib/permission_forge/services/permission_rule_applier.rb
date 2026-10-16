@@ -143,45 +143,39 @@ module PermissionForge
         join_method ? apply_join(query, rule, join_method) : query.none
       end
 
+      # A filter rule compares its model's own table: a field_name
+      # qualified with another table (RuleColumn::FOREIGN) matches nothing,
+      # whatever the query joins (RuleProblem :foreign_table).
       def apply_filter(query, rule)
-        column = quoted_column(@model_class.table_name, rule[:field_name])
-        build_query(query, column, rule, [@model_class])
+        field_name = rule[:field_name]
+        target = PermissionForge::Operators::RuleColumn.find(field_name, [@model_class])
+        build_query(query, quoted_column(@model_class.table_name, field_name), rule, target)
       end
 
       # A path that cannot be followed (Operators::RulePath#broken?: no such
       # association, a polymorphic one, a class that cannot be loaded...)
       # matches nothing: ActiveRecord would raise for the join when the query
-      # runs, and every holder would get an error instead of a denial.
+      # runs, and every holder would get an error instead of a denial. A
+      # qualifier is compared with the names the joined query gives its
+      # tables (Operators::RuleSources: the aliases ActiveRecord assigns,
+      # the default scope's and the host's joins included); one it does not
+      # give matches nothing (RuleColumn::FOREIGN / UNRESOLVABLE).
       def apply_join(query, rule, join_method)
         association_chain = PermissionForge::Operators::RuleColumn.path_segments(rule[:field_accessor_path])
         models = joinable_models(association_chain)
         return query.none unless models
 
-        query = joined(query, join_method, association_chain)
+        query = PermissionForge::Operators::RulePath.join(query, join_method, association_chain)
         field_name = rule[:field_name]
-        return query.none if foreign_qualifier?(query, field_name, models)
-
-        build_query(query, quoted_column(models.last.table_name, field_name), rule, models)
+        joined = field_name.to_s.include?('.') ? PermissionForge::Operators::RuleSources.of(query) : []
+        target = PermissionForge::Operators::RuleColumn.find(field_name, models, joined: joined)
+        build_query(query, quoted_column(models.last.table_name, field_name), rule, target)
       end
 
       # The models along a path ActiveRecord can join, or nil (RulePath#broken?).
       def joinable_models(association_chain)
         path = PermissionForge::Operators::RulePath.follow(@model_class, association_chain)
         path.models unless path.broken?
-      end
-
-      # A join rule's field_name qualified with a table that is none of the
-      # rule's own (RuleColumn::UNKNOWN: an alias ActiveRecord gives a table
-      # joined twice, or a table the query does not join at all). The joined
-      # query names its tables and aliases in its SQL; a qualifier it does not
-      # name would make the database reject the query, so the rule matches
-      # nothing instead of raising for every holder.
-      def foreign_qualifier?(query, field_name, models)
-        qualifier = field_name.to_s.split('.')[-2]
-        return false unless qualifier
-        return false unless PermissionForge::Operators::RuleColumn.find(field_name, models).equal?(PermissionForge::Operators::RuleColumn::UNKNOWN)
-
-        !query.to_sql.include?(@model_class.connection.quote_table_name(qualifier))
       end
 
       # Quotes a column reference with the connection's identifier quoting.
@@ -195,31 +189,6 @@ module PermissionForge
         "#{conn.quote_table_name(table)}.#{conn.quote_column_name(name)}"
       end
 
-      def joined(query, join_method, association_chain)
-        association_chain.any? ? apply_join_to_query(query, join_method, association_chain) : query
-      end
-
-      # @param join_method [Symbol] one of JOIN_METHODS — never a rule's own text
-      def apply_join_to_query(query, join_method, association_chain)
-        if association_chain.size > 1
-          query.public_send(join_method, build_nested_joins_structure(association_chain))
-        else
-          query.public_send(join_method, association_chain.first.to_sym)
-        end
-      end
-
-      def build_nested_joins_structure(association_chain)
-        structure = {}
-        current = structure
-
-        association_chain.each_with_index do |assoc, index|
-          current[assoc.to_sym] = {}
-          current = current[assoc.to_sym] unless index == association_chain.length - 1
-        end
-
-        structure
-      end
-
       # A built-in operator gets its value in the type of the column it is
       # compared with (see Operators::ValueTyping). A value that cannot be one
       # of that column makes the rule match nothing, whatever the database
@@ -230,13 +199,13 @@ module PermissionForge
       # built-in operator (Operators::ValueTyping.no_column?) — the database
       # would reject the query, and every holder would get an error instead
       # of a denial. So does one qualified with a table that is not there
-      # (RuleColumn#unresolvable?), and a rule whose operator the registry
+      # (RuleColumn#unresolvable?) or that is none of the rule's query
+      # (RuleColumn#foreign?), and a rule whose operator the registry
       # does not have (written past the model, or by a newer version).
-      def build_query(query, quoted_column, rule, models)
+      def build_query(query, quoted_column, rule, target)
         operator = rule[:operator]
         strategy = strategy_for(operator)
-        target = PermissionForge::Operators::RuleColumn.find(rule[:field_name], models)
-        return query.none if strategy.nil? || target.unresolvable?
+        return query.none if strategy.nil? || target.unresolvable? || target.foreign?
 
         value = PermissionForge::Operators::ValueTyping.call(operator, formatted_field_value(rule), target)
         return query.none if value.equal?(PermissionForge::Operators::ValueTyping::UNUSABLE)

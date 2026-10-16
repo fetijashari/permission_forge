@@ -115,7 +115,7 @@ module PermissionForge
       # unconfigured virtual fields instead). Read for any constant, like the
       # engine does, not only for the models the catalog lists.
       def implicit_names
-        PermissionForge::VirtualFields.new(@sources.name.to_s.safe_constantize, @configuration).implicit
+        PermissionForge::VirtualFields.new(PermissionForge::ModelLookup.model_for(@sources.name), @configuration).implicit
       end
 
       # The engine's entry for the resource flags as the granting sets merged

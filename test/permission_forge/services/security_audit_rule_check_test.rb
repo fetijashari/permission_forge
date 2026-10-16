@@ -2,6 +2,7 @@
 
 require 'test_helper'
 require_relative '../../support/rule_problem_fixtures'
+require_relative '../rule_path_models'
 
 module PermissionForge
   module Services

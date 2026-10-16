@@ -94,7 +94,8 @@ module PermissionForge
         ps = create_permission_set(allowed_ips: '192.168.1.0/24')
         assert evaluate(ps, { ip: IPAddr.new('192.168.1.50') })
         assert_not evaluate(ps, { ip: IPAddr.new('10.0.0.1') })
-        assert_not evaluate(ps, { ip: IPAddr.new('::ffff:192.168.1.50') }), 'an IPv6 address is outside an IPv4 range'
+        assert evaluate(ps, { ip: IPAddr.new('::ffff:192.168.1.50') }), 'an IPv4-mapped address is its IPv4 address'
+        assert_not evaluate(ps, { ip: IPAddr.new('2001:db8::1') }), 'an IPv6 address is outside an IPv4 range'
       end
 
       # An entry that is not an address used to be skipped, so the set passed

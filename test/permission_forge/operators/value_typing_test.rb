@@ -19,6 +19,20 @@ module PermissionForge
       PostgresColumn = Struct.new(:type, :sql_type)
       REAL = PostgresColumn.new(:float, 'real')
 
+      # The PostgreSQL casters run here on any database; whether a type can be
+      # compared is a PostgreSQL catalog question (SchemaRead.ordered_type?),
+      # answered for the date and time types they read back elsewhere.
+      setup do
+        next if POSTGRES
+
+        @ordered_type = SchemaRead.method(:ordered_type?)
+        replace_singleton_method(SchemaRead, :ordered_type?) { |_model, sql_type| %w[date datetime time].include?(sql_type.to_s) }
+      end
+
+      teardown do
+        replace_singleton_method(SchemaRead, :ordered_type?, @ordered_type) if @ordered_type
+      end
+
       # Typed as on a database without casters of its own, whichever runs the
       # tests; `adapter:` names another.
       def typed(operator, value, column, adapter: 'SQLite')

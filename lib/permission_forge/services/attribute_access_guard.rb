@@ -90,7 +90,7 @@ module PermissionForge
       # The model is the record's class, or else the one the first name of the
       # chain names (an anonymous subclass answers as its base).
       def without_user
-        model = @model || @resource_name.to_s.safe_constantize
+        model = @model || PermissionForge::ModelLookup.model_for(@resource_name)
         PermissionForge.configuration.hide_masked_attributes_without_user_for?(model) ? hidden : bypass
       end
 

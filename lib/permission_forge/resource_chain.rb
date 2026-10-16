@@ -42,8 +42,8 @@ module PermissionForge
     # @param resource_name [String, Symbol]
     # @return [Array<Symbol>]
     def names_for(resource_name)
-      klass = resource_name.to_s.safe_constantize
-      klass.is_a?(Class) && klass.respond_to?(:base_class) ? names(klass) : [resource_name.to_sym]
+      klass = ModelLookup.model_for(resource_name)
+      klass ? names(klass) : [resource_name.to_sym]
     end
 
     # The user's resource entries along the chain, nearest first.

@@ -62,15 +62,15 @@ module PermissionForge
                          :unresolvable?
       end
 
-      test 'source_names are the table names and aliases of the FROM and JOINs, not the names in their conditions' do
-        assert_equal %w[customers suppliers], RuleColumn.source_names(Customer.joins(:supplier)).sort
-        assert_equal %w[customers], RuleColumn.source_names(Customer.where(supplier_id: 1))
+      test 'RuleSources are the table names and aliases of the FROM and JOINs, not the names in their conditions' do
+        assert_equal %w[customers suppliers], RuleSources.of(Customer.joins(:supplier)).sort
+        assert_equal %w[customers], RuleSources.of(Customer.where(supplier_id: 1))
 
         require_relative '../rule_path_models'
-        assert_includes RuleColumn.source_names(PfRulePathRecord.joins(:parent)), 'parents_pf_rule_path_records'
+        assert_includes RuleSources.of(PfRulePathRecord.joins(:parent)), 'parents_pf_rule_path_records'
         string_join = Customer.joins('INNER JOIN suppliers AS vendors ON vendors.id = customers.supplier_id')
 
-        assert_equal %w[customers vendors], RuleColumn.source_names(string_join).sort
+        assert_equal %w[customers vendors], RuleSources.of(string_join).sort
       end
 
       test 'a name that is not a name is malformed, whatever it is qualified with' do

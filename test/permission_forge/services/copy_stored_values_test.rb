@@ -48,7 +48,7 @@ module PermissionForge
         },
         api_group_clone: lambda { |t|
           t.post "/permission_forge/api/permission_set_groups/#{t.group.uuid}/clone", params: { name: 'API group' }.to_json,
-                                                                                     headers: HEADERS
+                                                                                      headers: HEADERS
           t.assert_response :created
           PermissionForge::PermissionSetGroup.find_by(name: 'API group')&.permission_sets&.first
         }
@@ -110,20 +110,25 @@ module PermissionForge
       def assert_kept(poison, copy)
         copied_resource = copy.resources.first
         case poison
-        when :rule_operator, :rule_join_type
-          copied = copied_resource.permission_set_rules.first
-          original = @rule.reload
-
-          assert_equal original.attributes.slice('operator', 'join_type', 'field_accessor_path'),
-                       copied.attributes.slice('operator', 'join_type', 'field_accessor_path')
-          assert_equal Operators::RuleProblem.for(original).kind, Operators::RuleProblem.for(copied)&.kind, 'matches nothing, as the original'
-        when :mask_strategy
-          assert_equal 'emial', copied_resource.resource_fields.find_by(name: 'email').mask_strategy
-          assert_equal '****', MaskValue.call('a@b.c', strategy: 'emial')[0, 4], 'masks fully, as the original'
+        when :rule_operator, :rule_join_type then assert_rule_kept(copied_resource.permission_set_rules.first)
+        when :mask_strategy then assert_mask_kept(copied_resource)
         when :allowed_ips
           assert_equal '10.0.0.0/8 office', copy.allowed_ips
           assert_predicate copy, :conditions_broken?
         end
+      end
+
+      def assert_rule_kept(copied)
+        original = @rule.reload
+        columns = %w[operator join_type field_accessor_path]
+
+        assert_equal original.attributes.slice(*columns), copied.attributes.slice(*columns)
+        assert_equal Operators::RuleProblem.for(original).kind, Operators::RuleProblem.for(copied)&.kind, 'matches nothing, as the original'
+      end
+
+      def assert_mask_kept(copied_resource)
+        assert_equal 'emial', copied_resource.resource_fields.find_by(name: 'email').mask_strategy
+        assert_equal '****', MaskValue.call('a@b.c', strategy: 'emial')[0, 4], 'masks fully, as the original'
       end
     end
   end

@@ -158,6 +158,8 @@ module PermissionForge
         unknown_operator: 'Matches nothing: <code class="pf-mono-key">regex</code> is not a condition this version knows',
         unknown_join_type: 'Matches nothing: <code class="pf-mono-key">inner</code> is not a way of joining this version knows',
         unknown_table: 'Matches nothing: <code class="pf-mono-key">nosuch</code> is not a table of this database',
+        foreign_table: 'Matches nothing: <code class="pf-mono-key">suppliers</code> is a table of another model: a filter rule ' \
+                       "compares Customer's own columns",
         unusable_value: 'Matches nothing: <code class="pf-mono-key">5_id</code> is not a value supplier_id of Customer can hold'
       }.freeze
 

@@ -185,8 +185,9 @@ module PermissionForge
         PermissionForge::SchemaRead.column(PermissionForge::PermissionSetUser, 'user_id')&.sql_type || 'bigint'
       end
 
-      # Granting-set view_all/modify_all bypasses rules; a muting set with
-      # view_all/modify_all cancels the bypass. Both checked dynamically.
+      # A granting set's View All bypasses the rules (bypass_flags_sql); a
+      # muting set with View All or Modify All cancels the bypass. Both
+      # checked dynamically.
       #
       # GDPR/consent guard: activation conditions (session flag / IP / login
       # hours) cannot be evaluated inside a database policy, so only
@@ -208,10 +209,20 @@ module PermissionForge
           (unconditional_set_sql unless muting),
           "r.name = #{@conn.quote(resource_name)}", 'r.is_active = TRUE',
           tenant_predicate_sql.delete_prefix('AND ').presence,
-          '(r.view_all = TRUE OR r.modify_all = TRUE)'
+          bypass_flags_sql(muting)
         ]
         "EXISTS ( SELECT 1 FROM #{psu_table} psu JOIN #{ps_table} ps ON ps.id = psu.permission_set_id " \
           "JOIN #{resources_table} r ON r.permission_set_id = ps.id WHERE #{conditions.compact.join(' AND ')} )"
+      end
+
+      # A granting row bypasses the rules with View All alone: the app layer
+      # grants Modify All only together with View All
+      # (PermissionHashBuilder.granted_flags), so Modify All without it — a
+      # row written past the validation — bypasses nothing. A muting row
+      # cancels the bypass with either flag (narrower than the app layer,
+      # whose muting Modify All leaves View All standing).
+      def bypass_flags_sql(muting)
+        muting ? '(r.view_all = TRUE OR r.modify_all = TRUE)' : 'r.view_all = TRUE'
       end
 
       # Ties the resource row to the protected row's tenant, when tenancy is

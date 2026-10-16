@@ -188,8 +188,8 @@ module PermissionForge
       private
 
       def build_info(name)
-        klass = name.safe_constantize
-        ModelInfo.new(klass, @configuration) if usable?(klass)
+        klass = PermissionForge::ModelLookup.model_for(name)
+        ModelInfo.new(klass, @configuration) if klass && usable?(klass)
       end
 
       def model_classes

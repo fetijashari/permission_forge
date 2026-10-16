@@ -40,6 +40,7 @@ module PermissionForge
         missing_rule_columns: :broken_rules,
         unknown_rule_operators: :broken_rules,
         unusable_rule_values: :broken_rules,
+        foreign_table_filter_rules: :broken_rules,
         secret_rule_columns: :secret_rules,
         unknown_mask_strategies: :unknown_mask_strategies,
         incomplete_conditions: :broken_conditions,
@@ -207,6 +208,7 @@ module PermissionForge
       def arrange_missing_rule_columns = rule_of_kind(:missing_column)
       def arrange_unknown_rule_operators = rule_of_kind(:unknown_operator)
       def arrange_unusable_rule_values = rule_of_kind(:unusable_value)
+      def arrange_foreign_table_filter_rules = rule_of_kind(:foreign_table)
 
       # A rule on a secret column, written before the model refused one.
       def arrange_secret_rule_columns

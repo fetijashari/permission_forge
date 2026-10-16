@@ -6,6 +6,9 @@
 sq:
   permission_forge.ui.states.actor.user: 'Albanian for a person is "person" (definite "personi"); the label keeps the English spelling'
   permission_forge.bulk_assignments.new.paste_placeholder: 'a sample paste of an email and a name'
+  permission_forge.flash.copy_refused.kinds.permission_set: 'a UI name kept verbatim (Permission Set)'
+  permission_forge.flash.copy_refused.kinds.permission_set_group: 'a UI name kept verbatim (Permission Set Group)'
+  permission_forge.flash.copy_refused.kinds.resource: 'a UI name kept verbatim (Resource)'
   permission_forge.layouts.application.title: 'the brand'
   permission_forge.permission_set_rules.value_input.values_placeholder: 'sample values of a status column, as stored'
   permission_forge.settings.units.people.one: 'Albanian for one person is "person" ("%{count} persona" in the plural)'
