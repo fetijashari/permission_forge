@@ -68,11 +68,12 @@ module PermissionForge
       #
       # @param virtual [Boolean] the model declares the field (not a column)
       # @param editable [Boolean] the resource grants Edit: an editable field
-      #   is capped to Read-only without it
+      #   is capped to Read-only without it, and a mute that takes its
+      #   editing away changes nothing then (not credited; review of round 8, D3)
       # @return [Hash] every FieldOutcome attribute but name and unconfigured
       def attributes(virtual:, editable:)
         granting = grants
-        muting = mutes
+        muting = editable ? mutes : mutes.reject { |source| source.level == 'no_edit' }
         { virtual: virtual || implicit?, implicit: implicit?, mask_strategy: @entry[:mask_strategy],
           variant_of: @entry[:variant_of], decided_by: @decided_by, unreadable: false, **level(editable),
           granted_by: granting.map(&:permission_set), grants: granting, blocked_by: muting.map(&:permission_set),
@@ -111,12 +112,17 @@ module PermissionForge
       end
 
       # The entry's level (FieldLevel.effective_level); Edit is capped to
-      # Read-only when the resource does not grant Edit.
+      # Read-only when the resource does not grant Edit. Then a mute that
+      # took the field's editing away changed nothing (D3): the field is
+      # capped as the granting sets left its editing.
       def level(editable)
-        level = FieldLevel.effective_level(@entry)
+        level = FieldLevel.effective_level(editable ? @entry : @entry.merge(edit_access: granted_edit?))
         capped = level == 'edit' && !editable
         { level: capped ? 'read' : level, capped: capped }
       end
+
+      # Whether the field is readable and the granting sets let it be edited.
+      def granted_edit? = @entry[:read_access] == true && (@entry[:before] || @entry)[:edit_access] == true
 
       def changed?(level)
         MUTE_EFFECTS.fetch(level).call(@entry[:before] || {}, @entry)

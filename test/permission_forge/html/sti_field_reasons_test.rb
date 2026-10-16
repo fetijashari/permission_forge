@@ -21,18 +21,20 @@ module PermissionForge
       setup do
         @sales = create_permission_set(name: 'Field sales')
         base = create_resource(permission_set: @sales, name: BASE, read_access: true, edit_access: true)
-        sub = create_resource(permission_set: @sales, name: SUB, read_access: true)
+        sub = create_resource(permission_set: @sales, name: SUB, read_access: true, edit_access: true)
         create_resource_field(resource: base, name: 'email', read_access: true)
         create_resource_field(resource: base, name: 'status', read_access: false)
         create_resource_field(resource: sub, name: 'email', read_access: true)
         create_resource_field(resource: sub, name: 'secret', read_access: true, mask_access: true, mask_strategy: 'last4')
         create_resource_field(resource: sub, name: 'status', read_access: true)
         create_resource_field(resource: sub, name: 'title', read_access: true)
+        create_resource_field(resource: sub, name: 'owner_id', read_access: true, edit_access: true)
         @pii = create_permission_set(name: 'No PII', is_muting: true)
         muted_base = create_resource(permission_set: @pii, name: BASE, read_access: false)
         muted_sub = create_resource(permission_set: @pii, name: SUB, read_access: false)
         create_resource_field(resource: muted_base, name: 'email', read_access: true)
         create_resource_field(resource: muted_base, name: 'status', read_access: true)
+        create_resource_field(resource: muted_base, name: 'owner_id', read_access: false, edit_access: true)
         create_resource_field(resource: muted_sub, name: 'secret', read_access: true)
         [@sales, @pii].each { |set| create_permission_set_user(user: @bo, permission_set: set) }
       end
@@ -75,17 +77,20 @@ module PermissionForge
       def surface_problems(field, locale)
         doc = effective_page(locale: locale)
         reason = outcome(field).reason
-        said = { row: row_reason(doc, field), why: why_reasons(doc, field), explain: explain_text(field, locale: locale) }
+        said = { row: row_reason(doc, field), why: why_reasons(doc, field), explain: explain_text(field, locale: locale),
+                 outcome: outcome(field) }
         problems = SURFACE_CHECKS.fetch(reason) { ->(*) { ["unexpected reason #{reason}"] } }.call(self, said, reason, locale)
         problems.map { |problem| "#{locale} #{field} (#{reason}): #{problem}" }
       end
 
-      # A set named on the row is named by the Why panel and Explain for.
+      # A set named on the row is named by the Why panel and Explain for;
+      # a mute's level is worded by both the row and Explain for.
       SET_CHECK = lambda do |test, said, reason, locale|
-        set = test.send(:row_set, said[:row], reason, locale)
+        set = test.send(:row_set, said[:row], said[:outcome], locale)
         glyph = reason == :muted ? '⊘' : '✓'
+        expected = test.send(:explain_sentence, said[:outcome], set, locale)
         [("the Why panel does not name #{set}" if said[:why].none? { |g, text| g == glyph && text.include?(set) }),
-         ("Explain for #{said[:explain].inspect} does not name #{set}" unless said[:explain].include?(set))].compact
+         ("Explain for #{said[:explain].inspect} does not say #{expected.inspect}" unless said[:explain].include?(expected))].compact
       end
       # The entry that decides is said in the same words on every surface.
       CHAIN_CHECK = lambda do |_test, said, *|
@@ -95,12 +100,23 @@ module PermissionForge
       end
       SURFACE_CHECKS = { muted: SET_CHECK, granted: SET_CHECK, inherited: CHAIN_CHECK, unreadable: CHAIN_CHECK }.freeze
 
-      # The set name in a row's text ("Hidden by No PII · PfStiTicket" => "No PII · PfStiTicket").
-      def row_set(text, reason, locale)
+      ROW_KEYS = { 'hide' => 'muted_by', 'mask' => 'masked_by', 'no_edit' => 'read_only_by' }.freeze
+      EXPLAIN_KEYS = { 'hide' => 'hidden_by', 'mask' => 'masked_by', 'no_edit' => 'read_only_by' }.freeze
+
+      # The set name in a row's text ("Hidden by No PII · PfStiTicket" =>
+      # "No PII · PfStiTicket"), by the row's key for the outcome.
+      def row_set(text, outcome, locale)
+        key = outcome.reason == :muted ? ROW_KEYS.fetch(outcome.blocked_level) : 'from'
+        prefix, suffix = I18n.with_locale(locale) { t("people.effective_field_source.#{key}", set: "\u0001") }.split("\u0001")
+        text.delete_prefix(prefix.to_s).delete_suffix(suffix.to_s)
+      end
+
+      # Explain for's sentence for one set (Bo is the person explained).
+      def explain_sentence(outcome, set, locale)
         I18n.with_locale(locale) do
-          key = reason == :muted ? 'people.effective_field_source.muted_by' : 'people.effective_field_source.from'
-          prefix, suffix = t(key, set: "\u0001").split("\u0001")
-          text.delete_prefix(prefix.to_s).delete_suffix(suffix.to_s)
+          next t('resource_fields.explain.granted', name: 'Bo', sets: set) unless outcome.reason == :muted
+
+          t("resource_fields.explain.#{EXPLAIN_KEYS.fetch(outcome.blocked_level)}", count: 1, name: 'Bo', sets: set)
         end
       end
 
@@ -133,6 +149,86 @@ module PermissionForge
         assert_equal t('people.effective_field_source.masked_by', set: 'Mask emails'), row
       end
 
+      # --- review of round 8: a mute decides only the level it gives ------------------
+
+      # Ana's Customer › Email: [row text, badge, Why reasons, Explain for panel].
+      def customer_row_and_explain
+        get pf("/people/#{@ana.id}"), params: { tab: 'effective', open: ['Customer'] }
+        assert_response :success
+        doc = Nokogiri::HTML(response.body)
+        row = doc.at_css('[data-pf-why="Customer.field.email"]')
+        [row.css('> span').last.text.squish, row.at_css('.pf-level-badge').text, customer_why(doc), customer_explain]
+      end
+
+      def customer_why(doc)
+        doc.css('[id="pf-why-Customer.field.email"] li.pf-why__reason').map { |node| node.at_css('.pf-stack > span').text.squish }
+      end
+
+      def customer_explain
+        get pf("/permission_sets/#{@set.id}/resources/Customer/fields/email"), params: { explain_user_id: @ana.id }
+        Nokogiri::HTML(response.body).at_css('.pf-panel[aria-live]')
+      end
+
+      def mute_email(name, **flags)
+        set = create_permission_set(name: name, is_muting: true)
+        create_resource_field(resource: create_resource(permission_set: set, name: 'Customer', read_access: false),
+                              name: 'email', read_access: false, **flags)
+        create_permission_set_user(user: @ana, permission_set: set)
+        set
+      end
+
+      test 'a mute that only takes editing away from a masked field does not decide it: the mask does' do
+        @email.update!(edit_access: true)
+        mute_email('NoEdit', edit_access: true)
+
+        row, badge, why, explain = customer_row_and_explain
+
+        assert_includes badge, t('ui.states.field_level.masked')
+        assert_equal t('people.effective_field_source.from', set: 'Sales rep'), row
+        assert_includes why, t('ui.level_sentences.no_edit', set: 'NoEdit'), 'the Why panel still says what NoEdit does'
+        assert_includes explain.text.squish, t('resource_fields.explain.granted', name: 'Ana', sets: 'Sales rep')
+      end
+
+      test 'an edit mute on a resource that gives no Edit changes nothing and is not credited' do
+        @resource.update!(edit_access: false)
+        @email.update!(edit_access: true, mask_access: false)
+        mute_email('NoEdit', edit_access: true)
+
+        row, _badge, why, = customer_row_and_explain
+
+        assert_equal t('people.effective_field_source.from', set: 'Sales rep'), row
+        assert_includes why, t('people.effective_why.field_capped')
+        assert(why.none? { |text| text.include?('NoEdit') }, why.inspect)
+      end
+
+      test 'Explain for words the deciding mute\'s level and names the sets the row names' do
+        @email.update!(edit_access: true, mask_access: false)
+        mute_email('MaskA', mask_access: true)
+        mute_email('NoEditB', edit_access: true)
+
+        row, _badge, _why, explain = customer_row_and_explain
+
+        assert_equal t('people.effective_field_source.masked_by', set: 'MaskA'), row
+        assert_includes explain.text.squish, t('resource_fields.explain.masked_by', count: 1, name: 'Ana', sets: 'MaskA')
+        assert_not_includes explain.text, 'NoEditB'
+      end
+
+      test 'two sets that hide a field are counted in Explain for' do
+        mute_email('HideA', read_access: true)
+        mute_email('HideB', read_access: true)
+
+        _row, _badge, _why, explain = customer_row_and_explain
+
+        assert_includes explain.text.squish, t('resource_fields.explain.hidden_by', count: 2, name: 'Ana', sets: 'HideA and HideB')
+      end
+
+      test 'Explain for draws no empty sentence when the inherited entry decides' do
+        get pf("/permission_sets/#{@sales.id}/resources/#{SUB}/fields/status"), params: { explain_user_id: @bo.id }
+        panel = Nokogiri::HTML(response.body).at_css('.pf-panel[aria-live]')
+
+        assert(panel.css('> span').none? { |span| span.text.strip.empty? }, panel.to_html)
+      end
+
       # --- B#39: one decision for an inherited hidden field, on every surface -----------
 
       test 'a field hidden on the base reads the same on the row, the Why panel and Explain for, in every locale' do
@@ -153,12 +249,16 @@ module PermissionForge
       end
 
       test 'every field of the subclass reads the same reason on the row, the Why panel and Explain for, in every locale' do
-        reasons = %w[email secret status title].map { |field| outcome(field).reason }
-        assert_equal %i[muted muted inherited granted], reasons, 'the setup covers each reason'
-
+        fields = %w[email secret status title owner_id]
+        reasons = fields.map { |field| outcome(field).reason }
+        assert_equal %i[muted muted inherited granted muted], reasons, 'the setup covers each reason'
+        assert_equal 'no_edit', outcome('owner_id').blocked_level
         problems = PermissionForge::BUNDLED_LOCALES.flat_map do |locale|
-          %w[email secret status title].flat_map { |field| surface_problems(field, locale.to_s) }
+          fields.flat_map { |field| surface_problems(field, locale.to_s) }
         end
+        create_resource_field(resource: @pii.resources.find_by!(name: SUB), name: 'title', read_access: false, mask_access: true)
+        assert_equal 'mask', outcome('title').blocked_level
+        problems += PermissionForge::BUNDLED_LOCALES.flat_map { |locale| surface_problems('title', locale.to_s) }
 
         assert_empty problems, problems.join("\n")
       end
@@ -181,7 +281,7 @@ module PermissionForge
       end
 
       test 'a subclass entry without Read says so on the row, as the Why panel does' do
-        @sales.resources.find_by!(name: SUB).update!(read_access: false)
+        @sales.resources.find_by!(name: SUB).update!(read_access: false, edit_access: false)
 
         doc = effective_page
         expected = t('people.effective_why.field_own_unreadable')

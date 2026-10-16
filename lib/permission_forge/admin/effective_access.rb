@@ -53,6 +53,11 @@ module PermissionForge
       # Resource whose entry decides the field (ResourceChain: the strictest
       # entry along the chain); nil when the resource's own entry does.
       # `unreadable` — that entry does not grant Read, so it hides every field.
+      # The level a field shows when a mute decides it (FieldSource#level of a
+      # mute => Admin::FieldLevel granting level): hide => Hidden, mask =>
+      # Masked, no_edit => Read-only.
+      MUTED_LEVELS = { 'hide' => 'hidden', 'mask' => 'masked', 'no_edit' => 'read' }.freeze
+
       FieldOutcome = Struct.new(:name, :level, :mask_strategy, :granted_by, :blocked_by, :blocked_level,
                                 :capped, :unconfigured, :virtual, :variant_of, :implicit, :grants, :mutes,
                                 :decided_by, :unreadable, keyword_init: true) do
@@ -60,17 +65,31 @@ module PermissionForge
         # Hidden because a Muting Permission Set takes it away, not because no set grants it.
         def hidden_by_muting? = level == 'hidden' && blocked_by.any?
 
+        # The mutes that decide the field's level: the strongest mute's level
+        # (blocked_level) when it is the level the field shows
+        # (MUTED_LEVELS), and every set credited at it; none otherwise — a
+        # mute that took editing away from a field a grant shows masked
+        # changed the entry but does not decide what it shows. The row and
+        # "Explain for" name these sets (review of round 8, D1/D2).
+        #
+        # @return [Array<FieldSource>]
+        def deciding_mutes
+          return [] unless blocked_level && MUTED_LEVELS[blocked_level] == level
+
+          mutes.select { |source| source.level == blocked_level }
+        end
+
         # Why the field is at its level: the one decision a person's
         # Effective access row, its Why panel and the field drawer's
         # "Explain for" all word (field test round 8, B#39) —
-        # :muted (a Muting Permission Set decides), :unconfigured, :granted,
+        # :muted (#deciding_mutes: a Muting Permission Set decides), :unconfigured, :granted,
         # :implicit (a virtual field's default), :unreadable (the deciding
         # entry does not grant Read), :inherited (an STI base's entry
         # decides and shows it to nobody) or :none (no set shows it).
         #
         # @return [Symbol]
         def reason
-          return :muted if blocked_by.any?
+          return :muted if deciding_mutes.any?
           return :unconfigured if unconfigured
           return :granted if granted_by.any?
           return :implicit if implicit
@@ -226,16 +245,12 @@ module PermissionForge
 
       def action_outcomes(sources)
         grants = sources.grants
-        names = grants.flat_map { |_, r| active_actions(r).map(&:name) }.uniq
+        names = grants.flat_map { |_, r| r.resource_actions.select(&:is_active).map(&:name) }.uniq
         names.map { |action| [action, outcome_for(grants, sources.mutes) { |r, _granting| permitted?(r, action) }] }
       end
 
-      def active_actions(resource)
-        resource.resource_actions.select(&:is_active)
-      end
-
       def permitted?(resource, action)
-        active_actions(resource).select(&:is_permitted).map(&:name).include?(action)
+        resource.resource_actions.any? { |row| row.is_active && row.is_permitted && row.name == action }
       end
     end
   end

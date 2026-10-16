@@ -235,8 +235,8 @@ module PermissionForge
       # row naming a subclass reaches that subclass alone.
       def apply_muting_permission_set(data, permission_set)
         permission_set.resources.select(&:is_active).each do |resource|
-          entries_under(data, resource.name).each do |entry_name, resource_data|
-            apply_muting_resource(resource_data, permission_set, resource, field_variants(entry_name))
+          entries_under(data, resource.name).each do |entry|
+            apply_muting_resource(entry, permission_set, resource)
           end
         end
       end
@@ -252,15 +252,17 @@ module PermissionForge
       end
 
       # The set is listed once per entry: one with rows for a base and its
-      # subclass reaches the subclass entry twice. `variants`: the entry's
-      # own (FieldVariants of the entry's model, not of the muting row's
-      # Resource): a base row reaching a subclass entry mutes the variants
-      # the subclass has, as the granting phase wrote them.
-      def apply_muting_resource(resource_data, permission_set, resource, variants)
+      # subclass reaches the subclass entry twice. `entry`: [entry name,
+      # entry]; the variants muted are the entry's own (FieldVariants of the
+      # entry's model, not of the muting row's Resource): a base row reaching
+      # a subclass entry mutes the variants the subclass has, as the granting
+      # phase wrote them.
+      def apply_muting_resource(entry, permission_set, resource)
+        entry_name, resource_data = entry
         sources = resource_data[:source_permission_sets]
         add_source_permission_set(sources, permission_set) if sources.none? { |source| source[:uuid] == permission_set.uuid }
         mute_resource_permissions(resource_data[:permissions], resource)
-        mute_field_permissions(resource_data[:fields], resource, variants)
+        mute_field_permissions(resource_data[:fields], resource, field_variants(entry_name))
         mute_fields_of_resource(resource_data[:fields], resource)
         mute_resource_actions(resource_data[:actions], resource)
       end

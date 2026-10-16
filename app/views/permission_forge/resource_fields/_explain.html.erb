@@ -6,23 +6,19 @@
   <% else %>
     <div><%= pf_effective_field_badge(outcome) %></div>
     <%# FieldOutcome#reason, the decision the person's Effective access row and Why panel word too (B#39);
-        sets named as there (B#38). Hidden by the entry that decides (:unreadable, :inherited): the line below says it. %>
-    <% sets = ->(sources) { pf_markup_sentence(sources.map { |src| pf_field_source_set_name(src, resource.name) }) } %>
-    <span>
-      <% case outcome.reason %>
-      <% when :muted %>
-        <%= pf_t_markup(sets: sets.call(outcome.mutes)) { |held| t('.muted', name: name, **held) } %>
-      <% when :unconfigured %>
-        <%= t('.unconfigured', name: name) %>
-      <% when :granted %>
-        <%= pf_t_markup(sets: sets.call(outcome.grants)) { |held| t('.granted', name: name, **held) } %>
-      <% when :implicit %>
-        <%= t('.virtual_default', name: name) %>
-      <% when :none %>
-        <%= t('.none', name: name) %>
-      <% end %>
-      <%= t('.capped') if outcome.capped %>
-    </span>
+        the mutes and sets named as there (B#38, D2). Hidden by the entry that decides (:unreadable, :inherited):
+        the line below says it. %>
+    <% sentence = case outcome.reason
+                  when :muted then pf_field_muted_explain(outcome, resource.name, name)
+                  when :unconfigured then t('.unconfigured', name: name)
+                  when :granted
+                    pf_t_markup(sets: pf_markup_sentence(outcome.grants.map { |src| pf_field_source_set_name(src, resource.name) })) { |held| t('.granted', name: name, **held) }
+                  when :implicit then t('.virtual_default', name: name)
+                  when :none then t('.none', name: name)
+                  end %>
+    <% if sentence || outcome.capped %>
+      <span><%= sentence %> <%= t('.capped') if outcome.capped %></span>
+    <% end %>
     <%# The entry that decides an inherited field, worded as the Why panel words it. %>
     <% if (chain = pf_field_chain_reason(outcome)) %>
       <span><span aria-hidden="true"><%= chain.first %></span> <%= chain.last %></span>

@@ -1330,9 +1330,17 @@ en:
         capped: It shows as Read-only because Edit isn't allowed on this resource.
         full_picture: See everything %{name} can access →
         granted: "%{name} sees it through %{sets}."
-        muted: "%{name} doesn't see it in full because %{sets} hides or masks it."
+        hidden_by:
+          one: "%{name} doesn't see it: %{sets} hides it."
+          other: "%{name} doesn't see it: %{sets} hide it."
+        masked_by:
+          one: "%{name} sees it masked: %{sets} masks it."
+          other: "%{name} sees it masked: %{sets} mask it."
         no_access: "%{name} can't read %{resources}."
         none: No set shows this field to %{name}.
+        read_only_by:
+          one: "%{name} can't edit it: %{sets} takes editing away."
+          other: "%{name} can't edit it: %{sets} take editing away."
         unconfigured: No set configures this column, so the unconfigured-field setting
           decides for %{name}.
         virtual_default: "%{name} gets this virtual field by default, readable and
