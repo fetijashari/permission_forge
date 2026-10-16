@@ -47,6 +47,33 @@ module PermissionForge
         assert messages.key?('name'), messages.inspect
       end
 
+      # Field test round 8 (A#54, D#24): name "" or "   " answered 201, and
+      # PATCH name "" 200, for a rule only — sets and groups refused it.
+      test 'a blank name is refused on create and on update for a Permission Set, a group and a rule' do
+        rule = create_permission_set_rule(permission_set: @ps, resource: @resource)
+        group = PermissionSetGroup.create!(name: 'Ops', is_active: true)
+        ['', '   '].each do |blank|
+          assert_no_difference -> { PermissionSetRule.count } do
+            post rules_path, params: { permission_set_rule: { name: blank, field_name: 'name', field_value: 'x', operator: 'equal' } }, as: :json
+          end
+          assert_response :unprocessable_entity
+          assert_equal [I18n.t('permission_forge.validations.name_blank')], messages.fetch('name'), blank.inspect
+
+          post '/permission_forge/api/permission_sets', params: { permission_set: { name: blank } }, as: :json
+          assert_response :unprocessable_entity
+          post '/permission_forge/api/permission_set_groups', params: { permission_set_group: { name: blank } }, as: :json
+          assert_response :unprocessable_entity
+        end
+
+        patch "#{rules_path}/#{rule.uuid}", params: { permission_set_rule: { name: '' } }, as: :json
+        assert_response :unprocessable_entity
+        assert_equal rule.name, rule.reload.name
+        patch "/permission_forge/api/permission_sets/#{@ps.uuid}", params: { permission_set: { name: ' ' } }, as: :json
+        assert_response :unprocessable_entity
+        patch "/permission_forge/api/permission_set_groups/#{group.uuid}", params: { permission_set_group: { name: '' } }, as: :json
+        assert_response :unprocessable_entity
+      end
+
       # Review of round 7 (P2-5): {"name":["can't be blank","can't be blank"]}
       # — the presence rule and the NOT NULL column both answered.
       test 'POST create without a name or a value names each once' do

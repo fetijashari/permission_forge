@@ -145,6 +145,8 @@ module PermissionForge
       end
 
       test 'ending soon: the end-date cell, Home, the People filter and ending_within agree' do
+        # At noon, so "in two hours" is still today whenever the suite runs.
+        travel_to Time.current.change(hour: 12)
         soon = create_permission_set_user(user: create_user, permission_set: @set, expires_at: 7.days.from_now.end_of_day)
         later = create_permission_set_user(user: create_user, permission_set: @set, expires_at: 8.days.from_now.beginning_of_day)
         today = create_permission_set_user(user: create_user, permission_set: @set, expires_at: 2.hours.from_now)

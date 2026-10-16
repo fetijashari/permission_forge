@@ -11,6 +11,7 @@ module PermissionForge
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::KeepsCopiedValues
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::RequiresName # name present, on create or rename
     include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -41,10 +42,6 @@ module PermissionForge
     # made before 0.15 says ('Untitled Permission Set'), so a set created
     # without a name is refused (GeneratedText).
     attribute :name, default: nil
-    # Checked for a new row and on a rename only: a row whose name was
-    # blank before 0.14 stays editable in its other attributes.
-    validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },
-                     if: -> { new_record? || will_save_change_to_name? }
     validates :name, length: { maximum: 255, too_long: ->(*) { I18n.t('permission_forge.validations.too_long', count: 255) } }
     # Unique within its tenant, ignoring case — what the admin's "New
     # Permission Set" form refuses. Checked for a new row and on a rename

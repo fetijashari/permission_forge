@@ -35,7 +35,7 @@ module PermissionForge
       # @return [String]
       def self.text(name, kind)
         name = name.to_s
-        return name unless GeneratedText.name?(name, kind)
+        return name unless name.strip.empty? || GeneratedText.name?(name, kind)
 
         element = kind.respond_to?(:model_name) ? kind.model_name.element : kind.to_s
         I18n.t("permission_forge.ui.untitled.#{element}")

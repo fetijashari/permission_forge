@@ -9,6 +9,7 @@ module PermissionForge
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::RequiresName # name present, on create or rename
     include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -45,7 +46,6 @@ module PermissionForge
     has_many :permission_set_rules, class_name: 'PermissionForge::PermissionSetRule', dependent: :destroy,
                                     extend: Concerns::AuditedCollection
 
-    validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } }
     validates :name, uniqueness: { scope: :permission_set_id,
                                    message: ->(*) { I18n.t('permission_forge.validations.resource.name_taken') } }
     # Resource#name is resolved to a model class via safe_constantize (e.g. by

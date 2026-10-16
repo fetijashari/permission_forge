@@ -10,6 +10,7 @@ module PermissionForge
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::KeepsCopiedValues
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::RequiresName # name present, on create or rename
     include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -113,10 +114,6 @@ module PermissionForge
     # collation does, and so the way the index does. On MySQL's default
     # (case-insensitive) collation "Email" collides with "email" in the index;
     # a forced case-sensitive check would let it through to a RecordNotUnique.
-    # Checked for a new row and on a rename only: a row whose name was
-    # blank before 0.14 stays editable in its other attributes.
-    validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },
-                     if: -> { new_record? || will_save_change_to_name? }
     validates :name, uniqueness: { scope: :resource_id, message: ->(*) { I18n.t('permission_forge.validations.taken') } }
 
     validates_dependency :edit_access, requires: :read_access

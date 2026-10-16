@@ -9,6 +9,7 @@ module PermissionForge
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::RequiresName # name present, on create or rename
     include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -36,10 +37,6 @@ module PermissionForge
     # made before 0.15 says ('Untitled Permission Set Group'), so a group
     # created without a name is refused (GeneratedText).
     attribute :name, default: nil
-    # Checked for a new row and on a rename only: a row whose name was
-    # blank before 0.14 stays editable in its other attributes.
-    validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },
-                     if: -> { new_record? || will_save_change_to_name? }
 
     before_destroy :detach_permission_sets
 

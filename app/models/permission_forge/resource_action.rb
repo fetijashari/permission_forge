@@ -9,6 +9,7 @@ module PermissionForge
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::RequiresName # name present, on create or rename
     include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
@@ -33,10 +34,6 @@ module PermissionForge
     # instead of a RecordNotUnique 500. Checked when a row is created, renamed
     # or moved, so duplicates that predate the index stay editable; the
     # security audit lists them (`duplicate_actions`).
-    # Checked for a new row and on a rename only: a row whose name was
-    # blank before 0.14 stays editable in its other attributes.
-    validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },
-                     if: -> { new_record? || will_save_change_to_name? }
     validates :name, uniqueness: { scope: :resource_id,
                                    message: ->(*) { I18n.t('permission_forge.errors.admin.action_taken') } },
                      if: -> { new_record? || will_save_change_to_name? || will_save_change_to_resource_id? }

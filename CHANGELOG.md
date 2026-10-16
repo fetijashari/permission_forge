@@ -21,8 +21,8 @@ is 7** (run `permission_forge:rls:sync` after the deploy), **`include_nulls` is 
 the JSON API and in the admin's rule builder alike.** (pass `include_nulls: true` where a rule should let empty values
 through), **A refusing `api_auth` answers 401 Unauthorized instead of 403.** and **API: a value of the wrong shape for
 its attribute is a 422 keyed by it, never dropped or cast.** (API clients), **A Permission Set, a group or a rule
-created without a name is refused, and a rule created without a blocked message stores none.** (code and API clients
-that create without a name), and **More warnings are SECURITY warnings.** (log alerts that match the warning text).
+created without a name — or renamed to a blank one — is refused, and a rule created without a blocked message stores
+none.** (code and API clients that create without a name, or with a blank one), and **More warnings are SECURITY warnings.** (log alerts that match the warning text).
 
 ### Added
 
@@ -1218,18 +1218,23 @@ that create without a name), and **More warnings are SECURITY warnings.** (log a
   <!-- pin: test/permission_forge/generated_text_test.rb#an action row made from a controller action key is labelled with the key -->
   <!-- pin: test/permission_forge/generated_text_test.rb#a field label an admin blanks is stored as the name -->
   <!-- pin: test/permission_forge/release_readiness/inflection_guard_test.rb#nothing in app/ or lib/permission_forge inflects English -->
-- **A Permission Set, a group or a rule created without a name is refused, and a rule created without a blocked
-  message stores none.** The install migration's English column defaults ("Untitled Permission Set", "Untitled
+- **A Permission Set, a group or a rule created without a name — or renamed to a blank one — is refused, and a rule
+  created without a blocked message stores none.** The install migration's English column defaults ("Untitled Permission Set", "Untitled
   Permission Set Group", "Untitled Rule", "You do not have permission to perform this action.") were stored by an API
   create or a create in code that sent none, and then shown in every language, returned by
   `NotAuthorizedError#failure_messages` and recorded as the audit's `record_label` (field test round 7, D#47). The models
   declare no default (`attribute :name, default: nil`, `attribute :failure_message, default: nil`), so the JSON API
-  answers 422 on `name`; the install migration of a new install gives those columns no default (an upgraded install
+  answers 422 on `name`. A name that is empty or only whitespace is refused the same way, in code, through the API and in
+  the admin: every named model (Permission Set, group, rule, Resource, field row, action row) takes the one rule of
+  `Concerns::RequiresName`, checked on create and on rename; a rule could be saved with name `""` or `"   "` before
+  (field test round 8), and a row stored so stays editable and shows as "Untitled …" in the admin; the install migration of a new install gives those columns no default (an upgraded install
   keeps its column defaults: the model's wins; see the migration guide). A rule whose stored message is the install
   default denies with the locale's sentence (`permission_forge.denials.rule_default`), read at denial time — the cached
   permission hash keeps the stored text. **Opt out:** send a name, and write a `failure_message` of your own.
   <!-- pin: test/permission_forge/generated_text_test.rb#a Permission Set, a group or a rule created without a name is refused, in every locale -->
   <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#POST create without a name answers 422 on name for a Permission Set, a group and a rule -->
+  <!-- pin: test/permission_forge/models/requires_name_test.rb#a new record with a blank name is refused, with one message -->
+  <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#a blank name is refused on create and on update for a Permission Set, a group and a rule -->
   <!-- pin: test/permission_forge/generated_text_test.rb#a rule created without a blocked message stores none, and denies with the sentence of the locale -->
   <!-- pin: test/permission_forge/generated_text_test.rb#a stored install default denies with the sentence of the current locale -->
   <!-- pin: test/permission_forge/generated_text_test.rb#the install migration gives no name of a set, group or rule and no blocked message an English default -->
