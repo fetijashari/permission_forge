@@ -1986,14 +1986,19 @@ none.** (code and API clients that create without a name, or with a blank one), 
   boot ping rescued Active Record's errors only, and the sqlite3 adapter refuses a configuration without a file with an
   `ArgumentError` (field test round 8, E#7). `PermissionForge::DatabaseReach` is the one definition of "this process
   cannot use its database" (Active Record's errors and an adapter's `ArgumentError` for its configuration, rescued
-  only around Rails' own connection code, a ping or `table_exists?`; `UNAVAILABLE_ERRORS` for the audit table check,
-  where any other error still raises out of `Audit.record`). The boot ping, auto-applied masking, the audit table
-  checks and the audit's `audit_trail` check ask it, so the boot skips its database checks with one line naming the
-  cause (`The database could not be reached at boot (ArgumentError: No database file specified. ...)`), and a request
+  only around Rails' own connection code, a ping or `table_exists?`). The boot ping, auto-applied masking, the audit
+  table checks and the audit's `audit_trail` check ask it; the audit table check of `Audit.record` keeps its narrower
+  list (`UNREACHABLE_ERRORS`: a database that does not answer or does not exist), so a configuration error there still
+  rolls the change back under `audit_change_failure_strategy :raise`. The boot skips its database checks with one line
+  naming the cause (`The database could not be reached at boot, or the gem's models could not be loaded
+  (ArgumentError: No database file specified. ...)`), and a request
   or job of a process that has not synced reads neither the Resource rows nor the masking token until the Resource
   table can be read: a production runner of such an app — Solid Cache, its production cache store, has no database
   either — logs no SECURITY warning ("masking could not be synced", "The cache store did not give or keep the masking
-  token"). A model whose table check raises is named in its unmaskable warning with the error. A process that runs
+  token"). A missing table is not remembered either: Active Record's schema cache kept the "no" of a process that
+  booted before the Resource table existed, which then never masked until a restart; `DatabaseReach.table_exists?`
+  drops a "no" from the cache, so such a process syncs at its first request or job after the migration. A model whose
+  table check raises is named in its unmaskable warning with the error. A process that runs
   nothing but asset tasks (`assets:precompile`, `assets:clean`, `assets:clobber`: `BootChecks.asset_build?`) runs the
   configuration warnings only and never connects. (An adapter whose driver gem is missing still fails as Active Record
   loads, as it does without the gem.)
@@ -2003,7 +2008,8 @@ none.** (code and API clients that create without a name, or with a blank one), 
   <!-- pin: test/permission_forge/engine_boot_paths_test.rb#MaskedModels.apply answers false, without raising, when the database is not configured -->
   <!-- pin: test/permission_forge/engine_boot_paths_test.rb#a process that has not synced and cannot use its database does not read the masking token -->
   <!-- pin: test/permission_forge/engine_boot_paths_test.rb#a model whose table check raises is named with the error in the unmaskable warning -->
-  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#the audit table check counts an unconfigured database as unchecked and lets any other error raise -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#a configuration error of the audit table check rolls the change back; a database gone is unchecked -->
+  <!-- pin: test/permission_forge/masking_sync_test.rb#a process that found no Resource table syncs at its next run once the table is there -->
   <!-- pin: test/permission_forge/engine_boot_paths_test.rb#asset_build? is true only when every task Rake was asked for is an asset task -->
 - **A production boot no longer calls a `:memory_store` "the Rails development default".** The masking warning of a
   production boot with `config.cache_store = :memory_store` said so (field test round 8, E#66); the clause is now

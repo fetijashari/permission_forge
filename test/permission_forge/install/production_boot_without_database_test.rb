@@ -27,7 +27,9 @@ module PermissionForge
     # prerequisite as Propshaft's and Sprockets': :environment.
     class ProductionBootWithoutDatabaseTest < ActiveSupport::TestCase
       GEM_ROOT = File.expand_path('../../..', __dir__)
-      UNREACHABLE_WARNING = /\[PermissionForge\] The database could not be reached at boot \(ArgumentError: No database file specified/
+      UNREACHABLE_WARNING = Regexp.new(Regexp.escape('[PermissionForge] The database could not be reached at boot, ' \
+                                                     "or the gem's models could not be loaded " \
+                                                     '(ArgumentError: No database file specified'))
 
       FILES = {
         'config/boot.rb' => <<~RUBY,

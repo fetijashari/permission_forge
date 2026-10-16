@@ -23,23 +23,31 @@ module PermissionForge
   # with or without the gem.)
   #
   # Every place that asks whether a table is there and may answer "no"
-  # quietly asks table_exists? here; one whose "no" would fail open passes
-  # the narrower UNAVAILABLE_ERRORS (Audit.table_available?: a check that
-  # fails for another reason still raises out of Audit.record, and the
-  # change it records rolls back, as before). Services::HostKeyGuard lets a
-  # failed read propagate to its own rescue (READ_ERRORS), so that a pass
-  # is never remembered from a check that could not look.
+  # quietly asks table_exists? here. Its "no" is never kept: Active Record's
+  # schema cache remembers a missing table until the process restarts, so a
+  # process that booted before the migration (run from another process)
+  # would never see the table; each caller decides how often it asks again
+  # (MaskingSync: each run until it syncs; Audit: MISSING_TABLE_RECHECK).
+  # The audit table check of the record path passes the narrower
+  # UNREACHABLE_ERRORS: a configuration error there still raises out of
+  # Audit.record, so the change it records rolls back, as it always did.
+  # Services::HostKeyGuard lets a failed read propagate to its own rescue
+  # (READ_ERRORS), so that a pass is never remembered from a check that
+  # could not look.
   #
   # @api private
   module DatabaseReach
-    # The database cannot be used at all: not reachable (refused, timed out,
-    # lost), not created, not configured (no adapter, an adapter that refuses
-    # its configuration: sqlite3's "No database file specified").
-    UNAVAILABLE_ERRORS = [ActiveRecord::ConnectionNotEstablished, ActiveRecord::NoDatabaseError,
-                          ActiveRecord::AdapterNotSpecified, ActiveRecord::AdapterNotFound, ArgumentError].freeze
+    # A configured database that does not answer (refused, timed out, lost)
+    # or does not exist. Never a configuration error: where a quiet "no"
+    # lets a change commit unrecorded (the audit table check of
+    # Audit.record), only these count as "cannot be asked".
+    UNREACHABLE_ERRORS = [ActiveRecord::ConnectionNotEstablished, ActiveRecord::NoDatabaseError].freeze
 
     # What a ping or a table check that may answer "no" quietly rescues: the
-    # above, and any other error Active Record raises for the query.
+    # database cannot be used at all — not reachable, not created, not
+    # configured (no adapter, an adapter that refuses its configuration:
+    # sqlite3's "No database file specified") — or Active Record raised for
+    # the query.
     CONNECT_ERRORS = [ActiveRecord::ActiveRecordError, ArgumentError].freeze
 
     # What a read raises when the database went away after it answered, or
@@ -66,12 +74,16 @@ module PermissionForge
 
       # @param model [Class] an ActiveRecord model
       # @param errors [Array<Class>] what counts as "cannot be asked"
-      #   (CONNECT_ERRORS, or the narrower UNAVAILABLE_ERRORS)
+      #   (CONNECT_ERRORS, or the narrower UNREACHABLE_ERRORS)
       # @yieldparam error [Exception] what the check raised, when it did
       # @return [Boolean] whether the model's table is there; false when the
-      #   check raised one of `errors`
+      #   check raised one of `errors`. A "no" is dropped from the schema
+      #   cache (`reset_column_information`): the next call asks the database.
       def table_exists?(model, errors: CONNECT_ERRORS)
-        model.table_exists?
+        return true if model.table_exists?
+
+        model.reset_column_information
+        false
       rescue *errors => e
         yield e if block_given?
         false

@@ -141,24 +141,31 @@ module PermissionForge
       Object.send(:remove_const, :PfUnreadableTableProbe) if Object.const_defined?(:PfUnreadableTableProbe, false)
     end
 
-    # Audit.table_available? under audit_events :auto: a database that cannot
-    # be used is "unchecked" (nothing recorded, one SECURITY warning); any
-    # other error of the check still raises out of Audit.record.
-    test 'the audit table check counts an unconfigured database as unchecked and lets any other error raise' do
+    # Audit.table_available? under audit_events :auto, on the record path: a
+    # database that does not answer or does not exist is "unchecked"
+    # (nothing recorded, one SECURITY warning), as it always was; a
+    # configuration error of the check (an ArgumentError, AdapterNotFound)
+    # raises, so under audit_change_failure_strategy :raise the change rolls
+    # back instead of committing without its event (review of round 8).
+    test 'a configuration error of the audit table check rolls the change back; a database gone is unchecked' do
       PermissionForge.configuration.audit_events = :auto
-      PermissionForge::Audit.reset!
-      unconfigured = -> { raise ArgumentError, 'No database file specified. Missing argument: database' }
+      PermissionForge.configuration.audit_change_failure_strategy = :raise
+      [ArgumentError.new('No database file specified. Missing argument: database'),
+       ActiveRecord::AdapterNotFound.new('no adapter')].each do |error|
+        PermissionForge::Audit.reset!
+        with_singleton_method(PermissionForge::AuditEvent, :table_exists?, -> { raise error }) do
+          assert_no_difference -> { PermissionForge::PermissionSet.count }, error.class.name do
+            assert_raises(error.class) { create_permission_set(name: "Probe #{error.class}") }
+          end
+        end
+      end
 
-      log = with_singleton_method(PermissionForge::AuditEvent, :table_exists?, unconfigured) do
+      PermissionForge::Audit.reset!
+      gone = -> { raise ActiveRecord::NoDatabaseError, 'database does not exist' }
+      log = with_singleton_method(PermissionForge::AuditEvent, :table_exists?, gone) do
         capture_rails_log { assert_equal false, PermissionForge::Audit.enabled? }
       end
-      assert_match(/cannot check for the audit table '.*' \(ArgumentError\)/, log)
-
-      PermissionForge::Audit.reset!
-      refused = -> { raise ActiveRecord::StatementInvalid, 'permission denied for schema public' }
-      with_singleton_method(PermissionForge::AuditEvent, :table_exists?, refused) do
-        assert_raises(ActiveRecord::StatementInvalid) { PermissionForge::Audit.enabled? }
-      end
+      assert_match(/cannot check for the audit table '.*' \(ActiveRecord::NoDatabaseError\)/, log)
     ensure
       PermissionForge::Audit.reset!
     end
@@ -205,8 +212,8 @@ module PermissionForge
         end
       end
 
-      assert_equal 1, log.scan('The database could not be reached at boot (ActiveRecord::ConnectionNotEstablished: ' \
-                               'connection refused)').size, log
+      assert_equal 1, log.scan("The database could not be reached at boot, or the gem's models could not be loaded " \
+                               '(ActiveRecord::ConnectionNotEstablished: connection refused)').size, log
     end
 
     test 'a boot step that loses the database is skipped and the next steps still run' do

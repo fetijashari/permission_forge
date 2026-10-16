@@ -83,6 +83,35 @@ module PermissionForge
       assert_equal 0, @queries
     end
 
+    # Review of round 8: Active Record's schema cache kept the "no" of a
+    # process that booted before the Resource table existed (a migration run
+    # from another process): it never masked until a restart, although the
+    # boot promised a retry at each request or job.
+    test 'a process that found no Resource table syncs at its next run once the table is there' do
+      named_elsewhere(@model, announce: false)
+      table = PermissionForge::Resource.table_name
+      hidden = Module.new do
+        define_method(:data_sources) { super().reject { |name| name == table } }
+        define_method(:data_source_exists?) { |name| name.to_s == table ? false : super(name) }
+      end
+      connection = PermissionForge::Resource.connection_pool.with_connection { |leased| leased }
+      MaskingSync.reset!
+      PermissionForge::Resource.reset_column_information
+      connection.singleton_class.prepend(hidden)
+
+      MaskingSync.check!
+      assert_not MaskingSync.synced?, 'no table yet'
+
+      %i[data_sources data_source_exists?].each { |name| hidden.send(:remove_method, name) }
+      MaskingSync.check!
+
+      assert MaskingSync.synced?
+      assert applied?(@model)
+    ensure
+      %i[data_sources data_source_exists?].each { |name| hidden.send(:remove_method, name) if hidden&.method_defined?(name, false) }
+      PermissionForge::Resource.reset_column_information
+    end
+
     test 'nothing is read while auto-apply and virtual masking are off' do
       PermissionForge.configuration.auto_apply_masked_attributes = false
 

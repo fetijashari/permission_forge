@@ -205,7 +205,6 @@ module PermissionForge
         cause = nil
         return if DatabaseReach.table_exists?(klass) { |error| cause = error }
 
-        klass.reset_column_information
         cause ? "its table cannot be read (#{cause.class}: #{cause.message.lines.first&.strip})" : 'its table cannot be read'
       end
 

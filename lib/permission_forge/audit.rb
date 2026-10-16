@@ -280,14 +280,15 @@ module PermissionForge
         end
       end
 
-      # A database that cannot be used (DatabaseReach::UNAVAILABLE_ERRORS:
-      # unreachable, not created, not configured) is "unchecked": nothing is
-      # recorded until it answers. Any other error of the check raises out of
-      # Audit.record, as it always did.
+      # A database that does not answer or does not exist
+      # (DatabaseReach::UNREACHABLE_ERRORS) is "unchecked": nothing is
+      # recorded until it answers. Any other error of the check — a
+      # configuration error included — raises out of Audit.record, so the
+      # change it records rolls back.
       def check_table(name)
         cause = nil
         exists = PermissionForge::DatabaseReach.table_exists?(PermissionForge::AuditEvent,
-                                                              errors: PermissionForge::DatabaseReach::UNAVAILABLE_ERRORS) { |e| cause = e }
+                                                              errors: PermissionForge::DatabaseReach::UNREACHABLE_ERRORS) { |e| cause = e }
         if cause
           warn_unchecked_table(name, cause)
           return false

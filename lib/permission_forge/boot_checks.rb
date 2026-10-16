@@ -249,11 +249,14 @@ module PermissionForge
       # The boot step did not run: the first request or job that reaches the
       # database applies auto-applied masking (MaskingSync). The cause is
       # named: "not configured" (an adapter's ArgumentError) reads otherwise
-      # than "refused".
+      # than "refused". The ping loads the gem's models (and Active Record
+      # with them, as Rails' lazy load would): an error raised there — a
+      # host's on_load(:active_record) hook — is named the same way.
       def database_unreachable(problem)
         MaskingSync.reset!
         Warnings.emit(:database_unreachable,
-                      "The database could not be reached at boot (#{problem.class}: #{problem.message.lines.first&.strip}); " \
+                      "The database could not be reached at boot, or the gem's models could not be loaded " \
+                      "(#{problem.class}: #{problem.message.lines.first&.strip}); " \
                       'the boot checks that read it (security warnings) were skipped. Auto-applied masking is ' \
                       'applied at the first request or job that reaches the database.')
       end
