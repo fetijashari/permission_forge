@@ -550,7 +550,30 @@ or switch caching off in development (`config.cache_backend = :null if Rails.env
 
 **The same store carries auto-applied masking.** While `auto_apply_masked_attributes` (or `mask_virtual_attributes`) is `:auto`, a process that commits the first `Resource` row for a model tells the others through a token in the cache store ([Masked attributes](masked-attributes.md#how-other-processes-learn-about-a-new-model-maskingsync)). A per-process store (`:memory`, a `:memory_store`) or one that keeps nothing (`:null`, a `:null_store`) carries it to no other process: a `Customer` row created from `bin/rails runner` left the server's `Customer` unmasked — emails in clear while `masked_field?` said `true` — until a restart. In development the server therefore re-reads the `Resource` names from the database instead, one query at most every 2 seconds, so such a model is masked at its next request; no other environment runs that query. The development boot says so when the store is one of these, and production warns that a model first named in another process stays unmasked there until a restart. The remedies: a store every process shares (as above), or `include PermissionForge::Concerns::MaskedAttributes` in each model that holds personal data with `auto_apply_masked_attributes = false` (the recommended production setup, [below](masked-attributes.md#recommended-in-production-include-the-concern-explicitly)), or a list of models in `auto_apply_masked_attributes`.
 
-In development these warnings are also written to standard error, once per boot: the boot logs before `bin/rails server` attaches its console logger, and `bin/rails runner` and the console never attach one, so `log/development.log` alone went unread. Nothing is written there when the logger already writes to standard output or error, while `bin/rails generate` or `destroy` runs, or in any other environment.
+### Where warnings appear
+
+Every boot and configuration warning of the gem — the per-process cache above, conditional sets with an empty request
+context, the API enabled without authorization lambdas, unmasked GDPR fields, join rules under auto-scoping, missing or
+stale RLS policies, a model a `Resource` row names that cannot be masked, `audit_events = false`, a shared Basic-auth
+login without `audit_actor_resolver`, a model class that loaded with another setting — is written by one emitter with
+one policy:
+
+- **The log, always** (`Rails.logger.warn`, prefixed `[PermissionForge]`; a fail-open condition is prefixed
+  `[PermissionForge] SECURITY warning:`).
+- **Standard error as well, where the log is not read:** in development (`bin/rails server` boots before it attaches
+  its console logger; a console, `bin/rails runner`, a rake task and `db:seed` never attach one), and in every other
+  environment but test in any process that is not a web server — a console, a runner, a rake task, a seed, a job worker.
+  A server (`bin/rails server`, the `puma` command) in production or staging gets the log only. Each warning is written
+  there once per process.
+- **Not twice:** when the logger already writes to standard output or error (a container, `RAILS_LOG_TO_STDOUT`, the
+  Rails 7.1+ production default), nothing is written to standard error.
+- **Nothing while `bin/rails generate` or `destroy` runs:** the install generator boots the app before it writes the
+  initializer, so its warnings would describe the defaults the app is about to stop having. The next server, console or
+  task boot checks the configuration the app has.
+
+There is no switch for the standard-error copy: each warning names the setting that removes its condition (a shared
+cache store, the authorization lambdas, `conditional_sets_strict_mode`, masking the field, ...), and the warning goes
+with it.
 
 **When the cache store is unreachable** nothing is raised and access never widens: requests work with the hash they build. An invalidation that could not be made is reported (`config.on_cache_failure`), and the process that failed makes it when the store answers again — see [architecture.md](architecture.md#when-the-cache-store-fails) for what that does and does not cover.
 
