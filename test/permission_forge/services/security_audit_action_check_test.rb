@@ -2,6 +2,7 @@ require_relative '../admin/action_catalog_support'
 
 # A guarded controller of a resource no Permission Set manages in these tests.
 class PfStubGuardedSuppliersController < ActionController::Base
+  protect_from_forgery with: :exception
   include PermissionForge::Concerns::ControllerActionGuard
 
   permission_forge_actions resource: 'Supplier'
