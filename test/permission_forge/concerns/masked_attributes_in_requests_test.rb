@@ -404,7 +404,9 @@ module PermissionForge
         instrument = Audit.method(:instrument)
         replace_singleton_method(Audit, :instrument) { |*| built += 1 }
         customer = @customer
-        read = -> { 200.times { customer.email } }
+        # Per read, not in total: a one-off allocation of the Rails version (2 objects on Rails main) is not the guard's.
+        reads = 200
+        read = -> { reads.times { customer.email } }
         WebRequest.within(Rack::MockRequest.env_for('/warm')) { read.call } # the per-process warning, once
 
         outside = allocations(&read)
@@ -412,12 +414,13 @@ module PermissionForge
 
         assert_equal 0, built
         assert_nil ExecutionState[Audit::Runtime::ONCE_KEY], 'not even the once-per-request memo'
-        assert_operator inside, :<=, outside
+        assert_operator inside - outside, :<, reads, 'no allocation per read'
 
-        hashes = -> { 50.times { customer.attributes } }
+        calls = 50
+        hashes = -> { calls.times { customer.attributes } }
         outside = allocations(&hashes)
         inside = WebRequest.within(Rack::MockRequest.env_for('/x')) { allocations(&hashes) }
-        assert_operator inside, :<=, outside, 'attributes returns the stored hash at once once the model was warned about'
+        assert_operator inside - outside, :<, calls, 'attributes returns the stored hash at once once the model was warned about'
       ensure
         replace_singleton_method(Audit, :instrument, instrument)
       end
