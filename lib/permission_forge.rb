@@ -258,6 +258,8 @@ module PermissionForge
 end
 
 require_relative 'permission_forge/execution_state'
+require_relative 'permission_forge/execution_state/restore'
+require_relative 'permission_forge/web_request'
 require_relative 'permission_forge/inspection_filters'
 require_relative 'permission_forge/model_bindings'
 require_relative 'permission_forge/cache/base'
@@ -302,6 +304,7 @@ require_relative 'permission_forge/audit/reason_codes'
 require_relative 'permission_forge/audit/actor_resolver'
 require_relative 'permission_forge/audit/audited_views'
 require_relative 'permission_forge/audit/request_context'
+require_relative 'permission_forge/audit/unmasked_without_user'
 require_relative 'permission_forge/audit/detached'
 require_relative 'permission_forge/audit/refusals'
 require_relative 'permission_forge/audit/job_context'

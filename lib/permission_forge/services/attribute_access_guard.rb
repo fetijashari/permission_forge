@@ -84,14 +84,27 @@ module PermissionForge
       end
 
       # Without a user there is no entry to decide by:
-      # config.masked_attributes_nil_user_strategy says whether every
-      # attribute passes (:bypass, the default) or is hidden (:hide) — except
-      # on the user model, which sign-in reads before anyone is signed in.
-      # The model is the record's class, or else the one the first name of the
-      # chain names (an anonymous subclass answers as its base).
+      # config.masked_attributes_nil_user_strategy says whether the attribute
+      # passes (:bypass, the default), is hidden (:hide), or is hidden inside
+      # a web request only (:hide_in_requests) — never on the user model,
+      # which sign-in reads before anyone is signed in
+      # (Configuration#masked_attributes_without_user_for). A read returned
+      # as stored inside a web request under :bypass is recorded
+      # (Audit::UnmaskedWithoutUser). The model is the record's class, or
+      # else the one the first name of the chain names (an anonymous
+      # subclass answers as its base).
       def without_user
         model = @model || PermissionForge::ModelLookup.model_for(@resource_name)
-        PermissionForge.configuration.hide_masked_attributes_without_user_for?(model) ? hidden : bypass
+        case PermissionForge.configuration.masked_attributes_without_user_for(model)
+        when :hide then hidden
+        when :record then unmasked_in_request(model)
+        else bypass
+        end
+      end
+
+      def unmasked_in_request(model)
+        PermissionForge::Audit::UnmaskedWithoutUser.note(model || @resource_name, @attribute)
+        bypass
       end
 
       def bypass

@@ -1,0 +1,259 @@
+# frozen_string_literal: true
+
+require 'test_helper'
+require_relative '../sti_models'
+
+module PermissionForge
+  module Concerns
+    # Masking with nobody signed in, inside and outside a web request
+    # (GitHub issue #11). masked_attributes_nil_user_strategy:
+    #
+    # - :hide_in_requests hides every guarded attribute in a web request with
+    #   nobody signed in (a public page, a before_action before sign-in, a
+    #   middleware below WebRequest::Middleware) and keeps the stored values
+    #   in jobs, rake and the console; the user model stays readable;
+    # - :bypass (the library default) returns the stored values everywhere,
+    #   and inside a web request records each such read: the runtime event
+    #   field.unmasked_without_user (group :bypass) once per request per model
+    #   and attribute, and one SECURITY warning per model and process.
+    class MaskedAttributesInRequestsTest < ActionDispatch::IntegrationTest
+      PAGE = '/pf_public/customers'
+      EVENT = 'field.unmasked_without_user'
+
+      setup do
+        Current.user = nil
+        @set = create_permission_set(name: 'Customer readers')
+        customers = create_resource(permission_set: @set, name: 'Customer', read_access: true)
+        create_resource_field(resource: customers, name: 'name', label: 'Name', read_access: true)
+        create_resource_field(resource: customers, name: 'email', label: 'Email', read_access: true,
+                              mask_access: true, mask_strategy: 'email')
+        @customer = PermissionForge.without_permission_scope { create_customer(name: 'Acme', email: 'sales@acme.test') }
+        @log = StringIO.new
+        Rails.logger = ActiveSupport::Logger.new(@log)
+      end
+
+      teardown { Current.user = nil }
+
+      def config = PermissionForge.configuration
+
+      def page_json
+        get "#{PAGE}/#{@customer.id}"
+        assert_response :ok
+        response.parsed_body
+      end
+
+      def notifications
+        seen = []
+        subscriber = ActiveSupport::Notifications.subscribe("#{EVENT}.permission_forge") { |*, payload| seen << payload }
+        yield
+        seen
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      def stored_events
+        baseline = AuditEvent.unscoped.maximum(:id) || 0
+        yield
+        AuditEvent.unscoped.where(event: EVENT).where(AuditEvent.arel_table[:id].gt(baseline)).order(:id).to_a
+      end
+
+      def warnings = @log.string.lines.grep(/unmasked_without_user|read in a web request with nobody signed in/)
+
+      # --- :hide_in_requests -----------------------------------------------------------
+
+      test ':hide_in_requests hides every guarded attribute in a web request with nobody signed in, before_action included' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        body = page_json
+
+        assert_nil body['before_action'], 'a read before sign-in (a tenant lookup in a before_action) is in the request'
+        assert_nil body['email']
+        assert_nil body['name'], 'configured or not: nobody is signed in to be granted it'
+        assert_equal({ 'id' => @customer.id }, body['as_json'], 'only the primary key, as under :hide')
+        assert_equal({ 'id' => @customer.id }, body['attributes'])
+        assert_not WebRequest.active?, 'the request is over once its response is'
+      end
+
+      test ':hide_in_requests hides a read in a middleware below WebRequest::Middleware, before any controller' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        customer = @customer
+        host_middleware = ->(_env) { [200, {}, [customer.email.inspect]] }
+        _status, _headers, body = WebRequest::Middleware.new(host_middleware).call(Rack::MockRequest.env_for('/tenant'))
+
+        assert_equal ['nil'], body.to_enum.to_a
+        body.close
+      end
+
+      test ':hide_in_requests keeps the stored values outside a web request: a job, the console, a runner, rake' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+
+        assert_equal 'sales@acme.test', @customer.email, 'console / runner / rake: no request'
+        assert_equal 'sales@acme.test', Rails.application.executor.wrap { @customer.reload.email }, 'a job run by a worker'
+        assert_equal 'Acme', @customer.as_json['name']
+        assert_equal 'sales@acme.test', @customer.attributes['email']
+      end
+
+      test ':hide_in_requests leaves the user model readable in a web request, for sign-in' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        config.user_class = 'PfStiBugTicket'
+        tickets = create_resource(permission_set: @set, name: 'PfStiTicket', read_access: true)
+        create_resource_field(resource: tickets, name: 'email', label: 'Email', read_access: true, mask_access: true)
+        signing_in, other = PermissionForge.without_permission_scope do
+          [PfStiBugTicket.create!(title: 'Ann', email: 'ann@example.test'), PfStiTicket.create!(title: 'Cat', email: 'cat@example.test')]
+        end
+
+        WebRequest.within(Rack::MockRequest.env_for('/sign_in')) do
+          assert_equal 'ann@example.test', signing_in.email, 'the user model (user_class) is exempt'
+          assert_equal 'Ann', signing_in.as_json['title']
+          assert_nil other.email, 'its base class is not the user model'
+          assert_nil @customer.email
+        end
+      end
+
+      test 'a job run with perform_now inside the request is in the request' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+
+        WebRequest.within(Rack::MockRequest.env_for('/signup')) do
+          assert_nil Rails.application.executor.wrap { @customer.email }, 'the executor run joins the request'
+        end
+      end
+
+      test 'a signed-in user is judged by their permissions under :hide_in_requests, as before' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        user = create_user
+        create_permission_set_user(user: user, permission_set: @set)
+        Current.user = user
+
+        WebRequest.within(Rack::MockRequest.env_for('/account')) do
+          assert_equal 'Acme', @customer.name
+          assert_equal 's***@acme.test', @customer.email
+        end
+      end
+
+      test 'explain says what happens with nobody signed in, in a request and outside one' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        outside = MaskedAttributes.explain(@customer, :email)
+        inside = WebRequest.within(Rack::MockRequest.env_for('/x')) { MaskedAttributes.explain(@customer, :email) }
+
+        assert_equal [false, 'sales@acme.test'], outside.values_at(:in_web_request, :returned_value)
+        assert_equal [true, nil], inside.values_at(:in_web_request, :returned_value)
+        decisions = capture_io do
+          @decisions = [MaskedAttributes.explain_all(@customer),
+                        WebRequest.within({}) { MaskedAttributes.explain_all(@customer) }].map do |rows|
+            rows.find { |row| row[:attribute] == 'email' }[:decision]
+          end
+        end
+        assert decisions
+        assert_equal %i[no_user_bypassed no_user_hidden], @decisions
+      end
+
+      # --- :bypass records what :hide_in_requests would hide ------------------------------
+
+      test ':bypass returns the stored values in a web request and publishes field.unmasked_without_user once per request per attribute' do
+        assert_equal :bypass, config.masked_attributes_nil_user_strategy
+
+        published = notifications { 2.times { page_json } }
+        body = response.parsed_body
+
+        assert_equal 'sales@acme.test', body['email']
+        assert_equal 'sales@acme.test', body['before_action']
+        per_request = published.map { |payload| payload[:data]['attribute'] }
+        assert_equal per_request.uniq.size * 2, per_request.size, 'each attribute once per request, in each request'
+        assert_includes per_request, 'email'
+        assert_includes per_request, 'name'
+        assert_not_includes per_request, 'id', 'the primary key is never guarded'
+        email = published.find { |payload| payload[:data]['attribute'] == 'email' }
+        assert_equal({ 'model' => 'Customer', 'attribute' => 'email', 'method' => 'GET', 'path' => "#{PAGE}/#{@customer.id}",
+                       'endpoint' => 'pf_public_pages#show' }, email[:data])
+        assert_equal ['access', 'runtime', 'Customer', nil, nil], email.values_at(:category, :source, :record_type, :record_id, :subject_user_id)
+        assert_equal false, email[:stored], 'the bypass group is not stored by default'
+        assert email[:request_id].present?, 'the request id of the web request'
+      end
+
+      test 'field.unmasked_without_user is stored with the bypass group, never with a value' do
+        config.audit_runtime_events = %i[denied bypass]
+
+        events = stored_events { page_json }
+
+        email = events.find { |event| event.data['attribute'] == 'email' }
+        assert email, events.map(&:data).inspect
+        assert_equal %w[access runtime Customer], [email.category, email.source, email.record_type]
+        assert_equal 'pf_public_pages#show', email.data['endpoint']
+        assert_not_includes events.map(&:attributes).to_json, 'sales@acme.test'
+        attributes = events.map { |event| event.data['attribute'] }
+        assert_equal attributes.uniq, attributes, 'once per request per attribute'
+      end
+
+      test 'attributes and as_json record too, though no getter is called' do
+        config.audit_runtime_events = %i[denied bypass]
+
+        events = stored_events do
+          WebRequest.within(Rack::MockRequest.env_for('/feed')) do
+            assert_equal 'sales@acme.test', @customer.attributes['email']
+            Audit::Runtime.reset!
+            assert_equal 'sales@acme.test', @customer.as_json['email']
+          end
+        end
+
+        assert_equal(2, events.count { |event| event.data['attribute'] == 'email' })
+      end
+
+      test 'nothing is recorded outside a web request, for the user model, or under :hide_in_requests and :hide' do
+        config.audit_runtime_events = %i[denied bypass]
+        config.user_class = 'Customer'
+
+        events = stored_events do
+          assert_equal 'sales@acme.test', @customer.email
+          WebRequest.within(Rack::MockRequest.env_for('/x')) { assert_equal 'sales@acme.test', @customer.email }
+          config.user_class = 'User'
+          %i[hide_in_requests hide].each do |strategy|
+            config.masked_attributes_nil_user_strategy = strategy
+            WebRequest.within(Rack::MockRequest.env_for('/x')) { assert_nil @customer.email }
+          end
+        end
+
+        assert_empty events
+        assert_empty warnings
+      end
+
+      test 'a SECURITY warning names the model, the attribute and the request, once per model and process' do
+        2.times { page_json }
+
+        assert_equal 1, warnings.size, @log.string
+        line = warnings.first
+        assert_includes line, 'SECURITY warning:'
+        assert_match(%r{Customer#\w+ was read in a web request with nobody signed in \(GET #{PAGE}/#{@customer.id}}, line)
+        assert_includes line, ':hide_in_requests'
+        assert_not_includes line, 'sales@acme.test'
+      end
+
+      test 'with nobody listening and the bypass group not stored, a read in a request builds nothing and allocates no more' do
+        built = 0
+        instrument = Audit.method(:instrument)
+        replace_singleton_method(Audit, :instrument) { |*| built += 1 }
+        customer = @customer
+        read = -> { 200.times { customer.email } }
+        WebRequest.within(Rack::MockRequest.env_for('/warm')) { read.call } # the per-process warning, once
+
+        outside = allocations(&read)
+        inside = WebRequest.within(Rack::MockRequest.env_for('/x')) { allocations(&read) }
+
+        assert_equal 0, built
+        assert_nil ExecutionState[Audit::Runtime::ONCE_KEY], 'not even the once-per-request memo'
+        assert_operator inside, :<=, outside
+      ensure
+        replace_singleton_method(Audit, :instrument, instrument)
+      end
+
+      private
+
+      def allocations
+        GC.disable
+        before = GC.stat(:total_allocated_objects)
+        yield
+        GC.stat(:total_allocated_objects) - before
+      ensure
+        GC.enable
+      end
+    end
+  end
+end

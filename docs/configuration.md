@@ -2,16 +2,15 @@
 
 Before production, go through the Production hardening checklist in the README (https://github.com/fetijashari/permission_forge#production-hardening-checklist).
 
-All configuration options with their defaults. These are the defaults of `PermissionForge::Configuration`; the initializer that `rails generate permission_forge:install` writes is short (the integration points, and the safe part of the hardening checklist: `action_guard_nil_user_strategy = :deny`, `conditional_sets_strict_mode = true` and `cache_backend = :rails_cache`) and offers `config.preset = :strict` commented (see [Presets](#presets)). Every option it leaves out keeps the default shown here.
+All configuration options with their defaults. These are the defaults of `PermissionForge::Configuration`; the initializer that `rails generate permission_forge:install` writes is short (the integration points, and the safe part of the hardening checklist: `action_guard_nil_user_strategy = :deny`, `conditional_sets_strict_mode = true`, `cache_backend = :rails_cache` and `masked_attributes_nil_user_strategy = :hide_in_requests`) and offers `config.preset = :strict` commented (see [Presets](#presets)). Every option it leaves out keeps the default shown here.
 
 Set these in `config/initializers`. `user_class`, `audit_user_class` and `tenant_model` are read by the models as they load; a change made later does not reach a loaded class (PermissionForge logs a warning).
 
 ```ruby fragment
 PermissionForge.configure do |config|
   # Sets the options that decide whether something fails open, all at once
-  # (see Presets below: masked_attributes_nil_user_strategy and the options
-  # that need your code are not among them). A setting made in this block
-  # wins over it, in any order.
+  # (see Presets below: the options that need your code are not among them).
+  # A setting made in this block wins over it, in any order.
   #   :compat — the defaults below (default)
   #   :strict — the closed values of the hardening checklist
   config.preset = :compat
@@ -327,14 +326,23 @@ PermissionForge.configure do |config|
   config.response_filter_nil_user_strategy = :bypass
 
   # Behavior of MaskedAttributes (model masking) when there is no current user:
-  #   :bypass — getters, attributes and as_json return the stored values (default)
-  #   :hide   — every guarded attribute reads as hidden_attribute_value; the
-  #             primary key and the raw paths (read_attribute_before_type_cast,
-  #             pluck) are untouched. Jobs and mailers that read masked models
-  #             with no user then see hidden values: set the current user there.
-  #             The user model (user_class and its subclasses) is exempt: sign-in
-  #             reads it before anyone is signed in. Validations always read the
-  #             stored values. Not part of any preset.
+  #   :bypass           — getters, attributes and as_json return the stored
+  #                       values (default). Inside a web request each guarded
+  #                       attribute so returned is logged (once per model and
+  #                       process) and published as field.unmasked_without_user.
+  #   :hide_in_requests — hidden inside a web request (a public page, a
+  #                       webhook, a controller that forgot authentication, a
+  #                       before_action or middleware before sign-in); jobs,
+  #                       rake, the runner and the console keep the stored
+  #                       values. The generated initializer and :strict set it.
+  #   :hide             — every guarded attribute reads as hidden_attribute_value
+  #                       everywhere. Jobs and mailers that read masked models
+  #                       with no user then see hidden values: set the current
+  #                       user there.
+  #   Where it hides, the primary key and the raw paths (read_attribute_before_type_cast,
+  #   pluck) are untouched, the user model (user_class and its subclasses) is
+  #   exempt (sign-in reads it before anyone is signed in), and validations
+  #   read the stored values.
   config.masked_attributes_nil_user_strategy = :bypass
 
   # What row-level rules do when current_user is nil: find_by / find_by! /
@@ -669,7 +677,7 @@ Users who relied on old defaults can restore them in their initializer.
 `config.preset` sets the options that decide whether something fails open, all at once. It is a layer of defaults: a setting you make yourself wins, before or after `config.preset =`, in whichever `configure` block.
 
 - `:compat` (the default): the library defaults, as every version had them.
-- `:strict`: every fail-open default of the [Production hardening checklist](https://github.com/fetijashari/permission_forge#production-hardening-checklist) that a setting can close, except masking with nobody signed in, and the defaults that are already closed kept so. The install generator writes it as a comment.
+- `:strict`: every fail-open default of the [Production hardening checklist](https://github.com/fetijashari/permission_forge#production-hardening-checklist) that a setting can close, and the defaults that are already closed kept so. The install generator writes it as a comment.
 
 | Option | `:compat` | `:strict` |
 |---|---|---|
@@ -683,11 +691,12 @@ Users who relied on old defaults can restore them in their initializer.
 | `mask_virtual_attributes` | `false` | `:auto` |
 | `extra_fields_default_access` | `:grant` | `:unconfigured` |
 | `cache_backend` | `:memory` | `:rails_cache` |
+| `masked_attributes_nil_user_strategy` | `:bypass` | `:hide_in_requests` |
 | `api_require_authorization`, `admin_tenantless_access`, `nested_attributes_parent_fallback`, `unconfigured_field_strategy` | `true`, `:deny`, `false`, `:block` | the same |
 
 What `:strict` leaves open:
 
-- `masked_attributes_nil_user_strategy` is in no preset (`Presets::OPT_IN`): `:hide` makes jobs and mailers that read masked models with no user see hidden values, a cost each app chooses for itself. It stays `:bypass` under `:strict`, so `bin/rails permission_forge:audit` still reports `masked_nil_user_bypass` (medium) until you set it.
+- Masking with nobody signed in outside web requests: `:strict` sets `masked_attributes_nil_user_strategy = :hide_in_requests`, so jobs, rake, the runner and the console keep reading stored values (`bin/rails permission_forge:audit` notes it as `masked_nil_user_outside_requests`, info). `:hide` closes that too, at the cost of hidden values in jobs and mailers that read masked models with no user; it counts as closed, not as a looser override.
 - The rows of the hardening checklist that need your code: an authenticated `base_controller_class` (and `api_base_controller_class`), `admin_assignment_authorization`, `audit_log_authorization`, a `request_context_resolver` for conditional Permission Sets, and `user_active_check`.
 
 So `:strict` is not "every finding closed": run the audit after setting it.
@@ -740,7 +749,7 @@ One entry per option, in the order the admin **Settings** page shows them (its "
 
 **Default:** `:compat`
 
-**Preset.** `:strict` closes the settings that fail open by default, except masking with nobody signed in; `:compat` (the default) keeps the library defaults. A setting made in the initializer always wins. See [Presets](#presets).
+**Preset.** `:strict` closes the settings that fail open by default; `:compat` (the default) keeps the library defaults. A setting made in the initializer always wins. See [Presets](#presets).
 
 ### Admin access
 
@@ -894,9 +903,13 @@ Your User model needs no `uuid` column: `uuid` is then `nil`, and `permission_se
 
 #### masked_attributes_nil_user_strategy
 
-**Default:** `:bypass` Takes `:bypass` or `:hide` (or its String).
+**Default:** `:bypass` Takes `:bypass`, `:hide_in_requests` or `:hide` (or its String).
 
-**Masked attributes with nobody signed in.** Whether a masked model's getters, `attributes` and `as_json` return the stored values (`:bypass`, the default) or hide every guarded attribute (`:hide`) when there is no current user. The primary key and the raw paths stay as they are. Takes a Symbol or its String; anything else raises `ConfigurationError`. `rake permission_forge:audit` reports `:bypass` as `masked_nil_user_bypass` (medium). Not part of any preset. Under `:hide` the user model (`user_class` and its subclasses) is exempt: authentication reads it before anyone is signed in (Devise's `encrypted_password`, `confirmation_token`, lockable counters), so with nobody signed in its columns, password digests included, read as stored: do not render it with no current user (`permission_forge:audit` reports `user_model_unmasked_without_user`). Another authenticatable model (a second Devise scope) is not exempt. Validations always read stored values.
+**Masked attributes with nobody signed in.** Whether a masked model's getters, `attributes` and `as_json` return the stored values (`:bypass`, the default), hide every guarded attribute inside a web request only (`:hide_in_requests`), or hide every guarded attribute everywhere (`:hide`) when there is no current user. The primary key and the raw paths stay as they are. Takes a Symbol or its String; anything else raises `ConfigurationError`.
+
+*A web request* is any request the application serves, from the top of its middleware stack (the engine puts `PermissionForge::WebRequest::Middleware` first) until the response is finished: your controllers, the mounted engine, the middlewares and `before_action`s that run before sign-in (a tenant or subdomain lookup), and a job run with `perform_now` or a mail sent with `deliver_now` during the request. Outside one: jobs run by a worker (also `perform_later` on the `:async` adapter), Action Cable channel actions, rake tasks, `bin/rails runner`, the console, and `ActionController::TestCase` tests (they call the controller without the middleware stack; integration and system tests go through it). With Falcon or another fiber-based server, set `config.active_support.isolation_level = :fiber`, as Rails requires.
+
+Under `:bypass`, each guarded attribute returned as stored inside a web request with nobody signed in — exactly what `:hide_in_requests` would hide — is published as the runtime audit event `field.unmasked_without_user` (group `:bypass`, stored when `audit_runtime_events` includes it; once per request per model and attribute: the model, the attribute, the request's method, path and endpoint) and written to the log as one SECURITY warning per model and process. `rake permission_forge:audit` reports `:bypass` as `masked_nil_user_bypass` (medium) and `:hide_in_requests` as `masked_nil_user_outside_requests` (info). The generated initializer and `config.preset = :strict` set `:hide_in_requests`; the library default stays `:bypass`, because hiding before sign-in changes what an existing app's public pages and pre-authentication lookups read. Under `:hide` and `:hide_in_requests` the user model (`user_class` and its subclasses) is exempt: authentication reads it before anyone is signed in (Devise's `encrypted_password`, `confirmation_token`, lockable counters), so with nobody signed in its columns, password digests included, read as stored: do not render it with no current user (`permission_forge:audit` reports `user_model_unmasked_without_user`). Another authenticatable model (a second Devise scope) is not exempt. Validations always read stored values.
 
 #### hidden_attribute_value
 

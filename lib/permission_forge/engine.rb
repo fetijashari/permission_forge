@@ -25,6 +25,15 @@ module PermissionForge
     # left alone (AdminMethodOverride).
     config.middleware.use PermissionForge::AdminMethodOverride
 
+    # Every request the host application serves is a web request
+    # (PermissionForge::WebRequest) from the top of its stack until the
+    # response is finished: masked_attributes_nil_user_strategy
+    # :hide_in_requests hides there, and :bypass records
+    # field.unmasked_without_user. First in the stack, so that a middleware
+    # or a before_action that reads a model before anyone is signed in
+    # counts too.
+    config.app_middleware.unshift PermissionForge::WebRequest::Middleware
+
     # A denial nobody rescues answers 403, not 500: the row-rule refusal of
     # find_by / find_by! and the action guard's refusal (Rails' exceptions
     # app renders the status: public/403.html when the host has one, else an

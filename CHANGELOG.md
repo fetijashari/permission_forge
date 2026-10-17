@@ -22,7 +22,9 @@ the JSON API and in the admin's rule builder alike.** (pass `include_nulls: true
 through), **A refusing `api_auth` answers 401 Unauthorized instead of 403.** and **API: a value of the wrong shape for
 its attribute is a 422 keyed by it, never dropped or cast.** (API clients), **A Permission Set, a group or a rule
 created without a name — or renamed to a blank one — is refused, and a rule created without a blocked message stores
-none.** (code and API clients that create without a name, or with a blank one), and **More warnings are SECURITY warnings.** (log alerts that match the warning text).
+none.** (code and API clients that create without a name, or with a blank one), **More warnings are SECURITY warnings.** (log alerts that match the warning text), and **`config.preset = :strict` sets
+`masked_attributes_nil_user_strategy = :hide_in_requests`, and new installs get it from the generator** (pages that
+read a masked model before sign-in).
 
 ### Added
 
@@ -459,8 +461,54 @@ none.** (code and API clients that create without a name, or with a blank one), 
   <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#an answer sent back whole moves the set as its id key says, the same every time -->
   <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#a body with only permission_set_group_uuid changes nothing: the companion is answer-only -->
   <!-- pin: test/permission_forge/api/envelope_schema_test.rb#every foreign identifier is followed by the uuid of the same record, null where it may be null -->
+- **`masked_attributes_nil_user_strategy = :hide_in_requests`: masked attributes are hidden in a web request with
+  nobody signed in, and keep their stored values in jobs, rake, the runner and the console** (GitHub #11). Under
+  `:bypass` a public page, a webhook, a controller that forgot authentication or a resolver that returns nil got every
+  guarded attribute as stored, and nothing recorded it. The new value hides them there exactly as `:hide` does (the
+  primary key and the raw paths untouched, the user model exempt for sign-in). "A web request" has one definition,
+  `PermissionForge::WebRequest`: the engine puts `WebRequest::Middleware` first in the host's middleware stack
+  (`config.app_middleware`), which marks the request in `ExecutionState` slot `:pf_web_request` (execution scope, kept
+  at the end of an executor run) until the response is finished (`rack.response_finished`, else when the body is
+  closed; at once when the app raises) — so a middleware or a `before_action` that reads a model before sign-in counts,
+  as do a job run with `perform_now` and a mail sent with `deliver_now` during the request; jobs run by a worker,
+  Action Cable channel actions, rake, the runner, the console and `ActionController::TestCase` tests are outside.
+  `Configuration#masked_attributes_without_user_for(klass)` (`:hide`, `:record` or `:bypass`) is the one decision
+  behind `hide_masked_attributes_without_user_for?`; `hide_masked_attributes_without_user_in_requests?` says whether
+  the strategy hides at least in requests. `MaskedAttributes.explain` adds `in_web_request`. The Settings page lists
+  the three values with what each does (en, sq, mk).
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#:hide_in_requests hides every guarded attribute in a web request with nobody signed in, before_action included -->
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#:hide_in_requests hides a read in a middleware below WebRequest::Middleware, before any controller -->
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#:hide_in_requests keeps the stored values outside a web request: a job, the console, a runner, rake -->
+  <!-- pin: test/permission_forge/web_request_test.rb#the engine puts the middleware first in the host application's stack -->
+  <!-- pin: test/permission_forge/web_request_test.rb#below the middleware the request is a web request, with its env, until the server closes the body -->
+  <!-- pin: test/permission_forge/web_request_test.rb#a run completed inside the request does not end it -->
+  <!-- pin: test/permission_forge/html/masked_nil_user_setting_test.rb#the Settings page lists bypass, hide_in_requests and hide, marks the current one and explains them in en, sq and mk -->
+- **Under `:bypass`, a masked value returned in a web request with nobody signed in is recorded** (GitHub #11): the
+  runtime audit event `field.unmasked_without_user` (group `:bypass`: published always, stored when
+  `audit_runtime_events` includes `:bypass`) once per request per model and attribute — the model, the attribute, the
+  request's method, path and endpoint, and its request id and IP as columns; never a value — for exactly the reads
+  `:hide_in_requests` would hide; and one SECURITY warning per model and process in the log, naming the model, the
+  attribute and the request. With nobody listening and the group not stored, a read builds nothing (one gate check).
+  Sentence in en, sq and mk.
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#:bypass returns the stored values in a web request and publishes field.unmasked_without_user once per request per attribute -->
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#field.unmasked_without_user is stored with the bypass group, never with a value -->
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#a SECURITY warning names the model, the attribute and the request, once per model and process -->
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#with nobody listening and the bypass group not stored, a read in a request builds nothing and allocates no more -->
 
 ### Changed
+
+- **`config.preset = :strict` sets `masked_attributes_nil_user_strategy = :hide_in_requests`, and new installs get it
+  from the generator** (it was in no preset, `Presets::OPT_IN`, which is now empty). Under the strict preset, or in a
+  new install, a page that reads a masked model before anyone signs in (a tenant or subdomain lookup, a public sign-up
+  page, a mail sent with `deliver_now`) reads hidden values; jobs and the console keep the stored values. `:hide`
+  counts as closed (no `strict_overrides`). The library default stays `:bypass`. `rake permission_forge:audit` reports
+  `:bypass` (`masked_nil_user_bypass`, medium) with `:hide_in_requests` as the remedy and its trade-off, and
+  `:hide_in_requests` as `masked_nil_user_outside_requests` (info); `user_model_unmasked_without_user` covers both
+  hiding values. **Opt out:** `config.masked_attributes_nil_user_strategy = :bypass`.
+  <!-- pin: test/permission_forge/configuration_presets_test.rb#:strict sets masking with nobody signed in to :hide_in_requests; :hide counts as closed -->
+  <!-- pin: test/permission_forge/configuration_presets_test.rb#a new install gets the safe subset explicitly and :strict offered, not active -->
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#masking with nobody signed in: :bypass is medium and recommends :hide_in_requests, which leaves an info -->
+  <!-- pin: test/permission_forge/install/fresh_install_test.rb#a default install on integer user keys works end to end -->
 
 - **A rule whose field name is not a column of its model does not save.** `PermissionSetRule` adds "names
   `onwer_id`, which is not a column of Customer" on `field_name` (en, sq, mk; it names the stored value, like the path
@@ -2222,9 +2270,14 @@ none.** (code and API clients that create without a name, or with a blank one), 
   submitted) and leaves out the ones they may not read.
   <!-- pin: docs/field-filtering.md#telling-the-user-what-was-not-saved -->
 - The generated initializer, README and [Presets](docs/configuration.md#presets): `config.preset = :strict` does not
-  close every fail-open default. `masked_attributes_nil_user_strategy` stays `:bypass` (the audit keeps reporting
-  `masked_nil_user_bypass`), and the checklist rows that need your code are in no preset.
+  close every finding. Masking with nobody signed in becomes `:hide_in_requests` (jobs and the console keep the stored
+  values: the audit notes `masked_nil_user_outside_requests`), and the checklist rows that need your code are in no
+  preset.
   <!-- pin: docs/configuration.md#presets -->
+- [Without a current user](docs/masked-attributes.md#without-a-current-user): what each value of
+  `masked_attributes_nil_user_strategy` does in a web request and elsewhere, what a web request is (and is not), the
+  trade-off of `:hide_in_requests` and what `:bypass` records.
+  <!-- pin: docs/masked-attributes.md#without-a-current-user -->
 - [filter_parameters_integration](docs/configuration.md#filter_parameters_integration) and the GDPR guide: the patterns
   filter every `name` parameter in the app's request logs, the admin's own forms included; how to narrow them. While
   on, the columns `filter_parameters` name count as personal data for the presets, Sync, the audits and the boot

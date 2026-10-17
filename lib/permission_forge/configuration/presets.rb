@@ -20,10 +20,10 @@ module PermissionForge
     # The options that need host code to close (an authenticated
     # base_controller_class, admin_assignment_authorization,
     # audit_log_authorization, a request_context_resolver, user_active_check)
-    # are not in a preset. Nor is masked_attributes_nil_user_strategy
-    # (OPT_IN): :hide makes jobs and mailers that read masked models with no
-    # user see hidden values, a cost each app must choose; it stays :bypass
-    # under every preset.
+    # are not in a preset. :strict sets masked_attributes_nil_user_strategy
+    # to :hide_in_requests (hidden inside web requests with nobody signed in,
+    # stored values for jobs, rake and the console); :hide, which hides in
+    # jobs and mailers too, counts as closed but stays each app's choice.
     #
     # @api public
     module Presets
@@ -41,6 +41,7 @@ module PermissionForge
         mask_virtual_attributes: false,
         extra_fields_default_access: :grant,
         cache_backend: :memory,
+        masked_attributes_nil_user_strategy: :bypass,
         # closed by default
         api_require_authorization: true,
         admin_tenantless_access: :deny,
@@ -58,14 +59,17 @@ module PermissionForge
         conditional_sets_strict_mode: true,
         mask_virtual_attributes: :auto,
         extra_fields_default_access: :unconfigured,
-        cache_backend: :rails_cache
+        cache_backend: :rails_cache,
+        masked_attributes_nil_user_strategy: :hide_in_requests
       ).freeze
 
       PRESETS = { compat: COMPAT, strict: STRICT }.freeze
 
       # Fail-open defaults of the hardening checklist that no preset closes:
-      # an explicit choice with a documented cost.
-      OPT_IN = %i[masked_attributes_nil_user_strategy].freeze
+      # an explicit choice with a documented cost. None at present
+      # (masked_attributes_nil_user_strategy left it in 0.15: :strict sets
+      # :hide_in_requests).
+      OPT_IN = [].freeze
       OPTIONS = COMPAT.keys.freeze
 
       # When an option counts as closed with a value other than the :strict
@@ -75,6 +79,8 @@ module PermissionForge
         # nil follows nil_user_strategy
         action_guard_nil_user_strategy: ->(_value, config) { !config.action_guard_nil_user_bypass? },
         mask_virtual_attributes: ->(value, _config) { [true, 'auto'].include?(value) },
+        # hidden everywhere, jobs and the console included
+        masked_attributes_nil_user_strategy: ->(value, _config) { value == :hide },
         # no cache at all, or a shared store the host built
         cache_backend: ->(value, _config) { value == :null || value.is_a?(ActiveSupport::Cache::Store) }
       }.freeze

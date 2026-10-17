@@ -145,16 +145,21 @@ module PermissionForge
       end
     end
 
-    # Masking with nobody signed in is a checklist row no preset closes: :hide
-    # costs jobs and mailers their values, an explicit choice. It stays the
-    # library default under every preset, and the README row says so.
-    test 'masking with nobody signed in is in the checklist but in no preset' do
+    # Masking with nobody signed in: :strict hides guarded attributes in web
+    # requests with nobody signed in (:hide_in_requests) and keeps the stored
+    # values for jobs and the console; :hide, which hides there too, is as
+    # closed. The library default stays :bypass.
+    test ':strict sets masking with nobody signed in to :hide_in_requests; :hide counts as closed' do
+      assert_equal :bypass, config.masked_attributes_nil_user_strategy, 'library default'
       assert_includes checklist_rows.keys, :masked_attributes_nil_user_strategy
-      assert_includes checklist_rows[:masked_attributes_nil_user_strategy][1], 'Not part of'
-      assert_empty Presets::OPT_IN & Presets::OPTIONS
+      assert_empty Presets::OPT_IN
+
       config.preset = :strict
-      assert_equal :bypass, config.masked_attributes_nil_user_strategy
-      assert_not_includes config.options_looser_than_strict.keys, :masked_attributes_nil_user_strategy
+      assert_equal :hide_in_requests, config.masked_attributes_nil_user_strategy
+      config.masked_attributes_nil_user_strategy = :hide
+      assert_empty config.options_looser_than_strict
+      config.masked_attributes_nil_user_strategy = 'bypass'
+      assert_equal({ masked_attributes_nil_user_strategy: :bypass }, config.options_looser_than_strict)
     end
 
     test ':strict keeps closed what the README says is closed by default' do
@@ -220,7 +225,8 @@ module PermissionForge
       assert_equal true, generated.conditional_sets_strict_mode
       assert_equal :rails_cache, generated.cache_backend
       assert_equal :bypass, generated.nil_user_strategy, 'library default'
-      assert_equal :bypass, generated.masked_attributes_nil_user_strategy, 'library default'
+      assert_equal :hide_in_requests, generated.masked_attributes_nil_user_strategy, 'set explicitly: hidden in web requests'
+      assert generated.explicitly_set?(:masked_attributes_nil_user_strategy)
       assert_match(/^  # config\.preset = :strict$/, source)
       assert_match(/belongs_to presence check/, source)
       assert_match(/Never include PermissionScopedFindable in the user model/, source)

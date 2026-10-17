@@ -15,8 +15,8 @@ PermissionForge.configure do |config|
   # Rails.cache, shared by every process: Redis or Solid Cache in production, :file_store (not :memory_store) in development.
   config.cache_backend = :rails_cache
 
-  # config.preset = :strict closes the fail-open defaults a setting can close, except masking
-  # with nobody signed in (its own section below; the audit reports it until you choose):
+  # config.preset = :strict closes the fail-open defaults a setting can close (masking with
+  # nobody signed in too: :hide_in_requests, set in its own section below):
   #   nil_user_strategy = :deny, auto_query_scoping = :filter_only, no_read_access_strategy = :deny,
   #   response_filter_nil_user_strategy = :block, unconfigured_action_strategy = :block,
   #   mask_virtual_attributes = :auto, extra_fields_default_access = :unconfigured,
@@ -84,14 +84,14 @@ PermissionForge.configure do |config|
   # keep it cheap, never read permissions inside it, return {} with no request.
 
   # ---------------------------------------------------------------------------
-  # Masked attributes with nobody signed in (not part of the preset)
+  # Masked attributes with nobody signed in
   # ---------------------------------------------------------------------------
-  # :bypass (default) returns the stored values; :hide hides every guarded
-  # attribute. Trade-off: jobs, mailers and console code that read masked
-  # models with no user then see hidden values: set the current user there.
-  # The user model (user_class and its subclasses) stays readable for sign-in,
-  # and validations always read the stored values.
-  # config.masked_attributes_nil_user_strategy = :hide
+  # Hidden in a web request with nobody signed in (a public page, a controller
+  # that forgot authentication; a before_action that reads one before sign-in
+  # too), stored values for jobs, rake and the console. :hide also hides them
+  # in jobs (set the current user there); :bypass (library default) nowhere.
+  # The user model stays readable for sign-in; validations read stored values.
+  config.masked_attributes_nil_user_strategy = :hide_in_requests
 
   # ---------------------------------------------------------------------------
   # Admin screens

@@ -116,6 +116,7 @@ module PermissionForge
       'masking_sync_incomplete_at_boot' => [:security], 'masking_sync.token_not_taken.' => [:security],
       'masking_sync_store_failed' => [:security], 'masking_sync_failed' => [:security],
       'cache_process_local' => [:security], 'cache_unannounced_masking' => [:security],
+      'masked_attributes.unmasked_without_user.' => [:security],
       'model_bindings.' => [:by_setting, 'ModelBindings::SEVERITY: tenant_model is :security (tenant isolation not as ' \
                                          'configured); another user class only points an association elsewhere'],
       'audit_actor_shared_login' => [:config, 'every change is recorded; only the actor is the shared login'],
@@ -153,7 +154,8 @@ module PermissionForge
       'masking_sync_store_failed' => [:all], 'masking_sync_failed' => [:all], 'cache_process_local' => [:all],
       'cache_unannounced_masking' => [:all], 'model_bindings.' => [:all], 'unmasked_gdpr_fields' => [:all],
       'boot_check_skipped.' => [:all], 'database_unreachable' => [:all], 'cache_stale_permissions' => [:all],
-      'cache_development_masking' => [:all], 'unscoped_detection_raise_in_production' => [:all]
+      'cache_development_masking' => [:all], 'unscoped_detection_raise_in_production' => [:all],
+      'masked_attributes.unmasked_without_user.' => [:all]
     }.freeze
 
     DEVELOPMENT = ActiveSupport::EnvironmentInquirer.new('development')

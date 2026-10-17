@@ -37,15 +37,16 @@ module PermissionForge
                   'PermissionForge.without_permission_scope.')
         end
 
-        # :hide exempts the user model so sign-in can read it.
+        # :hide and :hide_in_requests exempt the user model so sign-in can read it.
         def user_model_unmasked_without_user
-          return unless configuration.hide_masked_attributes_without_user?
+          return unless configuration.hide_masked_attributes_without_user_in_requests?
 
           names = user_model_resource_names
           return if names.empty?
 
           finding(:low, :user_model_unmasked_without_user, 'The user model is not masked with nobody signed in',
-                  'masked_attributes_nil_user_strategy is :hide, but the user model is exempt so that sign-in ' \
+                  "masked_attributes_nil_user_strategy is :#{configuration.masked_attributes_nil_user_strategy}, " \
+                  'but the user model is exempt so that sign-in ' \
                   "can read it: with nobody signed in, #{user_model.name}'s columns — password digests and " \
                   'reset or confirmation tokens included — read as stored through its getters and as_json. ' \
                   'Do not render it with no current user. Another authenticatable model (a second Devise ' \

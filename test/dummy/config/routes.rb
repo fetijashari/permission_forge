@@ -16,4 +16,7 @@ Rails.application.routes.draw do
     get 'customers/:id', action: :show
     patch 'customers/:id', action: :update
   end
+
+  # Masking with nobody signed in inside a web request: a public page.
+  get 'pf_public/customers/:id', to: 'pf_public_pages#show'
 end

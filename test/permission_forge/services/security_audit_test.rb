@@ -44,6 +44,27 @@ module PermissionForge
         assert_empty hardened.at_least(:medium)
       end
 
+      # GitHub #11: :bypass is reported with :hide_in_requests as the remedy and
+      # its trade-off; under :hide_in_requests an info names what still reads
+      # as stored; :hide reports neither.
+      test 'masking with nobody signed in: :bypass is medium and recommends :hide_in_requests, which leaves an info' do
+        bypass = item_for(audit, :masked_nil_user_bypass)
+        assert_equal :medium, bypass.severity
+        assert_match 'web request', bypass.detail
+        assert_match 'Set it to :hide_in_requests', bypass.detail
+        assert_match 'field.unmasked_without_user', bypass.detail
+        assert_match 'Trade-off', bypass.detail
+
+        in_requests = audit(masked_attributes_nil_user_strategy: :hide_in_requests)
+        assert_nil item_for(in_requests, :masked_nil_user_bypass)
+        note = item_for(in_requests, :masked_nil_user_outside_requests)
+        assert_equal :info, note.severity
+        assert_match(/jobs, rake tasks, the runner and the console/, note.detail)
+
+        everywhere = audit(masked_attributes_nil_user_strategy: :hide)
+        assert_empty codes(everywhere) & %i[masked_nil_user_bypass masked_nil_user_outside_requests]
+      end
+
       # a-onboarding #54 / e-operations #67: under :strict (auto_query_scoping on) the
       # finding still said "enable auto_query_scoping".
       test 'no_rules advises enabling auto_query_scoping only while it is off' do

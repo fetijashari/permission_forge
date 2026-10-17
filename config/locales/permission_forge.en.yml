@@ -275,6 +275,8 @@ en:
           access: "%{actor} read %{record}."
           sensitive_acknowledged: "%{actor} confirmed that the field %{record} in
             %{set} is meant to be readable unmasked."
+          unmasked_without_user: A field of %{model} was read unmasked in a web request
+            with nobody signed in.
         group_membership:
           added: "%{actor} added %{person} to %{group}."
           changed: "%{actor} changed %{person}'s membership of %{group}."
@@ -1795,9 +1797,12 @@ en:
             them from the model.
           name: Mask virtual fields on models
         masked_attributes_nil_user_strategy:
-          desc: 'Whether masked models return their stored values or hidden ones when
-            there is no current user (jobs, mailers, the console). The user model
-            stays readable: sign-in reads it before anyone is signed in.'
+          desc: 'What masked models return when there is no current user. bypass:
+            the stored values everywhere (each read in a web request is logged and
+            published as an audit event). hide_in_requests: hidden values in web requests
+            (a public page, a controller that forgot sign-in), the stored values in
+            jobs, rake tasks and the console. hide: hidden values everywhere. The
+            user model stays readable: sign-in reads it before anyone is signed in.'
           name: Masked attributes with nobody signed in
         masked_write_protection:
           desc: Stops a masked value like “•••• 4821” from being saved back over the
@@ -1924,7 +1929,8 @@ en:
         gdpr_defaults: New sensitive columns start masked.
         http_basic_auth_enabled: Access to these screens is protected.
         masked_attributes_nil_user_strategy: Masked models hide their values when
-          nobody is signed in (the user model stays readable for sign-in).
+          nobody is signed in, in web requests at least (the user model stays readable
+          for sign-in).
         masked_write_protection: Masked values are never written back.
         nil_user_strategy: Code without a signed-in user sees no records.
         no_read_access_strategy: Signed-in users without Read on a resource see none

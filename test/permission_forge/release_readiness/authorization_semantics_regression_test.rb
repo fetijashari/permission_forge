@@ -297,10 +297,12 @@ module PermissionForge
         assert_not_includes codes, :masked_nil_user_bypass
       end
 
-      test 'CS-4 the generated initializer offers :hide, commented, with the trade-off; the admin lists the setting' do
+      test 'CS-4 the generated initializer sets :hide_in_requests and names :hide with the trade-off; the admin lists the setting' do
         template = render_install_template('initializer.rb.tt')
-        assert_includes template, '# config.masked_attributes_nil_user_strategy = :hide'
-        assert_match(/jobs?.*mailers?|mailers?.*jobs?/i, template[template.index('masked_attributes_nil_user_strategy') - 900, 1200])
+        assert_match(/^  config\.masked_attributes_nil_user_strategy = :hide_in_requests$/, template)
+        section = template[template.index('# Masked attributes with nobody signed in'), 700]
+        assert_match(/:hide also hides them\s+#\s+in jobs/, section)
+        assert_match(/web request with nobody signed in/, section)
 
         PermissionForge.configuration.masked_attributes_nil_user_strategy = :hide
         row = PermissionForge::Admin::SettingsCatalog.new.row(:masked_attributes_nil_user_strategy)

@@ -52,7 +52,7 @@ stored in database tables and managed in the PermissionForge admin. `User` inclu
   `error.failure_messages` the rules' own `failure_message` texts. Both denial errors answer 403 when
   nothing rescues them; a `rescue_from` decides otherwise.
 - With no current user: rules follow `config.nil_user_strategy` (default `:bypass` = no rules), masking
-  follows `masked_attributes_nil_user_strategy` (default `:bypass` = raw values; `:hide`; the user model is exempt), `FiltersResponseAttributes` follows `response_filter_nil_user_strategy` (default
+  follows `masked_attributes_nil_user_strategy` (default `:bypass` = raw values, a read in a web request is logged and published as `field.unmasked_without_user`; `:hide_in_requests` = hidden in web requests, raw in jobs and the console, what new installs get; `:hide` = hidden everywhere; the user model is exempt), `FiltersResponseAttributes` follows `response_filter_nil_user_strategy` (default
   `:bypass`), and `PermitsAttributes` returns `{}`.
 
 ### Writes

@@ -27,7 +27,10 @@ module PermissionForge
     #
     # With no current user every value is returned as stored, unless
     # config.masked_attributes_nil_user_strategy = :hide, which hides every
-    # guarded attribute instead (the primary key and the raw paths excepted).
+    # guarded attribute instead (the primary key and the raw paths excepted),
+    # or :hide_in_requests, which does so inside a web request only
+    # (PermissionForge::WebRequest). Under :bypass a value returned as stored
+    # inside a web request is recorded (field.unmasked_without_user).
     #
     # @example Include in a model
     #   class Customer < ApplicationRecord
@@ -243,8 +246,7 @@ module PermissionForge
           masked_attributes_applied: applied_in_chain?(klass),
           primary_key: klass.primary_key,
           is_primary_key: klass.primary_key.to_s == attr_name.to_s,
-          current_user_present: !user.nil?,
-          masked_attributes_nil_user_strategy: config.masked_attributes_nil_user_strategy, user_model_exempt: config.user_model_class?(klass),
+          current_user_present: !user.nil?, **explain_without_user(config, klass),
           user_responds_to_field_permissions: user.respond_to?(:field_permissions),
           resource_in_permissions_hash: entries?(user, chain),
           field_configured: !field.nil?,
@@ -255,6 +257,13 @@ module PermissionForge
           returned_value: record.public_send(attr_name)
         }
       end
+
+      # What explain reports about reads with nobody signed in.
+      def self.explain_without_user(config, klass)
+        { masked_attributes_nil_user_strategy: config.masked_attributes_nil_user_strategy,
+          user_model_exempt: config.user_model_class?(klass), in_web_request: PermissionForge::WebRequest.active? }
+      end
+      private_class_method :explain_without_user
 
       # Whether the user's hash has a resource entry along the chain.
       def self.entries?(user, chain)
@@ -317,12 +326,13 @@ module PermissionForge
       private_class_method :decide
 
       # What the guard does with no user (config.masked_attributes_nil_user_strategy;
-      # the user model is exempt from :hide).
+      # the user model is exempt from :hide and :hide_in_requests).
       def self.without_user_decision(klass)
         config = PermissionForge.configuration
-        return :no_user_bypassed unless config.hide_masked_attributes_without_user?
+        return :no_user_hidden if config.hide_masked_attributes_without_user_for?(klass)
+        return :no_user_user_model_exempt if config.hide_masked_attributes_without_user_in_requests? && config.user_model_class?(klass)
 
-        config.user_model_class?(klass) ? :no_user_user_model_exempt : :no_user_hidden
+        :no_user_bypassed
       end
       private_class_method :without_user_decision
 
@@ -362,13 +372,15 @@ module PermissionForge
 
       # The user is resolved once for the whole hash. With no user every
       # value is returned as stored (or hidden, under
-      # config.masked_attributes_nil_user_strategy = :hide); the decisions
-      # (bypassed) are still published, as for a getter or as_json, but only
-      # when someone listens.
+      # config.masked_attributes_nil_user_strategy = :hide, and :hide_in_requests
+      # inside a web request); the decisions (bypassed) are still published,
+      # as for a getter or as_json, but only when someone listens, and each
+      # attribute returned as stored inside a web request is recorded
+      # (field.unmasked_without_user).
       def attributes
         raw = super
         user = pf_guarded_user
-        return raw unless user || pf_hide_without_user? || PermissionForge::Audit::FieldAccess::GATE.open?
+        return raw unless user || pf_guard_without_user? || PermissionForge::Audit::FieldAccess::GATE.open?
 
         PermissionForge::Audit::FieldAccess.read(self, self.class.name, record: self) do
           pf_guard_attributes_hash(raw, user)
@@ -477,12 +489,19 @@ module PermissionForge
         name == self.class.primary_key || pf_raw_store_column?(name) || name == pf_validation_read
       end
 
-      # config.masked_attributes_nil_user_strategy = :hide — with no user
-      # every guarded attribute is hidden (AttributeAccessGuard#without_user),
-      # except on the user model, which sign-in reads before anyone is
-      # signed in.
+      # config.masked_attributes_nil_user_strategy = :hide (and
+      # :hide_in_requests inside a web request) — with no user every guarded
+      # attribute is hidden (AttributeAccessGuard#without_user), except on
+      # the user model, which sign-in reads before anyone is signed in.
       def pf_hide_without_user?
         PermissionForge.configuration.hide_masked_attributes_without_user_for?(self.class)
+      end
+
+      # Whether a read with no user goes through the guard attribute by
+      # attribute: it hides them, or records them (inside a web request
+      # under :bypass).
+      def pf_guard_without_user?
+        PermissionForge.configuration.masked_attributes_without_user_for(self.class) != :bypass
       end
 
       # Every guarded read of this record is one field.access read

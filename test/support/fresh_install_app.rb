@@ -51,6 +51,7 @@ YAML
 File.write(File.join(APP_ROOT, 'config/routes.rb'), <<~ROUTES)
   Rails.application.routes.draw do
     mount PermissionForge::Engine, at: '/permissions'
+    get '/walk_ins/:id', to: 'walk_ins#show'
   end
 ROUTES
 Dir.chdir(APP_ROOT)
@@ -79,6 +80,15 @@ end
 
 class Customer < ActiveRecord::Base
   include PermissionForge::Concerns::PermissionScopedFindable
+end
+
+# A public page of the host: nobody signed in, a masked model read in a web
+# request (the generated initializer's :hide_in_requests hides it there).
+class WalkInsController < ActionController::Base
+  def show
+    customer = Customer.find_by(id: params[:id])
+    render json: [customer.name, customer.email]
+  end
 end
 
 # Two ids that an integer column would both truncate to 1, and ones it would
@@ -112,6 +122,7 @@ module FreshInstallSignIn
   # not raise NameError.
   def signed_out_checks
     record = Customer.create!(name: 'walk-in', email: 'walk-in@example.test', owner_id: @bob.id)
+    @walk_in_id = record.id
     { signed_out_current_user: PermissionForge.current_user.inspect,
       signed_out_masked_attributes: PermissionForge::Concerns::MaskedAttributes.applied?(Customer) }.merge(signed_out_reads(record.id))
   rescue StandardError => e
@@ -361,14 +372,26 @@ module FreshInstall
       admin_permission_sets: get('/permissions/permission_sets', basic),
       admin_permission_set: get("/permissions/permission_sets/#{@set.id}", basic),
       admin_person: get("/permissions/people/#{@ann.id}", basic),
-      api_when_disabled: get('/permissions/api/permission_sets') }
+      api_when_disabled: get('/permissions/api/permission_sets'),
+      signed_out_request_read: get_json("/walk_ins/#{@walk_in_id}") }
   end
 
   # Closes the body, as a server does: that ends the request's executor run.
   def get(path, headers = {})
+    request(path, headers).first
+  end
+
+  def get_json(path)
+    status, text = request(path, {})
+    status == 200 ? JSON.parse(text) : status
+  end
+
+  def request(path, headers)
     status, _headers, body = Rails.application.call(Rack::MockRequest.env_for("http://localhost#{path}", headers))
+    text = +''
+    body.each { |chunk| text << chunk }
     body.close if body.respond_to?(:close)
-    status
+    [status, text]
   end
 end
 

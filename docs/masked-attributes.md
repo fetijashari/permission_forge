@@ -164,7 +164,7 @@ Nothing is revealed this way: a column that *was* loaded and that the user may n
 `inspect`, `pretty_print` / `pp` and `attribute_for_inspect` print what the current user's getters return (Rails 7.1 to 8.1), with Rails' `filter_attributes` applied on top: a record in a log line, an error report or a console no longer prints masked and hidden values in full. Two things to know:
 
 - They are not audited reads: they write no `field.access` event and do not call `on_field_filtered`.
-- They never raise. A read that fails (a dead cache store, a failed transaction), or Rails' formatting of the value that fails, prints the hidden value, never the stored one. Under `masked_attributes_nil_user_strategy = :hide` the hidden value prints when nobody is signed in.
+- They never raise. A read that fails (a dead cache store, a failed transaction), or Rails' formatting of the value that fails, prints the hidden value, never the stored one. Under `masked_attributes_nil_user_strategy = :hide` (and `:hide_in_requests` inside a web request) the hidden value prints when nobody is signed in.
 
 Under `unconfigured_field_strategy = :block`, columns without a field row (timestamps, foreign keys) print as `nil`, as their getters return. With no current user the stored values print, as the getters return them. `MaskedAttributes.explain` remains the way to see the raw value next to the returned one.
 
@@ -298,7 +298,7 @@ The decision is the same one columns get, made by `AttributeAccessGuard` (so `co
 | `read_access: true, mask_access: true` | The mask, when the value is a String, Symbol or Numeric. `config.hidden_attribute_value` for anything else. |
 | `read_access: true, mask_access: false` | The real value |
 | No entry | `config.unconfigured_field_strategy` (a declared field with no row has an entry under `extra_fields_default_access = :grant`) |
-| No current user | The real value under `masked_attributes_nil_user_strategy = :bypass` (the default); `config.hidden_attribute_value` for every guarded attribute under `:hide`, except on the user model (`user_class` and its subclasses), which reads as stored |
+| No current user | The real value under `masked_attributes_nil_user_strategy = :bypass` (the default; inside a web request the read is logged and published as `field.unmasked_without_user`); `config.hidden_attribute_value` for every guarded attribute under `:hide`, and under `:hide_in_requests` inside a web request (the real value outside one), except on the user model (`user_class` and its subclasses), which reads as stored |
 
 An array, hash, record, boolean or date is never masked: a mask of its `to_s` would be meaningless and could leak, so a masked field with such a value is hidden instead. That holds for every mask strategy, including a custom one that returns values it does not recognise unchanged: the value is never passed to the strategy.
 
@@ -358,7 +358,26 @@ A resource generated before keeps its fields until you sync them: on an existing
 
 ## Without a current user
 
-When `PermissionForge.current_user` returns `nil` (background jobs, mailers, the console, migrations), the concern follows `config.masked_attributes_nil_user_strategy`, not `nil_user_strategy` (that option governs the row-level rules). `:bypass` (the default) returns the stored values. `:hide` hides every guarded attribute: getters, `read_attribute`, `[]`, `attributes` (keys left out, or present with `hidden_attribute_value` when `omit_hidden_in_attributes_hash` is false), `as_json` (only the primary key remains), the wrapped virtual readers and store accessors. The primary key and the raw paths listed under "What is not intercepted" are untouched. `MaskedAttributes.explain_all` reports `:no_user_bypassed`, `:no_user_hidden` or `:no_user_user_model_exempt`; `explain` has `user_model_exempt`. Under `:hide` the user model (`user_class` and its subclasses) reads as stored with nobody signed in: authentication reads it before anyone is signed in, so hiding it would lock everyone out. Do not render it with no current user (`rake permission_forge:audit` reports `user_model_unmasked_without_user`); another authenticatable model is not exempt. Code that reads other masked models with no user then sees hidden values: set the current user there. `rake permission_forge:audit` reports `:bypass` as `masked_nil_user_bypass` (medium).
+When `PermissionForge.current_user` returns `nil` (background jobs, mailers, the console, migrations, a public page, a webhook, a controller that forgot authentication, a resolver bug), the concern follows `config.masked_attributes_nil_user_strategy`, not `nil_user_strategy` (that option governs the row-level rules):
+
+| Value | In a web request | Elsewhere (jobs, rake, runner, console) |
+|---|---|---|
+| `:bypass` (the library default) | stored values; each guarded attribute so returned is recorded (below) | stored values |
+| `:hide_in_requests` (the generated initializer, `config.preset = :strict`) | hidden | stored values |
+| `:hide` | hidden | hidden |
+
+Hidden means every guarded attribute: getters, `read_attribute`, `[]`, `attributes` (keys left out, or present with `hidden_attribute_value` when `omit_hidden_in_attributes_hash` is false), `as_json` (only the primary key remains), the wrapped virtual readers and store accessors. The primary key and the raw paths listed under "What is not intercepted" are untouched. The user model (`user_class` and its subclasses) reads as stored with nobody signed in under every value: authentication reads it before anyone is signed in, so hiding it would lock everyone out. Do not render it with no current user (`rake permission_forge:audit` reports `user_model_unmasked_without_user`); another authenticatable model is not exempt.
+
+**What a web request is.** Every request your application serves, from the top of its middleware stack until the response is finished (`PermissionForge::WebRequest`; the engine puts its middleware first in your stack): your controllers and their `before_action`s, the mounted engine, the middlewares below it (a tenant or subdomain lookup), a streamed body, and a job run with `perform_now` (or the `:inline` adapter) or a mail sent with `deliver_now` during the request. Not a web request: a job run by a worker (`perform_later`, also on the `:async` adapter), Action Cable channel actions, rake tasks, `bin/rails runner`, the console, and `ActionController::TestCase` controller tests, which call the controller without the middleware stack (integration and system tests go through it).
+
+**The trade-off of `:hide_in_requests`.** A page that reads a masked model before anyone signs in then reads hidden values: a tenant looked up by subdomain (its id, the primary key, stays readable), a public sign-up form that renders the record it just created, a mail sent with `deliver_now` from a request with nobody signed in. Sign the request in first, read the raw column there (`read_attribute_before_type_cast`), or deliver the mail with `deliver_later`. That is why the library default stays `:bypass` for existing apps; new installs get `:hide_in_requests` from the generator. `:hide` also hides in jobs and mailers: set the current user there.
+
+**What `:bypass` records.** Inside a web request with nobody signed in, each guarded attribute returned as stored (exactly the reads `:hide_in_requests` would hide) is:
+
+- published as the runtime audit event `field.unmasked_without_user` (group `:bypass`; stored when `config.audit_runtime_events` includes `:bypass`), once per request per model and attribute, with the model, the attribute, and the request's method, path and endpoint (and its request id and IP as columns). Never a value. When nobody listens and the group is not stored, nothing is built: the read costs one check;
+- written to the log once per model and process as a SECURITY warning naming the model, the attribute and the request.
+
+`MaskedAttributes.explain_all` reports `:no_user_bypassed`, `:no_user_hidden` or `:no_user_user_model_exempt`; `explain` has `user_model_exempt` and `in_web_request`. `rake permission_forge:audit` reports `:bypass` as `masked_nil_user_bypass` (medium) and `:hide_in_requests` as `masked_nil_user_outside_requests` (info).
 
 ## Validations
 
