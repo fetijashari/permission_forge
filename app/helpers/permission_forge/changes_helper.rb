@@ -42,16 +42,25 @@ module PermissionForge
       "#{text} #{pf_action_managed_note(resource, action.name)}"
     end
 
-    # The first row for an action makes it managed for everyone; later rows
-    # join the sets that already manage it.
+    # The first row for an action makes it managed for everyone (under :allow
+    # that restricts it; under :block, the default, it opens it to the people
+    # permitted); later rows join the sets that already manage it.
     def pf_action_managed_note(resource, key)
       return pf_ui('changes.action_managed_later') unless resource.in_effect?
 
       across = pf_action_across(resource.name)
-      return pf_ui('changes.action_managed_first') unless across.managed?(key)
+      return pf_action_managed_first unless across.managed?(key)
 
       sets = across.permitting_sets(key).map(&:name)
       sets.any? ? pf_ui('changes.action_managed_already', sets: sets.join(', ')) : pf_ui('changes.action_managed_nobody')
+    end
+
+    def pf_action_managed_first
+      if PermissionForge.configuration.allow_unconfigured_actions?
+        pf_ui('changes.action_managed_first_allowed')
+      else
+        pf_ui('changes.action_managed_first_blocked')
+      end
     end
 
     # One lookup per resource name per page.

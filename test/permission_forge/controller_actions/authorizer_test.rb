@@ -338,7 +338,7 @@ module PermissionForge
       test 'row 4 costs one index read' do
         index = SpyIndex.new
 
-        assert_allowed :resource_not_managed, decide('suppliers', 'sync', index: index)
+        assert_denied :resource_not_managed_blocked, decide('suppliers', 'sync', index: index)
         assert_equal ['Supplier'], index.calls
       end
 
@@ -558,11 +558,12 @@ module PermissionForge
       test 'row 8 costs one index read' do
         index = SpyIndex.new('Customer' => [])
 
-        assert_allowed :action_not_managed, decide('customers', 'archive', index: index)
+        assert_denied :action_not_managed_blocked, decide('customers', 'archive', index: index)
         assert_equal ['Customer'], index.calls
       end
 
       test 'the first row for an action makes it managed for everyone' do
+        PermissionForge.configuration.unconfigured_action_strategy = :allow
         assert_allowed :action_not_managed, decide('customers', 'archive')
 
         other_set_with(action: 'archive', permitted: true)
@@ -621,12 +622,12 @@ module PermissionForge
 
       test 'configuration is injectable' do
         configuration = PermissionForge::Configuration.new
-        configuration.unconfigured_action_strategy = :block
+        configuration.unconfigured_action_strategy = :allow
         configuration.nil_user_strategy = :deny
 
-        assert_denied :action_not_managed_blocked, decide('customers', 'archive', configuration: configuration)
+        assert_allowed :action_not_managed, decide('customers', 'archive', configuration: configuration)
         assert_denied :nil_user_denied, decide('customers', 'index', user: nil, configuration: configuration)
-        assert_allowed :action_not_managed, decide('customers', 'archive')
+        assert_denied :action_not_managed_blocked, decide('customers', 'archive')
       end
 
       test 'unknown keywords are rejected' do

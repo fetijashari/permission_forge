@@ -288,12 +288,14 @@ The number on the **Actions** tab counts the rows the tab shows: configured acti
 
 On a discovered row choose *Add and permit* or *Add, not permitted* (in a muting set: *Add and block*), or use **Add all discovered actions** under the list. Then **Review and save**: nothing is saved until you confirm, like every other batched edit. **Details** on the row opens a drawer with the routes and the action in every Permission Set.
 
-**Adding the first row for an action makes it managed for everyone.** From then on only people whose Permission Sets permit it can run it. Everyone else is refused, including people who could run it while no set managed it. The tab says so above the list, and the review page says it for each action, with the sets that already permit it:
+**Adding the first row for an action makes it managed for everyone.** From then on only people whose Permission Sets permit it can run it. Under `unconfigured_action_strategy = :block` (the default since 0.15) nobody could run it before, so the first row opens it to the people permitted; under `:allow` everyone could, so it restricts it, and everyone else is refused from then on. The tab says which above the list, and the review page says it for each action, with the sets that already permit it:
 
 ```
-Customer: Archive added and permitted (this makes it managed: from now on only people whose Permission Sets permit it can run it)
+Customer: Archive added and permitted (the first row for it: from now on the people whose Permission Sets permit it can run it; until now nobody could)
 Customer: Export added, not permitted (already managed; sets that permit it: Sales rep)
 ```
+
+Under `:allow` the first line reads "(this makes it managed: from now on only people whose Permission Sets permit it can run it)".
 
 Only keys that discovery lists for that resource can be added this way. Any other key goes through **+ Add action**, which offers the discovered keys as suggestions. Locked sets and resources (`is_editable: false`) list the discovered actions without the controls to add them, and the server refuses the change.
 

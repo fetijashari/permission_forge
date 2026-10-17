@@ -67,13 +67,13 @@ module PermissionForge
         assert_equal 'destroy', payloads.first[:data]['action_name']
       end
 
-      test 'an action nobody manages is rule.bypassed (no_rules) under :allow and denied otherwise' do
-        payloads = published('rule.bypassed') { authorize('archive') }
-        assert_equal([%w[no_rules action_guard]], payloads.map { |p| p[:data].values_at('reason', 'via') })
-
-        PermissionForge.configuration.unconfigured_action_strategy = :block
+      test 'an action nobody manages is denied by default and rule.bypassed (no_rules) under :allow' do
         assert_raises(PermissionForge::ActionNotAuthorizedError) { authorize('archive') }
         assert_equal 'action_not_managed_blocked', assert_audit_event('action.denied').data['reason']
+
+        PermissionForge.configuration.unconfigured_action_strategy = :allow
+        payloads = published('rule.bypassed') { authorize('archive') }
+        assert_equal([%w[no_rules action_guard]], payloads.map { |p| p[:data].values_at('reason', 'via') })
       end
 
       test 'the error is built as before by hosts' do

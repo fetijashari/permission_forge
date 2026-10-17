@@ -1326,10 +1326,15 @@ sq:
           këtij burimi, ose shkruaj një çelës që e kontrollon kodi yt.
         permitted: I lejuar
       managed_note:
-        body: Sapo një Grup lejesh aktiv ka një rresht për një veprim, vetëm personat
-          që e kanë të lejuar nga Grupet e tyre të lejeve mund ta kryejnë. Të gjithë
-          të tjerëve u refuzohet.
-        title: Shtimi i një veprimi e bën të menaxhuar për të gjithë
+        body_allowed: Sapo një Grup lejesh aktiv ka një rresht për një veprim, vetëm
+          personat që e kanë të lejuar nga Grupet e tyre të lejeve mund ta kryejnë.
+          Të gjithë të tjerëve u refuzohet.
+        body_blocked: Derisa një Grup lejesh aktiv të ketë një rresht për një veprim,
+          askush nuk mund ta kryejë. Pasi ta ketë, mund ta kryejnë personat që e kanë
+          të lejuar nga Grupet e tyre të lejeve; të gjithëve të tjerëve vazhdon t'u
+          refuzohet.
+        title_allowed: Shtimi i një veprimi e bën të menaxhuar për të gjithë
+        title_blocked: Shtimi i një veprimi ua hap atë personave që e kanë të lejuar
         unmanaged_allowed: Një veprim që nuk e menaxhon asnjë Grup lejesh mund ta
           kryejnë të gjithë.
         unmanaged_blocked: Një veprim që nuk e menaxhon asnjë Grup lejesh është i
@@ -1999,6 +2004,9 @@ sq:
           aktive, por pa kredenciale) ose të pambrojtura (pa fjalëkalim dhe pa kontrollues
           admini të personalizuar).
         masked_write_protection: Vlerat e maskuara mund të ruhen mbi të dhënat e vërteta.
+        unconfigured_action_strategy: Veprimet e kontrolluesve që askush nuk i ka
+          konfiguruar mund t'i kryejë çdo përdorues i identifikuar (zgjedhje e qartë
+          kundër parazgjedhjes :block).
         unconfigured_field_strategy: Kolonat që askush nuk i ka konfiguruar u shfaqen
           pa maskim kujtdo që mund ta lexojë burimin.
       row:
@@ -2221,8 +2229,11 @@ sq:
       cancel: Anulo
       changes:
         action_managed_already: "(tashmë i menaxhuar; grupet që e lejojnë: %{sets})"
-        action_managed_first: "(kjo e bën të menaxhuar: tani e tutje vetëm personat
-          që e kanë të lejuar nga Grupet e tyre të lejeve mund ta kryejnë)"
+        action_managed_first_allowed: "(kjo e bën të menaxhuar: tani e tutje vetëm
+          personat që e kanë të lejuar nga Grupet e tyre të lejeve mund ta kryejnë)"
+        action_managed_first_blocked: "(rreshti i parë për të: tani e tutje mund ta
+          kryejnë personat që e kanë të lejuar nga Grupet e tyre të lejeve; deri tani
+          askush nuk mundte)"
         action_managed_later: "(hyn në fuqi sapo ky grup dhe ky burim të aktivizohen)"
         action_managed_nobody: "(tashmë i menaxhuar; asnjë Grup lejesh nuk e lejon
           ende)"

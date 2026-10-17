@@ -1306,9 +1306,14 @@ en:
           suggestions, or type a key your code checks.
         permitted: Permitted
       managed_note:
-        body: As soon as one active Permission Set has a row for an action, only people
-          whose Permission Sets permit it can run it. Everyone else is refused.
-        title: Adding an action makes it managed for everyone
+        body_allowed: As soon as one active Permission Set has a row for an action,
+          only people whose Permission Sets permit it can run it. Everyone else is
+          refused.
+        body_blocked: Until an active Permission Set has a row for an action, nobody
+          can run it. Once one has, the people whose Permission Sets permit it can
+          run it; everyone else is still refused.
+        title_allowed: Adding an action makes it managed for everyone
+        title_blocked: Adding an action opens it to the people it is permitted to
         unmanaged_allowed: An action no Permission Set manages can be run by everyone.
         unmanaged_blocked: An action no Permission Set manages is blocked for everyone.
       new:
@@ -1948,6 +1953,8 @@ en:
           on, but no credentials) or unprotected (no password and no custom admin
           controller).
         masked_write_protection: Masked values can be saved back over real data.
+        unconfigured_action_strategy: Controller actions nobody configured can be
+          run by every signed-in user (an explicit opt-out from the :block default).
         unconfigured_field_strategy: Columns nobody configured are shown unmasked
           to anyone who can read the resource.
       row:
@@ -2167,8 +2174,10 @@ en:
       cancel: Cancel
       changes:
         action_managed_already: "(already managed; sets that permit it: %{sets})"
-        action_managed_first: "(this makes it managed: from now on only people whose
-          Permission Sets permit it can run it)"
+        action_managed_first_allowed: "(this makes it managed: from now on only people
+          whose Permission Sets permit it can run it)"
+        action_managed_first_blocked: "(the first row for it: from now on the people
+          whose Permission Sets permit it can run it; until now nobody could)"
         action_managed_later: "(takes effect once this set and this resource are on)"
         action_managed_nobody: "(already managed; no Permission Set permits it yet)"
         action_muted: "%{resource}: %{action} blocked"

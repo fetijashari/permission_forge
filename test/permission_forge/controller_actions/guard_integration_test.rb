@@ -31,8 +31,9 @@ module PermissionForge
         PermissionForge.configuration.current_user_resolver = -> { user }
       end
 
-      def block_unconfigured!
-        PermissionForge.configuration.unconfigured_action_strategy = :block
+      # The explicit opt-out: a mapped action no Permission Set manages runs.
+      def allow_unconfigured!
+        PermissionForge.configuration.unconfigured_action_strategy = :allow
       end
 
       # --- CRUD actions -----------------------------------------------------------
@@ -59,7 +60,7 @@ module PermissionForge
         get '/customers'
         assert_response :forbidden
 
-        block_unconfigured!
+        allow_unconfigured!
 
         get '/customers'
         assert_response :forbidden
@@ -67,20 +68,34 @@ module PermissionForge
 
       # --- custom actions ---------------------------------------------------------
 
-      test 'an action nobody lists follows unconfigured_action_strategy' do
-        get '/customers/export'
-        assert_response :ok
-
-        post '/customers/1/archive'
-        assert_response :ok
-
-        block_unconfigured!
-
+      # Issue #10: refused (403, through the engine's rescue_responses) by
+      # default; :allow is the explicit opt-out.
+      test 'an action nobody lists is refused by default and runs under :allow' do
         get '/customers/export'
         assert_response :forbidden
 
         post '/customers/1/archive'
         assert_response :forbidden
+
+        allow_unconfigured!
+
+        get '/customers/export'
+        assert_response :ok
+
+        post '/customers/1/archive'
+        assert_response :ok
+      end
+
+      test 'a resource no Permission Set manages is refused by default and runs under :allow' do
+        @resource.destroy!
+
+        get '/customers'
+        assert_response :forbidden
+
+        allow_unconfigured!
+
+        get '/customers'
+        assert_response :ok
       end
 
       test 'a listed action is allowed only when it is permitted, under either strategy' do
@@ -94,7 +109,7 @@ module PermissionForge
         get '/customers/export'
         assert_response :ok
 
-        block_unconfigured!
+        allow_unconfigured!
 
         get '/customers/export'
         assert_response :ok
@@ -106,6 +121,7 @@ module PermissionForge
       end
 
       test 'listing an action in any set makes it managed for everyone' do
+        allow_unconfigured!
         post '/customers/1/archive'
         assert_response :ok
 
@@ -143,6 +159,7 @@ module PermissionForge
       # --- declared mapping -------------------------------------------------------
 
       test 'the merge controller is checked as the merge action, not as create' do
+        allow_unconfigured!
         post '/customers/1/merge'
         assert_response :ok
 
@@ -164,16 +181,18 @@ module PermissionForge
       end
 
       test 'the merge action follows unconfigured_action_strategy while nobody lists it' do
-        block_unconfigured!
-
         post '/customers/1/merge'
         assert_response :forbidden
+
+        allow_unconfigured!
+
+        post '/customers/1/merge'
+        assert_response :ok
       end
 
       # --- unguarded and unmapped -------------------------------------------------
 
       test 'a controller without the guard is never checked' do
-        block_unconfigured!
         PermissionForge.configuration.nil_user_strategy = :deny
 
         get '/reports'
@@ -217,7 +236,6 @@ module PermissionForge
       # --- bypass -----------------------------------------------------------------
 
       test 'action_guard_bypass lets the chosen users through' do
-        block_unconfigured!
         outsider = create_user(name: 'Admin')
         received = []
         PermissionForge.configuration.action_guard_bypass = lambda do |user, controller|
@@ -241,7 +259,6 @@ module PermissionForge
       end
 
       test 'a raising bypass refuses instead of letting the request through' do
-        block_unconfigured!
         PermissionForge.configuration.action_guard_bypass = ->(_user, _controller) { raise 'boom' }
 
         post '/customers/1/archive'

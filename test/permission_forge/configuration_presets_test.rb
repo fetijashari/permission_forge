@@ -166,6 +166,22 @@ module PermissionForge
       kept.each { |option, value| assert_equal value.inspect, already_closed.fetch(option.to_s), option }
     end
 
+    # Issue #10: closed by default since 0.15, in every preset; :allow is the
+    # host's opt-out, and :strict reports it as an override.
+    test 'unmanaged controller actions are refused under every preset, and :allow is an explicit override' do
+      assert_equal :block, config.unconfigured_action_strategy
+      assert_equal :block, Presets::COMPAT.fetch(:unconfigured_action_strategy)
+      assert_equal :block, Presets::STRICT.fetch(:unconfigured_action_strategy)
+
+      config.preset = :strict
+      config.unconfigured_action_strategy = :allow
+      config.preset = :compat
+
+      assert_equal :allow, config.unconfigured_action_strategy, 'an explicit :allow survives a preset'
+      config.preset = :strict
+      assert_equal({ unconfigured_action_strategy: :allow }, config.options_looser_than_strict)
+    end
+
     # --- SecurityAudit -------------------------------------------------------------
 
     test 'the security audit reports the preset' do
@@ -207,6 +223,17 @@ module PermissionForge
       assert_predicate row, :changed?
     end
 
+    test 'the Settings page flags an explicit :allow for unmanaged controller actions' do
+      assert_predicate Admin::SettingsCatalog.new.row(:unconfigured_action_strategy), :ok?
+
+      PermissionForge.configuration.unconfigured_action_strategy = :allow
+      row = Admin::SettingsCatalog.new.row(:unconfigured_action_strategy)
+
+      assert_predicate row, :warn?
+      assert_equal ':block', row.recommended
+      assert_equal 'block', row.default.to_s
+    end
+
     # --- the generated initializer ---------------------------------------------------
 
     # The safe subset is written explicitly; the preset is offered commented,
@@ -221,6 +248,9 @@ module PermissionForge
       assert_equal :rails_cache, generated.cache_backend
       assert_equal :bypass, generated.nil_user_strategy, 'library default'
       assert_equal :bypass, generated.masked_attributes_nil_user_strategy, 'library default'
+      assert_equal :block, generated.unconfigured_action_strategy, 'library default'
+      assert_includes source.lines,
+                      "  # So, by default, is any guarded action no Permission Set manages (opt out: config.unconfigured_action_strategy = :allow).\n"
       assert_match(/^  # config\.preset = :strict$/, source)
       assert_match(/belongs_to presence check/, source)
       assert_match(/Never include PermissionScopedFindable in the user model/, source)

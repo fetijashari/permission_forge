@@ -113,10 +113,10 @@ module PermissionForge
       test 'an action nobody manages follows unconfigured_action_strategy' do
         discovery_on!
 
-        assert_equal :unmanaged_allowed, effect('archive')
+        assert_equal :unmanaged_blocked, effect('archive'), 'blocked by default'
 
-        PermissionForge.configuration.unconfigured_action_strategy = :block
-        assert_equal :unmanaged_blocked, effect('archive')
+        PermissionForge.configuration.unconfigured_action_strategy = :allow
+        assert_equal :unmanaged_allowed, effect('archive')
 
         assert_raises(PermissionForge::ConfigurationError) do
           PermissionForge.configuration.unconfigured_action_strategy = :anything_else
@@ -146,7 +146,7 @@ module PermissionForge
       test 'a row that is switched off has no effect of its own' do
         action = create_resource_action(resource: @resource, name: 'export', is_permitted: true, is_active: false)
 
-        assert_equal :unmanaged_allowed, effect('export')
+        assert_equal :unmanaged_blocked, effect('export')
 
         other = create_resource(permission_set: create_permission_set(name: 'Managers'))
         create_resource_action(resource: other, name: 'export', is_permitted: false)
@@ -160,11 +160,11 @@ module PermissionForge
         create_resource_action(resource: @resource, name: 'export', is_permitted: true)
 
         @resource.update!(is_active: false)
-        assert_equal :unmanaged_allowed, effect('export')
+        assert_equal :unmanaged_blocked, effect('export')
 
         @resource.update!(is_active: true)
         @set.update!(is_active: false)
-        assert_equal :unmanaged_allowed, effect('export')
+        assert_equal :unmanaged_blocked, effect('export')
         assert_empty rows.row('export').permitted_by
       end
 

@@ -253,7 +253,6 @@ and the preset as a commented line with what it costs. The rows that need your c
 | `response_filter_nil_user_strategy = :bypass` | `FiltersResponseAttributes` returns every attribute when there is no user | `:block` |
 | `auto_query_scoping = :off` | Only class-level `find_by` / `find_by!` and `permission_scoped` apply row rules | `:filter_only`, and use `permission_scoped` for join rules; consider RLS on PostgreSQL |
 | `no_read_access_strategy = :rules_only` | A signed-in user whose Permission Sets do not grant Read on a model (no `Resource` for it at all included) has no rules there: `find_by`, `permission_scoped` and auto-scoping return every row. Only `can_read?` (or the controller guard) refuses them | `:deny` (no rows; `find_by` raises `NotAuthorizedError` for an existing record) |
-| `unconfigured_action_strategy = :allow` | A controller action no Permission Set manages is allowed; unmapped actions are always allowed | `:block` |
 | `action_guard_nil_user_strategy = nil` | The guard follows `nil_user_strategy` (`:bypass`) for signed-out requests to mapped actions | `:deny` (new installs get it from the generator) |
 | `conditional_sets_strict_mode = false` | With an empty request context (no resolver configured), every conditional Permission Set applies, MFA- or IP-gated grants included | A `request_context_resolver` that returns the request's IP and session flags, and `true`: without a request context, conditional granting sets are then dropped and conditional muting sets still apply |
 | `mask_virtual_attributes = false` | Virtual readers (methods, store accessors, attribute-API attributes) are not masked on the model; only `PermitsAttributes` and `FiltersResponseAttributes` apply their field rows | `:auto` (or a list of models), after checking that the models' own callbacks do not need the raw values |
@@ -265,13 +264,22 @@ and the preset as a commented line with what it costs. The rows that need your c
 | `base_controller_class` / `api_base_controller_class` | With tenancy on, a request with no current tenant is refused (403) | Controllers that authenticate and set the tenant |
 | `user_active_check` | Only reported by the security audit; an inactive user keeps every grant | Revoke the assignments of users you deactivate |
 
-Upgrading to 0.15: run `bin/rails permission_forge:audit` before you deploy (see the
+Upgrading to 0.15: a controller action that maps to a Resource (in a controller that includes
+`ControllerActionGuard`) and that no Permission Set manages is now refused with 403; before 0.15 it ran.
+`bin/rails permission_forge:audit` lists those actions (`unmanaged_actions_refused`; with tenancy, each with the
+tenants that do not manage it) and the controller actions it could not check (`actions_not_checked`). Manage each one
+in a Permission Set, or opt out with `config.unconfigured_action_strategy = :allow`, which lets every signed-in user
+run them (the audit reports the opt-out as `unconfigured_actions_allowed`, medium). Actions that map to no Resource are
+never checked.
+Run `bin/rails permission_forge:audit` before you deploy (see the
 [Migration Guide](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015)).
 From 0.13: follow [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013) — a revocation made on 0.15 does not reach what 0.13 processes have cached.
 
 Already closed by default, keep them so: `api_require_authorization = true` (API changes need
 `api_action_authorization` and `api_assignment_authorization`), `admin_tenantless_access = :deny`,
-`nested_attributes_parent_fallback = false`, `unconfigured_field_strategy = :block`, and the API is off
+`nested_attributes_parent_fallback = false`, `unconfigured_field_strategy = :block`,
+`unconfigured_action_strategy = :block` (since 0.15: a mapped controller action no Permission Set manages is refused
+with 403; `:allow`, the explicit opt-out, lets every signed-in user run it), and the API is off
 (`api_enabled = false`). If you use PostgreSQL RLS, run `bin/rails permission_forge:rls:sync` after each upgrade.
 
 See [Configuration](https://github.com/fetijashari/permission_forge/blob/main/docs/configuration.md) for every option.
