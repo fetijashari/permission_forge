@@ -128,6 +128,15 @@ module PermissionForge
         ['#<User id: 1>', '[#<User>]', 'true or false', '{ a: [1] }', 'nil means nothing'].each { |text| assert_not DocBlocks.literal?(text), text }
       end
 
+      # CodeQL rb/redos: one regexp with nested repetition backtracked
+      # exponentially on these claims; they are read token by token now.
+      test 'a # => claim is read in linear time, whatever it holds' do
+        assert DocBlocks.literal?('{ "a": 1, b: 2, 3 => :c }')
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        ["{{nil,#{'9,' * 20_000}", "['9.#{'999.' * 20_000}", "['#{'9' * 50_000}"].each { |claim| assert_not DocBlocks.literal?(claim) }
+        assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 1
+      end
+
       test 'a fence of four backticks keeps an inner ```ruby as content' do
         blocks = parse("````markdown\n## Notes\n```ruby\nx = 1\n```\n````\n\n```ruby run\ny = 2\n```\n")
         assert_equal %w[markdown ruby], blocks.map(&:lang)

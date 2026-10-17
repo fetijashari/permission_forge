@@ -201,7 +201,7 @@ module PermissionForge
       private
 
       def why_reasons(key)
-        css_select("#pf-why-#{key.gsub('.', '\\.')} .pf-why__reason > span:nth-child(2) > span:first-child")
+        css_select(%([id="pf-why-#{key}"] .pf-why__reason > span:nth-child(2) > span:first-child))
           .map { |node| node.text.squish }
       end
 

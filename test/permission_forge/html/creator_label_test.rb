@@ -49,7 +49,7 @@ module PermissionForge
         assert_match admin, css_select('.pf-table').map(&:text).join(' ')
 
         get pf('/audit'), headers: @headers
-        assert_match "#{admin} created the Permission Set", response.body.gsub(/<[^>]+>/, '').squish
+        assert_match "#{admin} created the Permission Set", document_root_element.text.squish
       end
 
       test 'the audit trail CSV of a set names the creator from the creation event' do

@@ -72,7 +72,9 @@ module PermissionForge
         assert_equal [302, true, true], post.values_at('status', 'created', 'token_in_form'), post.inspect
         assert_match(%r{\A/permissions/permission_sets/\d+\z}, post['location'])
         refused = result.fetch('admin_post_without_token')
-        assert_equal [false, 'ActionController::InvalidAuthenticityToken'], refused.values_at('created', 'error'), refused.inspect
+        assert_equal false, refused['created'], refused.inspect
+        # Rails 8.2's header check (:header_or_legacy_token) names the refusal InvalidCrossOriginRequest.
+        assert_includes %w[ActionController::InvalidAuthenticityToken ActionController::InvalidCrossOriginRequest], refused['error'], refused.inspect
       end
 
       # Field test round 7 (D#67): the edit and delete forms send POST with a

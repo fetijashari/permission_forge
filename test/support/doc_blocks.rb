@@ -2,6 +2,7 @@
 
 require 'pathname'
 require 'ripper'
+require 'strscan'
 
 # The one parser of the fenced code blocks in README.md and docs/*.md, and
 # the rules every block follows (docs/doc_blocks_test.rb is the meta test;
@@ -58,12 +59,6 @@ module DocBlocks
      'a redirect to the sign-in page must resume the session first (!authenticated?): on an action opened with ' \
      'allow_unauthenticated_access a signed-in visitor reads as signed out, and SessionsController#new sends them back (R6 #99)']
   ].freeze
-
-  SCALAR = /true|false|nil|-?\d+(?:\.\d+)?|:[A-Za-z_]\w*[?!]?|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/
-  PAIR = /(?:#{SCALAR}\s*=>\s*#{SCALAR}|[A-Za-z_]\w*:\s*#{SCALAR}|"(?:[^"\\]|\\.)*":\s*#{SCALAR})/
-  # What a `# =>` comment may claim and be checked for: a scalar literal, or
-  # an Array / Hash of scalars. Ids, uuids, times and records are not.
-  LITERAL = /\A(?:#{SCALAR}|\[\s*(?:#{SCALAR}(?:\s*,\s*#{SCALAR})*)?\s*\]|\{\s*(?:#{PAIR}(?:\s*,\s*#{PAIR})*)?\s*\})\z/
 
   FENCE = /\A(?<indent>\s*)(?<fence>`{3,}|~{3,})(?<info>[^`]*)\z/
   HEADING = /\A\#{1,6}\s/
@@ -164,7 +159,7 @@ module DocBlocks
     end
   end
 
-  def literal?(claim) = LITERAL.match?(claim.to_s.strip)
+  def literal?(claim) = Literal.call(claim)
 
   # Everything the meta test reports, one message per problem.
   def problems(blocks)
@@ -258,5 +253,48 @@ module DocBlocks
     end
     checker.new(source).parse
     errors.first
+  end
+end
+
+# A `# =>` claim read as a literal (DocBlocks.literal?).
+module DocBlocks
+  module Literal
+    # What a `# =>` comment may claim and be checked for (#literal?): a scalar
+    # literal, or an Array / Hash of scalars. Ids, uuids, times and records are
+    # not. Read token by token with a StringScanner, never one regexp with
+    # nested repetition (CodeQL rb/redos: exponential backtracking).
+    SCALAR = /true|false|nil|-?\d+(?:\.\d+)?|:[A-Za-z_]\w*[?!]?|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/
+    # The key of a Hash pair: `key:`, `"key":`, or a scalar followed by `=>`.
+    PAIR_KEY = /[A-Za-z_]\w*:(?!:)|"(?:[^"\\]|\\.)*":/
+
+    module_function
+
+    def call(claim)
+      scanner = StringScanner.new(claim.to_s.strip)
+      found = if scanner.skip(/\[\s*/) then literal_items?(scanner, ']') { scanner.skip(SCALAR) }
+              elsif scanner.skip(/\{\s*/) then literal_items?(scanner, '}') { literal_pair?(scanner) }
+              else scanner.skip(SCALAR)
+              end
+      found ? scanner.eos? : false
+    end
+
+    # The items of an Array or Hash literal up to `close`, each read by the
+    # block, separated by commas.
+    def literal_items?(scanner, close)
+      return true if scanner.skip(/#{Regexp.escape(close)}/)
+
+      loop do
+        return false unless yield
+
+        scanner.skip(/\s*/)
+        return true if scanner.skip(/#{Regexp.escape(close)}/)
+        return false unless scanner.skip(/,\s*/)
+      end
+    end
+
+    def literal_pair?(scanner)
+      key = scanner.skip(PAIR_KEY) || (scanner.skip(SCALAR) && scanner.skip(/\s*=>/))
+      key && scanner.skip(/\s*/) && scanner.skip(SCALAR)
+    end
   end
 end

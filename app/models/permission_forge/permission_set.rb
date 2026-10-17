@@ -109,10 +109,11 @@ module PermissionForge
     # @return [ActiveRecord::Relation]
     def self.named(name)
       # Arel nodes, quoted when the query is compiled — no SQL string is
-      # interpolated; a fresh table, since `arel_table` keeps the prefix it
-      # was first built with (the table name is a method: table_name_prefix).
+      # interpolated (Brakeman reads that as SQL injection); `arel_table`,
+      # as PermissionSetUser and PermissionSetRule build theirs, never
+      # `Arel::Table.new` (its signature changes on Rails main).
       folded = ->(node) { Arel::Nodes::NamedFunction.new('LOWER', [Arel::Nodes::NamedFunction.new('TRIM', [node])]) }
-      where(folded.call(Arel::Table.new(table_name)[:name]).eq(folded.call(Arel::Nodes.build_quoted(name.to_s))))
+      where(folded.call(arel_table[:name]).eq(folded.call(Arel::Nodes.build_quoted(name.to_s))))
     end
 
     # Whether a set of the current tenant is named `name` (any case).

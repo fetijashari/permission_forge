@@ -5,7 +5,7 @@ module DocsApp
   # `file=` and `run` blocks, in order) in the docs app: one console per
   # document (one binding, the app as installed), a `file=` block written
   # into the app and the app reloaded before the next block that runs, a
-  # `# => literal` comment asserted (DocBlocks::LITERAL; anything else is
+  # `# => literal` comment asserted (DocBlocks.literal?; anything else is
   # documentation).
   module Programs
     module_function

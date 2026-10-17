@@ -160,6 +160,9 @@ module DocsApp
     end
 
     def json_summary(records)
+      # On Rails 8.2 (main) jbuilder 2.15 renders a one-item json.array! as
+      # the object itself — upstream, with or without the gem.
+      records = [records] if records.is_a?(Hash) && Rails.gem_version >= Gem::Version.new('8.2.0.alpha')
       acme = records.find { |record| record['name'] == 'Acme' } || {}
       { names: records.map { |record| record['name'] }, keys: acme.keys.sort, email_masked: masked?(acme['email'].to_s, 'acme@example.test'),
         notes: acme['notes'], phone: acme['phone'] }
