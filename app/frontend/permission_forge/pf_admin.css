@@ -336,6 +336,10 @@
 .pf-desc-input:hover { border-color: var(--pf-border); }
 .pf-desc-input:focus { border-color: var(--pf-border-strong); background: var(--pf-surface); color: var(--pf-text); }
 /* A locked record's name and description: plain text that does not invite an edit. */
+/* The title shows "Untitled …" as its placeholder only while the name is blank; on a phone the
+   title is smaller, and a name or placeholder longer than the box ends in an ellipsis. */
+.pf-title-input { text-overflow: ellipsis; }
+@media (max-width: 640px) { .pf-title-input { font-size: 20px; } }
 .pf-title-input[readonly], .pf-desc-input[readonly] { cursor: default; }
 .pf-title-input[readonly]:hover, .pf-desc-input[readonly]:hover { border-color: transparent; }
 .pf-title-input[readonly]:focus, .pf-desc-input[readonly]:focus { background: transparent; }
@@ -633,6 +637,8 @@
 .pf-option:has(input:disabled) { opacity: .6; cursor: not-allowed; }
 .pf-option__main { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .pf-option__aside { font-size: 12px; color: var(--pf-text-3); white-space: nowrap; }
+/* On a phone a row's badge and count go to a second line rather than past the edge. */
+@media (max-width: 640px) { .pf-option { flex-wrap: wrap; row-gap: 4px; } }
 .pf-listbox__footer { padding: 8px 12px; background: var(--pf-surface-2); border-top: 1px solid var(--pf-border); font-size: 12px; color: var(--pf-text-2); }
 .pf-picked { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--pf-border); border-radius: var(--pf-radius); background: var(--pf-surface-2); }
 
@@ -680,6 +686,8 @@
 .pf-setting:target, .pf-setting[data-pf-focus="true"] { background: var(--pf-accent-soft); }
 .pf-setting__about { flex: 2 1 300px; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
 .pf-setting__value { flex: 1 1 240px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+/* A value's pill wraps inside its column (a long translation must not widen the page). */
+.pf-setting__value .pf-pill { white-space: normal; max-width: 100%; }
 .pf-setting__how { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
 .pf-setting__how[open] { flex: 1 1 100%; min-width: 0; }
 .pf-setting__how > summary { list-style: none; }
