@@ -23,16 +23,15 @@ module PermissionForge
       # Takes and ignores the arguments a `rack.response_finished` callback
       # is given.
       #
-      # @return [void]
+      # @return [Boolean] whether it put the value back (false: done
+      #   already, or called elsewhere)
       def call(*)
-        return if @done || !ExecutionState.owner(@name).equal?(@owner)
+        return false if @done || !ExecutionState.owner(@name).equal?(@owner)
 
         @done = true
         ExecutionState.put_back(@name, @previous)
+        true
       end
-
-      # @return [Proc] for Rack::BodyProxy's block
-      def to_proc = method(:call).to_proc
     end
 
     class << self

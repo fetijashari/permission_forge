@@ -301,8 +301,10 @@ module PermissionForge
         template = render_install_template('initializer.rb.tt')
         assert_match(/^  config\.masked_attributes_nil_user_strategy = :hide_in_requests$/, template)
         section = template[template.index('# Masked attributes with nobody signed in'), 700]
-        assert_match(/:hide also hides them\s+#\s+in jobs/, section)
+        assert_match(/:hide hides in jobs too/, section)
         assert_match(/web request with nobody signed in/, section)
+        assert_match(/deliver_now/, section)
+        assert_match(/sign a system user in/, section)
 
         PermissionForge.configuration.masked_attributes_nil_user_strategy = :hide
         row = PermissionForge::Admin::SettingsCatalog.new.row(:masked_attributes_nil_user_strategy)

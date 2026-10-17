@@ -22,7 +22,7 @@ module PermissionForge
 
     teardown { ExecutionState.delete(WebRequest::KEY) }
 
-    test 'the engine puts the middleware first in the host application\'s stack' do
+    test 'the engine puts the middleware at the top of the host application\'s stack' do
       assert_equal 'PermissionForge::WebRequest::Middleware', Rails.application.middleware.first.name
       executor = Rails.application.middleware.map(&:name).index('ActionDispatch::Executor')
       assert_operator executor, :>, 0, 'above ActionDispatch::Executor, so the request is marked before its run starts'
@@ -118,6 +118,71 @@ module PermissionForge
       body.close
     ensure
       outer&.complete!
+    end
+
+    # A server that neither runs the callbacks nor closes the body leaves the
+    # slot set: the next request must not put that request back when it ends.
+    test 'a request left unfinished is not put back by the next request on the thread' do
+      serve(env_for('/leaked')) { ok } # body never closed
+      _status, _headers, body = serve(env_for('/next')) { ok }
+      body.close
+
+      assert_not WebRequest.active?
+    end
+
+    # Reads made above ActionDispatch::Executor are outside its run, which
+    # would not clear what runtime events published once there.
+    test 'the outermost request forgets what it published once; a request inside it leaves that to the outer one' do
+      _status, _headers, body = serve do
+        Audit::Runtime.once?('rule.bypassed', 'Customer', 'x', 'y', nil)
+        _s, _h, inner = serve(env_for('/inner')) { ok }
+        inner.close
+        [200, {}, [ExecutionState[Audit::Runtime::ONCE_KEY].size.to_s]]
+      end
+
+      assert_equal ['1'], body.to_enum.to_a, 'the inner request kept the outer one\'s memo'
+      body.close
+      assert_nil ExecutionState[Audit::Runtime::ONCE_KEY]
+    end
+
+    # --- StackCheck --------------------------------------------------------------------
+
+    def app_with(*above)
+      stack = ActionDispatch::MiddlewareStack.new
+      stack.use Rack::ETag
+      stack.unshift Middleware
+      above.reverse_each { |klass| stack.insert_before(0, klass) }
+      Struct.new(:middleware).new(stack)
+    end
+
+    def boot_log(config, application)
+      io = StringIO.new
+      Rails.logger = ActiveSupport::Logger.new(io)
+      WebRequest::StackCheck.check(config, application)
+      io.string
+    end
+
+    test 'StackCheck names the middlewares inserted above the request marker' do
+      assert_equal [], WebRequest::StackCheck.middlewares_above, 'the dummy application: nothing above it'
+      assert_equal %w[Rack::Head], WebRequest::StackCheck.middlewares_above(app_with(Rack::Head))
+      assert_nil WebRequest::StackCheck.middlewares_above(Struct.new(:middleware).new(Object.new)), 'a stack not built yet'
+    end
+
+    test 'the boot check warns while the strategy depends on the request, naming what runs above' do
+      config = Configuration.new
+      application = app_with(Rack::Head)
+
+      config.masked_attributes_nil_user_strategy = :hide_in_requests
+      assert_match(/SECURITY warning: Rack::Head runs above PermissionForge::WebRequest::Middleware: .* are not hidden/,
+                   boot_log(config, application))
+      config.masked_attributes_nil_user_strategy = :bypass
+      log = boot_log(config, application)
+      assert_match(/Rack::Head runs above .* are not recorded/, log)
+      assert_not_includes log, 'SECURITY'
+      config.masked_attributes_nil_user_strategy = :hide
+      assert_empty boot_log(config, application), ':hide does not depend on the request'
+      config.masked_attributes_nil_user_strategy = :hide_in_requests
+      assert_empty boot_log(config, app_with), 'nothing above it'
     end
 
     test 'details name the method, the path and, once routed, the endpoint, and write nothing into the env' do

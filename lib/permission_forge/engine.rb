@@ -29,9 +29,10 @@ module PermissionForge
     # (PermissionForge::WebRequest) from the top of its stack until the
     # response is finished: masked_attributes_nil_user_strategy
     # :hide_in_requests hides there, and :bypass records
-    # field.unmasked_without_user. First in the stack, so that a middleware
-    # or a before_action that reads a model before anyone is signed in
-    # counts too.
+    # field.unmasked_without_user. At the top of the stack (unless a
+    # middleware is inserted above it with insert_before 0: StackCheck names
+    # it at boot), so that a middleware or a before_action that reads a model
+    # before anyone is signed in counts too.
     config.app_middleware.unshift PermissionForge::WebRequest::Middleware
 
     # A denial nobody rescues answers 403, not 500: the row-rule refusal of

@@ -146,6 +146,60 @@ module PermissionForge
         assert_equal %i[no_user_bypassed no_user_hidden], @decisions
       end
 
+      # --- writing after a hidden read (a webhook or a public form that normalizes) -------------
+
+      def normalize(customer)
+        customer.email = customer.email&.downcase
+        customer.name = customer.name.to_s.strip
+        customer.domain = customer.email.to_s.split('@').last
+        customer.save!
+      end
+
+      test 'a value worked out from an attribute read as hidden with nobody signed in is not saved over it' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        config.audit_runtime_events = %i[denied params_filtered]
+        PermissionForge.without_permission_scope { @customer.update_columns(name: '  Acme ', domain: 'acme.test') }
+        customer = Customer.unscoped.find(@customer.id)
+
+        WebRequest.within(Rack::MockRequest.env_for('/webhook')) { normalize(customer) }
+
+        stored = Customer.unscoped.where(id: @customer.id).pick(:name, :email, :domain)
+        assert_equal ['  Acme ', 'sales@acme.test'], stored.first(2), 'name and email keep their stored values'
+        # The hazard the docs name: domain was never read, so its new value
+        # (derived from the hidden email) cannot be told from a real one.
+        assert_nil stored.last
+        assert_audit_event('write.masked_skipped', data: { 'attribute' => 'name', 'detected_by' => 'hidden_without_user' })
+      end
+
+      test 'under masked_write_protection :raise such a write raises, and an attribute never read is written' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        config.masked_write_protection = :raise
+        customer = Customer.unscoped.find(@customer.id)
+
+        WebRequest.within(Rack::MockRequest.env_for('/form')) do
+          customer.update!(supplier_id: 7, name: 'Typed in')
+          assert_raises(MaskedAttributes::MaskedWriteError) { customer.name = customer.name.to_s.strip }
+        end
+
+        assert_equal [7, 'Typed in'], Customer.unscoped.where(id: @customer.id).pick(:supplier_id, :name)
+      ensure
+        config.masked_write_protection = :skip
+      end
+
+      test 'an inspect does not count as a hidden read, and :bypass protects nothing it did not hide' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        customer = Customer.unscoped.find(@customer.id)
+
+        WebRequest.within(Rack::MockRequest.env_for('/error')) do
+          customer.inspect
+          customer.update!(name: 'Renamed')
+        end
+        config.masked_attributes_nil_user_strategy = :bypass
+        WebRequest.within(Rack::MockRequest.env_for('/form')) { customer.update!(name: customer.name.upcase) }
+
+        assert_equal 'RENAMED', Customer.unscoped.find(@customer.id).name
+      end
+
       # --- :bypass records what :hide_in_requests would hide ------------------------------
 
       test ':bypass returns the stored values in a web request and publishes field.unmasked_without_user once per request per attribute' do
@@ -226,6 +280,23 @@ module PermissionForge
         assert_not_includes line, 'sales@acme.test'
       end
 
+      test 'inspect in a request publishes nothing and warns nothing: a debugging read' do
+        published = notifications do
+          WebRequest.within(Rack::MockRequest.env_for('/error')) { assert_includes @customer.inspect, 'sales@acme.test' }
+        end
+
+        assert_empty published
+        assert_empty warnings
+      end
+
+      test 'models are warned about by name: a reloaded class, or a Resource name, does not warn again' do
+        WebRequest.within(Rack::MockRequest.env_for('/a')) { @customer.email }
+        WebRequest.within(Rack::MockRequest.env_for('/b')) { Audit::UnmaskedWithoutUser.note('Customer', :email) }
+
+        assert_equal 1, warnings.size
+        assert Audit::UnmaskedWithoutUser::WARNED.key?('Customer')
+      end
+
       test 'with nobody listening and the bypass group not stored, a read in a request builds nothing and allocates no more' do
         built = 0
         instrument = Audit.method(:instrument)
@@ -240,6 +311,11 @@ module PermissionForge
         assert_equal 0, built
         assert_nil ExecutionState[Audit::Runtime::ONCE_KEY], 'not even the once-per-request memo'
         assert_operator inside, :<=, outside
+
+        hashes = -> { 50.times { customer.attributes } }
+        outside = allocations(&hashes)
+        inside = WebRequest.within(Rack::MockRequest.env_for('/x')) { allocations(&hashes) }
+        assert_operator inside, :<=, outside, 'attributes returns the stored hash at once once the model was warned about'
       ensure
         replace_singleton_method(Audit, :instrument, instrument)
       end

@@ -125,7 +125,7 @@ module PermissionForge
               'Hash of the runtime audit events published once per request (Audit::Runtime.once?)'),
       Key.new(:pf_web_request, :execution, :keep,
               'the Rack env of the web request in progress (WebRequest::Middleware, until the response is finished). ' \
-              'Execution: every fiber of the request sees it. Seen elsewhere it hides more (fails closed); emptied ' \
+              'Execution: under :thread isolation every fiber of the request sees it. Seen elsewhere it hides more (fails closed); emptied ' \
               'inside the request by a run completed there it would hide nothing: kept, the middleware puts it back')
     ].to_h { |key| [key.name, key] }.freeze
 

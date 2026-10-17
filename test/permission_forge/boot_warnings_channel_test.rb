@@ -117,6 +117,9 @@ module PermissionForge
       'masking_sync_store_failed' => [:security], 'masking_sync_failed' => [:security],
       'cache_process_local' => [:security], 'cache_unannounced_masking' => [:security],
       'masked_attributes.unmasked_without_user.' => [:security],
+      'web_request_middleware_above_hide' => [:security],
+      'web_request_middleware_above_record' => [:config, 'under :bypass a read above the middleware returns the stored value, ' \
+                                                         'as it always did: only its recording is missed'],
       'model_bindings.' => [:by_setting, 'ModelBindings::SEVERITY: tenant_model is :security (tenant isolation not as ' \
                                          'configured); another user class only points an association elsewhere'],
       'audit_actor_shared_login' => [:config, 'every change is recorded; only the actor is the shared login'],
@@ -155,7 +158,9 @@ module PermissionForge
       'cache_unannounced_masking' => [:all], 'model_bindings.' => [:all], 'unmasked_gdpr_fields' => [:all],
       'boot_check_skipped.' => [:all], 'database_unreachable' => [:all], 'cache_stale_permissions' => [:all],
       'cache_development_masking' => [:all], 'unscoped_detection_raise_in_production' => [:all],
-      'masked_attributes.unmasked_without_user.' => [:all]
+      'masked_attributes.unmasked_without_user.' => [:all],
+      'web_request_middleware_above_hide' => [:server, 'about the requests a server process serves'],
+      'web_request_middleware_above_record' => [:server, 'about the requests a server process serves']
     }.freeze
 
     DEVELOPMENT = ActiveSupport::EnvironmentInquirer.new('development')
@@ -247,7 +252,8 @@ module PermissionForge
       assert_empty problems
       assert_equal SEVERITY.keys.sort, AUDIENCE.keys.sort, 'every warning has a severity and an audience'
       assert_equal %w[api_authorization_gap api_authorization_unset api_only_admin audit_actor_shared_login
-                      basic_auth_without_credentials tenantless_admin],
+                      basic_auth_without_credentials tenantless_admin web_request_middleware_above_hide
+                      web_request_middleware_above_record],
                    AUDIENCE.select { |_, (audience)| audience == :server }.keys.sort
     end
 

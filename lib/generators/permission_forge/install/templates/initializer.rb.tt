@@ -86,10 +86,11 @@ PermissionForge.configure do |config|
   # ---------------------------------------------------------------------------
   # Masked attributes with nobody signed in
   # ---------------------------------------------------------------------------
-  # Hidden in a web request with nobody signed in (a public page, a controller
-  # that forgot authentication; a before_action that reads one before sign-in
-  # too), stored values for jobs, rake and the console. :hide also hides them
-  # in jobs (set the current user there); :bypass (library default) nowhere.
+  # Hidden in a web request with nobody signed in (a public page, a forgotten
+  # sign-in, a before_action before it, a mail sent with deliver_now); jobs, rake
+  # and the console keep stored values. :hide hides in jobs too; :bypass nowhere.
+  # Webhooks that normalize records: sign a system user in (a value derived from
+  # a hidden read can still be saved into another column).
   # The user model stays readable for sign-in; validations read stored values.
   config.masked_attributes_nil_user_strategy = :hide_in_requests
 

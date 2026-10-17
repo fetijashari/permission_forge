@@ -16,20 +16,24 @@ module PermissionForge
     #   model, the attribute and the request (method, path, endpoint; request
     #   id and IP as event columns when the audit context has none), once per
     #   request per model and attribute (Runtime.once?). Nothing is built
-    #   while nobody listens and the group is not stored (Audit::Gate): the
-    #   read then costs one Gate check.
+    #   while nobody listens and the group is not stored (Audit::Gate).
     # - One SECURITY warning per model and process in the log (Warnings.emit),
-    #   so an app that stores no runtime event sees the gap too. At most
-    #   WARNED_LIMIT models are remembered.
+    #   so an app that stores no runtime event sees the gap too. Models are
+    #   remembered by name (a development reload does not warn again), at
+    #   most WARNED_LIMIT of them.
     #
-    # Neither ever raises into the read.
+    # Once the model has been warned about and nobody listens (the group not
+    # stored), there is nothing left to do: .pending? is false and the
+    # record's `attributes` returns the stored hash at once, as outside a
+    # request. A debugging read (inspect, MaskedAttributes::INSPECT_KEY) is
+    # not recorded. Neither ever raises into the read.
     #
     # @api private
     module UnmaskedWithoutUser
       EVENT = 'field.unmasked_without_user'
       GATE = Gate.for(EVENT)
 
-      # Models warned about in this process (by class, or by Resource name).
+      # The names of the models warned about in this process.
       WARNED = Concurrent::Map.new
       WARNED_LIMIT = 1_000
 
@@ -39,9 +43,24 @@ module PermissionForge
         # @param attribute [Symbol, String]
         # @return [void]
         def note(model, attribute)
-          warn_once(model, attribute) unless WARNED.key?(model)
-          publish(model, attribute) if GATE.open? && Audit.instrument?(EVENT)
+          name = Runtime.model_name(model)
+          first = !WARNED.key?(name)
+          return unless first || GATE.open?
+          return if ExecutionState[Concerns::MaskedAttributes::INSPECT_KEY]
+
+          warn_once(name, attribute) if first
+          publish(model, attribute) if Audit.instrument?(EVENT)
           nil
+        end
+
+        # Whether a read of `model` returned as stored in a web request still
+        # has something to do: the model's warning is still to come, or the
+        # event is stored or heard.
+        #
+        # @param model [Class, String]
+        # @return [Boolean]
+        def pending?(model)
+          !WARNED.key?(Runtime.model_name(model)) || (GATE.open? && Audit.instrument?(EVENT))
         end
 
         # Forgets which models were warned about (tests; Audit.reset!).
@@ -79,19 +98,18 @@ module PermissionForge
           value.presence && value.to_s[0, WebRequest::VALUE_LIMIT]
         end
 
-        def warn_once(model, attribute)
+        def warn_once(name, attribute)
           return if WARNED.size >= WARNED_LIMIT
-          return unless WARNED.put_if_absent(model, true).nil?
+          return unless WARNED.put_if_absent(name, true).nil?
 
-          Warnings.emit("masked_attributes.unmasked_without_user.#{Runtime.model_name(model)}",
-                        warning(model, attribute), severity: :security)
+          Warnings.emit("masked_attributes.unmasked_without_user.#{name}", warning(name, attribute), severity: :security)
         rescue StandardError
           nil
         end
 
-        def warning(model, attribute)
+        def warning(name, attribute)
           request = WebRequest.details.values_at('method', 'path', 'endpoint').compact.join(' ')
-          "#{Runtime.model_name(model)}##{attribute} was read in a web request with nobody signed in " \
+          "#{name}##{attribute} was read in a web request with nobody signed in " \
             "(#{request.presence || 'a request'}) and returned as stored: masked_attributes_nil_user_strategy is " \
             ':bypass. Set it to :hide_in_requests to hide guarded attributes in web requests with nobody signed in ' \
             '(jobs, rake and the console keep the stored values), or sign the request in before it reads masked ' \

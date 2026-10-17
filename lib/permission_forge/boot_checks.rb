@@ -269,6 +269,7 @@ module PermissionForge
         warn_api_authorizations_unset(config)
         config.tenantless_admin_warning&.then { |message| warn_tenantless_admin(message) }
         QueryScopingWarnings.warn_unscoped_detection_raise_in_production(config)
+        WebRequest::StackCheck.check(config)
       end
 
       # AdminUiSettings#tenantless_admin_warning is the text; the emitter

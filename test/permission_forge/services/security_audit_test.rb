@@ -65,6 +65,22 @@ module PermissionForge
         assert_empty codes(everywhere) & %i[masked_nil_user_bypass masked_nil_user_outside_requests]
       end
 
+      test 'middlewares inserted above the request marker are an info, unless the strategy is :hide' do
+        above = WebRequest::StackCheck.method(:middlewares_above)
+        replace_singleton_method(WebRequest::StackCheck, :middlewares_above) { |*| %w[Rack::Cors] }
+
+        note = item_for(audit(masked_attributes_nil_user_strategy: :hide_in_requests), :middleware_above_web_request)
+        assert_equal :info, note.severity
+        assert_equal %w[Rack::Cors], note.items
+        assert_match 'insert_after PermissionForge::WebRequest::Middleware', note.detail
+        assert item_for(audit(masked_attributes_nil_user_strategy: :bypass), :middleware_above_web_request)
+        assert_nil item_for(audit(masked_attributes_nil_user_strategy: :hide), :middleware_above_web_request)
+        replace_singleton_method(WebRequest::StackCheck, :middlewares_above) { |*| [] }
+        assert_nil item_for(audit(masked_attributes_nil_user_strategy: :bypass), :middleware_above_web_request)
+      ensure
+        replace_singleton_method(WebRequest::StackCheck, :middlewares_above, above)
+      end
+
       # a-onboarding #54 / e-operations #67: under :strict (auto_query_scoping on) the
       # finding still said "enable auto_query_scoping".
       test 'no_rules advises enabling auto_query_scoping only while it is off' do

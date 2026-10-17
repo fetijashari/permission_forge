@@ -466,8 +466,10 @@ read a masked model before sign-in).
   `:bypass` a public page, a webhook, a controller that forgot authentication or a resolver that returns nil got every
   guarded attribute as stored, and nothing recorded it. The new value hides them there exactly as `:hide` does (the
   primary key and the raw paths untouched, the user model exempt for sign-in). "A web request" has one definition,
-  `PermissionForge::WebRequest`: the engine puts `WebRequest::Middleware` first in the host's middleware stack
-  (`config.app_middleware`), which marks the request in `ExecutionState` slot `:pf_web_request` (execution scope, kept
+  `PermissionForge::WebRequest`: the engine puts `WebRequest::Middleware` at the top of the host's middleware stack
+  (`config.app_middleware`; a middleware inserted above it with `insert_before 0`, as rack-cors documents, reads
+  outside the request: the boot log names it, `web_request_middleware_above_hide` / `_record`, and
+  `rake permission_forge:audit` lists it, `middleware_above_web_request`, info), which marks the request in `ExecutionState` slot `:pf_web_request` (execution scope, kept
   at the end of an executor run) until the response is finished (`rack.response_finished`, else when the body is
   closed; at once when the app raises) — so a middleware or a `before_action` that reads a model before sign-in counts,
   as do a job run with `perform_now` and a mail sent with `deliver_now` during the request; jobs run by a worker,
@@ -475,11 +477,19 @@ read a masked model before sign-in).
   `Configuration#masked_attributes_without_user_for(klass)` (`:hide`, `:record` or `:bypass`) is the one decision
   behind `hide_masked_attributes_without_user_for?`; `hide_masked_attributes_without_user_in_requests?` says whether
   the strategy hides at least in requests. `MaskedAttributes.explain` adds `in_web_request`. The Settings page lists
-  the three values with what each does (en, sq, mk).
+  the three values with what each does (en, sq, mk). A record that read an attribute as hidden because nobody was
+  signed in refuses a later write to that attribute as a masked write-back (`masked_write_protection`: `:skip` keeps
+  the stored value, `:raise` raises; `write.masked_skipped` `detected_by: hidden_without_user`), so a webhook that
+  normalizes `name` from its hidden value does not store `""`; a value derived for another attribute (`domain` from
+  a hidden `email`) cannot be told apart: sign a system user in where webhooks normalize data.
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#a value worked out from an attribute read as hidden with nobody signed in is not saved over it -->
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#under masked_write_protection :raise such a write raises, and an attribute never read is written -->
+  <!-- pin: test/permission_forge/web_request_test.rb#the boot check warns while the strategy depends on the request, naming what runs above -->
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#middlewares inserted above the request marker are an info, unless the strategy is :hide -->
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#:hide_in_requests hides every guarded attribute in a web request with nobody signed in, before_action included -->
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#:hide_in_requests hides a read in a middleware below WebRequest::Middleware, before any controller -->
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#:hide_in_requests keeps the stored values outside a web request: a job, the console, a runner, rake -->
-  <!-- pin: test/permission_forge/web_request_test.rb#the engine puts the middleware first in the host application's stack -->
+  <!-- pin: test/permission_forge/web_request_test.rb#the engine puts the middleware at the top of the host application's stack -->
   <!-- pin: test/permission_forge/web_request_test.rb#below the middleware the request is a web request, with its env, until the server closes the body -->
   <!-- pin: test/permission_forge/web_request_test.rb#a run completed inside the request does not end it -->
   <!-- pin: test/permission_forge/html/masked_nil_user_setting_test.rb#the Settings page lists bypass, hide_in_requests and hide, marks the current one and explains them in en, sq and mk -->
@@ -488,12 +498,15 @@ read a masked model before sign-in).
   `audit_runtime_events` includes `:bypass`) once per request per model and attribute — the model, the attribute, the
   request's method, path and endpoint, and its request id and IP as columns; never a value — for exactly the reads
   `:hide_in_requests` would hide; and one SECURITY warning per model and process in the log, naming the model, the
-  attribute and the request. With nobody listening and the group not stored, a read builds nothing (one gate check).
-  Sentence in en, sq and mk.
+  attribute and the request (models by name; an `inspect` records nothing). With nobody listening and the group not
+  stored, nothing is built or allocated: once the model has been warned about, `attributes` returns the stored hash
+  as outside a request and a getter pays a few lookups (about 15% in the gem's 8-column benchmark). Sentence in en,
+  sq and mk.
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#:bypass returns the stored values in a web request and publishes field.unmasked_without_user once per request per attribute -->
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#field.unmasked_without_user is stored with the bypass group, never with a value -->
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#a SECURITY warning names the model, the attribute and the request, once per model and process -->
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#with nobody listening and the bypass group not stored, a read in a request builds nothing and allocates no more -->
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#inspect in a request publishes nothing and warns nothing: a debugging read -->
 
 ### Changed
 

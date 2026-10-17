@@ -8,7 +8,8 @@ module PermissionForge
       class ConfigCheck < BaseCheck
         RULES = %i[
           admin_ui_exposed process_local_cache unconfigured_fields_pass write_protection_off nested_parent_fallback
-          nil_user_bypass masked_nil_user_bypass gdpr_defaults_off log_filtering_off audit_trail_off conditional_sets_lenient
+          nil_user_bypass masked_nil_user_bypass middleware_above_web_request gdpr_defaults_off log_filtering_off audit_trail_off
+          conditional_sets_lenient
           detection_raises_in_production api_without_auth api_mutations_unguarded api_authorization_unset
           api_sequential_ids api_rule_values_exposed tenantless_admin strict_overrides
         ].freeze
@@ -114,6 +115,20 @@ module PermissionForge
                   'every guarded attribute reads as hidden, but jobs, rake tasks, the runner and the console (and ' \
                   'Action Cable channel actions) read the stored values. That code runs on your servers, not on a ' \
                   'visitor\'s behalf; :hide hides there too, and then needs the current user set in those jobs and mailers.')
+        end
+
+        # Middlewares inserted above WebRequest::Middleware read outside the
+        # request: :hide_in_requests does not hide there, :bypass does not
+        # record (WebRequest::StackCheck, also a boot warning).
+        def middleware_above_web_request
+          return if configuration.masked_attributes_nil_user_strategy == :hide
+
+          above = PermissionForge::WebRequest::StackCheck.middlewares_above
+          return if above.blank?
+
+          finding(:info, :middleware_above_web_request, 'Middlewares run before requests are marked',
+                  "#{PermissionForge::WebRequest::StackCheck.message(above, 'are not hidden or recorded')} " \
+                  'Middlewares that read no masked model (CORS, profiling, static files) need nothing.', items: above)
         end
 
         def gdpr_defaults_off
