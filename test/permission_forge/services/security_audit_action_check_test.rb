@@ -1,5 +1,12 @@
 require_relative '../admin/action_catalog_support'
 
+# A guarded controller of a resource no Permission Set manages in these tests.
+class PfStubGuardedSuppliersController < ActionController::Base
+  include PermissionForge::Concerns::ControllerActionGuard
+
+  permission_forge_actions resource: 'Supplier'
+end
+
 module PermissionForge
   module Services
     # SecurityAuditChecks::ActionCheck — controller actions as permissions.
@@ -23,8 +30,77 @@ module PermissionForge
 
       test 'is part of the audit and quiet on a setup without actions' do
         assert_includes SecurityAudit.checks, SecurityAuditChecks::ActionCheck
-        assert_empty findings
-        assert_empty(SecurityAudit.call(configuration: @config, environment: 'test').findings.select { |f| f.check == 'action' })
+        assert_empty findings(catalog: catalog_over { get 'reports', to: 'reports#index' })
+      end
+
+      # --- guarded actions no Permission Set manages (issue #10) -------------------
+
+      test 'guarded actions no Permission Set manages are listed as refused, per resource and per action' do
+        catalog = catalog_over do
+          get 'suppliers', to: 'pf_stub_guarded_suppliers#index'
+          get 'stub/export', to: 'pf_stub_guarded#export'
+          post 'stub/:id/archive', to: 'pf_stub_guarded#archive'
+          post 'stub/:id/refresh', to: 'pf_stub_guarded#refresh'
+          get 'stub/csv', to: 'pf_stub_guarded#exportCSV'
+          get 'stub', to: 'pf_stub_guarded#index'
+          post 'stub/:id/merge', to: 'pf_stub_plain#create'
+        end
+        create_resource_action(resource: @resource, name: 'export', is_permitted: false)
+        found = finding(:unmanaged_actions_refused, catalog: catalog)
+
+        assert_equal :low, found.severity
+        assert_equal 'action', found.check
+        assert_equal ['Supplier (resource not managed): pf_stub_guarded_suppliers#index',
+                      'Customer › archive: pf_stub_guarded#archive',
+                      'Customer › exportCSV: pf_stub_guarded#exportCSV (not a valid action key)',
+                      'Customer › sync: pf_stub_guarded#refresh'], found.items
+        assert_match ':allow', found.detail
+        assert_nil finding(:unmanaged_actions_allowed, catalog: catalog)
+      end
+
+      test 'under :allow the same actions are listed as open, and none as refused' do
+        found = finding(:unmanaged_actions_allowed, catalog: stub_catalog, unconfigured_action_strategy: :allow)
+
+        assert_equal :info, found.severity
+        assert_equal ['Customer › archive: pf_stub_guarded#archive', 'Customer › export: pf_stub_guarded#export'], found.items
+        assert_nil finding(:unmanaged_actions_refused, catalog: stub_catalog)
+      end
+
+      test 'an action managed in any tenant, or by a muting row alone, is not listed' do
+        @config.tenant_model = 'Account'
+        items = ActsAsTenant.without_tenant { finding(:unmanaged_actions_refused, catalog: stub_catalog).items }
+        assert_equal ['Customer › archive: pf_stub_guarded#archive', 'Customer › export: pf_stub_guarded#export'], items
+
+        muting = create_resource(permission_set: create_permission_set(name: 'Contractors', is_muting: true))
+        create_resource_action(resource: muting, name: 'archive', is_permitted: true)
+        ActsAsTenant.with_tenant(Account.create!(name: 'Other tenant')) do
+          set = create_permission_set(name: 'Elsewhere')
+          create_resource_action(resource: create_resource(permission_set: set), name: 'export', is_permitted: true)
+        end
+
+        assert_nil(ActsAsTenant.without_tenant { finding(:unmanaged_actions_refused, catalog: stub_catalog) })
+      end
+
+      test 'rows that are not in effect do not manage, and a whole unmanaged resource is listed once' do
+        create_resource_action(resource: @resource, name: 'export', is_permitted: true, is_active: false)
+        @resource.update!(is_active: false)
+
+        assert_equal ['Customer (resource not managed): pf_stub_guarded#archive, pf_stub_guarded#export'],
+                     finding(:unmanaged_actions_refused, catalog: stub_catalog).items
+      end
+
+      test 'only controllers that run the guard are listed, with discovery on or off' do
+        assert_nil finding(:unmanaged_actions_refused, catalog: stub_catalog(guarded: false))
+        assert finding(:unmanaged_actions_refused, catalog: stub_catalog, controller_action_discovery: false)
+        assert finding(:unmanaged_actions_refused, catalog: stub_catalog, controller_action_discovery: true)
+      end
+
+      test 'the audit reads the app routes for refused actions while discovery is off' do
+        action_findings = SecurityAudit.call(configuration: @config, environment: 'test').findings.select { |f| f.check == 'action' }
+
+        assert_equal [:unmanaged_actions_refused], action_findings.map(&:code)
+        assert_equal ['Customer › archive: customers#archive', 'Customer › export: customers#export',
+                      'Customer › merge: customers/merges#create'], action_findings.first.items
       end
 
       # --- managed actions nobody is granted --------------------------------------
@@ -92,10 +168,10 @@ module PermissionForge
         assert_equal ['Customer › sync'], found.items
       end
 
-      test 'with discovery off, unlinked rows are not reported and the routes are not read' do
+      test 'with discovery off, unlinked rows are not reported' do
         create_resource_action(resource: @resource, name: 'sync', is_permitted: true)
 
-        assert_empty findings(catalog: Object.new)
+        assert_empty findings(catalog: stub_catalog(guarded: false))
       end
 
       # --- discovery without the guard --------------------------------------------
@@ -171,10 +247,10 @@ module PermissionForge
         assert_nil finding(:unguarded_actions, catalog: stub_catalog, controller_action_discovery: true)
       end
 
-      test 'with discovery off, unguarded controllers are not reported and the routes are not read' do
+      test 'with discovery off, unguarded controllers are not reported' do
         create_resource_action(resource: @resource, name: 'merge', is_permitted: true)
 
-        assert_nil finding(:unguarded_actions, catalog: Object.new)
+        assert_nil finding(:unguarded_actions, catalog: stub_catalog)
       end
 
       test 'with no guarded controller at all, both guard findings are reported' do
@@ -199,10 +275,10 @@ module PermissionForge
         assert_match 'can?', found.detail
       end
 
-      test 'an invalid name is reported with or without discovery, and never read from the routes' do
+      test 'an invalid name is reported with or without discovery' do
         create_resource_action(resource: @resource, name: 'Export', is_permitted: true)
 
-        assert_equal ['Sales › Customer › "Export"'], finding(:invalid_action_keys, catalog: Object.new).items
+        assert_equal ['Sales › Customer › "Export"'], finding(:invalid_action_keys, catalog: stub_catalog(guarded: false)).items
         assert_equal ['Sales › Customer › "Export"'],
                      finding(:invalid_action_keys, catalog: stub_catalog, controller_action_discovery: true).items
       end

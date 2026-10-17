@@ -75,12 +75,12 @@ module PermissionForge
       assert_not @config.mask_virtual_attributes_for?('Customer')
     end
 
-    test 'controller action options default to discovery off and allow' do
+    test 'controller action options default to discovery off and block' do
       assert_equal false, @config.controller_action_discovery
       assert_nil @config.controller_action_resolver
       assert_nil @config.action_guard_bypass
-      assert_equal :allow, @config.unconfigured_action_strategy
-      assert @config.allow_unconfigured_actions?
+      assert_equal :block, @config.unconfigured_action_strategy
+      assert_not @config.allow_unconfigured_actions?
       assert @config.controller_excluded?('rails/health')
     end
 

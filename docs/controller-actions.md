@@ -10,8 +10,13 @@ Permission Sets **before the action runs**.
   the Resource — the same `ResourceAction` rows that `user.can?(:export, :Customer)` reads.
 
 Nothing new is stored: no new table, no new key in the permission hash. The guard is
-**opt-in per controller**, and by default it only restricts what an admin has actually put
-into a Permission Set.
+**opt-in per controller**. Once a controller includes it, a mapped action runs only for the
+people whose Permission Sets permit it: an action no Permission Set manages yet is refused
+(`unconfigured_action_strategy = :block`, the default since 0.15; `:allow` is the
+[opt-out](#unconfigured_action_strategy)). Before you include the guard in a controller, put
+its Resource and actions into the Permission Sets that should run them, and run
+`bin/rails permission_forge:audit`: `unmanaged_actions_refused` lists every guarded action
+no Permission Set manages.
 
 ## Quick Start
 
@@ -219,13 +224,14 @@ not the current user is assigned to that set.
 
 This is how the guard tells two situations apart:
 
-- *Nobody configured this action yet* → `unconfigured_action_strategy` decides (allowed by default).
+- *Nobody configured this action yet* → `unconfigured_action_strategy` decides (refused by default since 0.15).
 - *Somebody configured it, and this user was not granted it* → denied.
 
 > **The first Permission Set that lists an action makes it managed for everyone in the
-> tenant.** Before the row exists (and under the default `:allow`), every signed-in user may
-> run the action. After it exists, only users whose Permission Sets permit it may. Permit the
-> action in every set that needs it at the same time as you add the first row.
+> tenant.** Before the row exists, nobody may run the action under the default `:block` (every
+> signed-in user may under `:allow`). After it exists, only users whose Permission Sets permit it
+> may. Under `:allow`, permit the action in every set that needs it at the same time as you add
+> the first row.
 
 The same holds for Resources: once any Permission Set contains a `Customer` Resource, the
 REST actions of `CustomersController` require the matching CRUD flag.
@@ -251,17 +257,24 @@ What happens to a Resource or an action that no Permission Set manages (rows 4 a
 
 ```ruby fragment
 PermissionForge.configure do |config|
-  config.unconfigured_action_strategy = :allow   # default
-  # config.unconfigured_action_strategy = :block
+  config.unconfigured_action_strategy = :block   # default since 0.15
+  # config.unconfigured_action_strategy = :allow # opt-out: fails open
 end
 ```
 
 | Value | Behaviour |
 |---|---|
-| `:allow` (default) | Let it through. Adding the guard to a controller changes nothing until an admin lists the Resource or the action in a Permission Set. |
-| `:block` | Deny until a Permission Set permits it. Every guarded action must be granted explicitly. |
+| `:block` (default) | Deny (`ActionNotAuthorizedError`, a 403) until a Permission Set permits it. Every guarded action must be granted explicitly; a new action is refused until someone decides who may run it. |
+| `:allow` | Let it through. Adding the guard to a controller changes nothing until an admin lists the Resource or the action in a Permission Set, and a new action is open to every signed-in user until then. The default before 0.15. `bin/rails permission_forge:audit` reports it (`unconfigured_actions_allowed`, medium) and lists the guarded actions it opens (`unmanaged_actions_allowed`). |
 
-Unknown values behave as `:block`.
+Any other value raises `ConfigurationError` when it is set. Under `:block`,
+`bin/rails permission_forge:audit` lists the guarded actions no Permission Set manages, the ones
+the guard refuses to everyone (`unmanaged_actions_refused`).
+
+**Upgrading from 0.14**, where `:allow` was the default: run the audit before you deploy. For
+each action in `unmanaged_actions_refused`, add its Resource or action to the Permission Sets
+that should run it, or set `config.unconfigured_action_strategy = :allow` to keep the old
+behaviour.
 
 `:block` does not apply to actions that are [never checked](#actions-that-are-never-checked) —
 those are outside the guard altogether.
@@ -443,9 +456,9 @@ decision.target     # => resource "Customer", action "export", crud nil
 - **Cost.** The guard reads the user's permission hash on every checked request. A request
   that already touches a protected model pays nothing extra (the hash is memoized on the user
   object); a request that would not otherwise load the hash now does, and for a broad grant
-  that hash can be large. A request that is not granted — under the default `:allow` that
-  includes every action and every Resource nobody manages yet — also costs one small cache
-  read (the managed list), once per request however many checks it makes. To keep
+  that hash can be large. A request that is not granted — every action and every Resource
+  nobody manages yet included — also costs one small cache read (the managed list), once per
+  request however many checks it makes. To keep
   controllers out of both, exclude them (`controller_discovery_exclude`), return `false`
   from the resolver, declare `rest_actions: false`, or use `action_guard_bypass`.
 
@@ -453,7 +466,7 @@ decision.target     # => resource "Customer", action "export", crud nil
 
 | Option | Default | Used by the guard for |
 |---|---|---|
-| `unconfigured_action_strategy` | `:allow` | Resources and actions no Permission Set manages |
+| `unconfigured_action_strategy` | `:block` (`:allow` before 0.15) | Resources and actions no Permission Set manages |
 | `action_guard_bypass` | `nil` | Users who skip the guard |
 | `action_guard_nil_user_strategy` | `nil` (generated initializer: `:deny`) | Requests without a current user |
 | `nil_user_strategy` | `:bypass` | Requests without a current user, while `action_guard_nil_user_strategy` is nil or blank |

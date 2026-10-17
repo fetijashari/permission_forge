@@ -36,9 +36,10 @@ module PermissionForge
 
       # What the guard does with a resource or action no Permission Set manages:
       #
-      #   :allow — let it through (default — nothing is restricted until an admin
-      #            adds the action to a Permission Set)
-      #   :block — deny until a Permission Set permits it
+      #   :block — deny until a Permission Set permits it (default since 0.15)
+      #   :allow — let it through: nothing is restricted until an admin adds the
+      #            action to a Permission Set (the default before 0.15; an
+      #            explicit opt-out that fails open, reported by SecurityAudit)
       #
       # A String is taken as its Symbol; any other value raises
       # ConfigurationError (StrategyValues).
@@ -69,7 +70,7 @@ module PermissionForge
         @controller_action_discovery = false
         @controller_action_resolver = nil
         @controller_discovery_exclude = DEFAULT_CONTROLLER_DISCOVERY_EXCLUDE.dup
-        @unconfigured_action_strategy = :allow
+        @unconfigured_action_strategy = :block
         @action_guard_bypass = nil
         @action_guard_nil_user_strategy = nil
       end

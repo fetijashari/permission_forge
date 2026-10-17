@@ -192,10 +192,10 @@ module PermissionForge
           assert_select '.pf-badge--grant', text: /✓ #{I18n.t('permission_forge.resource_actions.endpoints.guarded')}/, count: 2
           assert_select '.pf-badge--warn', text: /⚠ #{I18n.t('permission_forge.resource_actions.endpoints.not_guarded')}/, count: 1
           assert_select '.pf-badge--grant', text: /✓ #{I18n.t('permission_forge.resource_actions.states.permitted')}/, count: 1
-          assert_select '.pf-badge--unconfigured',
-                        text: /○ #{I18n.t('permission_forge.resource_actions.effect.unmanaged_allowed')}/, count: 2
+          assert_select '.pf-badge--block',
+                        text: /⊘ #{I18n.t('permission_forge.resource_actions.effect.unmanaged_blocked')}/, count: 2
           assert_match I18n.t('permission_forge.resource_actions.managed_note.title'), response.body
-          assert_match I18n.t('permission_forge.resource_actions.managed_note.unmanaged_allowed'), response.body
+          assert_match I18n.t('permission_forge.resource_actions.managed_note.unmanaged_blocked'), response.body
           assert_select '.pf-banner--warn', count: 0
         end
       end
@@ -216,13 +216,14 @@ module PermissionForge
         end
       end
 
-      test 'an unmanaged action says it is blocked when the strategy blocks' do
-        PermissionForge.configuration.unconfigured_action_strategy = :block
+      test 'an unmanaged action says everyone can run it when the strategy allows' do
+        PermissionForge.configuration.unconfigured_action_strategy = :allow
         discovering do
           get pf("#{@base}?tab=actions")
 
-          assert_select '.pf-badge--block', text: /⊘ #{I18n.t('permission_forge.resource_actions.effect.unmanaged_blocked')}/, count: 2
-          assert_match I18n.t('permission_forge.resource_actions.managed_note.unmanaged_blocked'), response.body
+          assert_select '.pf-badge--unconfigured',
+                        text: /○ #{I18n.t('permission_forge.resource_actions.effect.unmanaged_allowed')}/, count: 2
+          assert_match I18n.t('permission_forge.resource_actions.managed_note.unmanaged_allowed'), response.body
         end
       end
 

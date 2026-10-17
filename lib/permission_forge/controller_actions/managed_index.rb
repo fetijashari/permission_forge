@@ -16,9 +16,10 @@ module PermissionForge
     # in PermissionForge.cache, so every process sees an invalidation
     # (InvalidatesManagedActions drops it when a defining record changes).
     #
-    # A stale "not managed" lets a request through under the default
-    # strategy, so the index is invalidated and rebuilt the way a user's
-    # permission hash is — the same code, one definition:
+    # A stale "not managed" lets a request through under the :allow strategy
+    # (under :block, the default, both answers refuse), so the index is
+    # invalidated and rebuilt the way a user's permission hash is — the same
+    # code, one definition:
     #   - every invalidation leaves a fresh stamp (STAMP_KEY) before it removes
     #     the keys, and a build only leaves the index in the store when the
     #     stamp it read before reading the rows is still there after storing it

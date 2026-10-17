@@ -1999,6 +1999,9 @@ sq:
           aktive, por pa kredenciale) ose të pambrojtura (pa fjalëkalim dhe pa kontrollues
           admini të personalizuar).
         masked_write_protection: Vlerat e maskuara mund të ruhen mbi të dhënat e vërteta.
+        unconfigured_action_strategy: Veprimet e kontrolluesve që askush nuk i ka
+          konfiguruar mund t'i kryejë çdo përdorues i identifikuar (zgjedhje e qartë
+          kundër parazgjedhjes :block).
         unconfigured_field_strategy: Kolonat që askush nuk i ka konfiguruar u shfaqen
           pa maskim kujtdo që mund ta lexojë burimin.
       row:

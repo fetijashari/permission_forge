@@ -395,8 +395,8 @@ module PermissionForge
       # A request reads the rows, a commit drops the index, and only then does
       # the request store what it read. Without a check that index — without
       # the new action — would be served to everybody until it expires, and
-      # under the default unconfigured_action_strategy the action would run
-      # without a grant. The commit runs at exactly that point.
+      # under unconfigured_action_strategy :allow the action would run without
+      # a grant. The commit runs at exactly that point.
 
       test 'a commit between the rows read and the index stored leaves no index without the new action' do
         returned = nil

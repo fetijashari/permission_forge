@@ -92,6 +92,20 @@ module PermissionForge
         assert_nil entry(catalog(routes), 'customers#exportCSV')
       end
 
+      # The guard checks it all the same, so the audit lists it among the
+      # actions no Permission Set manages (it never can, without a key).
+      test 'an action whose name cannot be a key is still among the mapped entries' do
+        routes = draw do
+          get 'customers/export', to: 'customers#export'
+          get 'customers/export_csv', to: 'customers#exportCSV'
+        end
+        mapped = catalog(routes).mapped_entries
+
+        assert_equal %w[customers#export customers#exportCSV], mapped.map(&:endpoint)
+        assert_equal [true, false], mapped.map(&:manageable?)
+        assert_equal [true, true], mapped.map(&:guarded?)
+      end
+
       test 'a resolver typo drops that entry and is logged, never listed under a wrong name' do
         PermissionForge.configuration.controller_action_resolver = ->(_path, action) { %w[customer export] if action == 'export' }
 

@@ -10,6 +10,7 @@ PermissionForge.configure do |config|
   # ---------------------------------------------------------------------------
   # A guarded controller action (ControllerActionGuard) with nobody signed in is refused.
   config.action_guard_nil_user_strategy = :deny
+  # One no Permission Set manages is refused too, by default (opt out: config.unconfigured_action_strategy = :allow).
   # Conditional Permission Sets fail closed without a request context (see below).
   config.conditional_sets_strict_mode = true
   # Rails.cache, shared by every process: Redis or Solid Cache in production, :file_store (not :memory_store) in development.
@@ -18,9 +19,8 @@ PermissionForge.configure do |config|
   # config.preset = :strict closes the fail-open defaults a setting can close, except masking
   # with nobody signed in (its own section below; the audit reports it until you choose):
   #   nil_user_strategy = :deny, auto_query_scoping = :filter_only, no_read_access_strategy = :deny,
-  #   response_filter_nil_user_strategy = :block, unconfigured_action_strategy = :block,
-  #   mask_virtual_attributes = :auto, extra_fields_default_access = :unconfigured,
-  #   and the three settings above. A setting you make here still wins (docs/configuration.md#presets).
+  #   response_filter_nil_user_strategy = :block, mask_virtual_attributes = :auto,
+  #   extra_fields_default_access = :unconfigured, and the three settings above. A setting you make here still wins (docs/configuration.md#presets).
   # What it costs: with nil_user_strategy :deny and auto_query_scoping :filter_only,
   # code that runs with no current user (jobs, mailers, seeds, webhooks, the console,
   # sign-in lookups on a user model that includes PermissionScopedFindable) sees no

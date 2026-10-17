@@ -3,10 +3,12 @@
 module PermissionForge
   module Services
     module SecurityAuditChecks
-      # Controller actions as permissions: managed actions nobody is permitted
-      # to run, managed actions whose controller does not run the guard, rows
-      # whose name can never be an action key, rows that match no controller
-      # action, and discovery switched on while no controller includes the guard.
+      # Controller actions as permissions: guarded controller actions no
+      # Permission Set manages (refused under the default strategy, open under
+      # :allow), managed actions nobody is permitted to run, managed actions
+      # whose controller does not run the guard, rows whose name can never be
+      # an action key, rows that match no controller action, and discovery
+      # switched on while no controller includes the guard.
       class ActionCheck < BaseCheck
         # One action row in effect (PermissionForge::ResourceAction.in_effect).
         LiveRow = Struct.new(:tenant, :resource, :action, :permitted, :muting, :set) do
@@ -28,7 +30,7 @@ module PermissionForge
         end
 
         def call
-          [ungranted_actions, unguarded_actions, invalid_keys, unlinked_actions, guard_missing].compact
+          [unmanaged_actions, ungranted_actions, unguarded_actions, invalid_keys, unlinked_actions, guard_missing].compact
         end
 
         private
@@ -68,6 +70,43 @@ module PermissionForge
         def unguarded_item(resource, action)
           unguarded = endpoints[resource].fetch(action, []).reject(&:guarded?).map(&:endpoint).join(', ')
           "#{resource} › #{action}: #{unguarded}" unless unguarded.empty?
+        end
+
+        # Mapped controller actions, in controllers that run the guard, that no
+        # Permission Set manages in any tenant: the guard hands them to
+        # unconfigured_action_strategy. Read from the routes whether or not
+        # discovery is on, as the guard runs either way, so an app upgrading
+        # past the :allow default sees what now answers 403 before it deploys.
+        def unmanaged_actions
+          items = UnmanagedActions.new(entries: catalog.mapped_entries, managed: managed_actions).items
+          return if items.empty?
+
+          if configuration.allow_unconfigured_actions?
+            finding(:info, :unmanaged_actions_allowed, 'Guarded actions no Permission Set manages run for everyone',
+                    'unconfigured_action_strategy is :allow, so every signed-in user can run these controller ' \
+                    'actions: no Permission Set manages them (unconfigured_actions_allowed rates the setting). ' \
+                    'Manage each one in a Permission Set before you switch the strategy back to :block, the default.',
+                    items: items)
+          else
+            finding(:low, :unmanaged_actions_refused, 'Guarded actions no Permission Set manages are refused',
+                    'These controller actions map to a Resource and run the guard, but no Permission Set manages ' \
+                    'them, so the guard refuses them (403) to everyone whom action_guard_bypass does not let ' \
+                    'through (unconfigured_action_strategy :block, the default since 0.15). Give each one a row in ' \
+                    'the Permission Sets that should run it; an action whose name is not a valid action key needs a ' \
+                    'key first (permission_forge_actions actions: { ... }). Or set unconfigured_action_strategy = ' \
+                    ':allow to let every signed-in user run them, as before 0.15.', items: items)
+          end
+        end
+
+        # { 'Customer' => Set['export'] } for every resource in effect in some
+        # tenant: what ManagedIndex holds, for every tenant at once.
+        def managed_actions
+          @managed_actions ||= begin
+            index = PermissionForge::Resource.in_effect.distinct.pluck(column(PermissionForge::Resource, :name))
+                                             .index_with { Set.new }
+            live_rows.each { |row| (index[row.resource] ||= Set.new) << row.action }
+            index
+          end
         end
 
         # Managed (a row is in effect) but permitted by no granting set: the

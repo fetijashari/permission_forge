@@ -56,6 +56,7 @@ module PermissionForge
       SETTINGS = {
         admin_ui_exposed: 'http_basic_auth_enabled',
         unconfigured_fields_pass: 'unconfigured_field_strategy',
+        unconfigured_actions_allowed: 'unconfigured_action_strategy',
         write_protection_off: 'masked_write_protection',
         audit_trail_off: 'audit_trail_enabled',
         conditional_sets_lenient: 'conditional_sets_strict_mode',
@@ -273,6 +274,10 @@ module PermissionForge
 
       def configure_unconfigured_fields_pass
         config.unconfigured_field_strategy = :warn
+      end
+
+      def configure_unconfigured_actions_allowed
+        config.unconfigured_action_strategy = :allow
       end
 
       def configure_write_protection_off

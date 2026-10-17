@@ -1948,6 +1948,8 @@ en:
           on, but no credentials) or unprotected (no password and no custom admin
           controller).
         masked_write_protection: Masked values can be saved back over real data.
+        unconfigured_action_strategy: Controller actions nobody configured can be
+          run by every signed-in user (an explicit opt-out from the :block default).
         unconfigured_field_strategy: Columns nobody configured are shown unmasked
           to anyone who can read the resource.
       row:

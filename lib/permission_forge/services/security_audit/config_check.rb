@@ -8,6 +8,7 @@ module PermissionForge
       class ConfigCheck < BaseCheck
         RULES = %i[
           admin_ui_exposed process_local_cache unconfigured_fields_pass write_protection_off nested_parent_fallback
+          unconfigured_actions_allowed
           nil_user_bypass masked_nil_user_bypass gdpr_defaults_off log_filtering_off audit_trail_off conditional_sets_lenient
           detection_raises_in_production api_without_auth api_mutations_unguarded api_authorization_unset
           api_sequential_ids api_rule_values_exposed tenantless_admin strict_overrides
@@ -68,6 +69,18 @@ module PermissionForge
                   "has no Resource entry for is filtered against the parent's fields, so a key editable on the parent " \
                   'admits the same key on a child the user was never granted. Configure the child Resource and set ' \
                   'it back to false (the default).')
+        end
+
+        # Closed by default since 0.15: :allow is the host's explicit opt-out.
+        def unconfigured_actions_allowed
+          return unless configuration.allow_unconfigured_actions?
+
+          finding(:medium, :unconfigured_actions_allowed, 'Controller actions no Permission Set manages are allowed',
+                  'unconfigured_action_strategy is :allow (the opt-out from the :block default): a guarded ' \
+                  'controller action that maps to a Resource runs for every signed-in user until a Permission Set ' \
+                  'manages it, so a new action is open before anyone decides who may run it. ' \
+                  'unmanaged_actions_allowed lists the actions open now. Manage them, then remove the setting ' \
+                  '(:block refuses them with 403).')
         end
 
         def nil_user_bypass
