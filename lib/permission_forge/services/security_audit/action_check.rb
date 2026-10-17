@@ -3,10 +3,12 @@
 module PermissionForge
   module Services
     module SecurityAuditChecks
-      # Controller actions as permissions: managed actions nobody is permitted
-      # to run, managed actions whose controller does not run the guard, rows
-      # whose name can never be an action key, rows that match no controller
-      # action, and discovery switched on while no controller includes the guard.
+      # Controller actions as permissions: guarded controller actions no
+      # Permission Set manages (refused under the default strategy, open under
+      # :allow), managed actions nobody is permitted to run, managed actions
+      # whose controller does not run the guard, rows whose name can never be
+      # an action key, rows that match no controller action, and discovery
+      # switched on while no controller includes the guard.
       class ActionCheck < BaseCheck
         # One action row in effect (PermissionForge::ResourceAction.in_effect).
         LiveRow = Struct.new(:tenant, :resource, :action, :permitted, :muting, :set) do
@@ -28,7 +30,8 @@ module PermissionForge
         end
 
         def call
-          [ungranted_actions, unguarded_actions, invalid_keys, unlinked_actions, guard_missing].compact
+          [unmanaged_actions, actions_not_checked, ungranted_actions, unguarded_actions, invalid_keys, unlinked_actions,
+           guard_missing].compact
         end
 
         private
@@ -68,6 +71,47 @@ module PermissionForge
         def unguarded_item(resource, action)
           unguarded = endpoints[resource].fetch(action, []).reject(&:guarded?).map(&:endpoint).join(', ')
           "#{resource} › #{action}: #{unguarded}" unless unguarded.empty?
+        end
+
+        # Mapped controller actions, in controllers that run the guard, that
+        # some tenant's Permission Sets do not manage: the guard hands them to
+        # unconfigured_action_strategy. Read from the routes whether or not
+        # discovery is on, as the guard runs either way, so an app upgrading
+        # past the :allow default sees what now answers 403 before it deploys.
+        def unmanaged_actions
+          items = UnmanagedActions.build(entries: catalog.mapped_entries, configuration: configuration).items
+          return if items.empty?
+
+          if configuration.allow_unconfigured_actions?
+            finding(:info, :unmanaged_actions_allowed, 'Guarded actions no Permission Set manages run for everyone',
+                    'unconfigured_action_strategy is :allow, so every signed-in user can run these controller ' \
+                    'actions: no Permission Set manages them (unconfigured_actions_allowed rates the setting). ' \
+                    'Manage each one in a Permission Set before you switch the strategy back to :block, the default.',
+                    items: items)
+          else
+            finding(:low, :unmanaged_actions_refused, 'Guarded actions no Permission Set manages are refused',
+                    'These controller actions map to a Resource and run the guard, but no Permission Set manages ' \
+                    "them (with tenancy: in the tenants named), so the guard refuses them (403) #{UnmanagedActions.refused_to(configuration)} " \
+                    '(unconfigured_action_strategy :block, the default since 0.15) — unless the controller skips ' \
+                    'the guard for that action (skip_before_action :pf_authorize_action!, only: …), which the audit ' \
+                    'does not see. Give each one a row in the Permission Sets that should run it; an action whose ' \
+                    'name is not a valid action key needs a key first (permission_forge_actions actions: { ... }). ' \
+                    'Or set unconfigured_action_strategy = :allow to let every signed-in user run them, as before 0.15.',
+                    items: items)
+          end
+        end
+
+        # The routes the catalog could not judge: the lists above may miss them.
+        def actions_not_checked
+          skipped = catalog.skipped
+          count = skipped.size
+          return if count.zero?
+
+          finding(:low, :actions_not_checked, "#{count} #{'controller action'.pluralize(count)} could not be checked (see the log)",
+                  'A controller failed to load, or the controller_action_resolver or the mapping raised, so the ' \
+                  'audit could not tell whether these run the guard or what they map to. They are missing from ' \
+                  'unmanaged_actions_refused (and the other action findings); at run time the same error fails the ' \
+                  'request. Fix the error the log names and run the audit again.', items: skipped)
         end
 
         # Managed (a row is in effect) but permitted by no granting set: the

@@ -213,11 +213,12 @@ module PermissionForge
       end
 
       test 'the guard follows unconfigured_action_strategy' do
+        error = assert_raises(PermissionForge::ActionNotAuthorizedError) { authorize(::CustomersController, 'archive') }
+        assert_equal :action_not_managed_blocked, error.reason, 'refused by default'
+
+        PermissionForge.configuration.unconfigured_action_strategy = :allow
+
         assert_nil authorize(::CustomersController, 'archive')
-
-        PermissionForge.configuration.unconfigured_action_strategy = :block
-
-        assert_raises(PermissionForge::ActionNotAuthorizedError) { authorize(::CustomersController, 'archive') }
       end
 
       test 'the guard follows nil_user_strategy' do

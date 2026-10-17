@@ -195,7 +195,8 @@ module PermissionForge
         'no_read_access_strategy' => ->(config) { config.deny_record_reads_without_read_access? ? :ok : nil },
         'masked_attributes_nil_user_strategy' => ->(config) { config.hide_masked_attributes_without_user_in_requests? ? :ok : nil },
         'extra_fields_default_access' => ->(config) { config.grant_extra_fields_by_default? ? nil : :ok },
-        'unconfigured_action_strategy' => ->(config) { config.allow_unconfigured_actions? ? nil : :ok },
+        # :allow is the opt-out from the :block default: the audit's unconfigured_actions_allowed.
+        'unconfigured_action_strategy' => ->(config) { config.allow_unconfigured_actions? ? :warn : :ok },
         'action_guard_nil_user_strategy' => ->(config) { config.action_guard_nil_user_bypass? ? nil : :ok }
       }.freeze
 
@@ -218,6 +219,7 @@ module PermissionForge
         'api_require_authorization' => 'true',
         'admin_tenantless_access' => ':deny',
         'unconfigured_field_strategy' => ':block',
+        'unconfigured_action_strategy' => ':block',
         'masked_write_protection' => ':skip',
         'audit_trail_enabled' => 'true',
         'audit_events' => ':auto',

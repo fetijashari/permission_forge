@@ -70,15 +70,17 @@ stored in database tables and managed in the PermissionForge admin. `User` inclu
 - `response_filter_nil_user_strategy :bypass`, `masked_attributes_nil_user_strategy :bypass`,
   `auto_query_scoping :off`, `no_read_access_strategy :rules_only` (a signed-in user without Read on a
   model gets every row its rules allow, all of them with no rule),
-  `unconfigured_action_strategy :allow` (unmapped controller actions are always allowed),
   `conditional_sets_strict_mode false`, `extra_fields_default_access :grant`.
+- `unconfigured_action_strategy` is `:block` (since 0.15): a guarded action no Permission Set manages is
+  refused (403); unmapped controller actions are always allowed. `:allow` is an explicit opt-out that
+  fails open: do not set it in code you write.
 - `admin_assignment_authorization` and `audit_log_authorization` unset: any admin may assign and read
   the audit log.
 - `cache_backend :memory`: per process; production needs a shared store.
 - With `auto_query_scoping :filter_only`, the scope is decided when a relation is built: never keep a
   relation in a constant or build one before authentication (built with no user, it stays unscoped).
 Do not loosen these in code you write. `bin/rails permission_forge:audit` reports most of them (not
-`no_read_access_strategy`, `unconfigured_action_strategy`, `action_guard_nil_user_strategy`,
+`no_read_access_strategy`, `action_guard_nil_user_strategy`,
 `admin_assignment_authorization` or `audit_log_authorization`).
 
 ### Caching and data

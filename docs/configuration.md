@@ -237,9 +237,9 @@ PermissionForge.configure do |config|
   ]
 
   # What the guard does with an action no Permission Set manages:
-  #   :allow — let it through (default); :block — deny until a set permits it
-  # Unknown values behave as :block (fail closed).
-  config.unconfigured_action_strategy = :allow
+  #   :block — deny (403) until a set permits it (default since 0.15)
+  #   :allow — let it through (the default before 0.15; fails open)
+  config.unconfigured_action_strategy = :block
 
   # People the guard never checks.
   #   config.action_guard_bypass = ->(user, _controller) { user.admin? }
@@ -662,6 +662,7 @@ The following defaults changed for security hardening:
 | `api_require_authorization` (0.14) | `false` | `true` | Set `api_action_authorization` and `api_assignment_authorization`, or `false` explicitly (not recommended) |
 | `nested_attributes_parent_fallback` (0.14, new) | parent fallback | `false` | Set `true` explicitly (not recommended) |
 | `admin_tenantless_access` (0.14, new) | tenant-less admin requests served | `:deny` | Set the tenant in the base controllers, or `:allow` |
+| `unconfigured_action_strategy` (0.15) | `:allow` | `:block` | Manage the actions `bin/rails permission_forge:audit` lists as `unmanaged_actions_refused`, or set `:allow` explicitly (not recommended) |
 
 Users who relied on old defaults can restore them in their initializer.
 
@@ -676,7 +677,7 @@ Users who relied on old defaults can restore them in their initializer.
 
 `config.preset` sets the options that decide whether something fails open, all at once. It is a layer of defaults: a setting you make yourself wins, before or after `config.preset =`, in whichever `configure` block.
 
-- `:compat` (the default): the library defaults, as every version had them.
+- `:compat` (the default): the library defaults (`Configuration.new`). Since 0.15 that includes `unconfigured_action_strategy = :block`.
 - `:strict`: every fail-open default of the [Production hardening checklist](https://github.com/fetijashari/permission_forge#production-hardening-checklist) that a setting can close, and the defaults that are already closed kept so. The install generator writes it as a comment.
 
 | Option | `:compat` | `:strict` |
@@ -685,14 +686,13 @@ Users who relied on old defaults can restore them in their initializer.
 | `response_filter_nil_user_strategy` | `:bypass` | `:block` |
 | `auto_query_scoping` | `:off` | `:filter_only` |
 | `no_read_access_strategy` | `:rules_only` | `:deny` |
-| `unconfigured_action_strategy` | `:allow` | `:block` |
 | `action_guard_nil_user_strategy` | `nil` | `:deny` |
 | `conditional_sets_strict_mode` | `false` | `true` |
 | `mask_virtual_attributes` | `false` | `:auto` |
 | `extra_fields_default_access` | `:grant` | `:unconfigured` |
 | `cache_backend` | `:memory` | `:rails_cache` |
 | `masked_attributes_nil_user_strategy` | `:bypass` | `:hide_in_requests` |
-| `api_require_authorization`, `admin_tenantless_access`, `nested_attributes_parent_fallback`, `unconfigured_field_strategy` | `true`, `:deny`, `false`, `:block` | the same |
+| `api_require_authorization`, `admin_tenantless_access`, `nested_attributes_parent_fallback`, `unconfigured_field_strategy`, `unconfigured_action_strategy` | `true`, `:deny`, `false`, `:block`, `:block` | the same |
 
 What `:strict` leaves open:
 
@@ -1023,9 +1023,9 @@ See [controller-actions.md](controller-actions.md).
 
 #### unconfigured_action_strategy
 
-**Default:** `:allow` Takes `:allow` or `:block` (or its String).
+**Default:** `:block` Takes `:allow` or `:block` (or its String).
 
-**Actions without a setting.** What happens to a controller action that no Permission Set mentions: `:allow` (default) or `:block`.
+**Actions without a setting.** What happens to a guarded controller action that no Permission Set manages: `:block` (the default since 0.15) refuses it (`ActionNotAuthorizedError`, a 403) until a Permission Set permits it; `:allow` lets every signed-in user run it, as before 0.15 — an explicit opt-out that fails open (`bin/rails permission_forge:audit` reports it as `unconfigured_actions_allowed`, medium). Actions that map to no Resource are never checked. Under `:block` the audit lists the guarded actions no Permission Set manages (`unmanaged_actions_refused`). See [Controller Actions](controller-actions.md#unconfigured_action_strategy).
 
 #### action_guard_bypass
 

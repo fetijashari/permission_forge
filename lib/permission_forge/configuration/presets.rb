@@ -6,7 +6,8 @@ module PermissionForge
     # whether something fails open, applied as a layer of defaults under
     # the settings the host makes itself.
     #
-    #   :compat (default) — the library defaults, as every version had them
+    #   :compat (default) — the library defaults (Configuration.new; since 0.15
+    #                       unconfigured_action_strategy is :block there too)
     #   :strict           — every fail-open default of the README's
     #                       "Production hardening checklist" closed, and the
     #                       settings that are already closed kept so
@@ -35,7 +36,6 @@ module PermissionForge
         response_filter_nil_user_strategy: :bypass,
         auto_query_scoping: :off,
         no_read_access_strategy: :rules_only,
-        unconfigured_action_strategy: :allow,
         action_guard_nil_user_strategy: nil,
         conditional_sets_strict_mode: false,
         mask_virtual_attributes: false,
@@ -46,7 +46,9 @@ module PermissionForge
         api_require_authorization: true,
         admin_tenantless_access: :deny,
         nested_attributes_parent_fallback: false,
-        unconfigured_field_strategy: :block
+        unconfigured_field_strategy: :block,
+        # closed by default since 0.15 (:allow is the explicit opt-out)
+        unconfigured_action_strategy: :block
       }.freeze
 
       STRICT = COMPAT.merge(
@@ -54,7 +56,6 @@ module PermissionForge
         response_filter_nil_user_strategy: :block,
         auto_query_scoping: :filter_only,
         no_read_access_strategy: :deny,
-        unconfigured_action_strategy: :block,
         action_guard_nil_user_strategy: :deny,
         conditional_sets_strict_mode: true,
         mask_virtual_attributes: :auto,

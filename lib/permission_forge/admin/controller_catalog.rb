@@ -8,10 +8,11 @@ module PermissionForge
     #
     # Reads the route table once per instance. Routes without a static
     # controller and action (mounted engines and Rack apps, redirects, dynamic
-    # segments), internal routes, excluded controllers and actions whose name
-    # cannot be a ResourceAction key are skipped. A
-    # controller that fails to load, or a host resolver that raises, drops
-    # that one entry instead of the whole catalog.
+    # segments), internal routes and excluded controllers are skipped; actions
+    # whose name cannot be a ResourceAction key are left out of #entries (no
+    # row can manage them) but kept in #mapped_entries, since the guard still
+    # checks them. A controller that fails to load, or a host resolver that
+    # raises, drops that one entry instead of the whole catalog.
     #
     # @example
     #   catalog = ControllerCatalog.new
@@ -26,11 +27,16 @@ module PermissionForge
       # One mapped controller action. `key` is the action key the guard asks
       # for; `crud` is :read / :create / :edit / :delete when the action means
       # a CRUD permission, nil for a custom action. `guarded` is whether the
-      # controller runs the guard (ControllerActions.guarded?).
+      # controller runs the guard (ControllerActions.guarded?). `manageable`
+      # is whether a row can manage it (Mapping::Target#manageable?).
       Entry = Struct.new(:controller_path, :action_name, :verbs, :paths, :resource, :key, :crud, :guarded,
-                         keyword_init: true) do
+                         :manageable, keyword_init: true) do
         def crud? = !crud.nil?
         def guarded? = guarded == true
+        def manageable? = manageable == true
+
+        # ['Customer', 'export']: what a ResourceAction row of that resource and name manages
+        def pair = [resource, key]
 
         # 'customers#export'
         def endpoint = "#{controller_path}##{action_name}"
@@ -82,13 +88,23 @@ module PermissionForge
         # controller_path => conventional resource, filled by Mapping: one
         # lookup per controller instead of one per route.
         @conventions = {}
+        @skipped = []
       end
 
-      # @return [Array<Entry>] one per mapped (controller_path, action_name),
-      #   sorted by resource, key, controller and action
+      # @return [Array<Entry>] one per mapped (controller_path, action_name)
+      #   a row can manage, sorted by resource, key, controller and action
       def entries
-        @entries ||= routed_actions.filter_map { |(path, action), route| build_entry(path, action, route) }
-                                   .sort_by(&:sort_key).freeze
+        @entries ||= mapped_entries.select(&:manageable?).freeze
+      end
+
+      # Every mapped controller action, those whose name cannot be an action
+      # key included: the guard checks them too (with no row possible, the
+      # strategy for unmanaged actions decides).
+      #
+      # @return [Array<Entry>] sorted as #entries
+      def mapped_entries
+        @mapped_entries ||= routed_actions.filter_map { |(path, action), route| build_entry(path, action, route) }
+                                          .sort_by(&:sort_key).freeze
       end
 
       # @param resource_name [String, Symbol] e.g. 'Customer'
@@ -102,6 +118,17 @@ module PermissionForge
       # @return [Array<String>] unique custom action keys, sorted
       def keys_for(resource_name)
         for_resource(resource_name).map(&:key).uniq
+      end
+
+      # What reading the routes could not judge: a controller that fails to
+      # load (listed, but whether it runs the guard is unknown) and a
+      # controller action dropped because its controller, the resolver or the
+      # mapping raised. The log has the first error.
+      #
+      # @return [Array<String>] "customers#export: RuntimeError", "broken: NameError"
+      def skipped
+        mapped_entries
+        @skipped.dup.freeze
       end
 
       # @return [Boolean] whether any listed controller runs the guard (see
@@ -130,11 +157,11 @@ module PermissionForge
         klass = controller_class(path)
         target = ControllerActions::Mapping.call(controller_path: path, action_name: action, controller_class: klass,
                                                  configuration: @configuration, conventions: @conventions)
-        return nil unless target&.manageable?
+        return nil unless target
 
         Entry.new(controller_path: path, action_name: action, verbs: route[:verbs].sort, paths: route[:paths].sort,
                   resource: target.resource, key: target.action, crud: target.crud,
-                  guarded: ControllerActions.guarded?(klass))
+                  guarded: ControllerActions.guarded?(klass), manageable: target.manageable?)
       rescue StandardError => e
         log_skipped("#{path}##{action}", e)
         nil
@@ -153,9 +180,10 @@ module PermissionForge
         nil
       end
 
-      # Logged once per catalog: a raising resolver would otherwise repeat the
-      # same line for every route.
+      # Kept for #skipped; logged once per catalog: a raising resolver would
+      # otherwise repeat the same line for every route.
       def log_skipped(what, error)
+        @skipped << "#{what}: #{error.class}"
         return if @logged
 
         @logged = true

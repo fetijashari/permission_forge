@@ -34,10 +34,13 @@ module PermissionForge
 
       def item_for(report, code) = report.findings.find { |f| f.code == code }
 
+      # The dummy app's guarded CustomersController maps to Customer, which no
+      # Permission Set manages here: its actions are refused (a low note).
       test 'a default install gets notes (nil-user bypass, unused record rules, audit log defaults) and one medium' do
         report = audit(audit_actor_resolver: ->(_controller) {})
 
-        assert_equal %i[masked_nil_user_bypass nil_user_bypass no_rules audit_runtime_default audit_kept_forever], codes(report)
+        assert_equal %i[masked_nil_user_bypass nil_user_bypass unmanaged_actions_refused no_rules audit_runtime_default
+                        audit_kept_forever], codes(report)
         assert_equal %i[masked_nil_user_bypass], report.at_least(:medium).map(&:code)
 
         hardened = audit(audit_actor_resolver: ->(_controller) {}, masked_attributes_nil_user_strategy: :hide)
@@ -137,6 +140,19 @@ module PermissionForge
         finding = item_for(audit(nested_attributes_parent_fallback: true), :nested_parent_fallback)
         assert_equal :medium, finding.severity
         assert_includes finding.detail, 'nested_attributes_parent_fallback'
+      end
+
+      # Issue #10: :block is the default; :allow is the host's explicit opt-out,
+      # which fails open.
+      test 'an explicit :allow for unconfigured actions is a medium finding' do
+        assert_not_includes codes(audit), :unconfigured_actions_allowed
+
+        finding = item_for(audit(unconfigured_action_strategy: :allow), :unconfigured_actions_allowed)
+        assert_equal :medium, finding.severity
+        assert_equal 'config', finding.check
+        assert_includes finding.detail, 'unconfigured_action_strategy is :allow'
+        assert_includes codes(audit(unconfigured_action_strategy: 'allow')), :unconfigured_actions_allowed
+        assert_not_includes codes(audit(unconfigured_action_strategy: :block)), :unconfigured_actions_allowed
       end
 
       test 'an enabled API without authorization lambdas is high once requiring them is switched off' do

@@ -15,9 +15,10 @@ before the deploy — it lists the stored rows this release reads differently (r
 activation conditions, variant rows, unknown mask strategies) — and an RLS re-sync after it. From 0.13, see
 [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013): a revocation
 made on 0.15 does not reach what 0.13 processes have cached. Most Changed
-entries need nothing from you. These may need a change in your app or its clients: **An unrescued denial answers 403
-Forbidden instead of 500.** (add `public/403.html`, or rescue the errors), **RLS: `RlsPolicyGenerator::GENERATOR_VERSION`
-is 7** (run `permission_forge:rls:sync` after the deploy), **`include_nulls` is off unless asked for — in code, through
+entries need nothing from you. These may need a change in your app or its clients: **A mapped controller action no
+Permission Set manages is refused (403) unless `unconfigured_action_strategy = :allow`.** (manage the actions the
+audit lists as `unmanaged_actions_refused` — with tenancy, in each tenant named — or opt out), **An unrescued denial answers 403 Forbidden instead of 500.**
+(add `public/403.html`, or rescue the errors), **RLS: `RlsPolicyGenerator::GENERATOR_VERSION` is 7** (run `permission_forge:rls:sync` after the deploy), **`include_nulls` is off unless asked for — in code, through
 the JSON API and in the admin's rule builder alike.** (pass `include_nulls: true` where a rule should let empty values
 through), **A refusing `api_auth` answers 401 Unauthorized instead of 403.** and **API: a value of the wrong shape for
 its attribute is a 422 keyed by it, never dropped or cast.** (API clients), **A Permission Set, a group or a rule
@@ -724,6 +725,36 @@ read a masked model before sign-in).
   judge — fix it on the Conditions tab)") instead of calling it overnight; the Conditions form refuses a start hour
   equal to the end hour (error keyed `:hours`). **No opt-out:** wording.
   <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#hours_window: none, a window, an overnight window, and the broken shapes -->
+- **A mapped controller action no Permission Set manages is refused (403) unless `unconfigured_action_strategy = :allow`.** (issue #10)
+  `unconfigured_action_strategy` defaults to `:block` (it was `:allow`), in `Configuration.new` and so in the `:compat`
+  preset too. In a controller that includes `ControllerActionGuard`, an action that maps to a Resource no Permission Set
+  manages, or a custom action no Permission Set manages, raises `ActionNotAuthorizedError` (reason
+  `resource_not_managed_blocked` / `action_not_managed_blocked`, an `action.denied` event; 403 unless you rescue it)
+  instead of running for every signed-in user — a new action nobody configured is refused until someone decides who
+  may run it, as an unconfigured field already was. Unchanged: actions that map to no Resource are never checked, a
+  request with nobody signed in follows `action_guard_nil_user_strategy`, `action_guard_bypass` and grants come
+  first. Every refused request stores an `action.denied` audit event (the denied group is stored by default), so a
+  page left unmanaged fills the audit log. `rake permission_forge:audit` lists the guarded actions this refuses
+  (`action/unmanaged_actions_refused`, Low: per Resource not managed, then per custom action; with tenancy, each with
+  the tenants that do not manage it), read from the routes whether or not `controller_action_discovery` is on — run it
+  before the deploy; a CI step running it with `FAIL_ON=low` (or `info`) now fails on that finding. It cannot see a
+  per-action `skip_before_action :pf_authorize_action!, only: …` (those actions are listed although they run), and
+  `action/actions_not_checked` (Low) names the controller actions it could not judge (a controller that fails to load,
+  a raising resolver or mapping). The admin's Actions tab says "Not managed — blocked until a set permits it", and its
+  note and review say the first row opens an action to the people permitted. If you copied
+  `config.unconfigured_action_strategy = :allow` from the 0.14 reference block of docs/configuration.md, remove it to
+  get the new default. **Opt out:** `config.unconfigured_action_strategy = :allow` restores the 0.14 behaviour;
+  it fails open, so the audit reports it (`config/unconfigured_actions_allowed`, Medium, and
+  `action/unmanaged_actions_allowed`, Info, listing the actions it opens), the Settings page flags it and `:strict`
+  counts it as an override.
+  <!-- pin: test/permission_forge/controller_actions/guard_integration_test.rb#an action nobody lists is refused by default and runs under :allow -->
+  <!-- pin: test/permission_forge/controller_actions/guard_integration_test.rb#a resource no Permission Set manages is refused by default and runs under :allow -->
+  <!-- pin: test/permission_forge/configuration_test.rb#controller action options default to discovery off and block -->
+  <!-- pin: test/permission_forge/services/security_audit_action_check_test.rb#guarded actions no Permission Set manages are listed as refused, per resource and per action -->
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#an explicit :allow for unconfigured actions is a medium finding -->
+  <!-- pin: test/permission_forge/services/security_audit_action_check_test.rb#with tenancy, an action is listed with the tenants that do not manage it -->
+  <!-- pin: test/permission_forge/services/security_audit_action_check_test.rb#controller actions the catalog could not judge are reported, and the rest still checked -->
+  <!-- pin: test/permission_forge/html/action_discovery_test.rb#under :allow, review warns that the first row restricts the action -->
 - **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
   `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` and
   `PermissionForge::ActionNotAuthorizedError` in `config.action_dispatch.rescue_responses` as `:forbidden`, as
