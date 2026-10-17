@@ -197,11 +197,11 @@ module PermissionForge
                                                 PermissionForge::ResourceAction.arel_table[:name])
         end
 
-        # Mirrors PermissionCacheAccessor#permission_cache_key.
+        # Mirrors PermissionCacheAccessor#permission_cache_key: the ambient
+        # tenant's key (PermissionForge.ambient_tenant_id, the one reader).
         def cache_key
-          config = PermissionForge.configuration
-          tenant = ActsAsTenant.current_tenant if config.tenant_enabled? && defined?(ActsAsTenant)
-          tenant ? tenant_key(tenant.id) : CACHE_KEY
+          tenant_id = PermissionForge.ambient_tenant_id
+          tenant_id ? tenant_key(tenant_id) : CACHE_KEY
         end
 
         def tenant_key(tenant_id)

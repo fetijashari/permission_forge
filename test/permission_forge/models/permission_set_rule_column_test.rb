@@ -1,0 +1,245 @@
+# frozen_string_literal: true
+
+require 'test_helper'
+
+module PermissionForge
+  # A rule's field_name has to be a column of its table. A rule naming one the
+  # table does not have was saved (201 through the API), and then every
+  # find_by / permission_scoped of its holders raised
+  # ActiveRecord::StatementInvalid — a 500 in the host app. It is refused when
+  # it is written, and one written before (or past the model) denies.
+  class PermissionSetRuleColumnTest < ActiveSupport::TestCase
+    NotAuthorizedError = PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError
+    POSTGRES = ActiveRecord::Base.connection.adapter_name.match?(/postgresql/i)
+
+    # A model whose table does not exist (yet).
+    class TablelessRecord < ActiveRecord::Base
+      self.table_name = 'pf_rule_column_no_such_table'
+    end
+
+    setup do
+      @permission_set = create_permission_set(name: 'Sales')
+      @resource = create_resource(permission_set: @permission_set, name: 'Customer', read_access: true)
+    end
+
+    teardown do
+      Current.user = nil
+    end
+
+    # --- refused at save ---
+
+    test 'a field name that is no column of the model is refused on field_name' do
+      rule = build_rule(field_name: 'onwer_id')
+
+      assert_not rule.valid?
+      assert_equal ['names onwer_id, which is not a column of Customer'], rule.errors[:field_name]
+      assert_equal ['Field name names onwer_id, which is not a column of Customer'], rule.errors.full_messages
+      assert_not build_rule(field_name: 'customers.onwer_id').valid?
+    end
+
+    test 'the message is translated' do
+      { sq: 'përmend onwer_id, që nuk është kolonë e Customer', mk: 'го именува onwer_id, што не е колона на Customer' }.each do |locale, message|
+        I18n.with_locale(locale) do
+          rule = build_rule(field_name: 'onwer_id')
+
+          assert_not rule.valid?
+          assert_equal [message], rule.errors[:field_name], locale
+        end
+      end
+    end
+
+    test 'a column of the model, in any notation the database resolves, is accepted' do
+      { 'supplier_id' => '5', 'customers.supplier_id' => '5', 'created_at' => '2026-01-01', 'id' => '5' }.each do |name, value|
+        rule = build_rule(field_name: name, field_value: value)
+
+        assert rule.valid?, "#{name}: #{rule.errors.full_messages}"
+      end
+      other_case = build_rule(field_name: 'Supplier_ID')
+
+      # PostgreSQL tells the case of a quoted name apart; MySQL and SQLite do not.
+      assert_equal !POSTGRES, other_case.valid?, other_case.errors.full_messages.inspect
+    end
+
+    test 'a join rule names a column of the table at the end of its path' do
+      join = { join_type: 'joins', field_accessor_path: 'supplier' }
+
+      assert build_rule(field_name: 'owner_id', **join).valid?
+      assert build_rule(field_name: 'suppliers.owner_id', **join).valid?
+      assert build_rule(field_name: 'deactivated', field_value: 'true', join_type: 'left_joins', field_accessor_path: 'supplier.owner').valid?
+
+      on_path = build_rule(field_name: 'domain', **join)
+
+      assert_not on_path.valid?
+      assert_equal ['names domain, which is not a column of Supplier'], on_path.errors[:field_name]
+      qualified = build_rule(field_name: 'customers.nope', **join).tap(&:valid?)
+      assert_equal ['names nope, which is not a column of Customer'], qualified.errors[:field_name]
+    end
+
+    test 'a filter rule is checked against its own model, whatever path it carries' do
+      assert build_rule(field_name: 'domain', field_accessor_path: 'supplier').valid?
+      assert_not build_rule(field_name: 'owner_id', field_accessor_path: 'supplier').valid?
+    end
+
+    # A qualifier naming no table would reach SQL as written and raise for
+    # every holder: refused on field_name. So is a filter rule's qualifier
+    # naming a real table of another model (a filter rule compares its own
+    # table: review R1 #2), and a join rule's naming none of the names its
+    # join gives (review R1 #1). A join rule's qualifier naming a real table
+    # its query may join itself, or an alias its join gives, is left to the query.
+    test 'a qualifier naming no table is refused; a join rule may name a table or an alias its query gives' do
+      rule = build_rule(field_name: 'elsewhere.anything')
+
+      assert_not rule.valid?
+      assert_equal ['names elsewhere, which is no table of this database'], rule.errors[:field_name]
+      assert_not build_rule(field_name: 'customer.name').valid?, 'a typo of the own table'
+      assert_not build_rule(field_name: 'suppliers.name').valid?, 'a real table that is none of the filter rule\'s'
+      assert_not build_rule(field_name: 'elsewhere.anything', join_type: 'joins', field_accessor_path: 'supplier').valid?,
+                 'with a path: no name its join gives'
+      assert build_rule(field_name: 'users.id', join_type: 'joins', field_accessor_path: 'supplier').valid?,
+             'a join rule: a real table its query may join itself'
+    end
+
+    # What the check cannot tell is left to the query, as before.
+    test 'where the columns cannot be told, the rule is not refused for its column' do
+      # A path it cannot follow is refused on field_accessor_path (PermissionSetRulePathTest), not on field_name.
+      %w[nowhere supplier.nowhere].each do |path|
+        rule = build_rule(field_name: 'anything', join_type: 'joins', field_accessor_path: path)
+
+        assert_not rule.valid?
+        assert_empty rule.errors[:field_name], path
+      end
+
+      { 'FreightCost' => 'no model', TablelessRecord.name => 'no table', 'PermissionForge' => 'not a model' }.each do |name, why|
+        @resource.update_columns(name: name)
+
+        assert build_rule(field_name: 'anything').valid?, why
+      end
+    end
+
+    test 'a model that cannot be loaded is skipped, not an error' do
+      @resource.update_columns(name: 'PfRuleColumnBroken')
+      Object.const_set(:PfRuleColumnBroken, Class.new(ActiveRecord::Base) { self.abstract_class = true })
+
+      assert build_rule(field_name: 'anything').valid?
+    ensure
+      Object.send(:remove_const, :PfRuleColumnBroken) if Object.const_defined?(:PfRuleColumnBroken)
+    end
+
+    test 'an existing row is checked only when what it names changes' do
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
+      rule.update_columns(field_name: 'onwer_id')
+
+      assert rule.reload.update(field_value: '5', is_active: false, name: 'Renamed'), rule.errors.full_messages.inspect
+      assert_not rule.update(field_name: 'onwer')
+      assert_equal ['names onwer, which is not a column of Customer'], rule.errors[:field_name]
+
+      rule.reload
+      assert_not rule.update(join_type: 'joins', field_accessor_path: 'supplier'), 'onwer_id is no column of Supplier either'
+      assert rule.reload.update(field_name: 'supplier_id')
+    end
+
+    # The admin's rule form writes join_type nil for a filter; a legacy row
+    # stored 'filter'. Editing only its message is no change of column.
+    test "a filter rule stored as 'filter' stays editable when the form writes nil" do
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
+      rule.update_columns(field_name: 'onwer_id', join_type: 'filter')
+
+      assert rule.reload.update(join_type: nil, failure_message: 'Only your own'), rule.errors.full_messages.inspect
+    end
+
+    test "a copy moved onto another model's Resource is checked" do
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
+      rule.update_columns(field_name: 'domain')
+      supplier = create_resource(permission_set: @permission_set, name: 'Supplier', read_access: true)
+      copy = rule.reload.dup
+      copy.assign_attributes(uuid: SecureRandom.uuid, resource: supplier)
+
+      assert_not copy.valid?, 'domain is a column of Customer, not of Supplier'
+      assert_equal ['names domain, which is not a column of Supplier'], copy.errors[:field_name]
+    end
+
+    # A column a migration added after the schema cache was read (a running
+    # server, an old process in a rolling deploy) is found at save.
+    test 'a column added after the schema cache was read is accepted' do
+      Customer.columns_hash # warm the cache
+      ActiveRecord::Base.connection.add_column(:customers, :pf_region, :string)
+
+      assert build_rule(field_name: 'pf_region').valid?
+    ensure
+      ActiveRecord::Base.connection.remove_column(:customers, :pf_region) if Customer.connection.column_exists?(:customers, :pf_region)
+      Customer.reset_column_information
+    end
+
+    # The process asked about the name before the migration (a running
+    # request confirmed it missing, SchemaRead stops asking): the save
+    # compares with the database anyway.
+    test 'a column the process confirmed missing before a migration added it is accepted at save' do
+      Customer.columns_hash
+      assert_not PermissionForge::SchemaRead.column?(Customer, 'pf_late'), 'confirmed missing'
+      ActiveRecord::Base.connection.add_column(:customers, :pf_late, :string)
+
+      assert build_rule(field_name: 'pf_late').valid?
+    ensure
+      ActiveRecord::Base.connection.remove_column(:customers, :pf_late) if Customer.connection.column_exists?(:customers, :pf_late)
+      Customer.reset_column_information
+      PermissionForge::SchemaRead.reset!
+    end
+
+    # --- a rule saved before: it denies, it does not raise ---
+
+    test 'a holder of a rule naming a missing column is denied every record, never a 500' do
+      user = create_user
+      create_permission_set_user(user: user, permission_set: @permission_set)
+      customer = create_customer(supplier_id: user.id)
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource, name: 'Owner',
+                                        failure_message: 'Not yours', include_nulls: false)
+      rule.update_columns(field_name: 'onwer_id')
+      Current.user = user
+
+      assert_empty Customer.permission_scoped
+      error = assert_raises(NotAuthorizedError) { Customer.find_by(uuid: customer.uuid) }
+      assert_equal ['Not yours'], error.failure_messages
+      assert_raises(NotAuthorizedError) { Customer.find_by!(uuid: customer.uuid) }
+      assert_nil Customer.find_by(uuid: 'missing'), 'a record that does not exist is still not found'
+
+      PermissionForge.configuration.auto_query_scoping = :filter_only
+
+      assert_equal 0, Customer.where(uuid: customer.uuid).count, 'every query, under auto_query_scoping'
+    end
+
+    # --- copies ---
+
+    test 'cloning a set copies a rule naming a missing column as it is' do
+      good = create_permission_set_rule(permission_set: @permission_set, resource: @resource, name: 'Good')
+      bad = create_permission_set_rule(permission_set: @permission_set, resource: @resource, name: 'Bad')
+      bad.update_columns(field_name: 'onwer_id')
+
+      copy = Services::PermissionSetCloner.call(permission_set: @permission_set.reload, attrs: { name: 'Sales copy' })
+      rules = copy.resources.first.permission_set_rules.order(:name)
+
+      assert_equal [%w[Bad onwer_id], %w[Good supplier_id]], rules.pluck(:name, :field_name)
+      assert_not_equal [good.id, bad.id].sort, rules.ids.sort
+
+      copied = rules.find_by(name: 'Bad')
+
+      assert_not copied.update(field_name: 'onwer'), 'the copy is checked like any rule once its name changes'
+    end
+
+    test 'a copy whose name differs from its original is checked' do
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
+      copy = rule.dup
+      copy.assign_attributes(uuid: SecureRandom.uuid, field_name: 'onwer_id')
+
+      assert_not copy.valid?
+    end
+
+    private
+
+    def build_rule(**attrs)
+      PermissionForge::PermissionSetRule.new({
+        uuid: SecureRandom.uuid, name: 'Rule', field_name: 'supplier_id', field_value: '5', operator: 'equal',
+        permission_set: @permission_set, resource: @resource
+      }.merge(attrs))
+    end
+  end
+end

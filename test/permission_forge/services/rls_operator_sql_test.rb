@@ -51,11 +51,16 @@ module PermissionForge
         end
       end
 
-      test 'a date or time that is not ISO 8601 is FALSE, except for PostgreSQL, which gets it as written' do
-        { %w[born_on less_than today] => "(#{col('born_on')} < 'today')",
+      # PostgreSQL is asked whether it reads the text (ValueCasters::PostgresqlTypes::ReadBack). Its
+      # relative words are computed per statement (review R1 #6); with more text they are FALSE.
+      test 'a date or time that is not ISO 8601 is FALSE, except text PostgreSQL reads, which it gets as written' do
+        { %w[born_on less_than today] => "(#{col('born_on')} < CAST(CURRENT_DATE AS date))",
           ['seen_at', 'not_equal', ' 10.01.2026 '] => "(#{col('seen_at')} <> ' 10.01.2026 ')",
-          ['born_on', 'in', '2026-01-10, someday'] => "(#{col('born_on')} IN ('2026-01-10', 'someday'))",
-          %w[opens_at greater_than noon] => "(#{col('opens_at')} > 'noon')" }.each do |(field, operator, value), as_written|
+          ['born_on', 'in', '2026-01-10, yesterday'] => "(#{col('born_on')} IN ('2026-01-10', CAST((CURRENT_DATE - 1) AS date)))",
+          ['seen_at', 'less_than', 'today 10:00'] => 'FALSE',
+          ['born_on', 'in', '2026-01-10, someday'] => 'FALSE',
+          %w[opens_at greater_than allballs] => "(#{col('opens_at')} > 'allballs')",
+          %w[opens_at greater_than noon] => 'FALSE' }.each do |(field, operator, value), as_written|
           assert_equal (postgres? ? as_written : 'FALSE'), compiled(field, operator, value), "#{field} #{operator} #{value}"
         end
       end
@@ -76,6 +81,24 @@ module PermissionForge
           assert_equal 'FALSE', compiled(field, operator, value), "#{field} #{operator}"
           assert_equal 'FALSE', compiled(field, operator, value, include_nulls: true), "#{field} #{operator} +nulls"
         end
+      end
+
+      # The sync used to fail on such a rule: the policy named a column the
+      # table does not have. The application layer matches nothing for it.
+      test 'a column the table does not have compiles to FALSE, whatever the operator or value' do
+        [%w[no_such_column equal 5], %w[onwer_id equal current_user], %w[no_such_column not_equal x],
+         ['no_such_column', 'in', 'a, b'], %w[no_such_column between 1,2], %w[no_such_column contains a],
+         ['no_such_column', 'is_null', ''], ['no_such_column', 'is_not_null', '']].each do |field, operator, value|
+          assert_equal 'FALSE', compiled(field, operator, value), "#{field} #{operator}"
+          assert_equal 'FALSE', compiled(field, operator, value, include_nulls: true), "#{field} #{operator} +nulls"
+        end
+        assert_not_includes policy_sql_with('onwer_id', 'equal', 'current_user'), 'onwer_id'
+      end
+
+      test 'a name in another case is a missing column only where the database tells case apart' do
+        expected = postgres? ? 'FALSE' : "(#{col('Flag')} = #{quote(true)})"
+
+        assert_equal expected, compiled('Flag', 'equal', 'true')
       end
 
       test 'a join rule whose field name is not a name is compiled too, not skipped' do
@@ -188,6 +211,13 @@ module PermissionForge
         ).tap { |rule| rule.save!(validate: false) }
       end
 
+      def policy_sql_with(field_name, operator, field_value)
+        rule = add_rule(field_name, operator, field_value)
+        policy_sql
+      ensure
+        rule&.delete
+      end
+
       def policy_sql
         RlsPolicyGenerator.call(model_class: PfRuleRecord)[:statements].find { |s| s.include?('CREATE POLICY permission_forge_select') }
       end
@@ -201,16 +231,19 @@ module PermissionForge
       end
 
       def compiled_part(policy)
-        policy[/AND \(psu\.expires_at IS NULL OR psu\.expires_at > now\(\)\) \) OR \((.*)\){6}\z/m, 1]
+        policy[/AND \(psu\.expires_at IS NULL OR psu\.expires_at >= now\(\)\) \) OR \((.*)\){6}\z/m, 1]
       end
 
+      # The user_id column as SchemaRead (the one reader of a model's columns) answers it.
       def with_user_id_column(type, sql_type)
-        model = PermissionForge::PermissionSetUser
-        columns = model.columns_hash.merge('user_id' => Struct.new(:type, :sql_type).new(type, sql_type))
-        model.define_singleton_method(:columns_hash) { columns }
+        read = PermissionForge::SchemaRead.method(:column)
+        user_id = Struct.new(:type, :sql_type).new(type, sql_type)
+        replace_singleton_method(PermissionForge::SchemaRead, :column) do |model, name, &pick|
+          model == PermissionForge::PermissionSetUser && name.to_s == 'user_id' ? user_id : read.call(model, name, &pick)
+        end
         yield
       ensure
-        model.singleton_class.remove_method(:columns_hash)
+        replace_singleton_method(PermissionForge::SchemaRead, :column, read)
       end
     end
   end

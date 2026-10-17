@@ -13,7 +13,7 @@ Groups are useful when you have many permission sets and want to:
 
 ## Creating a Group
 
-```ruby
+```ruby run
 sales_group = PermissionForge::PermissionSetGroup.create!(
   name: 'Sales Department',
   description: 'All permission sets for sales team members',
@@ -23,7 +23,7 @@ sales_group = PermissionForge::PermissionSetGroup.create!(
 
 ## Adding Permission Sets to a Group
 
-```ruby
+```ruby fragment
 # When creating a permission set, assign it to a group:
 pset = PermissionForge::PermissionSet.create!(
   name: 'Customer Management',
@@ -37,7 +37,7 @@ existing_pset.update!(permission_set_group: sales_group)
 
 ## Assigning Users to Groups
 
-```ruby
+```ruby fragment
 PermissionForge::PermissionSetGroupUser.create!(
   permission_set_group: sales_group,
   user: user
@@ -50,7 +50,7 @@ PermissionForge::PermissionSetGroupUser.create!(
 
 ## Listing Group Members
 
-```ruby
+```ruby run
 sales_group.users
 # => [#<User id: 1>, #<User id: 2>, ...]
 
@@ -60,7 +60,7 @@ sales_group.permission_sets
 
 ## Active/Inactive Groups
 
-```ruby
+```ruby run
 # Only active groups
 PermissionForge::PermissionSetGroup.active
 # => groups where is_active = true

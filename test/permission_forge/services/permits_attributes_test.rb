@@ -57,6 +57,69 @@ module PermissionForge
         assert_equal({}, permit({}))
       end
 
+      # --- report: true — what was dropped, for a "Not saved: …" message ---
+
+      test 'report: true answers the same filtered hash plus the dropped paths' do
+        params = { name: 'New Name', email: 'new@email.com', status: 'vip', domain: 'new.com' }
+        result = PermitsAttributes.call(resource: @customer, permitted_params: params, report: true)
+
+        assert_kind_of PermitsAttributes::Result, result
+        assert_equal permit(params), result.params
+        assert_equal %w[email status], result.dropped
+        assert_predicate result, :dropped?
+        assert_equal %w[email status], result.dropped_fields
+      end
+
+      test 'without report: the return value is the plain filtered hash, as before' do
+        assert_equal({ name: 'x' }, permit({ name: 'x', email: 'e' }))
+      end
+
+      test 'report: true lists nothing when every key is kept' do
+        result = PermitsAttributes.call(resource: @customer, permitted_params: { name: 'x' }, report: true)
+
+        assert_equal [], result.dropped
+        assert_not result.dropped?
+      end
+
+      test 'report: true names nested paths and their top-level key' do
+        configure_supplier
+        result = PermitsAttributes.call(resource: PfNestedCustomer, report: true,
+                                        permitted_params: { email: 'e', supplier_attributes: { name: 'Acme', uuid: 'u' } })
+
+        assert_equal({ supplier_attributes: { name: 'Acme' } }, result.params)
+        assert_equal %w[email supplier_attributes.uuid], result.dropped
+        assert_equal %w[email supplier_attributes], result.dropped_fields
+      end
+
+      test 'report: true with nobody signed in lists every key' do
+        Current.user = nil
+        result = PermitsAttributes.call(resource: @customer, permitted_params: { name: 'x', email: 'e' }, report: true)
+
+        assert_equal({}, result.params)
+        assert_equal %w[name email], result.dropped
+      end
+
+      test 'report: true with no model to filter for lists every key, with or without a user' do
+        [@user, nil].each do |user|
+          Current.user = user
+          result = PermitsAttributes.call(resource: nil, permitted_params: { name: 'x', email: 'e' }, report: true)
+
+          assert_equal({}, result.params)
+          assert_equal %w[name email], result.dropped, "user: #{user.inspect}"
+        end
+        assert_equal({}, PermitsAttributes.call(resource: nil, permitted_params: { name: 'x' }))
+        assert_equal [], PermitsAttributes.call(resource: nil, permitted_params: {}, report: true).dropped
+      end
+
+      test 'report: true collects the dropped keys even when nobody listens to params.filtered' do
+        PermissionForge::Audit.send(:emitting) do # nothing is instrumented while emitting
+          assert_not PermissionForge::Audit.instrument?(PermitsAttributes::EVENT)
+          result = PermitsAttributes.call(resource: @customer, permitted_params: { name: 'x', email: 'e' }, report: true)
+
+          assert_equal %w[email], result.dropped
+        end
+      end
+
       test 'removes array field when it matches a field permission without edit access' do
         create_resource_field(resource: @resource, name: 'tags', label: 'Tags', read_access: true, edit_access: false)
         @user.regenerate_permissions

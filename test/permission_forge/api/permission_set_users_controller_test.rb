@@ -35,7 +35,7 @@ module PermissionForge
 
         delete "/permission_forge/api/permission_sets/#{@ps.uuid}/users/#{psu.uuid}"
 
-        assert_response :no_content
+        assert_response :ok # the revoked assignment and meta.cache (R2 P1-2)
         assert_nil PermissionForge::PermissionSetUser.find_by(id: psu.id)
       end
 
@@ -79,7 +79,8 @@ module PermissionForge
         UNREADABLE_EXPIRY.each do |value|
           post users_path, params: { user_id: @user.id, expires_at: value }, as: :json
           assert_response :unprocessable_entity, value
-          assert_match(/expires_at/, JSON.parse(response.body).dig('error', 'messages'), value)
+          assert_equal({ 'expires_at' => [I18n.t('permission_forge.api.errors.not_iso8601_time')] },
+                       JSON.parse(response.body).dig('error', 'messages'), value)
 
           post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'assign', expires_at: value }, as: :json
           assert_response :unprocessable_entity, value
@@ -113,12 +114,151 @@ module PermissionForge
         in_zone('Europe/Berlin') do
           post users_path, params: { user_id: @user.id, expires_at: '2030-07-01' }, as: :json
           assert_response :created
-          assert_equal Time.utc(2030, 6, 30, 22, 0), PermissionForge::PermissionSetUser.find_by!(user_id: @user.id).expires_at
+          # The end of 1 July in Berlin (CEST), as stored (microseconds).
+          assert_equal Time.utc(2030, 7, 1, 21, 59, Rational(59_999_999, 1_000_000)),
+                       PermissionForge::PermissionSetUser.find_by!(user_id: @user.id).expires_at
 
           PermissionForge::PermissionSetUser.where(user_id: @user.id).destroy_all
           post users_path, params: { user_id: @user.id, expires_at: '2030-07-01 10:00' }, as: :json
           assert_equal Time.utc(2030, 7, 1, 8, 0), PermissionForge::PermissionSetUser.find_by!(user_id: @user.id).expires_at
         end
+      end
+
+      # --- expires_at must be after now: an assignment that has ended grants nothing ---
+
+      test 'an expires_at that is not in the future is a 422 and assigns nobody, single and bulk' do
+        refusal = { 'expires_at' => [I18n.t('permission_forge.api.errors.expires_at_past')] }
+        [1.minute.ago.iso8601, '2020-01-01', Time.zone.yesterday.iso8601].each do |value|
+          post users_path, params: { user_id: @user.id, expires_at: value }, as: :json
+          assert_response :unprocessable_entity, value
+          assert_equal refusal, JSON.parse(response.body).dig('error', 'messages'), value
+
+          post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'assign', expires_at: value }, as: :json
+          assert_response :unprocessable_entity, value
+          assert_equal refusal, JSON.parse(response.body).dig('error', 'messages'), value
+        end
+
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
+      end
+
+      test 'now itself is refused: the end must be after the moment of the request' do
+        travel_to Time.zone.local(2030, 5, 5, 12, 0) do
+          post users_path, params: { user_id: @user.id, expires_at: '2030-05-05T12:00' }, as: :json
+          assert_response :unprocessable_entity
+        end
+      end
+
+      test 'a date alone is the end of that day, so today is accepted and lasts through it' do
+        travel_to Time.zone.local(2030, 5, 5, 18, 30) do
+          post users_path, params: { user_id: @user.id, expires_at: '2030-05-05' }, as: :json
+          assert_response :created
+          assignment = PermissionForge::PermissionSetUser.find_by!(user_id: @user.id)
+          assert_equal Time.zone.local(2030, 5, 5, 23, 59, 59), assignment.expires_at.change(usec: 0)
+          assert_not assignment.expired?
+        end
+      end
+
+      test 'a bulk revoke ignores an expires_at in the past' do
+        create_permission_set_user(user: @user, permission_set: @ps)
+        post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'revoke', expires_at: '2020-01-01' }, as: :json
+
+        assert_response :ok
+        assert_equal 1, JSON.parse(response.body).dig('data', 'revoked')
+      end
+
+      test 'a bulk revoke ignores an expires_at it cannot read' do
+        create_permission_set_user(user: @user, permission_set: @ps)
+        post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'revoke', expires_at: 'tuesday' }, as: :json
+
+        assert_response :ok
+        assert_equal 1, JSON.parse(response.body).dig('data', 'revoked')
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
+      end
+
+      test 'a bulk request that names nobody is a 422 keyed by user_ids, recorded like the other 422s' do
+        create_permission_set_user(user: @user, permission_set: @ps)
+        expected = { 'user_ids' => [I18n.t('permission_forge.api.errors.user_ids_missing')] }
+
+        [{}, { user_ids: [] }, { user_ids: '' }, { user_ids: [''] }, { user_ids: [' ', nil] }].each do |ids|
+          %w[assign revoke].each do |action|
+            assert_no_difference -> { PermissionForge::AuditEvent.unscoped.count }, "#{ids} #{action}" do
+              post "#{users_path}/bulk", params: ids.merge(bulk_action: action), as: :json
+            end
+            assert_response :unprocessable_entity, "#{ids} #{action}"
+            assert_equal expected, JSON.parse(response.body).dig('error', 'messages'), "#{ids} #{action}"
+          end
+        end
+        assert PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
+
+        # An unknown bulk_action is answered first, as before.
+        post "#{users_path}/bulk", params: { bulk_action: 'invalid' }, as: :json
+        assert_equal ['bulk_action'], JSON.parse(response.body).dig('error', 'messages').keys
+      end
+
+      # Field test: one string "1,3" was read as a single unknown id, 200 with nobody assigned.
+      test 'a bulk user_ids that is not a list is a 422 keyed by user_ids and changes nothing' do
+        expected = { 'user_ids' => [I18n.t('permission_forge.api.errors.user_ids_not_list')] }
+
+        ["#{@user.id},3", @user.id, @user.id.to_s, { 'a' => @user.id }].each do |ids|
+          %w[assign revoke].each do |action|
+            assert_no_difference -> { PermissionForge::AuditEvent.unscoped.count }, "#{ids.inspect} #{action}" do
+              post "#{users_path}/bulk", params: { user_ids: ids, bulk_action: action }, as: :json
+            end
+            assert_response :unprocessable_entity, "#{ids.inspect} #{action}"
+            assert_equal expected, JSON.parse(response.body).dig('error', 'messages'), "#{ids.inspect} #{action}"
+          end
+        end
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: @user.id)
+      end
+
+      # Field test: each of these answered 404 "Record not found", as if the set were wrong.
+      test 'a missing or malformed user_id is a 422 keyed by user_id, on a set that exists' do
+        missing = [I18n.t('permission_forge.api.errors.user_id_missing')]
+        invalid = [I18n.t('permission_forge.api.errors.user_id_invalid')]
+
+        { {} => missing, { user_id: nil } => missing, { user_id: '' } => missing, { user_id: ' ' } => missing,
+          { user_id: [] } => missing, { user_id: 'abc' } => invalid, { user_id: [@user.id] } => invalid,
+          { user_id: { 'id' => @user.id } } => invalid, { user_id: 1.5 } => invalid, { user_id: true } => invalid,
+          { user_id: -1 } => invalid, { user_id: "#{@user.id}abc" } => invalid }.each do |body, messages|
+          assert_no_difference -> { PermissionForge::AuditEvent.unscoped.count }, body.inspect do
+            post users_path, params: body, as: :json
+          end
+          assert_response :unprocessable_entity, body.inspect
+          assert_equal({ 'user_id' => messages }, JSON.parse(response.body).dig('error', 'messages'), body.inspect)
+        end
+        assert_not PermissionForge::PermissionSetUser.exists?(permission_set_id: @ps.id)
+      end
+
+      # Reveals what a bulk request's `skipped` reveals: nobody and someone
+      # outside user_list_resolver read the same, and the message is about the
+      # person, not the set.
+      test 'a user_id that names nobody, or someone outside user_list_resolver, is the same 422' do
+        outside = create_user(name: 'Outside')
+        config = PermissionForge.configuration
+        config.user_list_resolver = -> { config.user_model.where.not(id: outside.id).order(:id) }
+        expected = { 'user_id' => [I18n.t('permission_forge.api.errors.user_not_found')] }
+
+        [99_999, '99999', outside.id, outside.id.to_s].each do |id|
+          post users_path, params: { user_id: id }, as: :json
+
+          assert_response :unprocessable_entity, id.inspect
+          assert_equal expected, JSON.parse(response.body).dig('error', 'messages'), id.inspect
+        end
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: outside.id)
+      end
+
+      test 'the user_id messages follow the request locale' do
+        post "#{users_path}?locale=sq", params: { user_id: 99_999 }, as: :json
+
+        assert_equal({ 'user_id' => [I18n.t('permission_forge.api.errors.user_not_found', locale: :sq)] },
+                     JSON.parse(response.body).dig('error', 'messages'))
+      end
+
+      test 'an unknown set is still a 404' do
+        post '/permission_forge/api/permission_sets/00000000-0000-0000-0000-000000000000/users', params: { user_id: @user.id },
+                                                                                                 as: :json
+
+        assert_response :not_found
       end
 
       test 'a blank expires_at is a permanent assignment' do
@@ -142,6 +282,28 @@ module PermissionForge
         json = JSON.parse(response.body)
         assert_equal 2, json.dig('data', 'assigned')
         assert_equal 2, json.dig('data', 'invalidated')
+      end
+
+      test 'POST bulk reports the ids it skipped: nobody, or outside user_list_resolver' do
+        outside = create_user(name: 'Outside')
+        config = PermissionForge.configuration
+        config.user_list_resolver = -> { config.user_model.where.not(id: outside.id).order(:id) }
+
+        # A blank string is ignored (Rails' collection_check_boxes adds one), never reported.
+        post "#{users_path}/bulk", params: { user_ids: [@user.id, outside.id, 99_999, '99999', 'abc', ' ', ''],
+                                             bulk_action: 'assign' }, as: :json
+
+        assert_response :ok
+        data = JSON.parse(response.body)['data']
+        assert_equal 1, data['assigned']
+        assert_equal [outside.id, 99_999, 'abc'], data['skipped']
+        assert_not PermissionForge::PermissionSetUser.exists?(user_id: outside.id)
+
+        post "#{users_path}/bulk", params: { user_ids: [@user.id], bulk_action: 'revoke' }, as: :json
+        # `cache`: the one Cache::Outcome (the suite's memory store is process-local; the API serves a request)
+        assert_equal({ 'assigned' => 0, 'revoked' => 1, 'invalidated' => 1, 'skipped' => [],
+                       'cache' => { 'confirmed' => true, 'process_local' => true, 'unconfirmed' => 0, 'in_request' => true } },
+                     JSON.parse(response.body)['data'])
       end
 
       test 'POST bulk revokes multiple users' do
@@ -184,11 +346,11 @@ module PermissionForge
         end
       end
 
-      # value → the time it names (a date alone: the beginning of that day in
-      # Time.zone; no offset: read in Time.zone).
+      # value → the time it names (a date alone: the end of that day in
+      # Time.zone, as stored, to the microsecond; no offset: read in Time.zone).
       def accepted_expiry_forms
         {
-          '2030-10-22' => Time.zone.local(2030, 10, 22),
+          '2030-10-22' => Time.zone.local(2030, 10, 22).end_of_day.change(usec: 999_999),
           '2030-10-22T10:00' => Time.zone.local(2030, 10, 22, 10, 0),
           '2030-10-22 10:00' => Time.zone.local(2030, 10, 22, 10, 0),
           '2030-10-22T10:00:30' => Time.zone.local(2030, 10, 22, 10, 0, 30),

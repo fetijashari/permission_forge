@@ -1,6 +1,8 @@
 <% scoping = PermissionForge.configuration.auto_query_scoping.to_s %>
 <div class="pf-stack pf-stack--loose">
-  <% unenforced = scoping == 'filter_only' ? @rules.any? { |r| r.is_active && r.join_rule? } : @rules.any?(&:is_active) %>
+  <%# Rules the app's query scoping leaves to permission_scoped: only where they count (Resource#in_effect?, not bypassed). %>
+  <% enforced_rules = resource.in_effect? && !resource.rules_bypassed? ? @rules.select(&:is_active) : [] %>
+  <% unenforced = scoping == 'filter_only' ? enforced_rules.any?(&:join_rule?) : enforced_rules.any? %>
   <% if muting %>
     <p class="pf-banner"><%= t('.muting') %></p>
   <% elsif unenforced && !resource.view_all %>
@@ -15,13 +17,14 @@
   <% end %>
   <% @rules.each do |rule| %>
     <% ignored = resource.view_all && rule.is_active %>
-    <% rule_locked = locked || pf_locked_record?(rule) %>
+    <% rule_locked = pf_locked?(rule) %>
     <div class="pf-rule<%= ' pf-rule--off' unless rule.is_active %>">
       <div class="pf-row">
-        <b><%= rule.name %></b>
+        <b><%= pf_record_name(rule) %></b>
         <%= pf_off_badge unless rule.is_active %>
+        <%= pf_rule_note_badges(rule) %>
         <% if ignored %><%= pf_badge("⚠ #{resource.modify_all ? t('.ignored_both') : t('.ignored')}", variant: :warn) %><% end %>
-        <%= pf_lock_badge if pf_locked_record?(rule) %>
+        <%= pf_lock_badge(rule) %>
         <% unless rule_locked %>
           <span class="pf-actions pf-ml-auto">
             <%= form_with url: permission_forge.toggle_permission_set_resource_rule_path(set, resource.name, rule),
@@ -39,14 +42,14 @@
       <%= pf_rule_sentence(rule, resource.name) %>
       <div class="pf-rule__meta">
         <span><%= rule.join_rule? ? t('.join_rule') : t('.filter_rule', applies: (scoping == 'filter_only' ? t('.all_queries') : t('.scoped_lookups'))) %></span>
-        <% if rule.failure_message.present? %><span><%= t('.blocked_message', message: rule.failure_message) %></span><% end %>
+        <% if (message = pf_prefill(rule, :failure_message)).present? %><span><%= t('.blocked_message', message: message) %></span><% end %>
       </div>
       <%= pf_audit_footer(rule) %>
     </div>
   <% end %>
   <% if @rules.empty? %>
     <p class="pf-card pf-empty">
-      <%= muting ? t('.empty_muting') : (resource.view_all ? t('.empty_view_all') : t('.empty', resources: pf_resource_plural(resource.name))) %>
+      <%= muting ? t('.empty_muting') : (resource.view_all ? t('.empty_view_all') : t('.empty', resource: pf_resource_label(resource))) %>
     </p>
   <% end %>
   <% unless locked || muting %>

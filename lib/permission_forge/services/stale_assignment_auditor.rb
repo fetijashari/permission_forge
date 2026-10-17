@@ -29,8 +29,7 @@ module PermissionForge
       def self.call(...) = new(...).call
 
       def initialize(threshold_days: nil, configuration: PermissionForge.configuration)
-        @threshold_days = threshold_days || configuration.admin_stale_assignment_days ||
-                          Configuration::AdminUiSettings::DEFAULT_STALE_ASSIGNMENT_DAYS
+        @threshold_days = threshold_days || PermissionForge::Admin::AttentionItems.stale_days(configuration)
       end
 
       # @return [Hash] `{ stale_count:, affected_user_ids:, assignments: }`

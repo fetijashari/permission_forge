@@ -65,16 +65,16 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSet.count } do
           post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'forged' } }
         end
-        assert_response :forbidden
+        assert_response :unauthorized
       end
 
       test 'a forged PATCH and DELETE with the session cookie are refused' do
         sign_in_by_session
 
         patch "#{ROOT}/api/permission_sets/#{@set.uuid}", params: { permission_set: { name: 'forged' } }
-        assert_response :forbidden
+        assert_response :unauthorized
         delete "#{ROOT}/api/permission_sets/#{@set.uuid}"
-        assert_response :forbidden
+        assert_response :unauthorized
 
         assert_equal 'Target', @set.reload.name
       end
@@ -86,7 +86,7 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSet.count } do
           post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'forged' } }
         end
-        assert_response :forbidden
+        assert_response :unauthorized
       end
 
       test 'a session-authenticated POST with a valid CSRF token passes' do
@@ -122,9 +122,9 @@ module PermissionForge
           ->(c) { c.request.env['pf.identity'] == 'admin' } => { env: { 'pf.identity' => 'admin' } },
           ->(c) { ActionController::HttpAuthentication::Basic.has_basic_credentials?(c.request) } =>
             { headers: { 'Authorization' => basic } }
-        }.each do |auth, options|
+        }.each_with_index do |(auth, options), index|
           PermissionForge.configuration.api_auth = auth
-          post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'forged' } }, **options
+          post "#{ROOT}/api/permission_sets", params: { permission_set: { name: "forged #{index}" } }, **options
           assert_response :created
         end
       end

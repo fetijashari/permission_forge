@@ -49,15 +49,26 @@ module PermissionForge
       # Locked when the field, its Resource or its Permission Set is (is_editable: false).
       def locked? = !EditableLock.locked_record(field, resource).nil?
 
-      # The mask strategy the select starts on: the saved one, else the
+      # The mask strategy the select starts on: the saved one — also one this
+      # app does not know (unknown_strategy?), which stays as stored unless
+      # the admin picks another and is masked fully meanwhile — else the
       # recommended one for a sensitive column, else 'full'.
       def strategy
-        field&.mask_strategy || row.match&.strategy || DEFAULT_STRATEGY
+        field&.mask_strategy.presence || row.match&.strategy || DEFAULT_STRATEGY
       end
 
-      # Other columns that follow this one (`_id` → `_uuid`, `_cents` → base name).
+      # The choices of the strategy select (MaskStrategyChoices): the saved
+      # one this app does not know is offered as stored, so saving the drawer
+      # with another change never rewrites it.
+      def strategy_choices = @strategy_choices ||= MaskStrategyChoices.new(field)
+
+      # The saved strategy is none this app knows: masked fully until fixed.
+      def unknown_strategy? = strategy_choices.unknown?
+
+      # Other names of the model that follow this one (`_id` → `_uuid`,
+      # `_cents` → base name), as the engine applies them (FieldVariants).
       def variants
-        @variants ||= @configuration.field_variants_for(key)
+        @variants ||= FieldVariants.new(resource.name, @configuration).call(key)
       end
 
       # The edit level needs edit access on the Resource, except in a muting set.
@@ -67,19 +78,21 @@ module PermissionForge
 
       # The note under the level control while no setting is in force, as the
       # suffix of a locale key under `resource_fields.show` — or nil.
+      # In a Muting Permission Set a field without a setting takes nothing
+      # away (no strategy applies), so its note says that instead.
       def unconfigured_note
         return nil if row.in_force?
 
-        implicit = row.implicit_grant
-        if row.configured?
-          implicit ? :turned_off_implicit : :turned_off
-        else
-          implicit ? :not_configured_implicit : :not_configured
-        end
+        base = row.configured? ? :turned_off : :not_configured
+        return :"#{base}_muting" if muting?
+
+        row.implicit_grant ? :"#{base}_implicit" : base
       end
 
-      # Setting the note links to.
+      # Setting the note links to; nil in a Muting Permission Set (no setting decides it).
       def unconfigured_setting
+        return nil if muting?
+
         row.implicit_grant ? 'extra_fields_default_access' : 'unconfigured_field_strategy'
       end
 

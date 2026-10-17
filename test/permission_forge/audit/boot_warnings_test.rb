@@ -18,7 +18,8 @@ module PermissionForge
         PermissionForge::Audit.reset!
       end
 
-      def warn_setup = PermissionForge::Audit::BootWarnings.call(PermissionForge.configuration)
+      # The suite loads Rails::Generators (generator tests): a boot outside a generator is asked for.
+      def warn_setup = PermissionForge::Audit::BootWarnings.call(PermissionForge.configuration, generating: false)
 
       test 'a missing table is warned about exactly once' do
         PermissionForge::AuditEvent.define_singleton_method(:table_exists?) { false }
@@ -52,9 +53,40 @@ module PermissionForge
         PermissionForge::AuditEvent.define_singleton_method(:table_exists?) { false }
         warn_setup
 
+        # Through the one emitter (PermissionForge::Warnings): a SECURITY warning.
         assert_includes @log.string, BootWarnings.missing_table(PermissionForge::AuditEvent.table_name)
+        assert_includes @log.string, "#{PermissionForge::Warnings::PREFIX}SECURITY warning: audit_events is :auto"
       ensure
         PermissionForge::AuditEvent.singleton_class.send(:remove_method, :table_exists?)
+      end
+
+      # a-onboarding #64: `bin/rails generate permission_forge:install` boots the app before it writes
+      # the migration; the boot told a fresh install to run the upgrade generator.
+      test 'no missing-table warning while a generator runs; the first event checks again' do
+        PermissionForge::AuditEvent.define_singleton_method(:table_exists?) { false }
+        PermissionForge::Audit::BootWarnings.call(PermissionForge.configuration, generating: true)
+
+        assert_no_match(/was not found/, @log.string)
+
+        assert_not PermissionForge::Audit.enabled?
+        assert_equal 1, @log.string.scan('audit_events is :auto but the table').size
+      ensure
+        PermissionForge::AuditEvent.singleton_class.send(:remove_method, :table_exists?)
+      end
+
+      # A gem that requires rails/generators as it loads made every server boot
+      # look like a generator's: the boot-time table check was skipped.
+      test 'Rails::Generators alone is no generator run' do
+        require 'rails/generators'
+
+        assert_not BootWarnings.generator_running?
+      end
+
+      test 'a generator is running while bin/rails generate or destroy boots the app' do
+        %i[GenerateCommand DestroyCommand].each do |command|
+          with_command_class(command) { assert_predicate BootWarnings, :generator_running?, command }
+          assert_not BootWarnings.generator_running?, "#{command} removed again"
+        end
       end
 
       test 'no table warning when the table exists' do
@@ -92,6 +124,23 @@ module PermissionForge
         warn_setup
 
         assert_no_match(/shared login/, @log.string)
+      end
+
+      private
+
+      # Rails::Command::<name> defined for the block, as `bin/rails generate`
+      # (or destroy) defines it before it boots the app.
+      def with_command_class(name)
+        skip "Rails::Command::#{name} is loaded in this process" if Object.const_defined?("Rails::Command::#{name}", false)
+        added_module = !Rails.const_defined?(:Command, false)
+        Rails.const_set(:Command, Module.new) if added_module
+        Rails::Command.const_set(name, Class.new)
+        begin
+          yield
+        ensure
+          Rails::Command.send(:remove_const, name)
+          Rails.send(:remove_const, :Command) if added_module
+        end
       end
     end
   end

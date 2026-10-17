@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 module PermissionForge
-  # Boot warnings for the three query-scoping levels (called by BootChecks).
+  # Boot warnings for the three query-scoping levels (called by BootChecks;
+  # each goes through Warnings.emit).
   #
   # @api private
   module QueryScopingWarnings
@@ -13,9 +14,10 @@ module PermissionForge
       return unless pf_config.unscoped_query_detection == :raise
       return unless pf_config.unscoped_query_detection_environments.include?('production')
 
-      Rails.logger&.warn '[PermissionForge] WARNING: unscoped_query_detection = :raise is enabled ' \
-                         'for production. A single unscoped query will raise UnscopedQueryError ' \
-                         'in live traffic — prefer :log in production and :raise in test/CI.'
+      Warnings.emit(:unscoped_detection_raise_in_production,
+                    'WARNING: unscoped_query_detection = :raise is enabled for production. A single unscoped ' \
+                    'query will raise UnscopedQueryError in live traffic — prefer :log in production and ' \
+                    ':raise in test/CI.')
     end
 
     # Level 1 applies filter-type rules only; join-type rules still require
@@ -23,13 +25,15 @@ module PermissionForge
     def warn_join_rules_not_auto_scoped(pf_config)
       return unless pf_config.auto_query_scoping_enabled?
 
-      join_rules = PermissionForge::PermissionSetRule.join_type_rules
-      return unless join_rules.exists?
+      # The join rules (PermissionSetRule#join_rule?, the one definition; the scope is the SQL pre-filter).
+      count = PermissionForge::PermissionSetRule.join_type_rules.pluck(:join_type)
+                                                .count { |join_type| !PermissionForge::PermissionSetRule.filter_join_type?(join_type) }
+      return if count.zero?
 
-      Rails.logger&.warn '[PermissionForge] SECURITY warning: auto_query_scoping is enabled but ' \
-                         "#{join_rules.count} join-type rule(s) exist. Join rules are NOT applied " \
-                         'by auto-scoping — queries relying on them must go through ' \
-                         'Model.permission_scoped.'
+      Warnings.emit(:join_rules_not_auto_scoped,
+                    "auto_query_scoping is enabled but #{count} join-type rule(s) exist. Join rules " \
+                    'are NOT applied by auto-scoping — queries relying on them must go through ' \
+                    'Model.permission_scoped.', severity: :security)
     rescue ActiveRecord::StatementInvalid
       # Tables don't exist yet (pre-migration)
     end
@@ -42,9 +46,10 @@ module PermissionForge
       return unless pf_config.database_row_level_security
 
       unless PermissionForge::RLS.postgres?
-        Rails.logger&.warn '[PermissionForge] WARNING: database_row_level_security is enabled but ' \
-                           'the database adapter is not PostgreSQL. RLS policies cannot be enforced — ' \
-                           'row-level security falls back to application-level scoping only.'
+        Warnings.emit(:rls_not_postgresql,
+                      'database_row_level_security is enabled but the database adapter is not ' \
+                      'PostgreSQL. RLS policies cannot be enforced — row-level security falls back to ' \
+                      'application-level scoping only.', severity: :security)
         return
       end
 
@@ -57,10 +62,10 @@ module PermissionForge
       stale = PermissionForge::RLS.drift_report.reject { |report| report[:in_sync] }
       return if stale.empty?
 
-      Rails.logger&.warn '[PermissionForge] SECURITY warning: RLS policies are missing or stale for ' \
-                         "table(s): #{stale.map { |report| report[:table] }.join(', ')}. " \
-                         'Rule rows have changed since the last policy sync (or policies were never ' \
-                         'installed) — run `rake permission_forge:rls:sync`.'
+      Warnings.emit(:rls_policy_drift,
+                    "RLS policies are missing or stale for table(s): #{stale.map { |report| report[:table] }.join(', ')}. " \
+                    'Rule rows have changed since the last policy sync (or policies were never installed) — ' \
+                    'run `rake permission_forge:rls:sync`.', severity: :security)
     rescue ActiveRecord::StatementInvalid
       # Tables don't exist yet (pre-migration)
     end

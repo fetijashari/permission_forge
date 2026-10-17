@@ -4,6 +4,8 @@ module PermissionForge
   #
   # @api private
   class PermissionSetGroupsController < ApplicationController
+    include PermissionForge::CopyRefusal
+
     before_action :set_group, except: %i[index create]
     before_action :reject_locked, only: %i[update destroy confirm_destroy add_set remove_set]
 
@@ -17,7 +19,7 @@ module PermissionForge
       return render_blank_name if @group.name.blank?
 
       @group.save!
-      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.created', name: @group.name)
+      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.created', name: pf_record_name(@group))
     end
 
     def show
@@ -28,12 +30,16 @@ module PermissionForge
       @people_counts = PermissionForge::PermissionSetUser.active_assignments.group(:permission_set_id).count
     end
 
+    # "Group saved. No one's access changed." for a change; an unchanged
+    # group is not saved, and says so (SaveNotice).
     def update
       attrs = group_params
-      return redirect_to(permission_forge.group_path(@group), alert: t('permission_forge.errors.admin.group_blank')) if blank_name?(attrs)
+      return redirect_to(group_page, alert: t('permission_forge.errors.admin.group_blank')) if blank_name?(attrs)
 
-      @group.update!(attrs)
-      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.updated')
+      saved = pf_save_changed(@group, attrs, &:save)
+      return redirect_to(group_page, alert: PermissionForge::Admin::ErrorSentence.first(@group.errors)) unless saved
+
+      redirect_to group_page, **pf_save_flash(@group) { t('permission_forge.flash.groups.updated') }
     end
 
     def duplicate
@@ -41,13 +47,15 @@ module PermissionForge
         permission_set_group: @group, attrs: { name: t('permission_forge.permission_sets.copy_name', name: @group.name), is_editable: true },
         unlock: true
       )
-      redirect_to permission_forge.group_path(copy), notice: t('permission_forge.flash.groups.duplicated', name: @group.name)
+      redirect_to permission_forge.group_path(copy), notice: t('permission_forge.flash.groups.duplicated', name: pf_record_name(@group))
+    rescue ActiveRecord::RecordInvalid => e
+      redirect_to permission_forge.group_path(@group), alert: pf_copy_refused_message(e, pf_record_name(@group))
     end
 
     def confirm_destroy; end
 
     def destroy
-      name = @group.name
+      name = pf_record_name(@group)
       @group.destroy!
       redirect_to permission_forge.groups_path, notice: t('permission_forge.flash.groups.deleted', name: name)
     end
@@ -61,7 +69,7 @@ module PermissionForge
       return if pf_reject_locked!([set, leaving], permission_forge.group_path(@group))
 
       set.update!(permission_set_group: @group)
-      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.set_added', set: set.name)
+      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.set_added', set: pf_record_name(set))
     end
 
     def remove_set
@@ -69,7 +77,7 @@ module PermissionForge
       return if pf_reject_locked!(set, permission_forge.group_path(@group))
 
       set.update!(permission_set_group: nil)
-      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.set_removed', set: set.name)
+      redirect_to permission_forge.group_path(@group), notice: t('permission_forge.flash.groups.set_removed', set: pf_record_name(set))
     end
 
     private
@@ -77,6 +85,8 @@ module PermissionForge
     def set_group
       @group = PermissionForge::PermissionSetGroup.find(params[:id])
     end
+
+    def group_page = permission_forge.group_path(@group)
 
     def load_index
       @groups = PermissionForge::PermissionSetGroup.includes(:permission_sets, :permission_set_group_users).order(:name)
@@ -91,8 +101,12 @@ module PermissionForge
       render(:index, status: :unprocessable_entity)
     end
 
+    # A blank name over a generated one, or a blank description over none,
+    # is no change (Admin::Prefill.posted).
     def group_params
-      pf_require_hash(:group).permit(:name, :description, :is_active).tap { |attrs| strip_name!(attrs) }
+      attrs = pf_require_hash(:group).permit(:name, :description, :is_active).tap { |permitted| strip_name!(permitted) }
+      PermissionForge::Admin::Prefill.posted_attributes(@group, attrs, :name, :description)
+      pf_boolean_attributes(attrs, :is_active)
     end
 
     def strip_name!(attrs)

@@ -32,14 +32,19 @@ module PermissionForge
     #     resource row's is_active; the membership EXISTS reads both states
     #     per statement, so switching a set or a resource off or on needs no
     #     re-sync and the policy is never wider than the app layer in between.
-    #   - A user in no rule-bearing set sees all rows (rules only restrict).
+    #   - A user in no rule-bearing set sees all rows (rules only restrict),
+    #     under no_read_access_strategy :rules_only (the default). Under :deny
+    #     a signed-in user sees a row only with read access to the model's
+    #     Resource chain, as RecordReadAccess decides it (RlsReadAccessSql,
+    #     read per statement); the strategy is part of the digest.
     #   - Muting sets contribute no rules; conditional sets' rules are included
     #     (more restrictive than the app, never less — documented).
     #   - Missing session variable follows nil_user_strategy: :bypass allows,
     #     :deny/:raise hides every row.
     #   - A rule's value is typed for its column by the app layer's own
-    #     Operators::ValueTyping; a value the column cannot hold compiles to
-    #     FALSE, as the app layer matches nothing for it (see RlsOperatorSql).
+    #     Operators::ValueTyping; a value the column cannot hold, or a column
+    #     the table does not have, compiles to FALSE, as the app layer matches
+    #     nothing for it (see RlsOperatorSql).
     #   - Join-type rules and dotted field names are NOT translatable — they are
     #     reported in :skipped_rules, never silently dropped. So are the rules
     #     of a Resource named after an STI subclass of the model: a policy is
@@ -70,9 +75,22 @@ module PermissionForge
       # 5: a rule set's membership EXISTS joins its resource row and needs it
       # active; the rules are compiled whatever the row's — or the set's —
       # state (the set's is_active was already read live).
-      GENERATOR_VERSION = 5
+      # 6: a rule naming a column the table does not have compiles to FALSE
+      # (the sync failed on it), as the app layer matches nothing for it.
+      # 7: every Operators::RuleProblem kind compiles to FALSE (an unknown
+      # operator, join type or table, a path no join is built through); a
+      # value is typed for a uuid, inet, cidr, json/jsonb, array or native
+      # enum column (one it cannot hold is FALSE); an assignment counts until
+      # its expires_at, that instant included (`>= now()`); and only a set
+      # without an activation condition as PermissionSet.unconditional reads
+      # it (a text of blanks is none, one hour of the two is one) grants the
+      # view_all bypass. Under no_read_access_strategy :deny, a session user
+      # without read access to the model's Resource chain sees no row
+      # (RlsReadAccessSql; the strategy is part of the digest).
+      GENERATOR_VERSION = 7
 
       include RlsOperatorSql
+      include RlsReadAccessSql
 
       def self.call(model_class:, configuration: PermissionForge.configuration)
         new(model_class: model_class, configuration: configuration).call
@@ -81,7 +99,10 @@ module PermissionForge
       def initialize(model_class:, configuration: PermissionForge.configuration)
         @model_class = model_class
         @configuration = configuration
-        @conn = model_class.connection
+        # The pool's lease, never the model's `connection` (it raises under
+        # Rails 7.2+ `permanent_connection_checkout = :disallowed`).
+        pool = model_class.connection_pool
+        @conn = pool.respond_to?(:lease_connection) ? pool.lease_connection : pool.connection
         @skipped_rules = []
       end
 
@@ -105,8 +126,8 @@ module PermissionForge
       def digest
         parts = [
           GENERATOR_VERSION,
-          @configuration.nil_user_strategy,
-          @configuration.rls_session_variable,
+          *strategy_fingerprint,
+          read_access_sql,
           table_name,
           tenant_predicate_sql,
           rule_sets.map { |set| [set[:id], set[:resource_id], set[:rules].map { |r| rule_fingerprint(r) }.sort] }.sort
@@ -115,6 +136,11 @@ module PermissionForge
       end
 
       private
+
+      # The settings the policy is generated from.
+      def strategy_fingerprint
+        [@configuration.nil_user_strategy, @configuration.no_read_access_strategy, @configuration.rls_session_variable]
+      end
 
       # Adapter connection used for quoting by RlsOperatorSql helpers too.
       def connection
@@ -150,11 +176,17 @@ module PermissionForge
 
       # :bypass  -> uid IS NULL OR (view_all OR rules)
       # :deny/:raise -> uid IS NOT NULL AND (view_all OR rules)
+      # Under no_read_access_strategy :deny the signed-in branch is
+      # (read_access AND (view_all OR rules)) — RlsReadAccessSql, checked
+      # before the rules as RecordReadAccess is: View All never stands in
+      # for read.
       # The explicit uid guard matters: with a NULL uid every membership EXISTS
       # is false, which would make the rules conjunction vacuously TRUE — the
       # deny strategies must therefore hide rows before that branch is reached.
       def using_expression
-        guarded = "(#{view_all_bypass_sql} OR #{rules_conjunction_sql})"
+        rows = "(#{view_all_bypass_sql} OR #{rules_conjunction_sql})"
+        read = read_access_sql
+        guarded = read ? "(#{read} AND #{rows})" : rows
         if @configuration.nil_user_strategy == :bypass
           "((#{uid_sql}) IS NULL OR #{guarded})"
         else
@@ -171,11 +203,12 @@ module PermissionForge
       end
 
       def user_id_cast_type
-        PermissionForge::PermissionSetUser.columns_hash['user_id']&.sql_type || 'bigint'
+        PermissionForge::SchemaRead.column(PermissionForge::PermissionSetUser, 'user_id')&.sql_type || 'bigint'
       end
 
-      # Granting-set view_all/modify_all bypasses rules; a muting set with
-      # view_all/modify_all cancels the bypass. Both checked dynamically.
+      # A granting set's View All bypasses the rules (bypass_flags_sql); a
+      # muting set with View All or Modify All cancels the bypass. Both
+      # checked dynamically.
       #
       # GDPR/consent guard: activation conditions (session flag / IP / login
       # hours) cannot be evaluated inside a database policy, so only
@@ -187,41 +220,41 @@ module PermissionForge
         "(#{view_all_exists_sql(muting: false)} AND NOT #{view_all_exists_sql(muting: true)})"
       end
 
+      # Built without squish: the condition SQL quotes a newline, a carriage
+      # return and a tab (PermissionSet.conditions_present_sql), which squish
+      # would turn into spaces.
       def view_all_exists_sql(muting:)
-        <<~SQL.squish
-          EXISTS (
-            SELECT 1 FROM #{psu_table} psu
-            JOIN #{ps_table} ps ON ps.id = psu.permission_set_id
-            JOIN #{resources_table} r ON r.permission_set_id = ps.id
-            WHERE psu.user_id = (#{uid_sql})
-              AND #{assignment_active_sql}
-              AND ps.is_active = TRUE AND ps.is_muting = #{muting ? 'TRUE' : 'FALSE'}
-              #{"AND #{unconditional_set_sql}" unless muting}
-              AND r.name = #{@conn.quote(resource_name)}
-              AND r.is_active = TRUE
-              #{tenant_predicate_sql}
-              AND (r.view_all = TRUE OR r.modify_all = TRUE)
-          )
-        SQL
+        resource_row_exists_sql(muting: muting, names: [resource_name],
+                                extra: [(unconditional_set_sql unless muting), bypass_flags_sql(muting)])
+      end
+
+      # A granting row bypasses the rules with View All alone: the app layer
+      # grants Modify All only together with View All
+      # (PermissionHashBuilder.granted_flags), so Modify All without it — a
+      # row written past the validation — bypasses nothing. A muting row
+      # cancels the bypass with either flag (narrower than the app layer,
+      # whose muting Modify All leaves View All standing).
+      def bypass_flags_sql(muting)
+        muting ? '(r.view_all = TRUE OR r.modify_all = TRUE)' : 'r.view_all = TRUE'
       end
 
       # Ties the resource row to the protected row's tenant, when tenancy is
-      # on and both tables have the tenant column: `AND r.account_id =
+      # on and both tables have the tenant column (SchemaRead: read again once
+      # before "no"): `AND r.account_id =
       # "customers"."account_id"`. A NULL tenant on either side matches
       # nothing. Empty otherwise (no tenant to compare).
       def tenant_predicate_sql
         column = @configuration.tenant_enabled? && @configuration.resolved_tenant_column.to_s
-        return '' unless column && [@model_class, PermissionForge::Resource].all? { |klass| klass.column_names.include?(column) }
+        return '' unless column && [@model_class, PermissionForge::Resource].all? { |klass| SchemaRead.column?(klass, column, ignored: false) }
 
         quoted = @conn.quote_column_name(column)
         "AND r.#{quoted} = #{quoted_table}.#{quoted}"
       end
 
-      # Mirrors PermissionSet.unconditional (activation conditions absent).
+      # PermissionSet.unconditional, on the `ps` alias: the one definition of
+      # "no activation condition".
       def unconditional_set_sql
-        "(ps.requires_session_flag IS NULL OR ps.requires_session_flag = '') " \
-          "AND (ps.allowed_ips IS NULL OR ps.allowed_ips = '') " \
-          'AND ps.allowed_hours_start IS NULL'
+        "NOT #{PermissionForge::PermissionSet.conditions_present_sql(table: 'ps')}"
       end
 
       # One conjunct per rule-bearing granting set:
@@ -255,9 +288,11 @@ module PermissionForge
         SQL
       end
 
+      # PermissionSetUser.active_assignments: an assignment counts until its
+      # expires_at, that instant included.
       def assignment_active_sql
-        clauses = ['(psu.expires_at IS NULL OR psu.expires_at > now())']
-        clauses << 'psu.is_active = TRUE' if PermissionForge::PermissionSetUser.column_names.include?('is_active')
+        clauses = ['(psu.expires_at IS NULL OR psu.expires_at >= now())']
+        clauses << 'psu.is_active = TRUE' if PermissionForge::SchemaRead.column?(PermissionForge::PermissionSetUser, 'is_active', ignored: false)
         clauses.join(' AND ')
       end
 
@@ -273,9 +308,14 @@ module PermissionForge
         @conn.quote_table_name(PermissionForge::Resource.table_name)
       end
 
-      # A value the column cannot hold makes the rule FALSE — the app layer
-      # matches nothing for it, NULL rows included.
+      # A rule the app layer matches nothing for (Operators::RuleProblem: the
+      # one taxonomy — a join type or operator this version does not know, a
+      # path no join is built through, a qualifier naming no table, a column
+      # the table does not have, a value it cannot hold) makes the rule FALSE
+      # — NULL rows included.
       def rule_sql(rule)
+        return 'FALSE' if Operators::RuleProblem.for(rule)
+
         operator, field_name = rule.values_at(:operator, :field_name)
         value = typed_value(operator, rule.field_value, Operators::RuleColumn.find(field_name, [@model_class]))
         return 'FALSE' if value.equal?(UNUSABLE)
@@ -343,10 +383,14 @@ module PermissionForge
         PermissionForge::PermissionSetRule.active.where(resource_id: resources.select(:id)).includes(:permission_set)
       end
 
-      # A field_name that is not a name is translated, whatever the rule is:
-      # to FALSE, as the app layer matches nothing for it.
+      # nil for a rule that is compiled, else why it is skipped (reported in
+      # :skipped_rules). A rule the app layer matches nothing for
+      # (Operators::RuleProblem) is compiled whatever it is — to FALSE
+      # (rule_sql) — never skipped, which would leave the policy wider than
+      # the app layer. An operator the app layer has (a custom one registered
+      # in Operators::Registry) but this module has no SQL for is skipped.
       def untranslatable_reason(rule)
-        return unless Operators::RuleColumn.name?(rule.field_name)
+        return if Operators::RuleProblem.for(rule)
         return :join_rule if rule.join_rule?
         return :dotted_field_name if rule.field_name.to_s.include?('.')
         return :unknown_operator unless OPERATOR_SQL.key?(rule.operator)

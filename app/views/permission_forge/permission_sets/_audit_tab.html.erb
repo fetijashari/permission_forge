@@ -5,7 +5,7 @@
   <%= render 'permission_forge/shared/audit_timeline',
              title: t('.timeline'), description: t('.timeline_desc'),
              page: @timeline, lookups: @timeline_lookups,
-             path: ->(number) { permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: params[:views].presence, page: number) },
+             path: ->(number) { permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: @views, page: number) },
              views_path: (permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: 1) unless @timeline_log.include_views?),
              links: [[t('.open_log'), pf_audit_log_path(permission_set: set.id)]] %>
 
@@ -42,7 +42,7 @@
                   class: 'pf-btn pf-btn--sm' %>
     <% end %>
 
-    <div class="pf-card pf-scroll-x">
+    <%= pf_scroll_frame('aria-label': t('.label'), class: 'pf-card') do %>
       <div class="pf-table pf-table--audit" role="table" aria-label="<%= t('.label') %>">
         <div class="pf-table__head" role="row">
           <span role="columnheader"><%= t('.columns.type') %></span>
@@ -62,13 +62,13 @@
               <% end %>
               <% if where %><span class="pf-fs-12 pf-text-3"><%= where %></span><% end %>
             </span>
-            <span role="cell" class="pf-fs-13 pf-text-2"><%= pf_audit_who_when(entry.created_by, entry.created_at) %></span>
+            <span role="cell" class="pf-fs-13 pf-text-2"><%= pf_audit_created(entry) %></span>
             <span role="cell" class="pf-fs-13 pf-text-2"><%= pf_audit_edited(entry) %></span>
           </div>
         <% end %>
       </div>
       <% if @entries.empty? %><p class="pf-empty"><%= t('.empty') %></p><% end %>
-    </div>
+    <% end %>
   <% else %>
     <div class="pf-banner pf-banner--warn" role="note">
       <span class="pf-banner__glyph" aria-hidden="true">⚠</span>

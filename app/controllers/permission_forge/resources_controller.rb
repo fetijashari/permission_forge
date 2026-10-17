@@ -4,6 +4,9 @@ module PermissionForge
   #
   # @api private
   class ResourcesController < ApplicationController
+    include PermissionForge::ChangeReview
+    include PermissionForge::CacheConfirmation
+
     TABS = %w[fields actions rules].freeze
     GRANTING_PRESETS = %w[full read nothing].freeze
     MUTING_PRESETS = %w[hide_sensitive block_changes leave].freeze
@@ -15,7 +18,6 @@ module PermissionForge
     }.freeze
     # Field level each preset gives the model's columns (nil = no fields).
     PRESET_LEVELS = { 'full' => 'edit', 'read' => 'read', 'nothing' => 'hidden', 'hide_sensitive' => 'hide_sensitive' }.freeze
-
     before_action :set_permission_set
     before_action :set_resource, except: %i[new create]
     before_action :reject_locked_set, only: %i[new create review apply sync destroy confirm_destroy]
@@ -42,7 +44,7 @@ module PermissionForge
 
     def review
       @change_set = change_set
-      return redirect_to(resource_path, notice: t('permission_forge.flash.permission_sets.no_changes')) if @change_set.empty?
+      return redirect_to(resource_path, pf_nothing_to_save_flash(@change_set)) if @change_set.empty?
 
       load_page
       @changes = @change_set.changes
@@ -50,10 +52,9 @@ module PermissionForge
     end
 
     def apply
-      changes = change_set.apply!
-      redirect_to pf_back_or(resource_path),
-                  notice: t('permission_forge.flash.permission_sets.saved', count: changes.size,
-                                                                            people: helpers.pf_people_text(pf_people_count(@permission_set)))
+      applied = change_set
+      outcome = cache_outcome { applied.apply! }
+      redirect_to pf_back_or(resource_path), **pf_applied_flash(applied, outcome)
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to resource_path, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end
@@ -77,7 +78,7 @@ module PermissionForge
       label = helpers.pf_resource_label(@resource)
       @resource.destroy!
       redirect_to permission_forge.permission_set_path(@permission_set),
-                  notice: t('permission_forge.flash.resources.removed', resource: label, set: @permission_set.name)
+                  notice: t('permission_forge.flash.resources.removed', resource: label, set: pf_record_name(@permission_set))
     end
 
     private
@@ -138,7 +139,7 @@ module PermissionForge
 
     def load_new_form
       load_models
-      @sensitive = PermissionForge::Admin::SensitiveColumns.new
+      @sensitive = PermissionForge::SensitiveColumns.new
       @existing = @permission_set.resources.pluck(:name)
       @presets = @permission_set.is_muting ? MUTING_PRESETS : GRANTING_PRESETS
       preset = params[:preset]
@@ -161,8 +162,7 @@ module PermissionForge
     end
 
     def added_notice(resource)
-      t('permission_forge.flash.resources.added', resource: helpers.pf_resource_label(resource),
-                                                  count: resource.resource_fields.size)
+      helpers.pf_added_resource_notice(resource, muting: @permission_set.is_muting)
     end
 
     def build_resource(model, preset)
@@ -181,7 +181,8 @@ module PermissionForge
     end
 
     # Creates ResourceFields for columns and virtual fields at a level, applying
-    # privacy defaults (sensitive names start Masked when gdpr_defaults is on).
+    # privacy defaults (see Admin::ColumnFields: under gdpr_defaults sensitive
+    # names start Masked, except at full access).
     def create_fields(columns, level, resource: @resource)
       PermissionForge::Admin::ColumnFields.new(resource, muting: @permission_set.is_muting).create(columns, level)
     end

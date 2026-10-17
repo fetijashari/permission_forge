@@ -105,6 +105,68 @@ module PermissionForge
         assert_response :ok
         assert_equal @set.uuid, JSON.parse(response.body).dig('data', 'uuid')
       end
+
+      # --- permission_set_group_id: a reference in the body, same rules ---
+
+      test 'under :uuid permission_set_group_id takes the group uuid, or its id' do
+        group = create_permission_set_group(name: 'Sales groups')
+
+        patch_group(group.uuid)
+        assert_response :ok
+        assert_equal group.id, @set.reload.permission_set_group_id
+
+        patch_group(nil)
+        assert_response :ok
+        assert_nil @set.reload.permission_set_group_id
+
+        patch_group(group.id)
+        assert_response :ok
+        assert_equal group.id, @set.reload.permission_set_group_id
+
+        post "#{BASE}/permission_sets", params: { permission_set: { name: 'Created in it', permission_set_group_id: group.uuid } }, as: :json
+        assert_response :created
+        assert_equal group.id, PermissionForge::PermissionSet.find_by!(name: 'Created in it').permission_set_group_id
+      end
+
+      test 'a permission_set_group_id that names no group is a 422 keyed by it' do
+        group = create_permission_set_group(name: 'Sales groups')
+        missing = [I18n.t('permission_forge.validations.permission_set.group_missing')]
+
+        [SecureRandom.uuid, '999999', "#{group.id}abc", { 'id' => group.id }.to_s].each do |value|
+          patch_group(value)
+          assert_response :unprocessable_entity, value
+          assert_equal missing, JSON.parse(response.body).dig('error', 'messages', 'permission_set_group_id'), value
+        end
+        assert_nil @set.reload.permission_set_group_id
+      end
+
+      # Rails would cast "12ab…" to 12 for the integer column: a uuid that
+      # starts with digits must never move the set into the group with that id.
+      test 'a uuid that starts with digits is never read as a group id' do
+        group = create_permission_set_group(name: 'Sales groups')
+        patch_group("#{group.id}e2d0f1a-1111-4222-8333-444455556666") # the column would read it as group.id
+
+        assert_response :unprocessable_entity
+        assert_nil @set.reload.permission_set_group_id
+      end
+
+      test 'under :id permission_set_group_id takes the id only' do
+        group = create_permission_set_group(name: 'Sales groups')
+        @config.api_record_identifier = :id
+
+        patch "#{BASE}/permission_sets/#{@set.id}", params: { permission_set: { permission_set_group_id: group.uuid } }, as: :json
+        assert_response :unprocessable_entity
+
+        patch "#{BASE}/permission_sets/#{@set.id}", params: { permission_set: { permission_set_group_id: group.id } }, as: :json
+        assert_response :ok
+        assert_equal group.id, @set.reload.permission_set_group_id
+      end
+
+      private
+
+      def patch_group(value)
+        patch "#{BASE}/permission_sets/#{@set.uuid}", params: { permission_set: { permission_set_group_id: value } }, as: :json
+      end
     end
   end
 end

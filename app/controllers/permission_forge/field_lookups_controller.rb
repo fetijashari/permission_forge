@@ -32,7 +32,7 @@ module PermissionForge
     end
 
     def field_label(model, name)
-      model&.klass&.human_attribute_name(name) || name.humanize
+      PermissionForge::Admin::FieldLabel.for(model, name).text
     end
   end
 end

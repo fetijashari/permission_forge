@@ -1,0 +1,27 @@
+# Values of the sq / mk locale files that are the English text on purpose,
+# each with the reason (i18n_test.rb: a sq/mk value identical to en, when the
+# en value is English prose — three Latin letters outside its placeholders,
+# one of them lower-case — must be listed here). Translate the key instead of
+# adding it here whenever the language has its own word.
+sq:
+  permission_forge.ui.states.actor.user: 'Albanian for a person is "person" (definite "personi"); the label keeps the English spelling'
+  permission_forge.bulk_assignments.new.paste_placeholder: 'a sample paste of an email and a name'
+  permission_forge.flash.copy_refused.kinds.permission_set_group: 'a UI name kept verbatim (Permission Set Group)'
+  permission_forge.flash.copy_refused.kinds.resource: 'a UI name kept verbatim (Resource)'
+  permission_forge.layouts.application.title: 'the brand'
+  permission_forge.permission_set_rules.value_input.values_placeholder: 'sample values of a status column, as stored'
+  permission_forge.settings.units.people.one: 'Albanian for one person is "person" ("%{count} persona" in the plural)'
+  permission_forge.shared.sidebar.aria: 'the brand'
+  permission_forge.shared.sidebar.brand: 'the brand'
+  permission_forge.ui.mask_strategies.email: '"email" is the Albanian word as well'
+  permission_forge.ui.months.jan: 'Janar abbreviates to Jan'
+  permission_forge.ui.months.mar: 'Mars abbreviates to Mar'
+  permission_forge.ui.people_count.one: 'Albanian for one person is "person" ("%{count} persona" in the plural)'
+  permission_forge.validations.attributes.permission_set_group: 'a UI name kept verbatim (Permission Set Group)'
+mk:
+  permission_forge.bulk_assignments.new.paste_placeholder: 'a sample paste of an email and a name'
+  permission_forge.layouts.application.title: 'the brand'
+  permission_forge.permission_set_rules.value_input.values_placeholder: 'sample values of a status column, as stored'
+  permission_forge.shared.sidebar.aria: 'the brand'
+  permission_forge.shared.sidebar.brand: 'the brand'
+  permission_forge.validations.attributes.permission_set_group: 'a UI name kept verbatim (Permission Set Group)'

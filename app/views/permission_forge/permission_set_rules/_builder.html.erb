@@ -20,9 +20,23 @@
     <%= link_to t('permission_forge.ui.cancel'), back, class: 'pf-btn', data: { pf_close: true } %>
     <button type="submit" class="pf-btn pf-btn--primary"><%= t('.save') %></button>
   <% end %>
-  <%= pf_sheet_frame({ title: title, subtitle: set.name, close_path: back, footer: footer,
+  <%= pf_sheet_frame({ title: title, subtitle: pf_record_name(set), close_path: back, footer: footer,
                        breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
-                                                 [set.name, permission_forge.permission_set_path(set)], [pf_resource_label(resource), back], title) }) do %>
+                                                 [pf_record_name(set), permission_forge.permission_set_path(set)], [pf_resource_label(resource), back], title) }) do %>
+    <%# What is said about the stored rule (Admin::RuleNotes), most severe first. %>
+    <% builder.notes.each do |note| %>
+      <% if note.matches_nothing? %>
+        <% problem = note.problem %>
+        <div class="pf-banner pf-banner--block" role="note" data-pf-rule-note="matches_nothing"><span class="pf-banner__glyph pf-text-block" aria-hidden="true">⊘</span>
+          <div class="pf-banner__body"><span class="pf-banner__title"><%= t('.problem_title') %></span>
+            <span><%= pf_rule_problem_text(problem) %><% if (written = builder.written_field) %> · <code class="pf-mono-key"><%= written %></code><% end %></span>
+            <span><%= t(".problem_fixes.#{problem.remedy}") %></span></div></div>
+      <% else %>
+        <div class="pf-banner pf-banner--warn" role="note" data-pf-rule-note="<%= note.kind %>"><span class="pf-banner__glyph" aria-hidden="true">⚠</span>
+          <div class="pf-banner__body"><span class="pf-banner__title"><%= t(".notes.#{note.kind}.title") %></span>
+            <span><%= t(".notes.#{note.kind}.body_html", column: content_tag(:code, note.column, class: 'pf-mono-key')) %></span></div></div>
+      <% end %>
+    <% end %>
     <% if builder.ignored_warning? %>
       <div class="pf-banner pf-banner--warn"><span class="pf-banner__glyph" aria-hidden="true">⚠</span>
         <div class="pf-banner__body"><span><%= t('.ignored_warning') %></span></div></div>
@@ -43,9 +57,12 @@
         <% builder.steps.each_with_index do |(model, assoc), i| %>
           <span aria-hidden="true">›</span>
           <label class="pf-sr-only" for="pf-rule-path-<%= i %>"><%= t('.relationship') %></label>
-          <select id="pf-rule-path-<%= i %>" name="rule[path][]" class="pf-select pf-select--sm pf-select--rel" data-pf-refresh>
+          <% broken = builder.broken_step(i) %>
+          <select id="pf-rule-path-<%= i %>" name="rule[path][]" class="pf-select pf-select--sm pf-select--rel" data-pf-refresh
+                  <%= pf_attrs_when(broken, aria: { invalid: true }) %>>
+            <% if broken %><option value="<%= broken %>" selected><%= t('.pick_relationship') %></option><% end %>
             <% model.associations.each do |a| %>
-              <option value="<%= a.name %>" <%= 'selected' if assoc&.name == a.name %>><%= a.label %></option>
+              <option value="<%= a.name %>" <%= 'selected' if assoc&.name == a.name %> data-pf-host-data><%= pf_field_label_text(model, a.name) %></option>
             <% end %>
           </select>
           <button type="submit" formaction="<%= refresh %>" name="rule[remove_step]" value="<%= i %>" class="pf-btn pf-btn--ghost pf-btn--xs"
@@ -55,8 +72,10 @@
         <label class="pf-sr-only" for="pf-rule-field"><%= t('.field') %></label>
         <select id="pf-rule-field" name="rule[field_name]" class="pf-select pf-select--sm" data-pf-refresh <%= pf_attrs_when(errors[:field], aria: { invalid: true }) %>>
           <option value=""><%= t('.pick_field') %></option>
+          <% if (kept = builder.kept_field) %><option value="<%= kept %>" selected><%= t('.stored_field', name: kept) %></option><% end %>
           <% form.field_options.each do |col| %>
-            <option value="<%= col.name %>" <%= 'selected' if builder.field_selected?(col) %>><%= col.label %> (<%= col.name %>)</option>
+            <% col_label = pf_field_label_for(form.target_model, col.name) %>
+            <option value="<%= col.name %>" <%= 'selected' if builder.field_selected?(col) %> data-pf-host-data><%= col_label.verbatim? ? col.name : "#{col_label.text} (#{col.name})" %><%= " — #{t('.ignored_field')}" if form.ignored_field?(col) %></option>
           <% end %>
         </select>
       </div>
@@ -65,13 +84,14 @@
           <label class="pf-fs-13 pf-text-2" for="pf-rule-follow">+ <%= t('.follow') %></label>
           <select id="pf-rule-follow" name="rule[path][]" class="pf-select pf-select--sm pf-select--auto" data-pf-refresh>
             <option value="" selected>—</option>
-            <% builder.follow_options.each do |a| %><option value="<%= a.name %>"><%= a.label %></option><% end %>
+            <% builder.follow_options.each do |a| %><option value="<%= a.name %>" data-pf-host-data><%= pf_field_label_text(builder.target, a.name) %></option><% end %>
           </select>
           <button type="submit" formaction="<%= refresh %>" class="pf-btn pf-btn--xs" data-pf-js-hide><%= t('.update_form') %></button>
         </div>
       <% end %>
+      <%# The relationship path as stored (or as built so far), named in the page's language: never the column's name (round 8, B#95). %>
       <% if form.follows_relationship? %>
-        <code class="pf-mono-key">field_accessor_path: <%= form.path.join('.') %></code>
+        <p class="pf-hint"><%= t('.path_html', path: tag.code(form.path.join('.'), class: 'pf-mono-key')) %></p>
       <% end %>
       <% if builder.model_missing? %><p class="pf-error" role="alert"><%= t('.model_missing') %></p><% end %>
     </div>
@@ -100,7 +120,8 @@
     <%# 4. Blocked message %>
     <div class="pf-field">
       <label class="pf-label" for="pf-rule-msg">4. <%= t('.message') %> <span class="pf-fs-12 pf-text-3 pf-fw-500"><%= t('.optional') %></span></label>
-      <textarea id="pf-rule-msg" class="pf-textarea" name="rule[failure_message]" rows="2" placeholder="<%= t('.message_placeholder') %>"><%= form.failure_message %></textarea>
+      <textarea id="pf-rule-msg" class="pf-textarea" name="rule[failure_message]" rows="2" aria-describedby="pf-rule-msg-help"><%= form.failure_message %></textarea>
+      <p id="pf-rule-msg-help" class="pf-hint"><%= t('.message_help') %></p>
     </div>
 
     <%# Advanced %>
@@ -132,13 +153,12 @@
       <%= pf_setting_link('auto_query_scoping', t('permission_forge.ui.setting')) %>
     </p>
 
-    <div class="pf-panel pf-panel--muted pf-stack pf-stack--tight">
-      <span class="pf-eyebrow"><%= t('.preview') %></span>
-      <% if form.column %>
-        <span><%= pf_rule_text(form.preview_rule, resource.name) %>.</span>
-      <% else %>
-        <span class="pf-text-3"><%= t('.preview_empty') %></span>
-      <% end %>
+    <%# The sentence the saved rule shows (SentencesHelper). As the value, "the current user" or "or empty"
+        change, pf_admin.js fetches it again from the preview action (one string, one helper); without JS
+        it changes on the builder's refresh and on save. %>
+    <div class="pf-panel pf-panel--muted pf-stack pf-stack--tight" aria-live="polite"
+         data-pf-rule-preview="<%= permission_forge.preview_permission_set_resource_rules_path(set, resource.name) %>">
+      <%= render 'preview', preview: PermissionForge::Admin::RulePreview.new(form: form, resource: resource, stored: @rule), resource: resource %>
     </div>
     <%= render 'permission_forge/shared/reason_field', id: 'pf-rule-reason', value: params[:reason] %>
   <% end %>

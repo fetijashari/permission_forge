@@ -26,7 +26,8 @@ module PermissionForge
 
       # A rule as the table can hold it, whatever the validations say today.
       def rule_with(resource, **attrs)
-        rule = create_permission_set_rule(permission_set: resource.permission_set, resource: resource, include_nulls: false)
+        rule = create_permission_set_rule(permission_set: resource.permission_set, resource: resource, include_nulls: false,
+                                          field_name: 'id')
         rule.update_columns(attrs)
         rule
       end
@@ -41,6 +42,17 @@ module PermissionForge
 
         hardened = audit(audit_actor_resolver: ->(_controller) {}, masked_attributes_nil_user_strategy: :hide)
         assert_empty hardened.at_least(:medium)
+      end
+
+      # a-onboarding #54 / e-operations #67: under :strict (auto_query_scoping on) the
+      # finding still said "enable auto_query_scoping".
+      test 'no_rules advises enabling auto_query_scoping only while it is off' do
+        off = item_for(audit(auto_query_scoping: :off), :no_rules)
+        assert_match 'otherwise add rules and enable auto_query_scoping.', off.detail
+
+        on = item_for(audit(auto_query_scoping: :filter_only), :no_rules)
+        assert_match 'otherwise add rules (auto_query_scoping is on', on.detail
+        assert_no_match(/enable auto_query_scoping/, on.detail)
       end
 
       test 'action rows that share a name on one resource are reported' do
@@ -99,6 +111,32 @@ module PermissionForge
         assert_not_includes codes(audit(api_enabled: true, api_auth: ->(_c) { true }, api_require_authorization: true)),
                             :api_mutations_unguarded
         assert_not_includes codes(audit(api_enabled: true, api_auth: ->(_c) { true })), :api_mutations_unguarded
+      end
+
+      # Field test round 8 (D#7): an API with api_auth and none of the
+      # authorization lambdas refused every change, assignment and stats
+      # read (fail closed), and the audit had nothing to say about it.
+      test 'an API with api_auth whose authorization lambdas are unset gets an info note naming each and what it guards' do
+        finding = item_for(audit(api_enabled: true, api_auth: ->(_c) { true }), :api_authorization_unset)
+
+        assert_equal :info, finding.severity
+        assert_equal ['api_action_authorization: every create, update, delete and copy',
+                      'api_assignment_authorization: every assignment and group membership change',
+                      'api_stats_authorization: GET /api/stats (or set api_stats_require_admin = false; an api_auth ' \
+                      'that sets the deprecated @admin = true still passes until 0.16)'], finding.items
+
+        partly = item_for(audit(api_action_authorization: ->(*) { true }, api_stats_require_admin: false), :api_authorization_unset)
+        assert_equal ['api_assignment_authorization: every assignment and group membership change'], partly.items
+      end
+
+      test 'no api_authorization_unset note when the API is off, has no api_auth, has every lambda, or does not require them' do
+        assert_not_includes codes(audit), :api_authorization_unset
+        assert_not_includes codes(audit(api_enabled: true)), :api_authorization_unset, 'api_without_auth says it'
+        assert_not_includes codes(audit(api_enabled: true, api_auth: ->(_c) { true }, api_action_authorization: ->(*) { true },
+                                        api_assignment_authorization: ->(*) { true }, api_stats_authorization: ->(_c) { true })),
+                            :api_authorization_unset
+        opted_out = audit(api_enabled: true, api_auth: ->(_c) { true }, api_require_authorization: false, api_stats_require_admin: false)
+        assert_not_includes codes(opted_out), :api_authorization_unset, 'api_mutations_unguarded says it'
       end
 
       test 'conditional sets are flagged while strict mode is off' do
@@ -161,8 +199,11 @@ module PermissionForge
                       'Sales › Customer.supplier.owner.users.deactivated equal "maybe": Active owner · 1 person',
                       'Sales › Customer.supplier.owner.deactivated equal "current_user": Me · 1 person',
                       'Sales › Customer.supplier.owner_id equal "no": Off · 1 person',
-                      'Sales › Customer.supplier_id. equal "5": Dot · 1 person',
                       *case_item], finding.items
+        # A name that is not a name (a trailing dot) names no column: the missing-column finding's.
+        # On PostgreSQL a column name in another case is another name: no column of the table.
+        missing_case = case_item.empty? ? ['Sales › Customer.Supplier_ID equal "5_id": Case · 1 person'] : []
+        assert_equal ['Sales › Customer.supplier_id. equal "5": Dot · 1 person', *missing_case], item_for(audit, :missing_rule_columns).items
       end
 
       test 'a rule that is not in effect, or held by nobody, weighs less' do
@@ -201,14 +242,16 @@ module PermissionForge
         assert_equal ['Managers › Customer.supplier_id equal "5_id": Own · 1 person'], item_for(audit, :unusable_rule_values).items
       end
 
-      test 'a rule whose model, association or column cannot be found is no finding and no error' do
+      test 'a rule whose model cannot be found is no finding and no error; a missing column or association is one' do
         set = create_permission_set(name: 'Legacy')
         gone = create_resource(permission_set: set, name: 'Supplier', read_access: true)
         resource = create_resource(permission_set: set, read_access: true)
         rule_with(gone, name: 'Gone', field_name: 'owner_id', field_value: 'x')
         rule_with(resource, name: 'No column', field_name: 'no_such_column', field_value: 'x')
-        rule_with(resource, name: 'Elsewhere', field_name: 'elsewhere.supplier_id', field_value: 'x')
-        # The engine raises for a path it cannot follow; the rule is not typed against its own model.
+        # With a path, a qualifier the join does not give (no table, no alias): matches nothing (review R1 #1).
+        rule_with(resource, name: 'Elsewhere', field_name: 'elsewhere.supplier_id', field_value: 'x', join_type: 'joins',
+                            field_accessor_path: 'supplier')
+        # A path that cannot be followed matches nothing; the rule is not typed against its own model.
         rule_with(resource, name: 'No path', field_name: 'supplier_id', field_value: 'x', join_type: 'joins', field_accessor_path: 'nowhere')
         rule_with(resource, name: 'Half a path', field_name: 'deactivated', field_value: 'maybe', join_type: 'left_joins',
                             field_accessor_path: 'supplier.nowhere')
@@ -217,7 +260,73 @@ module PermissionForge
         report = audit
 
         assert_not_includes codes(report), :unusable_rule_values
+        assert_equal ['Legacy › Customer.no_such_column equal "x": No column · 0 people',
+                      'Legacy › Customer.supplier.elsewhere.supplier_id equal "x": Elsewhere · 0 people',
+                      'Legacy › Customer.nowhere.supplier_id equal "x": No path · 0 people',
+                      'Legacy › Customer.supplier.nowhere.deactivated equal "maybe": Half a path · 0 people'],
+                     item_for(report, :missing_rule_columns).items, 'not the model that is gone'
         assert_includes item_for(report, :unknown_models).items, 'FreightCost'
+      end
+
+      # Saved before PermissionSetRule checked the column (or past it): the
+      # rule matches nothing, so its holders are denied every record.
+      test 'a rule naming a column its table does not have is a high finding while people hold the set' do
+        set = create_permission_set(name: 'Sales')
+        resource = create_resource(permission_set: set, read_access: true)
+        create_permission_set_user(user: create_user, permission_set: set)
+        through_supplier = { join_type: 'joins', field_accessor_path: 'supplier' }
+        rule_with(resource, name: 'Owner', field_name: 'onwer_id', field_value: 'current_user')
+        rule_with(resource, name: 'Qualified', field_name: 'customers.onwer_id', operator: 'is_null', field_value: '')
+        rule_with(resource, name: 'Joined', field_name: 'domain', field_value: 'x', **through_supplier)
+        rule_with(resource, name: 'Typed', field_name: 'supplier_id', field_value: '5_id')
+        rule_with(resource, name: 'Fine', field_name: 'owner_id', field_value: '5', **through_supplier)
+        rule_with(resource, name: 'Alias', field_name: 'elsewhere.onwer_id', field_value: '5', **through_supplier)
+
+        report = audit
+        finding = item_for(report, :missing_rule_columns)
+
+        assert_equal :high, finding.severity
+        assert_equal 'rule', finding.check
+        assert_match 'matches nothing', finding.detail
+        assert_equal ['Sales › Customer.onwer_id equal "current_user": Owner · 1 person',
+                      'Sales › Customer.customers.onwer_id is_null "": Qualified · 1 person',
+                      'Sales › Customer.supplier.domain equal "x": Joined · 1 person',
+                      'Sales › Customer.supplier.elsewhere.onwer_id equal "5": Alias · 1 person'], finding.items
+        assert_equal ['Sales › Customer.supplier_id equal "5_id": Typed · 1 person'],
+                     item_for(report, :unusable_rule_values).items, 'a missing column is not also an unusable value'
+      end
+
+      # Saved before PermissionSetRule checked the path: ActiveRecord cannot
+      # join it, so the rule matches nothing — the same finding, the same
+      # rules as the admin's Home lists.
+      test 'a rule whose association path cannot be followed is a high finding while people hold the set' do
+        set = create_permission_set(name: 'Sales')
+        resource = create_resource(permission_set: set, read_access: true)
+        create_permission_set_user(user: create_user, permission_set: set)
+        typo = rule_with(resource, name: 'Typo', field_name: 'owner_id', field_value: 'current_user', join_type: 'joins',
+                                   field_accessor_path: 'ownr')
+        rule_with(resource, name: 'Fine', field_name: 'owner_id', field_value: '5', join_type: 'joins', field_accessor_path: 'supplier')
+
+        report = audit
+        finding = item_for(report, :missing_rule_columns)
+
+        assert_equal :high, finding.severity
+        assert_equal ['Sales › Customer.ownr.owner_id equal "current_user": Typo · 1 person'], finding.items
+        assert_not_includes codes(report), :unusable_rule_values
+        assert_equal [typo], PermissionForge::Admin::AttentionItems.new.broken_rules.map(&:rule)
+      end
+
+      test 'a rule naming a missing column weighs less when nobody holds the set, and is no finding when not in effect' do
+        sales = create_permission_set(name: 'Sales')
+        rule_with(create_resource(permission_set: sales, read_access: true), name: 'Owner', field_name: 'onwer_id', field_value: '5')
+
+        assert_equal :medium, item_for(audit, :missing_rule_columns).severity
+
+        muting = create_permission_set(name: 'Muting', is_muting: true)
+        rule_with(create_resource(permission_set: muting), name: 'Not applied', field_name: 'onwer_id', field_value: '5')
+        sales.resources.first.permission_set_rules.update_all(is_active: false)
+
+        assert_not_includes codes(audit), :missing_rule_columns
       end
 
       # Only the rule check runs here: asked for the columns of a missing
@@ -284,6 +393,18 @@ module PermissionForge
         assert_not_includes codes(audit), :unmasked_personal_data
       end
 
+      # Field test: the finding named the set that unmasks, never the sets that mask.
+      test 'cross-set unmasking names the set that unmasks and the sets that mask' do
+        unmasking = create_resource(permission_set: create_permission_set(name: 'Managers'), read_access: true)
+        create_resource_field(resource: unmasking, name: 'email', read_access: true, mask_access: false)
+        %w[Support Sales].each do |name|
+          masking = create_resource(permission_set: create_permission_set(name: name), read_access: true)
+          create_resource_field(resource: masking, name: 'email', read_access: true, mask_access: true, mask_strategy: 'email')
+        end
+
+        assert_equal ['Managers › Customer.email (masked in Sales, Support)'], item_for(audit, :cross_set_unmasking).items
+      end
+
       test 'personal data in a virtual field left on the implicit grant' do
         resource = create_resource(permission_set: create_permission_set(name: 'Sales'), read_access: true)
         finding = item_for(audit, :implicit_virtual_personal_data)
@@ -313,7 +434,10 @@ module PermissionForge
 
         text = SecurityAuditChecks::TextReport.new(report).to_s
         assert_match '[CRITICAL] The admin UI has no authentication', text
-        assert_match 'Read-only: nothing was changed', text
+        assert_match 'No permission data was changed; this run is recorded in the audit log (report.generated).', text
+        assert_no_match(/Read-only: nothing was changed/, text)
+        unlogged = SecurityAuditChecks::TextReport.new(report, logged: false).to_s
+        assert_match 'No permission data was changed. FORMAT=json', unlogged
       end
     end
   end

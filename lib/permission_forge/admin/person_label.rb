@@ -9,7 +9,16 @@ module PermissionForge
     # the email (EMAIL_ATTRIBUTES: `email`, or Rails 8's `email_address`). Attribute
     # reads go raw-column-first (read_attribute_before_type_cast) so
     # MaskedAttributes on the User model never garbles admin lists; virtual
-    # attributes and blank columns fall back to the public reader.
+    # attributes and blank columns fall back to the public reader. A column
+    # the model encrypts (`encrypts :email`) is read decrypted through its
+    # attribute type (PermissionForge::EncryptedAttributes), never as the
+    # ciphertext it stores — for the admin's display, which is never cached.
+    # `decrypt: false` (the default profile_builder, whose profile is cached
+    # with the permission hash in the cache store) reads such a column as
+    # nil instead: neither its ciphertext nor its plaintext. Nor does it ask
+    # a public reader for a name or an email ({LABEL_ATTRIBUTES}) while the
+    # model encrypts any of them: a `name` composed from encrypted columns
+    # would hand over their plaintext.
     class PersonLabel
       NAME_METHODS = %i[name full_name display_name].freeze
       # The one definition of "the user's email attribute", in order: `email`,
@@ -17,10 +26,40 @@ module PermissionForge
       # creates). Labels, people search, bulk matching and the default
       # profile_builder all read it from here.
       EMAIL_ATTRIBUTES = %i[email email_address].freeze
+      # The split name attributes composed into a name.
+      NAME_PARTS = %i[first_name last_name firstname lastname].freeze
+      # Every attribute a name or an email is read from.
+      LABEL_ATTRIBUTES = (NAME_METHODS + NAME_PARTS + EMAIL_ATTRIBUTES).freeze
 
-      def initialize(user, configuration: PermissionForge.configuration)
+      # @param user [Object]
+      # @param configuration [PermissionForge::Configuration]
+      # @param decrypt [Boolean] false: an encrypted column reads as nil
+      def initialize(user, configuration: PermissionForge.configuration, decrypt: true)
         @user = user
         @configuration = configuration
+        @decrypt = decrypt
+      end
+
+      # A user attribute read raw-column-first (read_attribute_before_type_cast,
+      # past MaskedAttributes), the public reader for a virtual attribute or a
+      # blank column; nil when the user has neither. The one definition for the
+      # admin's labels (pf_raw_user_attribute) and the default profile_builder.
+      #
+      # @param user [Object]
+      # @param attr [Symbol, String]
+      # @return [Object, nil]
+      def self.raw_value(user, attr)
+        new(user).raw_value(attr)
+      end
+
+      # @see .raw_value
+      def raw_value(attr)
+        attr_name = attr.to_s
+        if readable_column?(attr_name)
+          value = column_value(attr_name)
+          return value if value.to_s.strip.present? || encrypted?(attr_name)
+        end
+        @user.try(attr) unless withheld_reader?(attr_name)
       end
 
       def name
@@ -37,8 +76,17 @@ module PermissionForge
         email unless email == name
       end
 
+      # Two letters for the avatar: the first and last word of a name ("AK"),
+      # or the first two letters of a single word. A label that is the email
+      # takes them from its local part ("dave@acme.test" => "DA"), never from
+      # the domain.
       def initials
-        initial_letters(name.to_s.scan(/[[:alnum:]]+/)).join.upcase.presence || '?'
+        initial_letters(initials_source.scan(/[[:alnum:]]+/)).join.upcase.presence || '?'
+      end
+
+      # Whether the label is the "User #<id>" fallback: neither a name nor an email.
+      def fallback?
+        name == fallback
       end
 
       # Lower-cased "name email" for in-memory search.
@@ -46,11 +94,28 @@ module PermissionForge
         "#{name} #{email}".downcase
       end
 
+      # The first word of a person's name, for sentences ("What Ana can do").
+      # A label that is not a name (the email, or the "User #2" fallback) is
+      # used whole: its first word would read as a placeholder ("User").
       def first_name
+        return name unless personal_name?
+
         name.to_s.split(/\s+/).first.presence || name
       end
 
       private
+
+      # Whether the label comes from a name (formatter or name attributes),
+      # not from the email or the id fallback.
+      def personal_name?
+        label = name
+        label != email && label != fallback
+      end
+
+      def initials_source
+        label = name.to_s
+        label == email ? label.split('@').first.to_s : label
+      end
 
       # First letters of the first and last word, or the first two letters of a single word.
       def initial_letters(words)
@@ -65,7 +130,7 @@ module PermissionForge
       end
 
       def default_name
-        first_present(NAME_METHODS) || composed(:first_name, :last_name) || composed(:firstname, :lastname)
+        first_present(NAME_METHODS) || composed(*NAME_PARTS.first(2)) || composed(*NAME_PARTS.last(2))
       end
 
       def first_present(attrs)
@@ -84,13 +149,26 @@ module PermissionForge
         I18n.t('permission_forge.shared.user_fallback', id: @user.id)
       end
 
-      def raw_value(attr)
-        attr_name = attr.to_s
-        if readable_column?(attr_name)
-          value = @user.read_attribute_before_type_cast(attr_name)
-          return value if value.to_s.strip.present?
-        end
-        @user.try(attr)
+      # The stored value; decrypted for an encrypted column (nil when this
+      # application cannot decrypt it: the reader would raise), nil for one
+      # under `decrypt: false`.
+      def column_value(attr_name)
+        value = @user.read_attribute_before_type_cast(attr_name)
+        return value if value.nil? || !encrypted?(attr_name)
+
+        PermissionForge::EncryptedAttributes.decrypt(@user.class, attr_name, value) if @decrypt
+      end
+
+      def encrypted?(attr_name)
+        PermissionForge::EncryptedAttributes.encrypted?(@user.class, attr_name)
+      end
+
+      # Under `decrypt: false`, a name or email attribute's public reader is
+      # not asked while the model encrypts any LABEL_ATTRIBUTES: the reader
+      # may read them decrypted.
+      def withheld_reader?(attr_name)
+        !@decrypt && LABEL_ATTRIBUTES.include?(attr_name.to_sym) &&
+          LABEL_ATTRIBUTES.any? { |attribute| encrypted?(attribute) }
       end
 
       # True when attr_name is a loaded column on an AR-like user (guards

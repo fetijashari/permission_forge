@@ -20,7 +20,7 @@ module PermissionForge
       live = @permission_set.permission_set_users.active_assignments.includes(:user).order(:created_at)
       @people_count = live.count
       @impact_people = live.limit(3).map(&:user).compact
-      @lost = @permission_set.is_muting ? [] : @permission_set.resources.select(&:is_active).map { |r| helpers.pf_resource_plural(r.name) }
+      @lost = @permission_set.is_muting ? [] : @permission_set.resources.in_effect.map { |r| helpers.pf_resource_plural(r.name) }
     end
 
     def load_resources_tab
@@ -29,6 +29,15 @@ module PermissionForge
 
     def load_assignments_tab
       @assignments = @permission_set.permission_set_users.includes(:user).order(:created_at).to_a
+    end
+
+    # The Conditions tab again, with the refused form's values and errors.
+    def render_conditions_refused
+      @tab = 'conditions'
+      @ip_text = params[:allowed_ips].to_s
+      load_editor
+      load_conditions_tab
+      render :show, status: :unprocessable_entity
     end
 
     def load_conditions_tab
@@ -48,22 +57,27 @@ module PermissionForge
 
     # The set's events, newest first (the log filtered by this set).
     def load_audit_timeline
-      @timeline_log = PermissionForge::Admin::AuditLog.new({ views: params[:views] },
+      @timeline_log = PermissionForge::Admin::AuditLog.new({ views: @views },
                                                            scope: PermissionForge::Admin::AuditLog.for_permission_set(@permission_set))
       @timeline = @timeline_log.page(params[:page], per_page: AUDIT_TIMELINE_PER_PAGE)
       @timeline_lookups = PermissionForge::Admin::AuditLookups.new(@timeline.events)
     end
 
+    # Typed like every admin parameter (ParamShapes): a Hash or a list in
+    # one of them is no filter, never a 500. Days are one of the offered
+    # counts (AuditTrail::DAY_FILTERS), else no filter.
     def load_audit_filters
-      @who = params[:who].presence
-      @type = params[:type].presence
-      @days = params[:days].presence
+      @who = pf_text_param(:who).presence
+      @type = pf_text_param(:type).presence
+      offered = PermissionForge::Admin::AuditTrail::DAY_FILTERS
+      @days = pf_integer_param(:days, default: nil, range: 1..offered.max).then { |days| days if offered.include?(days) }
       @sort = params[:sort] == 'asc' ? 'asc' : 'desc'
+      @views = pf_text_param(:views).presence
     end
 
     def send_audit_csv
       audit = PermissionForge::Admin::AuditTrail.new
-      csv = audit.to_csv(@entries, describe: helpers.method(:pf_audit_describe), person: helpers.method(:pf_audit_people))
+      csv = audit.to_csv(@entries, describe: helpers.method(:pf_audit_csv_describe), person: helpers.method(:pf_audit_people))
       response.headers['Cache-Control'] = 'no-store' # names of people, like the log's exports
       send_data csv, filename: "permission-forge-#{@permission_set.name.parameterize}-audit.csv", type: 'text/csv'
     end

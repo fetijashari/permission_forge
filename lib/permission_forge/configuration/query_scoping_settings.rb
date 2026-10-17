@@ -18,6 +18,19 @@ module PermissionForge
     module QueryScopingSettings
       AUTO_QUERY_SCOPING_VALUES = %i[off filter_only].freeze
       UNSCOPED_QUERY_DETECTION_VALUES = %i[off log raise].freeze
+      # Columns a record rule never compares (PermissionForge::SecretColumns),
+      # by name: password digests, tokens, `encrypted_*` columns (a gem's own
+      # encryption, attr_encrypted), secrets, then the credentials a
+      # user table commonly has — passwords and their salts, API / private /
+      # access keys, one-time-password seeds — anchored to name segments so
+      # `owner_id`, `sort_key`, `secretary` or `crypto_wallet` are never caught.
+      # An attribute declared with Active Record's `encrypts` keeps its column
+      # name: it is found by its declaration, not by a pattern
+      # (Operators::RuleProblem :encrypted_column).
+      DEFAULT_RULE_SECRET_COLUMN_PATTERNS = [
+        /\Apassword_digest\z/, /_digest\z/, /token/, /\Aencrypted_/, /_secret/, /passw/, /\Asecret(?:_|\z)/,
+        /(?:\A|_)(?:api|private|secret|access)_key\z/, /(?:\A|_)crypted(?:_|\z)/, /(?:\A|_)salt\z/, /(?:\A|_)otp(?:_|\z)/
+      ].freeze
 
       # Level 1 — ENFORCE.
       #   :off         — (default) only find_by/find_by!/permission_scoped apply rules
@@ -32,6 +45,20 @@ module PermissionForge
       # denied rows are silently filtered (find -> RecordNotFound).
       # Unknown values raise ConfigurationError at assignment (see below).
       attr_reader :auto_query_scoping
+
+      # What the record reads (find_by / find_by! / permission_scoped, and the
+      # default scope under auto_query_scoping) do for a signed-in user whose
+      # entry for the model's Resource chain does not grant read_access (no
+      # entry at all included):
+      #   :rules_only — (default) apply the rules of the user's entries, if
+      #                 any: no rules, every row (can_read? is the check)
+      #   :deny       — no rows: permission_scoped and the default scope are
+      #                 empty, find_by / find_by! raise NotAuthorizedError for
+      #                 an existing record (nil / RecordNotFound for a missing
+      #                 one). The strict preset's value.
+      # With nobody signed in nil_user_strategy decides. One definition:
+      # PermissionForge::RecordReadAccess.
+      attr_accessor :no_read_access_strategy
 
       # Level 2 — DETECT.
       #   :off   — (default) no detection
@@ -59,6 +86,25 @@ module PermissionForge
       # requires namespaced custom settings).
       attr_accessor :rls_session_variable
 
+      # The column names a record rule may not compare (PermissionForge::
+      # SecretColumns, matched against the column name in lower case): a new
+      # rule on one, or a change of a rule's column or path to one, is
+      # refused, and the admin's rule builder does not offer them. Rules
+      # stored before keep evaluating; the audit and Home list them. `[]`
+      # opts out.
+      attr_reader :rule_secret_column_patterns
+
+      # @param patterns [Array<Regexp>]
+      # @raise [ConfigurationError] for anything that is not a list of regular expressions
+      def rule_secret_column_patterns=(patterns)
+        unless patterns.is_a?(Array) && patterns.all?(Regexp)
+          raise PermissionForge::ConfigurationError,
+                "Invalid rule_secret_column_patterns: #{patterns.inspect}. Give a list of regular expressions ([] opts out)."
+        end
+
+        @rule_secret_column_patterns = patterns
+      end
+
       def auto_query_scoping=(value)
         @auto_query_scoping = normalize_scoping_value(
           value, AUTO_QUERY_SCOPING_VALUES, 'auto_query_scoping'
@@ -75,6 +121,13 @@ module PermissionForge
         @auto_query_scoping == :filter_only
       end
 
+      # @return [Boolean] whether the record reads of a signed-in user need
+      #   read_access on the model's Resource chain. Only the exact
+      #   :rules_only value applies the rules alone.
+      def deny_record_reads_without_read_access?
+        no_read_access_strategy.to_s != 'rules_only'
+      end
+
       def unscoped_query_detection_active?
         return false if @unscoped_query_detection == :off
         return false unless defined?(Rails) && Rails.respond_to?(:env)
@@ -86,10 +139,12 @@ module PermissionForge
 
       def set_query_scoping_defaults
         @auto_query_scoping = :off
+        @no_read_access_strategy = :rules_only
         @unscoped_query_detection = :off
         @unscoped_query_detection_environments = %w[development test]
         @database_row_level_security = false
         @rls_session_variable = 'permission_forge.user_id'
+        @rule_secret_column_patterns = DEFAULT_RULE_SECRET_COLUMN_PATTERNS.dup
       end
 
       # Fail closed on typos: an unknown value must never silently enable a

@@ -6,6 +6,12 @@ module PermissionForge
     # Returns true if the set is active for the given context (all conditions pass).
     # A nil/blank condition always passes (unconditional).
     #
+    # The conditions are read through PermissionForge::ActivationConditions
+    # (the one parser of the IP list and the hour window). A condition nobody
+    # can judge — an IP entry that is not an address, a list of separators,
+    # one hour of the two, the same hour twice, an hour outside 0..23 — never
+    # passes (.broken?); ConditionalSets applies a muting set with one.
+    #
     # @example
     #   PermissionSetConditionEvaluator.call(
     #     permission_set: ps,
@@ -22,22 +28,35 @@ module PermissionForge
         new(permission_set, context).call
       end
 
-      # Whether a condition of the set cannot be judged in `context`: it
+      # Whether a condition of the set cannot be judged in `context`: the
+      # set holds a broken condition (.broken?, whatever the context), it
       # restricts the IP and the context has none, or it requires a session
       # flag and the context says nothing about flags (no :session_flags at
       # all — an empty list is an answer). The hours are always judged (the
-      # time defaults to now). Under config.conditional_sets_strict_mode a
-      # conditional muting set applies then (ConditionalSets#passing).
+      # time defaults to now). A conditional muting set applies then under
+      # config.conditional_sets_strict_mode — and with a broken condition in
+      # every mode (ConditionalSets::Member#applies?).
       #
       # @return [Boolean]
       def self.unjudgeable?(permission_set:, context:)
         context ||= {}
-        (permission_set.allowed_ips.present? && context[:ip].blank?) ||
+        broken?(permission_set: permission_set) ||
+          (permission_set.allowed_ips.present? && context[:ip].blank?) ||
           (permission_set.requires_session_flag.present? && context[:session_flags].nil?)
+      end
+
+      # Whether the set holds a condition nobody can judge
+      # (ActivationConditions#conditions_broken?): such a set never passes.
+      #
+      # @param permission_set [PermissionSet, #allowed_ips]
+      # @return [Boolean]
+      def self.broken?(permission_set:)
+        PermissionForge::ActivationConditions.of(permission_set).conditions_broken?
       end
 
       def initialize(permission_set, context)
         @permission_set = permission_set
+        @conditions = PermissionForge::ActivationConditions.of(permission_set)
         @context = context || {}
       end
 
@@ -57,45 +76,28 @@ module PermissionForge
       end
 
       # IP restriction: set only active when request IP matches allowed CIDRs.
-      # The IP may be a String or an IPAddr; anything that is not an address
-      # fails the condition.
+      # The IP may be a String or an IPAddr (ActivationConditions.request_address:
+      # an IPv4-mapped IPv6 address is read as its IPv4 address); anything
+      # that is not an address fails the condition, as does a list that
+      # cannot be judged.
       def ip_passes?
-        allowed = @permission_set.allowed_ips
-        return true if allowed.blank?
+        return true if @permission_set.allowed_ips.blank?
+        return false if @conditions.ip_list_broken?
 
-        request_ip = @context[:ip]
-        return false if request_ip.blank?
+        address = PermissionForge::ActivationConditions.request_address(@context[:ip])
+        return false unless address
 
-        address = request_ip.is_a?(IPAddr) ? request_ip : IPAddr.new(request_ip.to_s)
-        parse_ip_ranges(allowed).any? { |range| range.include?(address) }
-      rescue IPAddr::Error
-        false
+        @conditions.allowed_ip_ranges.any? { |range| range.include?(address) }
       end
 
-      # Login hours: set only active during allowed hour window.
+      # Login hours: set only active during the allowed hour window; a
+      # broken window (one hour, the same hour twice, out of range) includes
+      # no hour.
       def hours_pass?
-        start_hour = @permission_set.allowed_hours_start
-        end_hour = @permission_set.allowed_hours_end
-        return true if start_hour.nil? || end_hour.nil?
+        window = @conditions.hours_window
+        return true unless window.set?
 
-        hour_in_range?((@context[:time] || Time.current).hour, start_hour, end_hour)
-      end
-
-      def hour_in_range?(hour, start_hour, end_hour)
-        if start_hour <= end_hour
-          hour >= start_hour && hour < end_hour
-        else
-          # Wraps midnight (e.g., 22-06 means 22:00 to 05:59)
-          hour >= start_hour || hour < end_hour
-        end
-      end
-
-      def parse_ip_ranges(allowed_ips)
-        allowed_ips.split(',').filter_map do |cidr|
-          IPAddr.new(cidr.strip)
-        rescue IPAddr::Error
-          nil
-        end
+        window.include?((@context[:time] || Time.current).hour)
       end
     end
   end

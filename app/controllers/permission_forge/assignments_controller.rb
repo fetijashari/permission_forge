@@ -9,6 +9,7 @@ module PermissionForge
   class AssignmentsController < ApplicationController
     include PermissionForge::AssignmentAuthorization
     include PermissionForge::ActingAdmin
+    include PermissionForge::CacheConfirmation
 
     # What config.admin_assignment_authorization is asked for each member action.
     CHANGE_ACTIONS = { update: :change_expiry, destroy: :revoke, keep: :review }.freeze
@@ -30,21 +31,24 @@ module PermissionForge
       back = pf_back_or(permission_forge.person_path(@person))
       return if pf_assignment_refused?(@chosen_sets, @person.id, :grant, back)
 
-      created = assign_chosen_sets
-      pf_redirect back, notice: assigned_notice(created), undo: assign_undo(created, back)
+      created = nil
+      outcome = cache_outcome { created = assign_chosen_sets }
+      pf_redirect back, undo: assign_undo(created, back), **cache_flash_text(outcome, assigned_notice(created))
     end
 
     # Change the end date (presets) or extend by 30 days. On a locked
     # Permission Set only a change that narrows access passes
     # (EditableLock.widening_lock): for a granting set an end date set or
     # moved earlier, for a Muting Permission Set one cleared or moved later.
+    # Nothing chosen (the select's own first entry), or the end date the
+    # assignment has, changes nothing and says so (SaveNotice).
     def update
       expires_at = new_expiry(params[:expiry].to_s)
-      return redirect_to(return_path) if expires_at == :invalid
+      return redirect_to(return_path, **pf_save_flash(false)) if expires_at == :invalid
       return if widening_refused?(expires_at)
 
-      @assignment.update!(expires_at: expires_at)
-      redirect_to return_path, notice: end_changed_notice(expires_at)
+      outcome = cache_outcome { pf_save_changed(@assignment, { expires_at: expires_at }, &:save!) }
+      redirect_to return_path, **pf_save_flash(@assignment) { cache_flash_text(outcome, end_changed_notice(expires_at)) }
     end
 
     def confirm_destroy
@@ -56,19 +60,19 @@ module PermissionForge
     # is allowed (EditableLock.widening_lock).
     def destroy
       name = person_name(@assignment.user)
-      set_name = @assignment.permission_set.name
+      set_name = pf_record_name(@assignment.permission_set)
       undo = restore_undo
-      @assignment.destroy!
-      pf_redirect return_path, notice: t('permission_forge.flash.assignments.removed', name: name, set: set_name), undo: undo
+      outcome = cache_outcome { @assignment.destroy! }
+      pf_redirect return_path, undo: undo, **cache_flash_text(outcome, t('permission_forge.flash.assignments.removed', name: name, set: set_name))
     end
 
     # Access review "Keep": records the reviewer and the date
     # (PermissionSetUser#mark_reviewed!, one assignment.reviewed event);
     # staleness is measured from the last review.
     def keep
-      @assignment.mark_reviewed!(reviewer: pf_acting_admin_record)
-      redirect_to return_path, notice: t('permission_forge.flash.assignments.kept',
-                                         name: person_name(@assignment.user), set: @assignment.permission_set.name)
+      outcome = cache_outcome { @assignment.mark_reviewed!(reviewer: pf_acting_admin_record) }
+      redirect_to return_path, **cache_flash_text(outcome, t('permission_forge.flash.assignments.kept',
+                                                             name: person_name(@assignment.user), set: pf_record_name(@assignment.permission_set)))
     end
 
     # Undo for "Remove": recreates the assignment.
@@ -77,8 +81,9 @@ module PermissionForge
       set, user = restore_target
       return if pf_widening_refused?(pf_widening_lock(set, :grant), return_path) || pf_assignment_refused?(set, user.id, :grant, return_path)
 
-      restore_assignment(set, user, expires_at)
-      redirect_to return_path, notice: t('permission_forge.flash.assignments.restored', name: person_name(user), set: set.name)
+      outcome = cache_outcome { restore_assignment(set, user, expires_at) }
+      redirect_to return_path,
+                  **cache_flash_text(outcome, t('permission_forge.flash.assignments.restored', name: person_name(user), set: pf_record_name(set)))
     end
 
     # Undo for "Assign": removes the assignments just created (narrows
@@ -88,8 +93,8 @@ module PermissionForge
       assignments = undo_assignments
       return if undo_refused?(assignments)
 
-      PermissionForge::Audit.correlate { assignments.each(&:destroy!) }
-      redirect_to return_path, notice: t('permission_forge.flash.assignments.undone')
+      outcome = cache_outcome { PermissionForge::Audit.correlate { assignments.each(&:destroy!) } }
+      redirect_to return_path, **cache_flash_text(outcome, t('permission_forge.flash.assignments.undone'))
     end
 
     private
@@ -174,7 +179,9 @@ module PermissionForge
       load_sets
       @people_counts = PermissionForge::PermissionSetUser.active_assignments.group(:permission_set_id).count
       pf_load_expiry
-      @chosen_sets = @sets.select { |set| @selected_ids.include?(set.id) && !@existing_ids.include?(set.id) }
+      @chosen_sets = @sets.select do |set|
+        @selected_ids.include?(set.id) && !@existing_ids.include?(set.id) && !@locked_ids.include?(set.id)
+      end
     end
 
     def load_person
@@ -193,22 +200,24 @@ module PermissionForge
       @set_query = pf_text_param(:set_q)
       @preset_set = PermissionForge::PermissionSet.find_by(id: params[:permission_set_id])
       @selected_ids = (pf_id_list(:set_ids) + [@preset_set&.id]).compact.uniq
-      @sets = assignable_sets
+      @sets = listed_sets
+      @locked_ids = @sets.select { |set| pf_widening_lock(set, :grant) }.to_set(&:id)
     end
 
     def picker_limit
       @person ? 0 : 8
     end
 
-    # The sets a holder can be added to: not those where that widens access
-    # on a locked set (a locked Muting Permission Set takes holders).
-    def assignable_sets
+    # Every set matching the filter. Those a holder cannot be added to (that
+    # widens access on a locked set; a locked Muting Permission Set takes
+    # holders) are listed as locked (@locked_ids) and never chosen.
+    def listed_sets
       scope = PermissionForge::PermissionSet.order(:is_muting, :name)
       unless @set_query.empty?
         needle = "%#{ActiveRecord::Base.sanitize_sql_like(@set_query.downcase)}%"
         scope = scope.where('LOWER(name) LIKE ?', needle).or(scope.where(id: @selected_ids))
       end
-      scope.reject { |set| pf_widening_lock(set, :grant) }
+      scope.to_a
     end
 
     def validate_form
@@ -227,7 +236,7 @@ module PermissionForge
 
     def end_changed_notice(expires_at)
       t('permission_forge.flash.assignments.end_changed', name: person_name(@assignment.user),
-                                                          set: @assignment.permission_set.name,
+                                                          set: pf_record_name(@assignment.permission_set),
                                                           when: helpers.pf_expiry(expires_at).first)
     end
 
@@ -236,7 +245,7 @@ module PermissionForge
     def restored_expiry = pf_time_param(:expires_at)
 
     def assigned_notice(created)
-      sets = created.map { |assignment| assignment.permission_set.name }.to_sentence
+      sets = helpers.pf_to_sentence(created.map { |assignment| pf_record_name(assignment.permission_set) })
       return t('permission_forge.flash.assignments.assigned', name: person_name(@person), sets: sets) if @expires_at.nil?
 
       t('permission_forge.flash.assignments.assigned_until', name: person_name(@person), sets: sets,
@@ -245,15 +254,7 @@ module PermissionForge
 
     # :invalid for a blank or unknown key (CHANGE_KEYS has no blank entry).
     def new_expiry(key)
-      return extended_expiry if key == 'extend30'
-      return :invalid unless PermissionForge::Admin::ExpiryPresets::CHANGE_KEYS.include?(key)
-
-      PermissionForge::Admin::ExpiryPresets.expires_at_for(key)
-    end
-
-    def extended_expiry
-      base = [@assignment.expires_at&.to_date, Time.zone.today].compact.max
-      (base + 30).in_time_zone.end_of_day
+      PermissionForge::Admin::ExpiryPresets.change_to(key, from: @assignment.expires_at)
     end
 
     # What the person stops seeing when this (granting) assignment is removed.
@@ -261,7 +262,7 @@ module PermissionForge
       permission_set = @assignment.permission_set
       return [] if permission_set.is_muting
 
-      permission_set.resources.select(&:is_active).map { |r| helpers.pf_resource_plural(r.name) }
+      permission_set.resources.in_effect.map { |r| helpers.pf_resource_plural(r.name) }
     end
   end
 end

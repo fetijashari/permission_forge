@@ -64,6 +64,21 @@ module PermissionForge
         assert PermissionSetUser.exists?(user: @user, permission_set: @marketing_set)
       end
 
+      test 'a real run answers the keys a dry run answers' do
+        dry = ConsentWithdrawalHandler.call(user: @user, consent_flag: 'marketing_consent', dry_run: true)
+        real = ConsentWithdrawalHandler.call(user: @user, consent_flag: 'marketing_consent')
+
+        assert_equal dry.keys.sort, real.keys.sort
+        # `cache`: the one Cache::Outcome; a dry run asks nothing of the store, and says so (Outcome.none:
+        # nothing confirmed, `work: false`; round 7, E#55). The suite's memory store is process-local.
+        cache = { confirmed: true, process_local: true, unconfirmed: 0, in_request: false }
+        assert_equal({ revoked_sets: 0, invalidated: false, affected_sets: ['Marketing Consent Access'],
+                       affected_assignment_count: 1, dry_run: true,
+                       cache: cache.merge(confirmed: nil, work: false) }, dry)
+        assert_equal({ revoked_sets: 1, invalidated: true, affected_sets: ['Marketing Consent Access'],
+                       affected_assignment_count: 1, dry_run: false, cache: cache }, real)
+      end
+
       test 'handles multiple sets with the same consent flag' do
         second_marketing_set = create_permission_set(
           name: 'Marketing Email Access',

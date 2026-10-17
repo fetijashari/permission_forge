@@ -180,9 +180,17 @@ module PermissionForge
     # Default records per page when per_page param is not provided.
     attr_accessor :api_default_per_page
 
-    # When true, the /api/stats endpoint requires admin access.
-    # The api_auth lambda must set @admin = true on the controller.
+    # When true (default), GET /api/stats answers only callers
+    # api_stats_authorization allows (403 for everyone else). false: every
+    # caller api_auth admits.
     attr_accessor :api_stats_require_admin
+
+    # Lambda that receives the controller and decides who may read GET
+    # /api/stats while api_stats_require_admin is on; a truthy answer allows.
+    # When nil, stats are refused (until 0.16 an api_auth that sets @admin =
+    # true on the controller still allows, with a deprecation warning).
+    # Example: ->(controller) { PermissionForge.current_user&.admin? }
+    attr_accessor :api_stats_authorization
 
     # Record identifier field for API lookups (default: :uuid).
     # Change to :id if your app uses integer IDs in URLs.
@@ -300,8 +308,12 @@ module PermissionForge
     # Hash of regex => strategy string for GDPR field pattern matching
     attr_reader :gdpr_field_patterns
 
+    # Not created_at / updated_at (before 0.15 they were here): generated
+    # fields give them a row, at most read-only on a granting set
+    # (TimestampFields), so the default unconfigured_field_strategy (:block)
+    # no longer hides them from a reader who is granted them.
     DEFAULT_IGNORED_FIELDS = %w[
-      id created_at updated_at token_digest token_last_digits
+      id token_digest token_last_digits
       created_by updated_by token password encrypted_password
       deleted_at uuid deactivated
     ].freeze
@@ -313,7 +325,7 @@ module PermissionForge
 
     # Column names that are personal data, with the mask for each. One
     # definition for masking detection (ResourceFieldGenerator,
-    # GdprFieldAuditor, Admin::SensitiveColumns, the security audit) and for
+    # GdprFieldAuditor, SensitiveColumns, the security audit) and for
     # Rails' filter_parameters (PermissionForge.gdpr_filter_parameters), which
     # Rails also applies to ActiveRecord::Base.filter_attributes — so a match
     # prints as [FILTERED] in #inspect. A word matches anywhere in the name,
@@ -324,9 +336,11 @@ module PermissionForge
     # `home_tel`, `tel2`, `telNumber`, `cityName`, `zipcode` yes — `hotel_id`,
     # `capacity`, `telemetry_enabled`, `automobile_id`, `gzip_enabled` no.
     # Every alternative stands alone (no group with an inner `|`):
-    # Admin::SensitiveColumns names the one that matched.
+    # SensitiveColumns names the one that matched. The first pattern
+    # that matches decides the strategy: Rails 8's `email_address` is an
+    # email (it also matches `address`, below).
     DEFAULT_GDPR_FIELD_PATTERNS = {
-      /\Aemail\z|_email\z/ => 'email',
+      /\Aemail\z|_email\z|\Aemail_address\z|_email_address\z/ => 'email',
       /phone|telefon|\Amobile|_mobile|\Afax|_fax|\Atel\z|\Atel_|\Atel[A-Z0-9]|_tel\z|_tel_|_tel[A-Z0-9]/ => 'last4',
       /\Assn\z|social_security|national_id/ => 'last4',
       /iban|bank_account|credit_card|card_number/ => 'last4',
@@ -391,9 +405,10 @@ module PermissionForge
     end
 
     # Field-name variants produced by the configured mappings (e.g. `user_id`
-    # -> `user_uuid`, `price_cents` -> `price`). Shared by the granting and
-    # muting phases of PermissionHashBuilder so they always cover the same
-    # names.
+    # -> `user_uuid`, `price_cents` -> `price`), whatever the model. What a
+    # field row applies to is PermissionForge::FieldVariants: these, kept to
+    # the names the Resource's model has (shared by the granting and muting
+    # phases of PermissionHashBuilder and the admin).
     #
     # @param field_name [String, Symbol]
     # @return [Array<String>]
@@ -573,6 +588,7 @@ module PermissionForge
       @api_auth = nil
       @api_base_controller_class = '::ActionController::Base'
       @api_stats_require_admin = true
+      @api_stats_authorization = nil
       @api_pagination_handler = nil
       @api_max_per_page = 100
       @api_default_per_page = 15
@@ -592,14 +608,19 @@ module PermissionForge
       ->(user) { user.respond_to?(:active_for_authentication?) ? user.active_for_authentication? : true }
     end
 
+    # The profile is cached with the permission hash (the cache store:
+    # Redis, Solid Cache, ...), so an attribute the user model encrypts is
+    # left out (nil): neither its ciphertext nor its plaintext goes there.
     def default_profile_builder
       lambda { |user|
+        label = Admin::PersonLabel.new(user, decrypt: false)
         {
           id: user.id,
           uuid: user.try(:uuid),
-          name: user.try(:name),
+          # Raw-column-first (Admin::PersonLabel#raw_value): a masked User model never garbles the profile
+          name: label.raw_value(:name),
           # The first present of `email`, Rails 8's `email_address` (Admin::PersonLabel::EMAIL_ATTRIBUTES)
-          email: Admin::PersonLabel::EMAIL_ATTRIBUTES.lazy.filter_map { |attr| user.try(attr).presence }.first
+          email: label.email
         }
       }
     end

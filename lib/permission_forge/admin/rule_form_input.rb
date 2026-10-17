@@ -13,23 +13,28 @@ module PermissionForge
       end
 
       # @param rule [PermissionSetRule, nil] nil for a new rule
+      # A new rule starts on the model's defaults (include_nulls among them).
       def self.from_rule(rule)
-        rule ||= PermissionForge::PermissionSetRule.new(operator: 'equal', include_nulls: false, is_active: true)
+        rule ||= PermissionForge::PermissionSetRule.new(operator: 'equal', is_active: true)
         path = rule_path(rule)
         path.merge(rule_values(rule.field_value.to_s, RuleForm::ARITY.fetch(path[:operator], :one)), rule_options(rule))
       end
 
       def self.param_path(attrs)
         path = Array(attrs['path']).map(&:to_s).compact_blank
-        remove = attrs['remove_step']
-        { name: attrs['name'].to_s.strip, path: remove.present? ? path.first(remove.to_i) : path,
-          field_name: attrs['field_name'].to_s, operator: allowed(attrs['operator'], RuleForm::ARITY.keys, 'equal') }
+        # The steps kept by a "remove" button: a count of them (0 up to the
+        # path's length), else none removed (ParamShapes.integer).
+        keep = ParamShapes.integer(attrs['remove_step'], default: nil, range: 0..path.size)
+        # The operator as posted: one that is not a condition is refused by
+        # RuleForm#valid?, never rewritten to another.
+        { name: attrs['name'].to_s.strip, path: keep ? path.first(keep) : path,
+          field_name: attrs['field_name'].to_s, operator: attrs.key?('operator') ? attrs['operator'].to_s : 'equal' }
       end
 
       def self.param_values(attrs)
         { value: stripped(attrs['value']), values: list_values(attrs),
           value_from: stripped(attrs['value_from']), value_to: stripped(attrs['value_to']),
-          current_user: attrs['current_user'] == '1' }
+          current_user: flag(attrs, 'current_user', default: false) }
       end
 
       # Checked list values plus comma-separated free text.
@@ -39,14 +44,25 @@ module PermissionForge
       end
 
       def self.param_options(attrs)
-        { include_nulls: attrs['include_nulls'] == '1', failure_message: stripped(attrs['failure_message']),
+        { include_nulls: flag(attrs, 'include_nulls', default: false), failure_message: stripped(attrs['failure_message']),
           join: allowed(attrs['join'], RuleForm::JOINS, 'auto'),
-          is_active: attrs.key?('is_active') ? attrs['is_active'] == '1' : true }
+          is_active: flag(attrs, 'is_active', default: true) }
       end
 
+      # A checkbox of the builder, through the one boolean reading of the
+      # admin and the API (ParamShapes.flag): the box absent (unchecked, no
+      # hidden field) is `default`; a value that is no boolean raises
+      # ParamShapes::InvalidFlag, which the admin answers with a flash.
+      def self.flag(attrs, key, default:)
+        attrs[key].nil? ? default : ParamShapes.flag(key, attrs[key])
+      end
+
+      # A filter rule's path is never joined (PermissionSetRule#join_rule?,
+      # the one definition): the builder does not load one, so saving the
+      # rule again keeps it a filter rule.
       def self.rule_path(rule)
-        { name: rule.name.to_s, path: rule.field_accessor_path.to_s.split('.').compact_blank,
-          field_name: rule.field_name.to_s, operator: rule.operator.presence || 'equal' }
+        path = rule.join_rule? ? rule.field_accessor_path.to_s.split('.').compact_blank : []
+        { name: Prefill.text(rule, :name), path: path, field_name: rule.field_name.to_s, operator: rule.operator.presence || 'equal' }
       end
 
       def self.rule_values(raw, arity)
@@ -57,8 +73,8 @@ module PermissionForge
       end
 
       def self.rule_options(rule)
-        { include_nulls: rule.persisted? ? rule.include_nulls : false, failure_message: rule.failure_message.to_s,
-          join: rule.join_type.presence || 'auto', is_active: rule.is_active != false }
+        { include_nulls: rule.include_nulls == true, failure_message: Prefill.text(rule, :failure_message),
+          join: rule.join_rule? ? rule.join_type : 'auto', is_active: rule.is_active != false }
       end
 
       def self.allowed(value, choices, fallback)

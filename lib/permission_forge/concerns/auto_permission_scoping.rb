@@ -107,6 +107,7 @@ module PermissionForge
         def pf_build_auto_scope
           current_user = PermissionForge.current_user
           return pf_nil_user_auto_scope unless current_user
+          return pf_no_read_access_auto_scope(current_user) if PermissionForge::RecordReadAccess.denied?(current_user, self)
 
           # Resolve the rules once — permissions_hash is a cache read per
           # call, and this hook runs on every relation build: those of this
@@ -130,6 +131,17 @@ module PermissionForge
           )
         end
 
+        # A signed-in user the model's Resource chain grants no read_access,
+        # under no_read_access_strategy :deny (RecordReadAccess): no rows,
+        # access.denied once per request.
+        def pf_no_read_access_auto_scope(current_user)
+          PermissionForge::Audit::Runtime.denied(
+            PermissionForge::Audit::Runtime::DENIED,
+            reason: PermissionForge::RecordReadAccess::REASON, model: self, via: 'auto_scope', user: current_user, once: true
+          )
+          none
+        end
+
         # Fail closed for :deny AND :raise — raising from inside a default_scope
         # would detonate in consoles, rake tasks, and view-layer counts, so the
         # strictest safe behavior is an empty relation (documented deviation).
@@ -148,9 +160,14 @@ module PermissionForge
         # Filter-type rules only: join-type rules inside a default_scope would
         # break includes/count/pluck and duplicate rows, so they remain the job
         # of permission_scoped (a boot warning fires when join rules exist while
-        # Level 1 is enabled).
+        # Level 1 is enabled). A join type this version does not know joins
+        # nothing — the applier makes such a rule match nothing — so it applies
+        # here too: skipped, it would leave the default scope wider than
+        # find_by and permission_scoped.
         def pf_filter_rule?(rule)
-          PermissionForge::PermissionSetRule.filter_join_type?(rule[:join_type])
+          join_type = rule[:join_type]
+          PermissionForge::PermissionSetRule.filter_join_type?(join_type) ||
+            !PermissionForge::Services::PermissionRuleApplier::JOIN_METHODS.key?(join_type.to_s)
         end
       end
     end

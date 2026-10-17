@@ -24,8 +24,17 @@
       <%= link_to t('.how_to_fix'), permission_forge.settings_path(focus: row.key, anchor: "set-#{row.key}"), class: 'pf-btn pf-btn--sm' %>
     </div>
   <% end %>
+  <%# Home's items count here too: Settings never says the setup looks good while Home warns. %>
+  <% attention = @catalog.attention_count %>
+  <% if attention.positive? %>
+    <div class="pf-card__row pf-card__row--top">
+      <span class="pf-text-warn" aria-hidden="true">⚠</span>
+      <span class="pf-grow"><%= t('.attention', count: attention) %></span>
+      <%= link_to t('.open_home'), permission_forge.root_path, class: 'pf-btn pf-btn--sm' %>
+    </div>
+  <% end %>
   <div class="pf-card__row">
-    <span class="pf-text-grant">✓ <%= t('.secure_count', count: @catalog.secure_count) %></span>
+    <span class="pf-text-grant">✓ <%= @catalog.healthy? ? t('.secure_count', count: @catalog.secure_count) : t('.secure_count_set', count: @catalog.secure_count) %></span>
   </div>
 </section>
 

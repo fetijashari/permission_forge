@@ -1,5 +1,5 @@
 <% set = @permission_set %>
-<% content_for :pf_title, t('.title', set: set.name) %>
+<% content_for :pf_title, t('.title', set: pf_record_name(set)) %>
 <% close_path = permission_forge.permission_set_path(set, tab: 'assignments') %>
 <%= form_with url: permission_forge.permission_set_bulk_assignment_path(set), method: :post do %>
   <% footer = capture do %>
@@ -15,8 +15,8 @@
       <%= @result ? t('.assign_count', count: @result.to_assign.size) : t('.assign') %>
     </button>
   <% end %>
-  <%= pf_sheet_frame({ title: t('.title', set: set.name), close_path: close_path, footer: footer,
-                       breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path], [set.name, close_path], t('.crumb')) }) do %>
+  <%= pf_sheet_frame({ title: t('.title', set: pf_record_name(set)), close_path: close_path, footer: footer,
+                       breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path], [pf_record_name(set), close_path], t('.crumb')) }) do %>
     <div class="pf-field">
       <label class="pf-label" for="pf-bulk-text"><%= t('.paste') %></label>
       <textarea id="pf-bulk-text" name="identifiers" rows="5" class="pf-textarea pf-textarea--mono" placeholder="<%= t('.paste_placeholder') %>"><%= @text %></textarea>

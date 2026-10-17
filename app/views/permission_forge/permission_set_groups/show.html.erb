@@ -1,14 +1,14 @@
 <% group = @group %>
-<% locked = pf_locked_record?(group) %>
-<% content_for :pf_title, group.name %>
-<%= pf_breadcrumb([t('permission_forge.nav.groups'), permission_forge.groups_path], group.name) %>
+<% locked = pf_locked?(group) %>
+<% content_for :pf_title, pf_record_name(group) %>
+<%= pf_breadcrumb([t('permission_forge.nav.groups'), permission_forge.groups_path], pf_record_name(group)) %>
 <%= render 'permission_forge/shared/mode_banners', record: group, muting: false %>
 
 <%= form_with url: permission_forge.group_path(group), method: :patch, scope: :group, class: 'pf-page-header' do %>
   <div class="pf-page-header__text">
-    <h1 class="pf-sr-only"><%= group.name %></h1>
+    <h1 class="pf-sr-only"><%= pf_record_name(group) %></h1>
     <label class="pf-sr-only" for="pf-group-title"><%= t('.name') %></label>
-    <input id="pf-group-title" class="pf-title-input" type="text" name="group[name]" value="<%= group.name %>" required maxlength="255" <%= 'readonly' if locked %>>
+    <input id="pf-group-title" class="pf-title-input" type="text" name="group[name]" value="<%= pf_prefill(group, :name) %>"<%= tag.attributes(placeholder: (t('permission_forge.ui.untitled.permission_set_group') if pf_prefill(group, :name).blank?)) %> <%= 'required' unless pf_prefill_optional?(group, :name) %> maxlength="255" <%= 'readonly' if locked %>>
     <label class="pf-sr-only" for="pf-group-desc"><%= t('.description') %></label>
     <input id="pf-group-desc" class="pf-desc-input" type="text" name="group[description]" value="<%= group.description %>"
            placeholder="<%= t('.description_placeholder') %>" <%= 'readonly' if locked %>>
@@ -22,15 +22,19 @@
       <span class="pf-switch__on"><%= t('permission_forge.shared.active') %></span>
       <span class="pf-switch__off"><%= t('permission_forge.ui.badges.off') %></span>
     </label>
-    <% unless locked %><button type="submit" class="pf-btn pf-btn--sm"><%= t('.save') %></button><% end %>
-    <%# Duplicate posts this form (and its reason) to the duplicate action, which reads nothing else from it. %>
-    <button type="submit" formaction="<%= permission_forge.duplicate_group_path(group) %>" formmethod="post" name="_method" value="post"
-            formnovalidate class="pf-btn pf-btn--sm" title="<%= t('.duplicate_title', count: @sets.size) %>"><%= t('.duplicate') %></button>
-    <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-group-reason' %>
+    <% unless locked %>
+      <button type="submit" class="pf-btn pf-btn--sm"><%= t('.save') %></button>
+      <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-group-reason' %>
+    <% end %>
+    <%# Duplicate: its own form and reason — a copy is always allowed, also of a locked group. %>
+    <button type="submit" form="pf-group-duplicate" class="pf-btn pf-btn--sm" title="<%= t('.duplicate_title', count: @sets.size) %>"><%= t('.duplicate') %></button>
     <% unless locked %>
       <%= pf_modal_link t('permission_forge.ui.delete'), permission_forge.delete_group_path(group), class: 'pf-btn pf-btn--sm pf-btn--danger' %>
     <% end %>
   </div>
+<% end %>
+<%= form_with url: permission_forge.duplicate_group_path(group), method: :post, id: 'pf-group-duplicate', class: 'pf-reason-form' do %>
+  <%= render 'permission_forge/shared/reason_field', compact: true, id: 'pf-group-duplicate-reason' %>
 <% end %>
 
 <section class="pf-card" aria-labelledby="pf-group-sets">
@@ -42,7 +46,7 @@
         <select id="pf-group-add-set" name="permission_set_id" class="pf-select pf-select--sm pf-select--auto" data-pf-autosubmit required>
           <option value=""><%= t('.add_set') %>…</option>
           <% @other_sets.each do |ps| %>
-            <option value="<%= ps.id %>"><%= ps.name %><%= " (#{t('.in_group', group: ps.permission_set_group.name)})" if ps.permission_set_group %></option>
+            <option value="<%= ps.id %>"><%= pf_record_name(ps) %><%= " (#{t('.in_group', group: pf_record_name(ps.permission_set_group))})" if ps.permission_set_group %></option>
           <% end %>
         </select>
         <button type="submit" class="pf-btn pf-btn--xs" data-pf-js-hide><%= t('permission_forge.ui.apply') %></button>
@@ -54,7 +58,7 @@
     <div class="pf-card__row">
       <span class="pf-stack pf-stack--tight pf-grow">
         <span><%= pf_set_chip(ps) %></span>
-        <% if ps.description.present? %><span class="pf-fs-13 pf-text-2"><%= ps.description %></span><% end %>
+        <% if ps.description.present? %><span class="pf-fs-13 pf-text-2" data-pf-host-data><%= ps.description %></span><% end %>
       </span>
       <span class="pf-fs-13 pf-text-3"><%= pf_people_text(@people_counts.fetch(ps.id, 0)) %></span>
       <% unless locked %>
@@ -72,10 +76,13 @@
 <section class="pf-card" aria-labelledby="pf-group-members">
   <div class="pf-card__header">
     <h2 class="pf-h2" id="pf-group-members"><%= t('.members') %></h2>
-    <%= form_with url: permission_forge.group_members_path(group), method: :post, class: 'pf-row pf-row--tight pf-reason-form' do %>
-      <%= render 'permission_forge/shared/user_select', users: @candidates, id_suffix: "group-#{group.id}" %>
-      <button type="submit" class="pf-btn pf-btn--xs"><%= t('.add_member') %></button>
-      <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-member-reason-#{group.id}" %>
+    <%# A locked group's members are frozen (the server refuses both ways): no add, no remove. %>
+    <% unless locked %>
+      <%= form_with url: permission_forge.group_members_path(group), method: :post, class: 'pf-row pf-row--tight pf-reason-form' do %>
+        <%= render 'permission_forge/shared/user_select', users: @candidates, id_suffix: "group-#{group.id}" %>
+        <button type="submit" class="pf-btn pf-btn--xs"><%= t('.add_member') %></button>
+        <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-member-reason-#{group.id}" %>
+      <% end %>
     <% end %>
   </div>
   <div class="pf-card__body">
@@ -87,9 +94,11 @@
   <% @members.each do |m| %>
     <div class="pf-card__row">
       <span class="pf-grow"><%= pf_person_cell(m.user, href: permission_forge.person_path(m.user_id)) %></span>
-      <%= form_with url: permission_forge.group_member_path(group, m), method: :delete, class: 'pf-reason-form' do %>
-        <button type="submit" class="pf-btn pf-btn--ghost-danger"><%= t('permission_forge.ui.remove') %></button>
-        <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-member-remove-reason-#{m.id}" %>
+      <% unless locked %>
+        <%= form_with url: permission_forge.group_member_path(group, m), method: :delete, class: 'pf-reason-form' do %>
+          <button type="submit" class="pf-btn pf-btn--ghost-danger"><%= t('permission_forge.ui.remove') %></button>
+          <%= render 'permission_forge/shared/reason_field', compact: true, id: "pf-member-remove-reason-#{m.id}" %>
+        <% end %>
       <% end %>
     </div>
   <% end %>

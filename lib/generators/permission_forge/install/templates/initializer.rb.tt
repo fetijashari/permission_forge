@@ -12,21 +12,21 @@ PermissionForge.configure do |config|
   config.action_guard_nil_user_strategy = :deny
   # Conditional Permission Sets fail closed without a request context (see below).
   config.conditional_sets_strict_mode = true
-  # The cache is Rails.cache: use a shared store in production (Redis, Solid Cache, Memcached).
+  # Rails.cache, shared by every process: Redis or Solid Cache in production, :file_store (not :memory_store) in development.
   config.cache_backend = :rails_cache
 
-  # config.preset = :strict closes every fail-open default at once
-  # (docs/configuration.md#presets; a setting you make here still wins):
-  #   nil_user_strategy = :deny, auto_query_scoping = :filter_only,
+  # config.preset = :strict closes the fail-open defaults a setting can close, except masking
+  # with nobody signed in (its own section below; the audit reports it until you choose):
+  #   nil_user_strategy = :deny, auto_query_scoping = :filter_only, no_read_access_strategy = :deny,
   #   response_filter_nil_user_strategy = :block, unconfigured_action_strategy = :block,
   #   mask_virtual_attributes = :auto, extra_fields_default_access = :unconfigured,
-  #   and the three settings above.
+  #   and the three settings above. A setting you make here still wins (docs/configuration.md#presets).
   # What it costs: with nil_user_strategy :deny and auto_query_scoping :filter_only,
-  # code that runs with no current user (jobs, mailers, seeds, webhooks, the
-  # console, sign-in lookups on a user model that includes PermissionScopedFindable)
-  # sees no protected rows, and a belongs_to presence check on a protected parent
-  # fails ("must exist"). Run such code with a user, or inside
-  # PermissionForge.without_permission_scope { }, where nobody signed in gets no rules:
+  # code that runs with no current user (jobs, mailers, seeds, webhooks, the console,
+  # sign-in lookups on a user model that includes PermissionScopedFindable) sees no
+  # protected rows (a seed's find_or_create_by! adds a duplicate on every run), and a
+  # belongs_to presence check on a protected parent fails ("must exist"). Run such code
+  # with a user, or inside PermissionForge.without_permission_scope { }, where nobody signed in gets no rules:
   # never around code an anonymous request reaches. Never include PermissionScopedFindable in the user model.
   # config.preset = :strict
 
@@ -48,10 +48,9 @@ PermissionForge.configure do |config|
   # reports the assignments still held by users it calls inactive.
   config.user_active_check = ->(user) { user.respond_to?(:active_for_authentication?) ? user.active_for_authentication? : true }
 
-  # The profile cached with each user's permissions (uuid: nil if users have none; email or email_address).
-  config.profile_builder = ->(user) {
-    { id: user.id, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email).presence || user.try(:email_address) }
-  }
+  # The profile cached with each user's permissions. The default is like this example but leaves an encrypted
+  # attribute out (nil); this lambda calls the public readers, which decrypt (and may be masked):
+  # config.profile_builder = ->(user) { { id: user.id, uuid: user.try(:uuid), name: user.try(:name), email: user.try(:email).presence || user.try(:email_address) } }
 
   # Prefix of the PermissionForge tables ('' for none).
   config.table_name_prefix = '<%= table_prefix %>'
@@ -143,7 +142,7 @@ PermissionForge.configure do |config|
   # config.api_action_authorization = ->(controller, action, record) { PermissionForge.current_user&.admin? }
   # config.api_assignment_authorization = ->(controller, permission_set, user_ids) { PermissionForge.current_user&.admin? }
   #
-  # api_auth proves identity only: until both authorization lambdas are set,
-  # every API change and assignment is refused (403).
+  # config.api_stats_authorization = ->(controller) { PermissionForge.current_user&.admin? }  # GET /api/stats
+  # api_auth proves identity only: until each lambda above is set, what it guards is refused (403).
   # config.api_require_authorization = true  # default
 end

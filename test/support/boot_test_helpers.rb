@@ -33,6 +33,15 @@ module PermissionForge
       count
     end
 
+    # Runs the block with Rails.env as `env` (a String).
+    def in_rails_env(env)
+      original = Rails.env.to_s
+      Rails.env = env
+      yield
+    ensure
+      Rails.env = original
+    end
+
     # What the block writes to Rails.logger.
     def capture_rails_log
       output = StringIO.new

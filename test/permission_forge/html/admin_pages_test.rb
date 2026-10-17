@@ -16,14 +16,15 @@ module PermissionForge
             assert_response :success, "#{locale} #{path}"
             assert_no_missing_translations
           end
+          extra_screens(locale: locale).each do |label, body|
+            assert_no_match(/translation[ _]missing/i, body, "#{locale} #{label}")
+          end
         end
       end
 
-      test 'markup is CSP-safe and namespaced' do
-        paths.each do |path|
-          get pf(path)
-          body = response.body
-
+      test 'markup is CSP-safe and namespaced, on every screen and every re-rendered form' do
+        screens = paths.map { |path| get(pf(path)) && [path, response.body] } + error_screens + extra_screens
+        screens.each do |path, body|
           assert_no_match(/\sstyle="/, body, "inline style on #{path}")
           assert_no_match(/<script(?![^>]*\ssrc=)/, body, "inline script on #{path}")
           assert_no_match(/\son[a-z]+="/, body, "inline handler on #{path}")

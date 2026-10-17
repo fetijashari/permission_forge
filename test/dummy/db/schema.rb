@@ -31,10 +31,31 @@ ActiveRecord::Schema.define do
     t.timestamps
   end
 
+  # Host shapes the models above do not have (host_shapes_test.rb): a
+  # namespaced model on a uuid primary key (Billing::Invoice), and one with
+  # an encrypted column and an enum (PfEncryptedNote).
+  create_table :billing_invoices, id: :string, primary_key: :uuid, force: true do |t|
+    t.string  :number
+    t.integer :amount_cents
+    t.string  :customer_email
+    t.bigint  :owner_id
+    t.bigint  :account_id
+    t.timestamps
+  end
+
+  create_table :pf_encrypted_notes, force: true do |t|
+    t.string  :title
+    t.text    :body
+    t.integer :status, null: false, default: 0
+    t.bigint  :owner_id
+    t.bigint  :account_id
+    t.timestamps
+  end
+
   # PermissionForge tables (no prefix for test simplicity)
   create_table :permission_set_groups, force: true do |t|
     t.string  :uuid, null: false
-    t.string  :name, null: false, default: 'Untitled Permission Set Group'
+    t.string  :name, null: false
     t.string  :description
     t.boolean :is_active, null: false, default: true
     t.boolean :is_editable, null: false, default: true
@@ -47,7 +68,7 @@ ActiveRecord::Schema.define do
   create_table :permission_sets, force: true do |t|
     t.string  :uuid, null: false
     t.bigint  :permission_set_group_id
-    t.string  :name, null: false, default: 'Untitled Permission Set'
+    t.string  :name, null: false
     t.string  :description
     t.boolean :is_active, null: false, default: true
     t.boolean :is_editable, null: false, default: true
@@ -123,8 +144,8 @@ ActiveRecord::Schema.define do
     t.string  :uuid, null: false
     t.bigint  :permission_set_id, null: false
     t.bigint  :resource_id, null: false
-    t.string  :name, null: false, default: 'Untitled Rule'
-    t.string  :failure_message, default: 'You do not have permission to perform this action.'
+    t.string  :name, null: false
+    t.string  :failure_message
     t.string  :join_type
     t.string  :field_name, null: false
     t.string  :field_value, null: false

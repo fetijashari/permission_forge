@@ -25,6 +25,10 @@ module PermissionForge
     ACTOR_TYPES = PermissionForge::Audit::Actor::TYPES
     SOURCES = PermissionForge::Audit::Source::SOURCES
 
+    # actor_label and record_label name people: #inspect hides them whenever
+    # the application's filters hide a `name` (InspectionFilters).
+    PermissionForge::InspectionFilters.hide_people_labels(self)
+
     # JSON text that works on SQLite, PostgreSQL and MySQL alike; times are
     # written in ISO 8601 (ActiveSupport::JSON), nothing reads as nil.
     #
@@ -68,7 +72,7 @@ module PermissionForge
     # @return [Symbol, nil]
     def self.tenant_column
       column = PermissionForge.configuration.resolved_tenant_column
-      column if column && column_names.include?(column.to_s)
+      column if column && PermissionForge::SchemaRead.column?(self, column.to_s, ignored: false)
     end
 
     # The events of one tenant, on the relation it is called on; every event

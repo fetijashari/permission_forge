@@ -68,8 +68,8 @@ module PermissionForge
       assert_equal I18n.t('permission_forge.ui.operators.equal'), pf_operator_label('equal')
     end
 
-    test 'pf_operator_label falls back to lower-case words for unknown operators' do
-      assert_equal 'made up operator', pf_operator_label('made_up_operator')
+    test 'pf_operator_label shows an unknown operator as stored, never humanized' do
+      assert_equal 'made_up_operator', pf_operator_label('made_up_operator')
     end
 
     # ---------- pf_user_option_label ----------
@@ -80,10 +80,23 @@ module PermissionForge
       assert_equal 'Custom Alice #7', pf_user_option_label(NamedUser.new(7, 'Alice'))
     end
 
-    test 'pf_user_option_label falls back to User when the formatter returns blank' do
+    test 'pf_user_option_label falls through to the name when the formatter returns blank (Admin::PersonLabel)' do
       PermissionForge.configuration.user_label_formatter = ->(_u) { '   ' }
 
-      assert_equal 'User #7', pf_user_option_label(NamedUser.new(7, 'Alice'))
+      assert_equal 'Alice #7', pf_user_option_label(NamedUser.new(7, 'Alice'))
+    end
+
+    test 'pf_time_ago is deprecated and reads as pf_relative' do
+      PermissionForge::Deprecation.reset!
+      warnings = []
+      previous = PermissionForge.deprecator.behavior
+      PermissionForge.deprecator.behavior = ->(message, *) { warnings << message }
+      assert_equal pf_relative(2.days.ago), pf_time_ago(2.days.ago)
+      assert_equal pf_relative(nil), pf_time_ago(nil)
+      assert_equal 1, warnings.grep(/pf_time_ago is deprecated; use pf_relative/).size, 'warned once'
+    ensure
+      PermissionForge.deprecator.behavior = previous
+      PermissionForge::Deprecation.reset!
     end
 
     test 'pf_user_option_label combines name and email' do
@@ -166,6 +179,16 @@ module PermissionForge
       user = create_user
 
       assert_nil pf_raw_user_attribute(user, :not_a_column)
+    end
+
+    # Review of the round-7 fixes (P2-7): a marker the caller did not pass
+    # (a stored value interpolated as text that holds one) raised KeyError —
+    # a 500 for the page. It is left as written, escaped.
+    test 'pf_t_markup leaves a marker it was not given as written' do
+      out = pf_t_markup(set: tag.b('S')) { |held| "#{held[:set]} and \u0001other\u0001 <i>" }
+
+      assert_equal "<b>S</b> and \u0001other\u0001 &lt;i&gt;", out
+      assert_predicate out, :html_safe?
     end
 
     test 'pf_raw_user_attribute returns nil for non-ActiveRecord users without the method' do

@@ -24,6 +24,8 @@ module PermissionForge
         delegate :effect, :permitted_by, to: :standing
 
         def configured? = !action.nil?
+        # The label is the key itself (ActionLabel): drawn once, in <code>.
+        def verbatim? = label == name
       end
 
       # What one action means right now for people with this set, and which
@@ -147,7 +149,7 @@ module PermissionForge
 
       def build_row(key, action)
         endpoints = endpoints_by_key.fetch(key, [])
-        Row.new(name: key, label: action&.display_name || key.humanize, action: action, endpoints: endpoints,
+        Row.new(name: key, label: ActionLabel.for(action, key).text, action: action, endpoints: endpoints,
                 unlinked: discovery? && endpoints.empty?,
                 standing: Standing.new(key, action, across: @across, configuration: @configuration))
       end

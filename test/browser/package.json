@@ -1,0 +1,10 @@
+{
+  "name": "permission_forge-browser",
+  "private": true,
+  "description": "The browser checks of the `browser` CI job: layout_probe.js (the admin at phone width) and docs_flows.spec.js (the documentation's denial flows, with Turbo). playwright-core drives the system Chrome, no browser is downloaded; @hotwired/turbo is served by test/support/docs_app.rb.",
+  "license": "MIT",
+  "devDependencies": {
+    "@hotwired/turbo": "8.0.23",
+    "playwright-core": "1.56.1"
+  }
+}

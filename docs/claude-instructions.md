@@ -16,7 +16,7 @@ stored in database tables and managed in the PermissionForge admin. `User` inclu
    rules. Query through `Model.permission_scoped` (or class-level `find_by`), never a bare `where`.
 2. Resource: create a `PermissionForge::Resource` named after the model in a Permission Set (admin, or
    `PermissionForge::Services::ResourceWithFieldsBuilder.call(permission_set:, resource_name: 'Customer')`,
-   which grants full CRUD and read/edit on every column, personal-data columns masked: narrow it).
+   which grants full CRUD and read/edit on every column, unmasked, personal-data columns included: narrow it).
    The model's first Resource row auto-applies `MaskedAttributes` to it (in every process when the
    cache store is shared).
 3. Fields: every column the user should read needs a field row; with `unconfigured_field_strategy :block`
@@ -42,7 +42,8 @@ stored in database tables and managed in the PermissionForge admin. `User` inclu
   With `auto_query_scoping :off` (the default) these skip the rules: `where`, `all`, `find`,
   associations, `Model.where(...).find_by`, `association.find_by`, `Model.unscoped.find_by`,
   `find_sole_by`. For collections, start from `Model.permission_scoped`.
-- A user with no rules for a model sees every row. Rules from several granting sets intersect (AND).
+- A user with no rules for a model sees every row — also a signed-in user without Read on it, unless
+  `config.no_read_access_strategy = :deny` (then no row). Rules from several granting sets intersect (AND).
   `view_all` / `modify_all` on a resource bypasses that resource's rules (for an STI subclass, only the
   rules of the entry that grants it).
 - `find_by` returns `nil` for a missing record and raises
@@ -67,7 +68,8 @@ stored in database tables and managed in the PermissionForge admin. `User` inclu
 - `nil_user_strategy :bypass`: no current user means no row rules (also in the RLS policy and, unless
   `action_guard_nil_user_strategy` is set, the controller guard).
 - `response_filter_nil_user_strategy :bypass`, `masked_attributes_nil_user_strategy :bypass`,
-  `auto_query_scoping :off`,
+  `auto_query_scoping :off`, `no_read_access_strategy :rules_only` (a signed-in user without Read on a
+  model gets every row its rules allow, all of them with no rule),
   `unconfigured_action_strategy :allow` (unmapped controller actions are always allowed),
   `conditional_sets_strict_mode false`, `extra_fields_default_access :grant`.
 - `admin_assignment_authorization` and `audit_log_authorization` unset: any admin may assign and read
@@ -76,8 +78,8 @@ stored in database tables and managed in the PermissionForge admin. `User` inclu
 - With `auto_query_scoping :filter_only`, the scope is decided when a relation is built: never keep a
   relation in a constant or build one before authentication (built with no user, it stays unscoped).
 Do not loosen these in code you write. `bin/rails permission_forge:audit` reports most of them (not
-`unconfigured_action_strategy`, `action_guard_nil_user_strategy`, `admin_assignment_authorization` or
-`audit_log_authorization`).
+`no_read_access_strategy`, `unconfigured_action_strategy`, `action_guard_nil_user_strategy`,
+`admin_assignment_authorization` or `audit_log_authorization`).
 
 ### Caching and data
 - Each user's permissions are cached (`user.permissions_hash`, read-through). Saving a permission record

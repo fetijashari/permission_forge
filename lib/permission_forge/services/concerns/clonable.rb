@@ -24,6 +24,15 @@ module PermissionForge
       def reset_on_copy(record)
         RESET_ON_COPY.select { |column| record.has_attribute?(column) }.index_with(nil)
       end
+
+      # A row whose blank name the validations would refuse on a new record
+      # (ResourceField, ResourceAction: `validates :name, presence`), so a
+      # copy of it can never be saved.
+      def refused_for_blank_name?(record)
+        return false unless record.respond_to?(:name) && record.name.to_s.strip.empty?
+
+        record.class.validators_on(:name).any? { |validator| validator.kind == :presence }
+      end
     end
   end
 end

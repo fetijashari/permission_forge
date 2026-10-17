@@ -96,6 +96,24 @@ module PermissionForge
         assert_response :unprocessable_entity
       end
 
+      # A Resource named after a constant that is no model with a table
+      # (`Kernel`, `String`, a model whose table is not there) has no columns
+      # to generate rows from: a 422 keyed by name, never a 500 and never the
+      # generic message.
+      test 'POST generate_fields on a Resource naming no model this app can load is a 422 on name' do
+        %w[Kernel String PermissionForge].each do |name|
+          resource = create_resource(permission_set: @ps, name: name)
+
+          post "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{resource.uuid}/generate_fields",
+               params: { grant_all: 'true' }
+
+          assert_response :unprocessable_entity, name
+          assert_equal({ 'name' => [I18n.t('permission_forge.api.errors.resource_names_no_model')] },
+                       JSON.parse(response.body).dig('error', 'messages'), name)
+          assert_equal 0, resource.resource_fields.count, name
+        end
+      end
+
       test 'POST generate_fields auto-generates fields' do
         resource = create_resource(permission_set: @ps, name: 'Customer')
 
@@ -106,6 +124,72 @@ module PermissionForge
         json = JSON.parse(response.body)
         assert json['data'].is_a?(Array)
         assert json['data'].size.positive?
+      end
+
+      # grant_all asks for full access: no personal-data mask, whatever
+      # gdpr_defaults says (the recommended strategy is kept for later).
+      test 'POST generate_fields with grant_all applies no masks under gdpr_defaults' do
+        PermissionForge.configuration.gdpr_defaults = true
+        resource = create_resource(permission_set: @ps, name: 'Customer', edit_access: true)
+
+        post "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{resource.uuid}/generate_fields",
+             params: { grant_all: 'true' }
+
+        assert_response :created
+        fields = JSON.parse(response.body)['data'].index_by { |field| field['name'] }
+        name = fields.fetch('name')
+        assert_equal [true, true, false, 'first1_last4'], name.values_at('read_access', 'edit_access', 'mask_access', 'mask_strategy')
+        assert_equal([], fields.values.select { |field| field['mask_access'] }.map { |field| field['name'] })
+      end
+
+      # Without grant_all nothing is granted, the personal-data columns
+      # included (through 0.14.1 they came back readable and masked); the
+      # recommended strategy is on the row.
+      test 'POST generate_fields without grant_all grants nothing: every field Hidden, the strategy recorded' do
+        PermissionForge.configuration.gdpr_defaults = true
+        resource = create_resource(permission_set: @ps, name: 'Customer')
+
+        post "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{resource.uuid}/generate_fields"
+
+        assert_response :created
+        fields = JSON.parse(response.body)['data'].index_by { |field| field['name'] }
+        assert_equal [false, false, false, 'email'], fields.fetch('email').values_at('read_access', 'edit_access', 'mask_access', 'mask_strategy')
+        assert_equal [false, false, false, 'full'], fields.fetch('domain').values_at('read_access', 'edit_access', 'mask_access', 'mask_strategy')
+      end
+
+      # A JSON true (or 1) used to read as false: 201 with fields without edit.
+      test 'POST generate_fields reads grant_all as a JSON boolean, 1 or their strings' do
+        { true => true, 'true' => true, 1 => true, '1' => true, 'TRUE' => true, 'on' => true, 't' => true,
+          false => false, 'false' => false, 0 => false, '0' => false, nil => false, 'Off' => false, 'f' => false }.each do |value, editable|
+          fields = generate_fields_with(grant_all: value).index_by { |field| field['name'] }
+          assert_response :created, value.inspect
+          assert_equal editable, fields.fetch('name')['edit_access'], value.inspect
+        end
+      end
+
+      test 'POST generate_fields refuses a grant_all it cannot read with a 422 keyed by grant_all' do
+        resource = create_resource(permission_set: @ps, name: 'Customer')
+        expected = { 'grant_all' => [I18n.t('permission_forge.api.errors.boolean_invalid')] }
+
+        ['yes', 'nope', '', 2, 1.5, [true], { 'a' => 1 }].each do |value|
+          assert_no_difference -> { resource.resource_fields.count } do
+            post "#{resources_path}/#{resource.uuid}/generate_fields", params: { grant_all: value }, as: :json
+          end
+          assert_response :unprocessable_entity, value.inspect
+          assert_equal expected, JSON.parse(response.body).dig('error', 'messages'), value.inspect
+        end
+      end
+
+      private
+
+      def resources_path = "/permission_forge/api/permission_sets/#{@ps.uuid}/resources"
+
+      # Generates the fields of a fresh Customer resource with `params` as JSON.
+      def generate_fields_with(params)
+        PermissionForge::Resource.where(permission_set: @ps).find_each(&:destroy!)
+        resource = create_resource(permission_set: @ps, name: 'Customer', edit_access: true)
+        post "#{resources_path}/#{resource.uuid}/generate_fields", params: params, as: :json
+        JSON.parse(response.body)['data']
       end
     end
   end

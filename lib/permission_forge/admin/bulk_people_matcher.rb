@@ -4,7 +4,10 @@ module PermissionForge
   module Admin
     # Resolves pasted emails/names (one per line or comma-separated) to people
     # for bulk assignment. Exact, case-insensitive matches only — a near miss
-    # is reported as "not found" rather than guessed. Only people within
+    # is reported as "not found" rather than guessed. A column the user model
+    # encrypts (PermissionForge::EncryptedAttributes) holds ciphertext: a
+    # deterministically encrypted one matches the pasted value exactly
+    # (`where(email: value)` encrypts it), any other is not matched. Only people within
     # config.user_list_resolver match (PeopleDirectory#find_all): anyone else
     # is "not found" too.
     class BulkPeopleMatcher
@@ -60,17 +63,28 @@ module PermissionForge
       end
 
       def lookup(token)
-        needle = token.downcase
-        return exact(email_columns, needle) if token.include?('@')
+        return exact(email_columns, token) if token.include?('@')
 
-        exact(name_column, needle) || first_last_match(needle)
+        exact(name_column, token) || first_last_match(token)
       end
 
-      # The first listed person whose value in any of `columns` equals needle.
-      def exact(columns, needle)
-        table = model.arel_table
-        condition = Array(columns).map { |column| table[column].lower.eq(needle) }.reduce(:or)
-        condition && first_listed(model.where(condition))
+      # The first listed person whose value in any of `columns` equals the token.
+      def exact(columns, token)
+        scopes = Array(columns).filter_map { |column| equal_to(column, token) }
+        first_listed(scopes.reduce(:or)) if scopes.any?
+      end
+
+      # The people whose `column` equals the token, whatever its case; for a
+      # deterministically encrypted column the value as pasted or lower-cased
+      # (the attribute type encrypts it); nil for a column SQL cannot compare
+      # (encrypted otherwise).
+      def equal_to(column, token)
+        if PermissionForge::EncryptedAttributes.encrypted?(model, column)
+          return unless PermissionForge::EncryptedAttributes.deterministic?(model, column)
+
+          return model.where(column => [token, token.downcase].uniq)
+        end
+        model.where(model.arel_table[column].lower.eq(token.downcase))
       end
 
       # The first match that config.user_list holds.
@@ -84,25 +98,25 @@ module PermissionForge
 
       # Every email column the user table has (`email`, `email_address`).
       def email_columns
-        PersonLabel::EMAIL_ATTRIBUTES.map(&:to_s) & model.column_names
+        PermissionForge::SchemaRead.columns_among(model, PersonLabel::EMAIL_ATTRIBUTES.map(&:to_s))
       end
 
       # "Ana Krasniqi" against separate first/last name columns.
-      def first_last_match(needle)
-        first, last = needle.split(/\s+/, 2)
+      def first_last_match(token)
+        first, last = token.split(/\s+/, 2)
         pair = first_last_columns
         return nil unless pair && last
 
-        table = model.arel_table
-        first_listed(model.where(table[pair.first].lower.eq(first).and(table[pair.last].lower.eq(last))))
+        scopes = [equal_to(pair.first, first), equal_to(pair.last, last)]
+        first_listed(scopes.first.merge(scopes.last)) if scopes.all?
       end
 
       def first_last_columns
-        FIRST_LAST_COLUMNS.find { |cols| (cols - model.column_names).empty? }
+        FIRST_LAST_COLUMNS.find { |cols| PermissionForge::SchemaRead.columns_among(model, cols).size == cols.size }
       end
 
       def name_column
-        (%w[name full_name display_name] & model.column_names).first
+        PermissionForge::SchemaRead.columns_among(model, %w[name full_name display_name]).first
       end
 
       def picked(ids)

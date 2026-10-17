@@ -4,14 +4,17 @@
 
 The gem ships a read-only audit task. It changes no permission data (it writes one `report.generated` audit event), so it is safe to run in production:
 
-```bash
+```bash fragment
 bin/rails permission_forge:audit                   # text report
 FORMAT=json bin/rails permission_forge:audit       # machine-readable
 FAIL_ON=high bin/rails permission_forge:audit      # exit 1 on any High or Critical finding (CI)
+ACTOR="CI" REASON="release check" bin/rails permission_forge:audit   # who ran it and why, on its report.generated event
 
 # On a Kamal deployment
 kamal app exec -i "bin/rails permission_forge:audit"
 ```
+
+`FAIL_ON` takes `critical`, `high`, `medium`, `low` or `info`, in any case (`FAIL_ON=HIGH` is `high`). When a finding of that severity or worse exists, the task prints `Failing: N finding(s) at or above <level>` on stderr (FORMAT=json output on stdout stays parseable) and exits 1. Any other value stops the task before the review runs, with the list of levels on stderr, and exit 2. The text report ends with "No permission data was changed", and says that the run is recorded in the audit log (`report.generated`) when the log records.
 
 Findings are rated Critical / High / Medium / Low / Info and grouped by check:
 
@@ -21,13 +24,16 @@ Findings are rated Critical / High / Medium / Low / Info and grouped by check:
 | `privilege` | View All / Modify All grants, active sets whose names look temporary (dev, debug, test…), sets that grant delete almost everywhere |
 | `assignment` | Permanent access not reviewed within `admin_stale_assignment_days` (counted from the last review, else the grant), assignments for deleted or deactivated users (`user_active_check`), expired rows not cleaned up, people holding 3+ sets, turned-off sets that still have people |
 | `user_model` | The user model against the nil-user strategies (see the findings below) |
-| `rule` | Record rules the app's query scoping doesn't apply to every query, rules in effect whose value their column cannot hold and which therefore match nothing (`unusable_rule_values` — Medium when people hold the set, otherwise Low; lists set, resource, field, operator and value), rules ignored because of View All, text operators on id columns |
-| `integrity` | Duplicate field rows, duplicate action rows, rows that skip a required permission (edit without read, …), resources naming models the app doesn't have |
+| `rule` | Record rules the app's query scoping doesn't apply to every query, rules in effect whose field name is not a column of their table or whose association path cannot be joined (`missing_rule_columns` — High when people hold the set, otherwise Medium), rules in effect whose value their column cannot hold and which therefore match nothing (`unusable_rule_values` — Medium when people hold the set, otherwise Low; both list set, resource, field, operator and value), rules on a column that holds a secret (`secret_rule_columns`), rules ignored because of View All, text operators on id columns |
+| `integrity` | Duplicate field rows, duplicate action rows, rows that skip a required permission (edit without read, …), resources naming models the app doesn't have, field rows naming nothing on their model |
+| `conditions` | Activation conditions the validation refuses today, which nobody can judge (`incomplete_conditions`), and Resources holding a row and an explicit row for one of its variants (`variant_rows_conflict`) |
 | `personal_data` | `GdprFieldAuditor` results: unmasked, virtual, cross-set and unmapped personal data (see the findings below) |
 | `action` | Controller actions as permissions (see below) |
 | `audit_trail` | The [audit event log](audit-log.md): is it recording, can its actors be trusted, are the failure settings strict (see below) |
 
 The other checks report these findings (the id is the `code` of the finding; the last column is its severity). Where a finding has two severities, the higher one applies when people hold the set or the rule concerned.
+
+Every finding that can be Medium or worse and is about a record the admin can open has a card on the admin's Home (`test/permission_forge/admin/attention_parity_test.rb` enumerates them); a finding about a setting flags its row on the Settings page.
 
 | Check | Finding | Severity | Meaning |
 |-------|---------|----------|---------|
@@ -49,6 +55,7 @@ The other checks report these findings (the id is the `code` of the finding; the
 | `config` | `log_filtering_off` | Low | `filter_parameters_integration` is false. |
 | `config` | `api_sequential_ids` | Low | The API is on and `api_record_identifier` is `:id`. |
 | `config` | `api_rule_values_exposed` | Low | The API is on and `api_redact_rule_field_values` is false. |
+| `config` | `api_authorization_unset` | Info | The API is on and `api_auth` is set, but an authorization lambda it needs is not: `api_action_authorization` / `api_assignment_authorization` while `api_require_authorization` is `true` (the default), `api_stats_authorization` while `api_stats_require_admin` is `true` (the default). The API answers 403, naming the option, to everything that lambda guards (it fails closed); the finding lists each missing lambda and what it guards. The server's boot log says the same. |
 | `privilege` | `bypass_grants` | Medium or Low | View All / Modify All grants in active granting sets. |
 | `privilege` | `temporary_sets` | Medium or Low | Active sets whose names look temporary (dev, debug, test, tmp, sandbox, demo, "full access"). |
 | `privilege` | `broad_delete` | Low | A set grants delete on at least 10 resources and at least 75% of its resources. |
@@ -62,17 +69,28 @@ The other checks report these findings (the id is the `code` of the finding; the
 | `user_model` | `user_model_scoped` | Low | The user model includes `PermissionScopedFindable` and `nil_user_strategy` is `:deny` or `:raise`: sign-in, session restore and password reset look the user up before anyone is signed in, and find nothing. |
 | `user_model` | `user_model_unmasked_without_user` | Low | `masked_attributes_nil_user_strategy` is `:hide` and a Resource row masks the user model: the user model is exempt so sign-in can read it, so with nobody signed in its columns (password digests, tokens) read as stored. Lists the Resource names. |
 | `rule` | `unenforced_rules` | High or Medium | Rules the app's query scoping does not apply to every query (`auto_query_scoping` off, or join rules). |
-| `rule` | `unusable_rule_values` | Medium or Low | Rules in effect that match nothing (described above). |
+| `rule` | `missing_rule_columns` | High or Medium | Rules in effect whose field name is not a column, table or association of theirs — a column their table does not have, a table this database does not have, a name that is not a name (an empty part, a control character), or an association path naming an association their model does not have or one no join can be built through (a typo, a renamed or dropped column or association, a polymorphic `belongs_to`): they match nothing, so everyone they apply to is denied every record of the resource. The admin's Home lists the same rules under "Rules that match nothing". |
+| `rule` | `unknown_rule_operators` | High or Medium | Rules in effect with an operator or join type this version does not know (written by a newer version, another application or past the model): they match nothing. High while people hold the set. |
+| `rule` | `foreign_table_filter_rules` | High or Medium | Filter rules whose field name is qualified with another model's table: a filter rule compares its own table, so they match nothing. Use a join rule. High while people hold the set. |
+| `rule` | `foreign_table_names` | Info | Join rules whose field name is qualified with a table this database has that is none of the rule's: left to the database; where the query does not join that table the rule matches nothing. Name the relationship in `field_accessor_path` instead. |
+| `rule` | `unusable_rule_values` | Medium or Low | Rules in effect whose value their column cannot hold (text on a number column, a word that is no boolean, an unknown enum label, a list or range with the wrong number of values): they match nothing. |
+| `rule` | `encrypted_rule_columns` | High or Medium | Rules in effect that compare a value with an attribute the model declares with `encrypts` (Active Record encryption): the column holds its ciphertext, so they match nothing — only `is_null` / `is_not_null` can be asked of it. Typically a rule saved before the attribute was encrypted. High while people hold the set. Home lists the same rules under "Rules that match nothing". |
+| `rule` | `non_text_pattern_rules` | Medium or Low | Rules in effect with `contains`, `not_contains`, `starts_with` or `ends_with` on a column no pattern can be matched against (on PostgreSQL every column that is not text; a `json` column everywhere): they match nothing. Reported as `unusable_rule_values` before 0.15. Home lists the same rules. |
+| `rule` | `secret_rule_columns` | Medium | Record rules in effect that compare a column holding a secret (`config.rule_secret_column_patterns`, by name: password digests, tokens, `encrypted_*` columns, secrets; an attribute declared with `encrypts` is `encrypted_rule_columns`). They still apply; who can read which record tells the secret apart. The item names the rule and its column, not its value. A new rule on such a column is refused. Home lists the same rules. |
 | `rule` | `bypassed_rules` | Low | Rules ignored because of View All / Modify All. |
 | `rule` | `text_operator_on_ids` | Low | `contains`, `starts_with` or `ends_with` on an id column. |
-| `rule` | `no_rules` | Info | No record rules are in use; when it fires, it is the only `rule` finding. |
+| `rule` | `no_rules` | Info | No record rules are in use; when it fires, it is the only `rule` finding. Its advice follows `auto_query_scoping`: add rules, and enable the setting only while it is off. |
 | `integrity` | `duplicate_fields` | High | Two field rows for one field of a resource (an unmasked duplicate unmasks the field). |
 | `integrity` | `duplicate_actions` | Medium | Two action rows for one action of a resource. |
 | `integrity` | `dependency_violations` | Low | Rows that skip a required permission (edit without read, delete without read, mask without read, Modify All without View All). |
 | `integrity` | `unknown_models` | Low | Resources naming models the app does not have. |
-| `personal_data` | `unmasked_personal_data` | Medium | Fields that look like personal data and are readable unmasked, minus fields marked *This is intended* in the admin privacy audit (this finding only). |
+| `integrity` | `unknown_mask_strategies` | High or Medium | Field rows in effect whose `mask_strategy` is none of the built-in ones nor of `config.custom_mask_strategies`: masked fully until fixed. High while people hold the set. |
+| `conditions` | `incomplete_conditions` | Medium | Permission Sets whose stored activation condition the validation refuses today: an IP entry that is not an IP address or CIDR range, a list with no entry, the same start and end hour, one hour of the two, an hour outside 0–23. Nobody can judge such a condition, so a muting set applies to every request and a granting set never passes. Each item says what the set does now and how many people hold it. |
+| `conditions` | `variant_rows_conflict` | Info | Resources in effect holding a row and an explicit row for one of its variants (`owner_id` → `owner_uuid`). Since 0.15 the explicit row decides that name; the item shows both levels. |
+| `integrity` | `unknown_fields` | Low or Info | Field rows in effect whose name is nothing their model has — no column, attribute, alias, public method, declared or discovered virtual field, or configured variant (a typo such as `emial`). Low when a muting set holds one (it mutes nothing), otherwise Info (a granting row grants nothing on the model). Lists set, resource, field and people. Saving does not refuse such a name: a key only a serializer computes is filtered by a row of its name; declare it in `extra_fields_for_permissions` to say so. Skipped for a Resource whose model the app cannot load. |
+| `personal_data` | `unmasked_personal_data` | Medium | Fields that look like personal data and are readable unmasked, minus fields marked *This is intended* in the admin privacy audit (this finding only). A field counts when its row shows it in the clear (active, read on, no mask — `ResourceField#exposes_in_clear?`); a Hidden row is never listed. Columns your `filter_parameters` name count as personal data while `filter_parameters_integration` is on. |
 | `personal_data` | `implicit_virtual_personal_data` | Medium | Declared virtual fields that look like personal data, have no active field row and are granted by default (`extra_fields_default_access = :grant`). |
-| `personal_data` | `cross_set_unmasking` | Medium | One set unmasks what another masks (masks combine with AND). |
+| `personal_data` | `cross_set_unmasking` | Medium | One set unmasks what another masks (masks combine with AND). Each item names the set that unmasks and, in parentheses, the sets that mask. |
 | `personal_data` | `unmapped_personal_data` | High when `unconfigured_field_strategy` is `:pass_through` or `:warn`, otherwise Low | Model columns that look like personal data and have no active field row. |
 
 The `action` check covers custom actions and the [controller action guard](controller-actions.md):
@@ -103,7 +121,7 @@ The `audit_trail` check (`Services::SecurityAuditChecks::AuditTrailCheck`) reads
 **`FAIL_ON` consequences when you upgrade.** `FAIL_ON=<level>` exits 1 when a finding of that severity or worse exists.
 - `FAIL_ON=high` now also fails on an app that has not run the upgrade migration (`audit_table_missing`), on `audit_off`, and on a self-granted assignment.
 - `FAIL_ON=medium` or `low` now also fails on a default install that uses HTTP Basic auth without `audit_actor_resolver` (`audit_shared_basic_auth`) and on an app with the API enabled and no `audit_actor_resolver` (`audit_anonymous_api`), until you set it, and on any app that has `unknown`-actor change events in the last 30 days (`audit_unknown_actors`) and on `audit_changes_unrecorded`. `FAIL_ON=low` also fails on `audit_hook_failures_logged`.
-- The two Info findings fail a build only under `FAIL_ON=info`, or under a `FAIL_ON` value the task does not recognise (a typo, or `HIGH` in capitals), which counts as `info`. Both fire on a default install (`audit_runtime_events` is `[:denied]` and `audit_retention_period` is `nil`), so `FAIL_ON=info` always fails there until you store more groups and set a retention period.
+- The two Info findings fail a build only under `FAIL_ON=info`. (Up to 0.14 a `FAIL_ON` value the task did not recognise, a typo or `HIGH` in capitals, counted as `info`; from 0.15 capitals are read as the level and anything else exits 2.) Both fire on a default install (`audit_runtime_events` is `[:denied]` and `audit_retention_period` is `nil`), so `FAIL_ON=info` always fails there until you store more groups and set a retention period.
 
 In code: `PermissionForge::Services::SecurityAudit.call` returns a report with `#findings`, `#counts`, `#at_least(:high)` and `#to_h`. To add a check, pass `checks:` to `SecurityAudit.call`, or override `SecurityAudit.checks`.
 
@@ -121,7 +139,7 @@ This guide explains how to use the built-in `/security-audit` Claude Code skill 
 
 Open your terminal in your project directory and run Claude Code:
 
-```bash
+```bash fragment
 claude
 ```
 
@@ -269,7 +287,7 @@ Before citing the log, read [What is not recorded](audit-log.md#what-is-not-reco
 
 You can run the security audit as part of your CI pipeline using Claude Code's headless mode:
 
-```bash
+```bash fragment
 claude --print "/security-audit full" > security-audit-report.md
 ```
 
@@ -279,7 +297,7 @@ This generates the report as a markdown file you can attach to pull requests or 
 
 Some audit checks can be run directly in a Rails console:
 
-```ruby
+```ruby run
 # GDPR field audit
 report = PermissionForge::Services::GdprFieldAuditor.call
 report.each { |finding| puts "#{finding[:type]}: #{finding.except(:type)}" }

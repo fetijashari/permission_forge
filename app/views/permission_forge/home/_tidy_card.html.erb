@@ -9,7 +9,7 @@
   <% items.each do |item| %>
     <div class="pf-card__row">
       <div class="pf-stack pf-stack--tight pf-grow">
-        <strong><%= t(".#{item.kind}", name: item.permission_set.name, count: item.people_count) %></strong>
+        <strong><%= t(".#{item.kind}", name: pf_record_name(item.permission_set), count: item.people_count) %></strong>
         <span class="pf-fs-13 pf-text-2"><%= t(".#{item.kind}_hint") %></span>
       </div>
       <%= link_to t('.open'), permission_forge.permission_set_path(item.permission_set), class: 'pf-btn pf-btn--sm' %>

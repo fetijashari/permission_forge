@@ -109,7 +109,9 @@ module PermissionForge
           post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'forged' } },
                                               headers: { 'Sec-Fetch-Site' => 'cross-site' }
         end
-        assert_response :forbidden
+        # :null_session empties the session, so api_auth (which reads it)
+        # refuses: 401, as every refusing api_auth answers since 0.15.
+        assert_response :unauthorized
       end
 
       test 'API: a same-origin POST with the session cookie passes' do

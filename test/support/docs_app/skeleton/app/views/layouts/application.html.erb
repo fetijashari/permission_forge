@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= content_for(:title) || "Docs App" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Docs App">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <%# What `rails new` wires: the tracked stylesheet and Turbo (importmap in a real app; one script here) %>
+    <link rel="stylesheet" href="/application.css" data-turbo-track="reload">
+    <script type="module" src="/turbo.js" data-turbo-track="reload"></script>
+  </head>
+
+  <body>
+    <header id="session">
+      <% if authenticated? %>
+        Signed in as <%= Current.user.email_address %>
+        <%= button_to "Sign out", session_path, method: :delete %>
+      <% else %>
+        <%= link_to "Sign in", new_session_path %>
+      <% end %>
+    </header>
+    <%= yield %>
+  </body>
+</html>

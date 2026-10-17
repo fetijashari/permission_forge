@@ -8,6 +8,7 @@ module PermissionForge
   class BulkAssignmentsController < ApplicationController
     include PermissionForge::AssignmentAuthorization
     include PermissionForge::ActingAdmin
+    include PermissionForge::CacheConfirmation
 
     before_action :set_permission_set
     # A locked set refuses what widens access (EditableLock.widening_lock):
@@ -34,9 +35,11 @@ module PermissionForge
       return render(:new, status: :unprocessable_entity) if @expiry_error || @nobody
       return if grant_refused?
 
-      outcome = assign(@result.to_assign)
+      result = assign(@result.to_assign)
+      # the service's one cache outcome: what the store confirmed, and its scope (CacheConfirmation)
       redirect_to assignments_path,
-                  notice: t('permission_forge.flash.bulk_assignments.assigned', count: outcome[:assigned], set: @permission_set.name)
+                  **cache_flash(result[:cache], { notice: :assigned, alert: :assigned_cache_kept },
+                                count: result[:assigned], set: pf_record_name(@permission_set))
     end
 
     def confirm_revoke
@@ -47,11 +50,12 @@ module PermissionForge
       ids = selected_people.map(&:id)
       return if pf_assignment_refused?(@permission_set, ids, :revoke, assignments_path)
 
-      outcome = PermissionForge::Services::BulkPermissionSetAssignment.call(
+      result = PermissionForge::Services::BulkPermissionSetAssignment.call(
         permission_set: @permission_set, user_ids: ids, action: :revoke
       )
       redirect_to assignments_path,
-                  notice: t('permission_forge.flash.bulk_assignments.revoked', count: outcome[:revoked], set: @permission_set.name)
+                  **cache_flash(result[:cache], { notice: :revoked, alert: :revoked_cache_kept },
+                                count: result[:revoked], set: pf_record_name(@permission_set))
     end
 
     private

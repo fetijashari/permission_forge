@@ -37,7 +37,8 @@ module PermissionForge
 
       def clone_permission_sets(cloned_group)
         @group.permission_sets.each do |ps|
-          attrs = { name: ps.name, permission_set_group: cloned_group }
+          # Names are unique per tenant: each copy is "<name> (copy)", numbered when taken.
+          attrs = { name: PermissionForge::PermissionSet.copy_name(ps.name), permission_set_group: cloned_group }
           attrs[:is_editable] = true if @unlock
           PermissionSetCloner.call(permission_set: ps, attrs: attrs, unlock: @unlock)
         end

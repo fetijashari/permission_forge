@@ -7,7 +7,10 @@ module PermissionForge
       # Permission Set, when and by whom it was granted, when it ends, when
       # and by whom it was last reviewed, and the reason of its last change.
       # Granted by is the actor of the assignment.granted event when the
-      # audit log has one, else the created_by column.
+      # audit log has one — named as the admin names it (Admin::ActorLabel:
+      # a code such as an API client nobody named in the export's language;
+      # the actor's kind and id stay as stored, and the events export keeps
+      # the stored label) — else the created_by column.
       #
       # The rows are read while the file is written (batches of BATCH_SIZE,
       # the way the events export does), never all at once. `row_count` in the
@@ -59,7 +62,7 @@ module PermissionForge
 
         def each_batch(assignments)
           assignments.find_in_batches(batch_size: @batch_size) do |batch|
-            granted = LastChanges.new(batch, events: %w[assignment.granted])
+            granted = LastChanges.creations(batch)
             people = people_by_id(batch)
             batch.each { |assignment| yield row(assignment, granted[assignment], people) }
           end
@@ -87,7 +90,7 @@ module PermissionForge
         def granted_by(assignment, event, people)
           if event
             return { 'granted_by_type' => event.actor_type, 'granted_by_id' => event.actor_id,
-                     'granted_by' => event.actor_label }
+                     'granted_by' => ActorLabel.for(event) }
           end
 
           id = assignment.try(:created_by_id)

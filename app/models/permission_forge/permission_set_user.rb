@@ -8,6 +8,7 @@ module PermissionForge
 
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
     include PermissionForge::Concerns::InvalidatesInBatch
@@ -24,7 +25,8 @@ module PermissionForge
     # a RecordNotUnique 500 (and prevents silent duplicate rows on schemas that
     # predate the index). BulkPermissionSetAssignment already de-dupes; this
     # covers the single-assignment controller/API paths.
-    validates :user_id, uniqueness: { scope: :permission_set_id }
+    validates :user_id, uniqueness: { scope: :permission_set_id,
+                                      message: ->(*) { I18n.t('permission_forge.validations.permission_set_user.taken') } }
 
     # An integer user_id column would store a UUID or string user key as its
     # leading digits, handing this assignment to every user who shares them.
@@ -39,8 +41,14 @@ module PermissionForge
     # (InvalidatesInBatch#note_previous_value).
     after_save { note_previous_value('user_id') }
 
+    # The window of "ending soon": Home's card, the People page filter and
+    # the end-date cell ("ends in N days") all read it.
+    ENDING_SOON_DAYS = 7
+
     scope :active_assignments, -> { where(expires_at: nil).or(where(expires_at: Time.current..)) }
     scope :expired, -> { where.not(expires_at: nil).where(expires_at: ...Time.current) }
+    # Assignments that end within `days` from now (today's included, ended ones not).
+    scope :ending_within, ->(days = ENDING_SOON_DAYS) { where(expires_at: Time.current..days.days.from_now.end_of_day) }
 
     # Permanent assignments last reviewed before `cutoff` — the access
     # review list and StaleAssignmentAuditor. Reviewed means a "Keep"
@@ -51,9 +59,18 @@ module PermissionForge
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
+    # Whether an end date has passed: the one comparison behind #expired?,
+    # the `expired` scope and the admin's end-date cell.
+    #
+    # @param expires_at [Time, nil]
+    # @return [Boolean]
+    def self.ended?(expires_at)
+      expires_at.present? && expires_at < Time.current
+    end
+
     # The review columns exist (bin/rails generate permission_forge:upgrade).
     def self.review_supported?
-      column_names.include?('reviewed_at')
+      PermissionForge::SchemaRead.column?(self, 'reviewed_at', ignored: false)
     end
 
     # Arel for "when this assignment was last reviewed" (see stale_before).
@@ -97,7 +114,25 @@ module PermissionForge
     end
 
     def expired?
-      expires_at.present? && expires_at < Time.current
+      self.class.ended?(expires_at)
+    end
+
+    # Whether the assignment ends within `days` (see .ending_within).
+    #
+    # @param days [Integer]
+    # @return [Boolean]
+    def ending_soon?(days = ENDING_SOON_DAYS)
+      expires_at.present? && !expired? && expires_at <= days.days.from_now.end_of_day
+    end
+
+    # Whether a permanent assignment is due for review: last reviewed more
+    # than `days` ago (see .stale_before; Admin::AttentionItems.stale_days
+    # is the threshold the admin uses).
+    #
+    # @param days [Integer]
+    # @return [Boolean]
+    def stale?(days)
+      expires_at.nil? && last_reviewed_at < days.days.ago
     end
 
     def active_assignment?

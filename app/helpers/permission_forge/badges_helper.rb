@@ -4,8 +4,13 @@ module PermissionForge
   #
   # @api private
   module BadgesHelper
-    LEVEL_GLYPHS = { 'hidden' => '∅', 'masked' => '••', 'read' => '◉', 'edit' => '✎', 'leave' => '–',
-                     'mask' => '••', 'hide' => '⊘', 'muted' => '⊘', 'none' => '–' }.freeze
+    # The level-badge colour of a state that is not a field level
+    # (Admin::StateLabel kinds :effective and :action), by its kind.
+    LEVEL_BADGE_CSS = {
+      effective: { 'hidden_by_muting' => 'muted' },
+      action: { 'permitted' => 'edit', 'not_permitted' => 'none', 'blocked' => 'muted', 'unchanged' => 'leave',
+                'none' => 'none' }
+    }.freeze
 
     MASK_SAMPLES = [
       [/email/, 'james.walker@acme.com'],
@@ -35,8 +40,19 @@ module PermissionForge
       content_tag(:span, content, class: classes, title: opts[:title])
     end
 
-    def pf_lock_badge(title: pf_ui('locked.title'))
-      pf_badge([pf_lock_icon, pf_ui('badges.locked')], title: title)
+    # The Locked badge. With a record: only when it is locked (pf_locked?,
+    # the chain), so a row's badge and its disabled controls agree.
+    def pf_lock_badge(record = nil, title: pf_ui('locked.title'))
+      return if !record.nil? && !pf_locked?(record)
+
+      pf_badge([pf_lock_icon, pf_state(:lock, :locked).word], title: title)
+    end
+
+    # Whether a record is locked: itself, its Resource, its Permission Set or
+    # (a membership) its group flagged is_editable: false — Admin::EditableLock,
+    # the one definition the controllers refuse by.
+    def pf_locked?(record)
+      PermissionForge::Admin::EditableLock.locked?(record)
     end
 
     def pf_off_badge
@@ -61,12 +77,8 @@ module PermissionForge
                                                                title: pf_condition_sentence(permission_set))
         badges << pf_fail_open_badge if pf_fail_open?
       end
-      badges << pf_lock_badge if pf_locked_record?(permission_set)
+      badges << pf_lock_badge(permission_set)
       safe_join(badges, ' ')
-    end
-
-    def pf_locked_record?(record)
-      record.respond_to?(:is_editable) && record.is_editable == false
     end
 
     # Permission Set chip. state: :normal / :inactive / :expired (auto from set).
@@ -87,23 +99,68 @@ module PermissionForge
 
     def pf_set_chip_body(permission_set, state)
       suffix_key = CHIP_SUFFIX_KEYS[state]
-      safe_join([content_tag(:span, "#{CHIP_PREFIXES[state]}#{permission_set.name}"),
+      safe_join([content_tag(:span, "#{CHIP_PREFIXES[state]}#{pf_record_name(permission_set)}"),
                  (content_tag(:span, pf_ui(suffix_key), class: 'pf-chip__suffix') if suffix_key)].compact, ' ')
     end
 
-    # Effective/configured field level badge ("•• Masked · j***@acme.com").
-    def pf_level_badge(level, strategy: nil, sample_for: nil, label: nil)
-      level = level.to_s
-      text = label || pf_level_label(level)
-      if %w[masked mask].include?(level) && strategy.present?
+    # A field's level for one person (an EffectiveAccess::FieldOutcome), the
+    # same in their Effective access row, its Why panel and the field
+    # drawer's "Explain for": hidden by a Muting Permission Set reads
+    # "⊘ Hidden by muting", never the neutral "∅ Hidden" of a field no set
+    # grants. `sample: true` adds a masked value's preview (the Why panel).
+    def pf_effective_field_badge(field, sample: false)
+      return pf_level_badge('hidden_by_muting', kind: :effective) if field.hidden_by_muting?
+
+      masked = field.level == 'masked'
+      pf_level_badge(field.level, strategy: (field.mask_strategy if masked), sample_for: (field.name if masked && sample))
+    end
+
+    # [glyph, sentence] for the entry along a single-table-inheritance chain
+    # that decides a person's field (EffectiveAccess::FieldOutcome#decided_by,
+    # #unreadable, #reason), or nil when the resource's own entry decides and
+    # grants Read: the Why panel and the field drawer's "Explain for" both
+    # say it, and the Effective access row says it when it is the reason
+    # (FieldOutcome#reason :unreadable or :inherited, B#39).
+    def pf_field_chain_reason(field)
+      base = field.decided_by
+      if field.unreadable
+        return ['∅', t('permission_forge.people.effective_why.field_own_unreadable')] unless base
+
+        return ['∅', t('permission_forge.people.effective_why.field_base_unreadable', resource: pf_resource_label(base))]
+      end
+      return unless base
+      return ['↑', t('permission_forge.people.effective_why.field_hidden_on', resource: pf_resource_label(base))] if field.reason == :inherited
+
+      ['↑', t('permission_forge.people.effective_why.field_decided_by', resource: pf_resource_label(base))]
+    end
+
+    # A level as a badge ("•• Masked (Email) · j***@acme.com"): a field level
+    # by default, or a state of another kind (Admin::StateLabel) drawn the
+    # same way — an effective outcome, an action state.
+    def pf_level_badge(level, strategy: nil, sample_for: nil, kind: :field_level)
+      label = PermissionForge::Admin::StateLabel.for(kind, level)
+      text = label.word
+      if %w[masked mask].include?(label.state) && strategy.present?
         text = "#{text} (#{pf_mask_strategy_label(strategy)})"
         text = "#{text} · #{pf_mask_preview(sample_for, strategy)}" if sample_for
       end
-      content_tag(:span, "#{LEVEL_GLYPHS.fetch(level, '–')} #{text}", class: "pf-level-badge pf-level-badge--#{level}")
+      css = LEVEL_BADGE_CSS.fetch(kind.to_sym, {}).fetch(label.state, label.state)
+      content_tag(:span, "#{label.glyph} #{text}", class: "pf-level-badge pf-level-badge--#{css}")
     end
 
+    # The word of a field level (Admin::StateLabel, kind :field_level).
     def pf_level_label(level)
-      pf_ui("levels.#{level}")
+      pf_state(:field_level, level).word
+    end
+
+    # The caption of a Fields tab filter: a level's word, Sensitive, or "All".
+    def pf_field_filter_label(filter)
+      case filter.to_s
+      when 'all' then t('permission_forge.resources.fields_tab.filters.all')
+      when 'sensitive' then pf_ui('badges.sensitive')
+      when 'unconfigured' then pf_state(:field_level, :none).word
+      else pf_level_label(filter)
+      end
     end
 
     def pf_mask_strategy_label(strategy)

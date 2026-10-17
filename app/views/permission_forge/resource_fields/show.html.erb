@@ -15,7 +15,8 @@
       when it picks the default button (webkit.org/b/247545) and would apply the recommendation. %>
   <% unless locked %><button type="submit" class="pf-sr-only" tabindex="-1" aria-hidden="true"><%= t('.save') %></button><% end %>
   <% footer = capture do %>
-    <span class="pf-sheet__footer-note"><%= t('.impact', people: pf_people_text(d.people_count)) %></span>
+    <%# Nothing can be saved while locked: say so instead of what saving would do. %>
+    <span class="pf-sheet__footer-note"><%= locked ? t('.locked_impact') : t('.impact', people: pf_people_text(d.people_count)) %></span>
     <%= link_to t('permission_forge.ui.close'), resource_path, class: 'pf-btn', data: { pf_close: true } %>
     <% unless locked %><button type="submit" class="pf-btn pf-btn--primary"><%= t('.save') %></button><% end %>
   <% end %>
@@ -25,12 +26,13 @@
       <%= pf_badge(t('permission_forge.ui.badges.virtual')) if d.virtual? %>
       <%= pf_badge(t('permission_forge.ui.badges.sensitive'), variant: :sensitive) if row.sensitive? %>
       <%= pf_badge(t('permission_forge.ui.badges.column_missing'), variant: :column_missing) if row.missing %>
+      <%= pf_badge(t('permission_forge.ui.badges.unknown_mask_strategy'), variant: :column_missing) if d.unknown_strategy? %>
     </span>
   <% end %>
-  <%= pf_sheet_frame({ title: d.label, subtitle: "#{set.name} › #{resource.name}", after_title: after,
+  <%= pf_sheet_frame({ title: pf_host_data(d.label), subtitle: "#{pf_record_name(set)} › #{resource.name}", after_title: after,
                        close_path: resource_path, footer: footer,
                        breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
-                                                 [set.name, permission_forge.permission_set_path(set)], [res_label, resource_path], d.label) }) do %>
+                                                 [pf_record_name(set), permission_forge.permission_set_path(set)], [res_label, resource_path], pf_host_data(d.label)) }) do %>
     <% if locked %>
       <div class="pf-banner" role="note"><span class="pf-banner__glyph" aria-hidden="true"><%= pf_lock_icon %></span>
         <div class="pf-banner__body"><span><%= t('permission_forge.ui.locked.title') %></span></div></div>
@@ -49,20 +51,22 @@
       <%# No setting in force (none, or one that is turned off): say what applies right now. %>
       <% if (note = d.unconfigured_note) %>
         <% behaviour = t("permission_forge.ui.unconfigured.#{d.unconfigured_behaviour}", default: t('permission_forge.ui.unconfigured.block')) %>
-        <p class="pf-fs-13 pf-text-warn">
-          <%= t(".#{note}", set: set.name, behaviour: behaviour) %>
-          <%= pf_setting_link(d.unconfigured_setting) %>
+        <p class="pf-fs-13 <%= d.muting? ? 'pf-text-2' : 'pf-text-warn' %>">
+          <%= t(".#{note}", set: pf_record_name(set), behaviour: behaviour) %>
+          <%= pf_setting_link(d.unconfigured_setting) if d.unconfigured_setting %>
         </p>
       <% end %>
 
       <div class="pf-panel pf-panel--mask pf-stack" data-pf-show-when="field[level]=masked,mask">
         <label class="pf-label" for="pf-fd-strategy"><%= t('.mask_strategy') %></label>
+        <%# A saved strategy this app does not know is offered as it is stored, so a save that changes
+            something else keeps it; it masks fully until the admin picks one this app knows. %>
         <select id="pf-fd-strategy" name="field[mask_strategy]" class="pf-select pf-select--auto" data-pf-mask-select <%= 'disabled' if locked %>>
-          <% pf_mask_strategies.each do |s| %>
-            <option value="<%= s %>" <%= 'selected' if s == d.strategy %>><%= pf_mask_strategy_label(s) %><%= " #{t('.custom')}" if pf_custom_mask_strategy?(s) %></option>
+          <% d.strategy_choices.options.each do |s, note| %>
+            <option value="<%= s %>" <%= 'selected' if s == d.strategy %>><%= pf_mask_strategy_label(s) %><%= " #{t(".#{note}")}" if note %></option>
           <% end %>
         </select>
-        <% pf_mask_strategies.each do |s| %>
+        <% d.strategy_choices.names.each do |s| %>
           <p class="pf-fs-13 pf-mono" data-pf-mask-preview="<%= s %>" <%= 'hidden' unless s == d.strategy %>>
             <%= pf_mask_sample(d.key) %> → <span class="pf-text-mask"><%= pf_mask_preview(d.key, s) %></span>
           </p>
@@ -115,7 +119,7 @@
       </div>
       <div class="pf-field">
         <label class="pf-label" for="pf-fd-label"><%= t('.label') %></label>
-        <input id="pf-fd-label" class="pf-input" type="text" name="field[label]" value="<%= field&.label %>" placeholder="<%= d.label %>" <%= 'readonly' if locked %>>
+        <input id="pf-fd-label" class="pf-input" type="text" name="field[label]" value="<%= pf_prefill(field, :label) %>" placeholder="<%= d.label %>" <%= 'readonly' if locked %>>
       </div>
       <div class="pf-field">
         <label class="pf-label" for="pf-fd-desc"><%= t('.description') %></label>
@@ -140,8 +144,13 @@
         <p class="pf-fs-13 pf-text-3"><%= t('.no_rules') %></p>
       <% else %>
         <% d.rules.each do |rule| %>
-          <%= link_to permission_forge.edit_permission_set_resource_rule_path(set, resource.name, rule), class: 'pf-panel pf-stack pf-stack--tight' do %>
-            <b><%= rule.name %></b><%= pf_rule_sentence(rule, resource.name) %>
+          <%# A locked rule (or chain) has no edit page to open: the sentence alone, with the badge. %>
+          <% if pf_locked?(rule) %>
+            <div class="pf-panel pf-stack pf-stack--tight"><span class="pf-row pf-row--tight"><b><%= rule.name %></b><%= pf_lock_badge %></span><%= pf_rule_sentence(rule, resource.name) %></div>
+          <% else %>
+            <%= link_to permission_forge.edit_permission_set_resource_rule_path(set, resource.name, rule), class: 'pf-panel pf-stack pf-stack--tight' do %>
+              <b><%= rule.name %></b><%= pf_rule_sentence(rule, resource.name) %>
+            <% end %>
           <% end %>
         <% end %>
       <% end %>

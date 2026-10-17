@@ -110,7 +110,7 @@ module PermissionForge
 
         delete "#{API}/permission_sets/#{set.uuid}/users/#{assignment.uuid}"
 
-        assert_response :no_content
+        assert_response :ok
         assert_not PermissionForge::PermissionSetUser.exists?(assignment.id)
       end
 
@@ -217,6 +217,8 @@ module PermissionForge
         responses = ActionDispatch::ExceptionWrapper.rescue_responses
         assert_equal :bad_request, responses['ActionController::BadRequest']
         assert_equal :bad_request, responses['ActionController::ParameterMissing']
+        # Rails maps by exact class name: the gem's subclass is registered too.
+        assert_equal 400, ActionDispatch::ExceptionWrapper.status_code_for_exception('PermissionForge::ParamShapes::InvalidParam')
 
         assert_no_difference -> { PermissionForge::PermissionSetUser.count } do
           assert_raises(ActionController::BadRequest) do
@@ -273,7 +275,10 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSetUser.unscoped.count } do
           post "#{ROOT}/assignments", params: { user_id: bob.id, set_ids: [set_a.id], expiry: 'never' }
           post "#{API}/permission_sets/#{set_a.uuid}/users", params: { user_id: bob.id }
-          assert_response :not_found
+          # The same 422 as an id that names nobody (through 0.14.1 a 404).
+          assert_response :unprocessable_entity
+          assert_equal({ 'user_id' => [I18n.t('permission_forge.api.errors.user_not_found')] },
+                       JSON.parse(response.body).dig('error', 'messages'))
         end
         assert_raises(ActionController::RoutingError) do
           post "#{ROOT}/people/#{bob.id}/erasure", params: { confirmation: 'Bob Only-In-B' }
@@ -303,7 +308,7 @@ module PermissionForge
         post "#{API}/permission_sets/#{set.uuid}/users", params: { user_id: other.id }
         assert_response :created
         delete "#{API}/permission_sets/#{set.uuid}/users/#{PermissionForge::PermissionSetUser.find_by!(user_id: other.id).uuid}"
-        assert_response :no_content
+        assert_response :ok
 
         assert_equal [[me.id], [me.id, other.id], [other.id], [other.id]], seen
         assert_not PermissionForge::PermissionSetUser.exists?(user_id: me.id)

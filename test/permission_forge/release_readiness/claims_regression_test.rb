@@ -50,7 +50,7 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSet.count } do
           post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'forged' } }
         end
-        assert_response :forbidden
+        assert_response :unauthorized
 
         get "#{ROOT}/permission_sets"
         token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1]
@@ -64,7 +64,7 @@ module PermissionForge
         assert_no_difference -> { PermissionForge::PermissionSet.count } do
           post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'forged' } }
         end
-        assert_response :forbidden
+        assert_response :unauthorized
 
         PermissionForge.configuration.api_auth = ->(controller) { controller.request.headers['Authorization'] == 'Bearer s3cret' }
         post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'token client' } }.to_json,
@@ -266,7 +266,16 @@ module PermissionForge
 
         assert_includes template, 'defined?(::Current)'
         assert_no_match(/^\s*config\.current_user_resolver = -> \{ Current\.user \}/, template)
-        assert_match(/config\.profile_builder = ->\(user\) \{\n\s*\{ id: user\.id, uuid: user\.try\(:uuid\)/, template)
+        # The template leaves the profile to the default builder (which keeps uuid and leaves an
+        # encrypted attribute out of the cached hash); the line is a commented example.
+        assert_no_match(/^\s*config\.profile_builder =/, template)
+        # Review of the round-7 fixes (P2-4): the example calls the public readers (they decrypt, and may be
+        # masked), so its comment says how it differs from the default instead of calling itself the default.
+        comment = template[/^ *# The profile cached.*?(?=^ *# config\.profile_builder)/m].to_s
+        assert_no_match(/the default is this/i, comment)
+        assert_match(/public readers.*decrypt/m, comment)
+        profile = install_template_configuration.profile_builder.call(create_user(uuid: 'u-32', name: 'Ada', email: 'ada@example.com'))
+        assert_equal({ id: profile[:id], uuid: 'u-32', name: 'Ada', email: 'ada@example.com' }, profile)
       end
 
       # ---- #35: README named `:mask`; the value is :mask_all ---------------------------

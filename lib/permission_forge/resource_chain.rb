@@ -42,8 +42,8 @@ module PermissionForge
     # @param resource_name [String, Symbol]
     # @return [Array<Symbol>]
     def names_for(resource_name)
-      klass = resource_name.to_s.safe_constantize
-      klass.is_a?(Class) && klass.respond_to?(:base_class) ? names(klass) : [resource_name.to_sym]
+      klass = ModelLookup.model_for(resource_name)
+      klass ? names(klass) : [resource_name.to_sym]
     end
 
     # The user's resource entries along the chain, nearest first.
@@ -90,6 +90,18 @@ module PermissionForge
     # @return [Boolean]
     def grants?(user, names, flag)
       entries(user, names).first&.dig(:permissions, flag) == true
+    end
+
+    # Whether the user may read the class's records at all: an entry along
+    # the chain, and every one of them grants read_access — a class cannot
+    # be more readable than an entry it answers to, as for its fields
+    # (#unreadable?). A subclass with no entry of its own reads as its base.
+    # Asked through RecordReadAccess.denied?.
+    #
+    # @return [Boolean]
+    def readable?(user, names)
+      resource_entries = entries(user, names)
+      resource_entries.any? && !unreadable?(resource_entries)
     end
 
     # @return [Symbol, nil] :view_all or :modify_all when one of them lets

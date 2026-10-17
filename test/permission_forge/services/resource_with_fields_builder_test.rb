@@ -25,8 +25,16 @@ module PermissionForge
         assert resource.resource_fields.any?
         resource.resource_fields.each do |field|
           assert field.read_access, "Expected #{field.name} to have read_access"
-          assert field.edit_access, "Expected #{field.name} to have edit_access"
+          assert_equal %w[created_at updated_at].exclude?(field.name), field.edit_access, "#{field.name} edit_access (timestamps are read-only)"
         end
+      end
+
+      test 'masks nothing, also under gdpr_defaults: the caller asked for full access' do
+        PermissionForge.configuration.gdpr_defaults = true
+        resource = ResourceWithFieldsBuilder.call(permission_set: create_permission_set, resource_name: 'Customer')
+
+        assert_equal [], resource.resource_fields.select(&:mask_access).map(&:name)
+        assert_equal 'email', resource.resource_fields.find_by!(name: 'email').mask_strategy
       end
 
       test 'associates resource with the given permission set' do

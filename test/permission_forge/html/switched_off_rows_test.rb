@@ -43,7 +43,7 @@ module PermissionForge
         assert_response :success
         assert_privacy_row('full_address') do
           assert_select '.pf-badge--off', text: /#{t('ui.badges.off')}/, count: 1
-          assert_select '.pf-badge', text: t('ui.badges.not_configured'), count: 0
+          assert_select '.pf-badge', text: t('ui.states.field_level.none'), count: 0
           assert_select 'strong', text: 'Full address'
         end
         body = CGI.unescapeHTML(response.body)
@@ -57,7 +57,7 @@ module PermissionForge
 
         assert_privacy_row('email') do
           assert_select '.pf-badge--off', count: 1
-          assert_select '.pf-badge', text: t('ui.badges.not_configured'), count: 0
+          assert_select '.pf-badge', text: t('ui.states.field_level.none'), count: 0
         end
         assert_includes CGI.unescapeHTML(response.body), where('where_turned_off')
       end
@@ -69,7 +69,7 @@ module PermissionForge
         assert_privacy_row('name') do
           assert_select '.pf-badge--off', count: 0
           assert_select "a.pf-badge--unconfigured[href='#{setting_href('unconfigured_field_strategy')}']",
-                        text: t('ui.badges.not_configured')
+                        text: t('ui.states.field_level.none')
         end
         assert_includes CGI.unescapeHTML(response.body), where('where_unconfigured')
       end
@@ -166,7 +166,7 @@ module PermissionForge
           assert_select '.pf-level-badge--edit', count: 1
         end
         assert_select '.pf-listbox .pf-option', text: /Contractors/ do
-          assert_select '.pf-level-badge--muted', text: /#{t('shared.across_sets.muted_hidden')}/
+          assert_select '.pf-level-badge--hide', text: /#{t('ui.states.field_level.hide')}/
         end
       end
 
@@ -192,7 +192,7 @@ module PermissionForge
 
         assert_off_badges('Finance' => false, 'Legal' => true)
         assert_select '.pf-listbox .pf-option', text: /Legal/ do
-          assert_select '.pf-level-badge', text: /#{t('ui.badges.not_configured')}/
+          assert_select '.pf-level-badge', text: /#{t('ui.states.field_level.none')}/
         end
       end
 

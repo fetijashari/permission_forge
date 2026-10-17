@@ -11,6 +11,10 @@ module PermissionForge
       end
 
       # SQL-backed: searches whichever of the usual name/email columns exist.
+      # A column the user model encrypts (PermissionForge::EncryptedAttributes)
+      # holds ciphertext, which a LIKE would match by its JSON (`iv` found
+      # everyone): it is left out, and a deterministically encrypted one
+      # matches the whole query exactly (`where(email: query)` encrypts it).
       class Relation
         # Common person columns; only those the user table has are searched.
         SEARCH_COLUMNS = (%w[name] + PersonLabel::EMAIL_ATTRIBUTES.map(&:to_s) +
@@ -31,11 +35,12 @@ module PermissionForge
         end
 
         def search(query)
-          columns = SEARCH_COLUMNS & @relation.klass.column_names
+          model = @relation.klass
+          columns = PermissionForge::SchemaRead.columns_among(model, SEARCH_COLUMNS)
           id = query.to_i if query.match?(NUMERIC)
-          return Relation.new(@relation.none) if columns.empty? && id.nil?
-
-          Relation.new(@relation.where(word_conditions(columns, query.downcase, id)))
+          condition = word_conditions(PermissionForge::EncryptedAttributes.plain(model, columns), query.downcase, id)
+          scopes = [(@relation.where(condition) if condition), *exact_matches(model, columns, query)].compact
+          Relation.new(scopes.empty? ? @relation.none : scopes.reduce(:or))
         end
 
         def count
@@ -50,13 +55,20 @@ module PermissionForge
 
         # Every word must match some column, so "ana kras" finds Ana Krasniqi
         # whether the name lives in one column or in first/last name columns.
-        # A numeric query also matches the id.
+        # A numeric query also matches the id. nil when nothing can match.
         def word_conditions(columns, needle, id)
           words = needle.split
-          matched = words.map { |word| any_column(columns, word) }.compact.reduce(:and)
-          return table[:id].eq(id) if matched.nil?
+          matched = words.map { |word| any_column(columns, word) }.compact.reduce(:and) if columns.any?
+          return id && table[:id].eq(id) if matched.nil?
 
           id ? matched.or(table[:id].eq(id)) : matched
+        end
+
+        # The whole query against each deterministically encrypted column, as
+        # typed and lower-cased.
+        def exact_matches(model, columns, query)
+          values = [query, query.downcase].uniq
+          PermissionForge::EncryptedAttributes.deterministic(model, columns).map { |column| @relation.where(column => values) }
         end
 
         def any_column(columns, word)

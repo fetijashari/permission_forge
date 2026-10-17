@@ -8,10 +8,10 @@ require_relative '../permission_forge/rule_value_models'
 # matrix of operators, column types and values it compiles one rule with
 # RlsPolicyGenerator, evaluates that expression in a WHERE clause and compares
 # the rows with PermissionRuleApplier.scope for the same rule; a few rules then
-# go through a real policy, read as a role policies apply to. Where the
-# application layer's query raises (a LIKE operator on a number, text
-# PostgreSQL cannot read as a uuid), the policy raises as well or shows no row:
-# it is never the wider of the two.
+# go through a real policy, read as a role policies apply to. Should the
+# application layer's query raise (no built-in rule does since values are
+# typed and read back), the policy raises as well or shows no row: it is never
+# the wider of the two.
 class RlsRuleParityTest < ActiveSupport::TestCase
   include RuleValueTestSupport
 
@@ -40,20 +40,54 @@ class RlsRuleParityTest < ActiveSupport::TestCase
   # in the policy as in the application layer.
   CODES = ['ab', 'AB', 'ab  ', 'b', 'xyz', 'xyz ', 'abcd', 'abcde', '%', '', 'ab,xyz', 'a,b', 'current_user'].freeze
 
+  UUIDS = ['7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', '7D1F0C0E-6F0A-4A57-9F0D-0F3F6F0A4A57', ' 7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57 ',
+           'banana', 'abc', '', '{7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57}', '7d1f0c0e6f0a4a579f0d0f3f6f0a4a57',
+           '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57,00000000-0000-0000-0000-000000000000',
+           '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57, banana', 'current_user'].freeze
+  INETS = ['10.0.0.1', '10.0.0.1/32', '10.0.0.0/24', '10.0.0.5/24', '2001:db8::1', ' 10.0.0.1 ', 'banana', '10.0.0.256',
+           '10.0.0.1/255.255.255.0', '10.0.0.1/33', '', '10.0.0.1, 2001:db8::1', '10.0.0.1,banana', 'current_user'].freeze
+  CIDRS = ['10.0.0.0/24', '10.0.0.5/24', '2001:db8::/32', '10.0.0.1', 'banana', '', '10.0.0.0/24, 2001:db8::/32',
+           '10.0.0.0/24,banana', 'current_user'].freeze
+  MOODS = ['calm', 'angry', ' calm ', 'Calm', 'banana', '', 'calm,angry', 'calm, angry', 'calm, banana', 'current_user'].freeze
+
   MATRIX = {
     small_count: NUMBERS, owner_id: NUMBERS, amount: NUMBERS, ratio: NUMBERS, rate: NUMBERS + %w[0.1 0.05,0.1 0.1,0.5 1e39],
     flag: BOOLEANS, label: TEXTS, notes: TEXTS,
     born_on: DATES, seen_at: DATES, opens_at: TIMES,
-    status: STATUSES, tier: TIERS, code: CODES
+    status: STATUSES, tier: TIERS, code: CODES,
+    ref: UUIDS, ip: INETS, net: CIDRS, mood: MOODS
   }.freeze
-  # Columns the typing leaves to PostgreSQL: both layers pass the text on, and
-  # both raise where PostgreSQL cannot read it.
-  UNTYPED = {
+  # Columns no value is typed for (json, jsonb, arrays): every built-in
+  # operator but the null checks matches nothing, in both layers. They used
+  # to be left to PostgreSQL, which raised on most of them.
+  OPAQUE = {
     codes: ['{1,2}', '{3}', '{}', '1', 'abc', '', '{1,2},{3}', '5,50', 'current_user'],
     tags: ['{a,b}', '{c}', 'a', '', '{a,b},{c}', 'current_user'],
-    token: ['7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', '7D1F0C0E-6F0A-4A57-9F0D-0F3F6F0A4A57', 'abc', '',
-            '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57,00000000-0000-0000-0000-000000000000', 'current_user']
+    aliases: ['{a,b}', 'a', '', 'current_user'],
+    settings: ['{"a": 1}', '{}', 'a', '', 'current_user'],
+    # Read by PostgreSQL, but not comparable (review R1 #4).
+    doc: ['<a/>', 'a', '<a/>,<b/>', '', 'current_user'],
+    spot: ['(1,2)', '(1,2),(3,4)', 'a', '', 'current_user']
   }.freeze
+
+  # One rule of every Operators::RuleProblem kind — the rules the app layer
+  # matches nothing for — on PfRuleRecord. A kind added to RuleProblem::KINDS
+  # needs a case here (the first test below).
+  KIND_RULES = {
+    unknown_join_type: { join_type: 'inner', field_accessor_path: 'owner', field_name: 'id', operator: 'equal', field_value: '1' },
+    unknown_association: { join_type: 'joins', field_accessor_path: 'ownr', field_name: 'id', operator: 'equal', field_value: '1' },
+    unjoinable_association: { join_type: 'joins', field_accessor_path: 'subject', field_name: 'id', operator: 'equal',
+                              field_value: '1' },
+    unknown_operator: { field_name: 'label', operator: 'regex', field_value: 'five' },
+    missing_column: { field_name: 'onwer_id', operator: 'equal', field_value: 'current_user' },
+    unknown_table: { field_name: 'nosuch.label', operator: 'equal', field_value: 'five' },
+    foreign_table: { field_name: 'users.name', operator: 'equal', field_value: 'five' },
+    encrypted_column: { field_name: 'sealed', operator: 'equal', field_value: 'five' },
+    pattern_on_non_text: { field_name: 'small_count', operator: 'contains', field_value: '5' },
+    unusable_value: { field_name: 'ref', operator: 'equal', field_value: 'banana' }
+  }.freeze
+  # A field name that is not a name is a missing column to RuleProblem.
+  MALFORMED_RULE = { field_name: 'label.', operator: 'not_equal', field_value: 'five' }.freeze
 
   setup do
     skip 'PostgreSQL-only enforcement suite (DB=postgres rake test:rls)' unless POSTGRES
@@ -76,10 +110,72 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     end
   end
 
-  UNTYPED.each_key do |column|
-    test "the policy expression does what the app layer does for rules on #{column}, left to PostgreSQL" do
-      assert_parity(column, OPERATORS, UNTYPED.fetch(column))
+  OPAQUE.each_key do |column|
+    test "the policy expression selects the app layer's rows for rules on #{column}, which take no value" do
+      assert_parity(column, OPERATORS, OPAQUE.fetch(column))
+      (OPERATORS - PermissionForge::Operators::Validations::VALUELESS).each do |operator|
+        assert_equal [[], []], compare(column, operator, OPAQUE.fetch(column).first, false), "#{column} #{operator}"
+      end
     end
+  end
+
+  test 'every kind of rule the app layer matches nothing for has a parity case' do
+    assert_equal PermissionForge::Operators::RuleProblem::KINDS.sort, KIND_RULES.keys.sort
+  end
+
+  KIND_RULES.merge(malformed_field_name: MALFORMED_RULE).each do |kind, attrs|
+    test "a rule of kind #{kind} compiles to FALSE, selects nothing in both layers and syncs to a policy that hides every row" do
+      rule = PermissionForge::PermissionSetRule.new(permission_set: @permission_set, resource: @resource, include_nulls: true, **attrs)
+
+      assert_equal(kind == :malformed_field_name ? :missing_column : kind, PermissionForge::Operators::RuleProblem.for(rule)&.kind)
+      assert_equal 'FALSE', generator.send(:rule_sql, rule)
+      assert_empty app_layer_rows([attrs])
+      assert_empty rows_through_policy([attrs.merge(include_nulls: true)])
+      assert_empty PermissionForge::Services::RlsPolicyGenerator.call(model_class: PfRuleRecord)[:skipped_rules], 'compiled, not skipped'
+    end
+  end
+
+  test 'current_user on a uuid column is the session id only where user ids are uuids' do
+    rule = PermissionForge::PermissionSetRule.new(permission_set: @permission_set, resource: @resource, field_name: 'ref',
+                                                  operator: 'equal', field_value: 'current_user', include_nulls: false)
+
+    assert_equal 'FALSE', generator.send(:rule_sql, rule), 'an integer user id is never a uuid'
+    with_user_id_column(:uuid, 'uuid') do
+      assert_match(/ref" = NULLIF\(current_setting\('[^']+', true\), ''\)::uuid\)\z/,
+                   PermissionForge::Services::RlsPolicyGenerator.new(model_class: PfRuleRecord).send(:rule_sql, rule))
+    end
+  end
+
+  # "No activation condition" has one definition, PermissionSet.unconditional:
+  # a text of blanks is no condition, one hour of the two is one. The policy
+  # used to read the old one (no TRIM, the start hour only).
+  test 'a set with only an end hour grants no view_all bypass in the policy' do
+    hours = bypass_set('Hours only')
+    hours.update_columns(allowed_hours_start: nil, allowed_hours_end: 17)
+
+    assert_predicate hours.reload, :conditional?
+    assert_equal %w[current_user five], policy_labels
+  end
+
+  test 'a set whose condition texts are blanks is unconditional to the policy, as to the app layer' do
+    blanks = bypass_set('Blank conditions')
+    blanks.update_columns(requires_session_flag: " \n", allowed_ips: "  \r\n\t")
+
+    assert_predicate blanks.reload, :unconditional?
+    assert_equal all_labels, app_layer_scoped_labels
+    assert_equal all_labels, policy_labels
+  end
+
+  # PermissionSetUser.active_assignments counts an assignment until its
+  # expires_at, that instant included; the policy reads now() the same way.
+  test 'an assignment ending at the statement time still holds its member to the rules' do
+    create_rules([{ field_name: 'owner_id', operator: 'equal', field_value: 'current_user' }])
+    PermissionForge::RLS.sync!
+    grant_app_role
+    PermissionForge::PermissionSetUser.find_by!(user_id: @user.id, permission_set: @permission_set)
+                                      .update_columns(expires_at: connection.select_value('SELECT now()'))
+
+    assert_equal %w[current_user five], policy_labels
   end
 
   test 'a field name that is not a name selects nothing in both layers' do
@@ -91,23 +187,61 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     end
   end
 
+  # Both layers used to raise: the app layer's query and the sync named a
+  # column the table does not have. A name in another case is another name
+  # on PostgreSQL.
+  test 'a column the table does not have selects nothing in both layers, and syncs to a policy that hides every row' do
+    %w[no_such_column onwer_id Flag pf_rule_records.Small_Count].each do |name|
+      { 'equal' => 'true', 'not_equal' => '5', 'not_in' => 'x', 'is_null' => '', 'is_not_null' => '', 'contains' => 'a',
+        'greater_than' => 'current_user' }.each do |operator, value|
+        assert_equal [[], []], compare(name, operator, value, true), "#{name} #{operator}"
+      end
+    end
+    rules = [{ field_name: 'onwer_id', operator: 'equal', field_value: 'current_user' }]
+
+    assert_empty app_layer_rows(rules)
+    assert_empty rows_through_policy(rules)
+  end
+
+  # The column of an attribute declared with `encrypts` holds ciphertext:
+  # every operator that compares a value matches nothing in both layers
+  # (current_user too), and the null checks — ciphertext is NULL exactly
+  # when the value is — select the same rows in both.
+  test 'a rule on an encrypted attribute: the null checks agree, every other built-in operator matches nothing' do
+    (OPERATORS - PermissionForge::Operators::Validations::VALUELESS).each do |operator|
+      %w[five current_user].each do |value|
+        assert_equal [[], []], compare(:sealed, operator, value, false), "sealed #{operator} #{value}"
+        assert_equal [[], []], compare(:sealed, operator, value, true), "sealed #{operator} #{value}, include_nulls"
+      end
+    end
+    assert_equal [%w[five], %w[five]], compare(:sealed, 'is_not_null', '', false)
+    nulls = all_labels - %w[five]
+
+    assert_equal [nulls, nulls], compare(:sealed, 'is_null', '', false)
+  end
+
   test 'the parity matrix is not vacuous' do
     selected = compare(:small_count, 'greater_than', '4.5', false)
     unusable = compare(:small_count, 'not_equal', '5_id', true)
-    untyped = compare(:token, 'equal', 'abc', false)
+    pattern_on_number = compare(:small_count, 'contains', '5', false)
 
     assert_equal [%w[big five], %w[big five]], selected
     assert_equal [[], []], unusable
-    assert_equal %i[raises raises], untyped
+    assert_equal [[], []], pattern_on_number
   end
 
-  # PostgreSQL has no LIKE for a number, so the app layer raises. The policy
+  # PostgreSQL has no LIKE for a number. The app layer raised and the policy
   # used to match the column's text instead, showing rows the app layer never
-  # shows; it compiles to FALSE now.
-  test 'a LIKE operator on a column that is not text raises in the app layer and shows no row in the policy' do
-    %i[small_count amount flag born_on status codes token].product(LIKE_OPERATORS).each do |column, operator|
-      assert_equal [:raises, []], compare(column, operator, '5', false), "#{column} #{operator}"
-      assert_equal [:raises, []], compare(column, operator, 'current_user', true), "#{column} #{operator} current_user"
+  # showed; neither layer matches now (ValueCasters.pattern?).
+  test 'a LIKE operator on a column that is not text matches nothing in either layer' do
+    %i[small_count amount flag born_on status].product(LIKE_OPERATORS).each do |column, operator|
+      assert_equal [[], []], compare(column, operator, '5', false), "#{column} #{operator}"
+      assert_equal [[], []], compare(column, operator, 'current_user', true), "#{column} #{operator} current_user"
+    end
+    # A uuid, network, json, array or native enum column: neither layer matches.
+    %i[codes tags aliases settings ref ip net mood].product(LIKE_OPERATORS).each do |column, operator|
+      assert_equal [[], []], compare(column, operator, '5', false), "#{column} #{operator}"
+      assert_equal [[], []], compare(column, operator, 'current_user', true), "#{column} #{operator} current_user"
     end
     rules = [{ field_name: 'small_count', operator: 'contains', field_value: '5' }]
 
@@ -163,37 +297,66 @@ class RlsRuleParityTest < ActiveSupport::TestCase
     end
   end
 
-  # A date in PostgreSQL's own words goes to PostgreSQL as written in both
-  # layers. The app layer sends it with every query; a policy is parsed once,
-  # so there `tomorrow` is the day after the policy was made — as it always was.
-  test "PostgreSQL's own date words are read per query by the app layer and once by a policy" do
-    rules = [{ field_name: 'born_on', operator: 'less_than', field_value: 'tomorrow' }]
-    tomorrow = connection.select_value("SELECT 'tomorrow'::date::text")
+  # Review R1 #6: a date in PostgreSQL's own relative words goes to
+  # PostgreSQL as written in the app layer, read anew by every query. Quoted
+  # into a policy, PostgreSQL resolved it once, when it parsed CREATE
+  # POLICY — the policy kept the sync's date and grew wider every day. It
+  # compiles to the expression PostgreSQL computes per statement instead;
+  # a relative word with more text compiles to FALSE (narrower).
+  test "PostgreSQL's relative date words are read per statement by the app layer and by the policy" do
+    { 'tomorrow' => 'CURRENT_DATE + 1', ' TODAY ' => 'CURRENT_DATE', 'yesterday' => 'CURRENT_DATE - 1', 'now' => 'now()' }
+      .each do |word, expression|
+        rules = [{ field_name: 'born_on', operator: 'less_than', field_value: word }]
 
-    assert_includes scoped(**rules.first).to_sql, "< 'tomorrow'"
-    assert_equal app_layer_rows(rules), rows_through_policy(rules)
+        assert_equal app_layer_rows(rules), rows_through_policy(rules), word
+        stored = connection.select_value(<<~SQL)
+          SELECT pg_get_expr(polqual, polrelid) FROM pg_policy
+          WHERE polname = 'permission_forge_select' AND polrelid = 'pf_rule_records'::regclass
+        SQL
 
-    stored = connection.select_value(<<~SQL)
-      SELECT pg_get_expr(polqual, polrelid) FROM pg_policy
-      WHERE polname = 'permission_forge_select' AND polrelid = 'pf_rule_records'::regclass
-    SQL
-
-    assert_includes stored, "born_on < '#{tomorrow}'::date"
-    assert_not_includes stored, 'tomorrow'
+        assert_includes stored, expression, word
+        assert_not_includes stored, connection.select_value('SELECT CURRENT_DATE::text'), "#{word}: no date frozen at sync"
+      end
+    assert_equal [%w[five zero], %w[five zero]], compare(:born_on, 'less_than', 'yesterday', false)
+    assert_equal [%w[five zero], %w[five zero]], compare(:born_on, 'between', '2020-01-01, today', false)
+    assert_equal 'FALSE', generator.send(:rule_sql, PermissionForge::PermissionSetRule.new(
+                                                      permission_set: @permission_set, resource: @resource, field_name: 'seen_at',
+                                                      operator: 'less_than', field_value: 'today 10:00'
+                                                    )), 'a relative word with more text: narrower'
   end
 
-  test 'a date PostgreSQL cannot read fails the sync, as before values were typed' do
-    create_rules([{ field_name: 'born_on', operator: 'equal', field_value: 'someday' }])
+  # It failed the sync (and raised in the app layer) before
+  # ValueCasters::PostgresqlTypes::ReadBack asked PostgreSQL first.
+  test 'a date PostgreSQL cannot read compiles to FALSE and matches nothing in the app layer' do
+    rules = [{ field_name: 'born_on', operator: 'equal', field_value: 'someday' }]
+    create_rules(rules)
 
-    error = assert_raises(ActiveRecord::StatementInvalid) do
-      PfRuleRecord.transaction(requires_new: true) { PermissionForge::RLS.sync! }
-    end
+    PermissionForge::RLS.sync!
 
-    assert_match(/invalid input syntax for type date/, error.message)
+    assert_empty rows_through_policy(rules)
+    assert_equal app_layer_rows(rules), rows_through_policy(rules)
   end
 
   # The bypass is dynamic, so it needs no resync; it stops with the row's
   # is_active in both layers (pre-release review core-security #6).
+  # Review R1 #3: Modify All without View All (written past the validation)
+  # bypasses nothing in the app layer (PermissionHashBuilder.granted_flags);
+  # the policy's granting EXISTS read either flag and bypassed the rules.
+  test 'a granting row with Modify All and no View All bypasses the rules in neither layer' do
+    rules = [{ field_name: 'owner_id', operator: 'equal', field_value: 'current_user' }]
+    create_rules(rules)
+    PermissionForge::RLS.sync!
+    grant_app_role
+    set = create_permission_set(name: 'Modify only')
+    create_permission_set_user(user: @user, permission_set: set)
+    create_resource(permission_set: set, name: 'PfRuleRecord', view_all: true, modify_all: true)
+      .update_columns(view_all: false)
+    Current.user = @user
+
+    assert_equal %w[current_user five], app_layer_scoped_labels
+    assert_equal %w[current_user five], policy_labels
+  end
+
   test 'a switched-off view_all resource bypasses the rules in neither layer' do
     rules = [{ field_name: 'owner_id', operator: 'equal', field_value: 'current_user' }]
     create_rules(rules)
@@ -270,13 +433,17 @@ class RlsRuleParityTest < ActiveSupport::TestCase
   def create_records
     record('five', small_count: 5, owner_id: @user.id, amount: '5.5', ratio: 0.5, rate: 0.1, flag: true, notes: '50%_off',
                    born_on: '2026-01-10', seen_at: Time.utc(2026, 1, 10, 10), opens_at: '09:00', status: :active, tier: :basic,
-                   codes: [1, 2], tags: %w[a b], token: '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', code: 'ab')
+                   codes: [1, 2], tags: %w[a b], ref: '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', code: 'ab',
+                   aliases: %w[a b], settings: { 'a' => 1 }, ip: '10.0.0.1', net: '10.0.0.0/24', mood: 'calm',
+                   doc: '<a/>', spot: '(1,2)', sealed: 'five')
     record('zero', small_count: 0, owner_id: @other.id, amount: 0, ratio: 0.0, rate: 0.5, flag: false, notes: '50x_OFF',
                    born_on: '2025-06-01', seen_at: Time.utc(2025, 6, 1), opens_at: '17:30', status: :archived, tier: :gold,
-                   codes: [3], tags: %w[c], token: '00000000-0000-0000-0000-000000000000', code: 'xyz')
+                   codes: [3], tags: %w[c], ref: '00000000-0000-0000-0000-000000000000', code: 'xyz',
+                   aliases: [], settings: {}, ip: '2001:db8::1', net: '2001:db8::/32', mood: 'angry')
     record('big', small_count: 2_000_000_000, owner_id: 9_000_000_000, amount: '12345678901234567.1234567891', ratio: 1e10,
                   rate: 16_777_216, flag: true, notes: 'a\\b', born_on: '2030-12-31', seen_at: Time.utc(2030, 12, 31, 23, 59, 59),
-                  opens_at: '23:59:59', status: :hidden, tier: :gold, codes: [], tags: [], code: 'abcd')
+                  opens_at: '23:59:59', status: :hidden, tier: :gold, codes: [], tags: [], code: 'abcd', ip: '10.0.0.5/24',
+                  net: '10.0.0.0/8')
     record(@user.id.to_s, small_count: -1, notes: 'Five')
     record('current_user', owner_id: @user.id, notes: '%')
     PfRuleRecord.create!(label: nil)
@@ -356,6 +523,31 @@ class RlsRuleParityTest < ActiveSupport::TestCase
       )
       rule.save!(validate: false)
     end
+  end
+
+  # A granting set holding @user that grants view_all on PfRuleRecord, with
+  # the base set's rule (owner_id = current_user) synced.
+  def bypass_set(name)
+    create_rules([{ field_name: 'owner_id', operator: 'equal', field_value: 'current_user' }])
+    PermissionForge::RLS.sync!
+    grant_app_role
+    set = create_permission_set(name: name)
+    create_permission_set_user(user: @user, permission_set: set)
+    create_resource(permission_set: set, name: 'PfRuleRecord', view_all: true)
+    Current.user = @user
+    set
+  end
+
+  # The user_id column as SchemaRead answers it, for the block.
+  def with_user_id_column(type, sql_type)
+    read = PermissionForge::SchemaRead.method(:column)
+    user_id = Struct.new(:type, :sql_type).new(type, sql_type)
+    replace_singleton_method(PermissionForge::SchemaRead, :column) do |model, name, &pick|
+      model == PermissionForge::PermissionSetUser && name.to_s == 'user_id' ? user_id : read.call(model, name, &pick)
+    end
+    yield
+  ensure
+    replace_singleton_method(PermissionForge::SchemaRead, :column, read)
   end
 
   def grant_app_role

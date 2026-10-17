@@ -58,7 +58,8 @@ module PermissionForge
   #   - a context with an IP or session flags: those whose conditions pass
   #     (Services::PermissionSetConditionEvaluator), granting and muting alike;
   #   - no context at all — the resolver returned nothing (no resolver, as
-  #     shipped): every conditional set, as before;
+  #     shipped): every conditional set, as before, but a granting set whose
+  #     condition nobody can judge (ActivationConditions#never_grants?), which never applies;
   #   - under config.conditional_sets_strict_mode, no request context — the
   #     resolver returned nothing, or neither an IP nor session flags (a job,
   #     the console; the time alone is not a request context): only the
@@ -104,6 +105,8 @@ module PermissionForge
     #
     # @api private
     Member = Data.define(:id, :muting, :requires_session_flag, :allowed_ips, :allowed_hours_start, :allowed_hours_end) do
+      include PermissionForge::ActivationConditions
+
       def self.of(permission_set)
         new(id: permission_set.id, muting: permission_set.is_muting == true,
             requires_session_flag: permission_set.requires_session_flag, allowed_ips: permission_set.allowed_ips,
@@ -121,13 +124,17 @@ module PermissionForge
 
       def muting? = muting
 
-      # Whether the set counts in `context`: its conditions pass — or, in
-      # strict mode, it is a muting set whose condition cannot be judged
-      # there (no IP for an IP allowlist, no flags at all for a session flag).
+      # Whether the set counts in `context`: its conditions pass — or it is
+      # a muting set whose condition cannot be judged: one nobody can judge
+      # (ActivationConditions#conditions_broken?: an IP entry that is not an
+      # address, one hour of the two, the same hour twice) in every mode, or
+      # one the context cannot answer (no IP for an IP allowlist, no flags
+      # at all for a session flag) in strict mode. A lockdown that never
+      # locked is the defect; a granting set never passes on such a condition.
       def applies?(context, strict)
         evaluator = Services::PermissionSetConditionEvaluator
         evaluator.call(permission_set: self, context: context) ||
-          (strict && muting && evaluator.unjudgeable?(permission_set: self, context: context))
+          (muting && (conditions_broken? || (strict && evaluator.unjudgeable?(permission_set: self, context: context))))
       end
     end
 
@@ -353,7 +360,7 @@ module PermissionForge
       klass = self.class
       strict = klass.strict?
       return sets.select(&:muting?) if strict && klass.no_context?(context)
-      return sets if context.blank?
+      return sets.reject(&:never_grants?) if context.blank?
 
       sets.select { |member| member.applies?(context, strict) }
     end

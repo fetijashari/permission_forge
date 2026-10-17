@@ -3,7 +3,7 @@
 <% else %>
 <% first_name = pf_person(@person).first_name %>
 <% total = @changes.values.sum(&:size) %>
-<% granters = pf_granters(@assignments) %>
+<% creations = pf_audit_creations(@assignments.to_a + @groups.to_a) %>
 <div class="pf-stack pf-stack--loose">
   <% unless PermissionForge.configuration.audit_trail_enabled %>
     <div class="pf-banner pf-banner--warn" role="note">
@@ -16,7 +16,7 @@
   <%= render 'permission_forge/shared/audit_timeline',
              title: t('.timeline', name: first_name), description: t('.timeline_desc', name: first_name),
              page: @timeline, lookups: @timeline_lookups,
-             path: ->(number) { permission_forge.person_path(@person, tab: 'audit', views: params[:views].presence, page: number) },
+             path: ->(number) { permission_forge.person_path(@person, tab: 'audit', views: @views, page: number) },
              views_path: (permission_forge.person_path(@person, tab: 'audit', views: 1) unless @timeline_log.include_views?),
              links: [[t('.events_about', name: first_name), pf_audit_log_path(subject_user_id: @person.id)],
                      [t('.events_by', name: first_name), pf_audit_log_path(actor_type: 'user', actor_id: @person.id)]] %>
@@ -29,9 +29,9 @@
     <% @assignments.each do |a| %>
       <div class="pf-card__row pf-card__row--top">
         <span class="pf-stack pf-stack--tight pf-grow">
-          <span><b><%= a.permission_set.name %></b> <span class="pf-fs-12 pf-text-3"><%= t(a.permission_set.is_muting ? '.kind_muting' : '.kind_set') %></span></span>
-          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_granted_by(a, granters), date: pf_date(a.created_at)) %></span>
-          <% if a.try(:reason).present? %><span class="pf-fs-12 pf-text-3"><%= t('permission_forge.audit_log.reason_inline', reason: a.reason) %></span><% end %>
+          <span><b><%= pf_record_name(a.permission_set) %></b> <span class="pf-fs-12 pf-text-3"><%= t(a.permission_set.is_muting ? '.kind_muting' : '.kind_set') %></span></span>
+          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_audit_creator(a, creations), date: pf_date(a.created_at)) %></span>
+          <% if (reason = pf_audit_reason(a)) %><span class="pf-fs-12 pf-text-3"><%= t('permission_forge.audit_log.reason_inline', reason: reason) %></span><% end %>
         </span>
         <span class="pf-stack pf-stack--tight pf-fs-12">
           <%= pf_expiry_tag(a.expires_at) %>
@@ -42,8 +42,8 @@
     <% @groups.each do |m| %>
       <div class="pf-card__row">
         <span class="pf-stack pf-stack--tight pf-grow">
-          <span><b><%= m.permission_set_group.name %></b> <span class="pf-fs-12 pf-text-3"><%= t('.kind_group') %></span></span>
-          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_person_name(m.try(:created_by)), date: pf_date(m.created_at)) %></span>
+          <span><b><%= pf_record_name(m.permission_set_group) %></b> <span class="pf-fs-12 pf-text-3"><%= t('.kind_group') %></span></span>
+          <span class="pf-fs-12 pf-text-3"><%= t('.assigned_by', who: pf_audit_creator(m, creations), date: pf_date(m.created_at)) %></span>
         </span>
       </div>
     <% end %>
@@ -79,7 +79,7 @@
                   <% if where %><span class="pf-fs-12 pf-text-3"><%= where %></span><% end %>
                 </span>
                 <span class="pf-stack pf-stack--tight pf-option__aside">
-                  <span><%= t('.created', value: pf_audit_who_when(entry.created_by, entry.created_at)) %></span>
+                  <span><%= t('.created', value: pf_audit_created(entry)) %></span>
                   <span><%= t('.edited', value: pf_audit_edited(entry)) %></span>
                 </span>
               <% end %>

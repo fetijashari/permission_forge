@@ -83,6 +83,35 @@ module PermissionForge
       assert_equal 0, @queries
     end
 
+    # Review of round 8: Active Record's schema cache kept the "no" of a
+    # process that booted before the Resource table existed (a migration run
+    # from another process): it never masked until a restart, although the
+    # boot promised a retry at each request or job.
+    test 'a process that found no Resource table syncs at its next run once the table is there' do
+      named_elsewhere(@model, announce: false)
+      table = PermissionForge::Resource.table_name
+      hidden = Module.new do
+        define_method(:data_sources) { super().reject { |name| name == table } }
+        define_method(:data_source_exists?) { |name| name.to_s == table ? false : super(name) }
+      end
+      connection = PermissionForge::Resource.connection_pool.with_connection { |leased| leased }
+      MaskingSync.reset!
+      PermissionForge::Resource.reset_column_information
+      connection.singleton_class.prepend(hidden)
+
+      MaskingSync.check!
+      assert_not MaskingSync.synced?, 'no table yet'
+
+      %i[data_sources data_source_exists?].each { |name| hidden.send(:remove_method, name) }
+      MaskingSync.check!
+
+      assert MaskingSync.synced?
+      assert applied?(@model)
+    ensure
+      %i[data_sources data_source_exists?].each { |name| hidden.send(:remove_method, name) if hidden&.method_defined?(name, false) }
+      PermissionForge::Resource.reset_column_information
+    end
+
     test 'nothing is read while auto-apply and virtual masking are off' do
       PermissionForge.configuration.auto_apply_masked_attributes = false
 
@@ -163,7 +192,7 @@ module PermissionForge
         end
       end
 
-      assert_match(/auto-applied masking could not be synced — ArgumentError: boom/, log)
+      assert_match(/SECURITY warning: Auto-applied masking could not be synced: .* \(ArgumentError: boom\)/, log)
     end
 
     # Development: a code reload hands out new, unmasked model classes.
@@ -371,6 +400,119 @@ module PermissionForge
 
       assert_equal 0, reads
       assert_equal 0, @queries
+    end
+  end
+
+  # A store that cannot carry the token to another process: one that lives in
+  # each process (:memory, a :memory_store — Rails 8's development default) or
+  # keeps nothing (:null, a :null_store — Rails 7.1/7.2's). Field test: a
+  # Customer Resource row created from `bin/rails runner` never reached the
+  # running server, whose pages showed the emails in clear until a restart.
+  class MaskingSyncUnsharedStoreTest < ActiveSupport::TestCase
+    include BootTestHelpers
+    include MaskingSyncTestHelpers
+
+    setup do
+      @model = fresh_model
+      @clock = [1_000.0] # monotonic seconds (on_clock)
+    end
+
+    teardown do
+      use_backend(:memory)
+      MaskingSync.reset!
+      MaskingSync.boot!
+    end
+
+    test 'development with a per-process store masks a model named from another process at the next request' do
+      in_rails_env('development') do
+        booted
+        named_elsewhere(@model, announce: false) # the runner's own store: nothing reaches this one
+
+        Rails.application.executor.wrap { nil }
+
+        assert applied?(@model)
+      end
+    end
+
+    test 'development re-reads the Resource names at most every DATABASE_RECHECK seconds' do
+      in_rails_env('development') do
+        on_clock do
+          booted
+          Rails.application.executor.wrap { nil }
+          named_elsewhere(@model, announce: false)
+
+          assert_equal 0, count_sql { Rails.application.executor.wrap { nil } }, 'within the interval: no query'
+          refute applied?(@model)
+
+          @clock[0] += MaskingSync::DATABASE_RECHECK
+          assert_equal 1, count_sql { Rails.application.executor.wrap { nil } }, 'one query for the names'
+          assert applied?(@model)
+        end
+      end
+    end
+
+    test 'development with a store that keeps nothing re-reads the names too, and asks it for no token' do
+      use_backend(:null)
+      in_rails_env('development') do
+        booted
+        named_elsewhere(@model, announce: false)
+
+        log = capture_rails_log { assert_equal(0, count_store_reads { Rails.application.executor.wrap { nil } }) }
+
+        assert applied?(@model)
+        assert_no_match(/masking token/, log)
+      end
+    end
+
+    # The per-request cost stays what it was outside development: no query.
+    test 'production with a per-process store runs no query per request' do
+      in_rails_env('production') do
+        booted
+
+        assert_equal(0, count_sql { Rails.application.executor.wrap { nil } })
+      end
+    end
+
+    # Rails 7.1's development default: the boot logged "did not give or keep
+    # the masking token" with no cause and no remedy.
+    test 'a store that keeps nothing is asked for no token and logs no token warning' do
+      use_backend(:null)
+
+      log = capture_rails_log do
+        assert booted
+        assert_equal(0, count_store_reads { 3.times { Rails.application.executor.wrap { nil } } })
+      end
+
+      assert_no_match(/masking token/, log)
+      assert_predicate MaskingSync, :synced?
+      assert_equal 0, count_sql { Rails.application.executor.wrap { nil } }, 'in step: no query per request'
+    end
+
+    test 'with a store that keeps nothing the first row for a model is masked in the process that commits it' do
+      use_backend(:null)
+      booted
+
+      create_resource(permission_set: create_permission_set, name: @model.name)
+
+      assert applied?(@model)
+    end
+
+    private
+
+    def booted
+      MaskingSync.reset!
+      MaskingSync.boot!
+    end
+
+    def use_backend(backend)
+      PermissionForge.configuration.cache_backend = backend
+      PermissionForge.configuration.reset_cache_store!
+    end
+
+    # MaskingSync's monotonic clock reads @clock for the block.
+    def on_clock(&)
+      clock = @clock
+      with_singleton_method(MaskingSync, :now, -> { clock[0] }, &)
     end
   end
 

@@ -252,7 +252,7 @@ module PermissionForge
 
         assert_empty arguments(one, :read) + arguments(many, :read), 'nothing is read'
         removed = arguments(one, :expunge)
-        assert_equal removed, arguments(many, :expunge_many).flatten, 'the same keys, this namespace, then the previous one'
+        assert_equal removed, arguments(many, :expunge_many).flatten, 'the same keys, this namespace, then the previous ones'
         assert_empty removed.grep(/_c_/), 'no variant key'
       ensure
         PermissionForge.configuration.request_context_resolver = -> { {} }
@@ -319,7 +319,7 @@ module PermissionForge
         set = create_permission_set
         holders = holders_of(set, count: (HolderInvalidation::SLICE * 2) + 100)
         field = create_resource_field(resource: create_resource(permission_set: set, name: 'Customer'), name: 'name')
-        keys = holders.map { |id| "tenant_#{DEFAULT_TEST_ACCOUNT.id}_user_#{id}" }
+        keys = holders.map { |id| UserKeys.hash_key(id, DEFAULT_TEST_ACCOUNT.id) }
         keys.each { |key| PermissionForge.cache.write(key, { stale: true }) }
         statements = nil
         single = counting_single_invalidations do

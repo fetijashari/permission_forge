@@ -38,9 +38,13 @@ module PermissionForge
 
     # --- mask_access: false (no validation on mask_strategy) ---
 
-    test 'mask_access false with nil mask_strategy is valid' do
+    # The column is NOT NULL: nil is refused by the column
+    # (ValidatesRequiredColumns), not by the mask rule — through 0.14.x it
+    # passed validation and the INSERT raised NotNullViolation.
+    test 'mask_access false with nil mask_strategy is refused by the column only' do
       field = build_field(read_access: true, mask_access: false, mask_strategy: nil)
-      assert field.valid?, "Errors: #{field.errors.full_messages}"
+      assert_not field.valid?
+      assert_equal [I18n.t('permission_forge.validations.blank')], field.errors[:mask_strategy]
     end
 
     test 'mask_access false with leftover email strategy is valid' do
@@ -51,6 +55,55 @@ module PermissionForge
     test 'mask_access false with no mask_strategy is valid' do
       field = build_field(read_access: true, mask_access: false)
       assert field.valid?, "Errors: #{field.errors.full_messages}"
+    end
+
+    # --- check on change: a row written past the model, or whose custom
+    # strategy was removed from the configuration, stays editable ---
+
+    test 'a saved row with a strategy this app does not know stays editable in its other attributes' do
+      field = build_field(read_access: true, mask_access: true, mask_strategy: 'email')
+      field.save!
+      field.update_columns(mask_strategy: 'gone')
+      field.reload
+      field.label = 'Renamed'
+
+      assert field.valid?, field.errors.full_messages.inspect
+      assert field.save
+    end
+
+    test 'the strategy is checked again when it, or mask_access, changes' do
+      field = build_field(read_access: true, mask_access: false, mask_strategy: 'full')
+      field.save!
+      field.update_columns(mask_strategy: 'gone')
+      field.reload
+      field.mask_access = true
+
+      assert_not field.valid?
+      assert field.errors[:mask_strategy].any?, 'mask_access switched on with an unknown strategy'
+
+      field.reload
+      field.mask_access = true
+      field.mask_strategy = 'still_gone'
+
+      assert_not field.valid?
+
+      field.mask_strategy = 'email'
+
+      assert field.valid?, field.errors.full_messages.inspect
+    end
+
+    test 'a custom strategy removed from the configuration leaves the row editable, and is refused when picked again' do
+      PermissionForge.configuration.custom_mask_strategies = { 'initials' => ->(value) { value[0] } }
+      field = build_field(read_access: true, mask_access: true, mask_strategy: 'initials')
+      field.save!
+      PermissionForge.configuration.custom_mask_strategies = {}
+      field.reload
+
+      assert field.valid?, field.errors.full_messages.inspect
+
+      other = build_field(name: 'other', read_access: true, mask_access: true, mask_strategy: 'initials')
+
+      assert_not other.valid?
     end
 
     private

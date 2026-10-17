@@ -4,21 +4,25 @@
   <% if outcome.nil? %>
     <span><%= t('.no_access', name: name, resources: pf_resource_plural(resource.name)) %></span>
   <% else %>
-    <div><%= pf_level_badge(outcome.level, strategy: (outcome.mask_strategy if outcome.level == 'masked')) %></div>
-    <span>
-      <% if outcome.blocked_by.any? %>
-        <%= t('.muted', name: name, sets: outcome.blocked_by.map(&:name).to_sentence) %>
-      <% elsif outcome.unconfigured %>
-        <%= t('.unconfigured', name: name) %>
-      <% elsif outcome.granted_by.any? %>
-        <%= t('.granted', name: name, sets: outcome.granted_by.map(&:name).to_sentence) %>
-      <% elsif outcome.implicit %>
-        <%= t('.virtual_default', name: name) %>
-      <% else %>
-        <%= t('.none', name: name) %>
-      <% end %>
-      <%= t('.capped') if outcome.capped %>
-    </span>
+    <div><%= pf_effective_field_badge(outcome) %></div>
+    <%# FieldOutcome#reason, the decision the person's Effective access row and Why panel word too (B#39);
+        the mutes and sets named as there (B#38, D2). Hidden by the entry that decides (:unreadable, :inherited):
+        the line below says it. %>
+    <% sentence = case outcome.reason
+                  when :muted then pf_field_muted_explain(outcome, resource.name, name)
+                  when :unconfigured then t('.unconfigured', name: name)
+                  when :granted
+                    pf_t_markup(sets: pf_markup_sentence(outcome.grants.map { |src| pf_field_source_set_name(src, resource.name) })) { |held| t('.granted', name: name, **held) }
+                  when :implicit then t('.virtual_default', name: name)
+                  when :none then t('.none', name: name)
+                  end %>
+    <% if sentence || outcome.capped %>
+      <span><%= sentence %> <%= t('.capped') if outcome.capped %></span>
+    <% end %>
+    <%# The entry that decides an inherited field, worded as the Why panel words it. %>
+    <% if (chain = pf_field_chain_reason(outcome)) %>
+      <span><span aria-hidden="true"><%= chain.first %></span> <%= chain.last %></span>
+    <% end %>
     <%= link_to t('.full_picture', name: name), permission_forge.person_path(explain[:user], tab: 'effective', why: "#{resource.name}.field.#{outcome.name}", open: [resource.name]), class: 'pf-fs-12' %>
   <% end %>
 </div>

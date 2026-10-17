@@ -94,12 +94,18 @@ module PermissionForge
         ps = create_permission_set(allowed_ips: '192.168.1.0/24')
         assert evaluate(ps, { ip: IPAddr.new('192.168.1.50') })
         assert_not evaluate(ps, { ip: IPAddr.new('10.0.0.1') })
-        assert_not evaluate(ps, { ip: IPAddr.new('::ffff:192.168.1.50') }), 'an IPv6 address is outside an IPv4 range'
+        assert evaluate(ps, { ip: IPAddr.new('::ffff:192.168.1.50') }), 'an IPv4-mapped address is its IPv4 address'
+        assert_not evaluate(ps, { ip: IPAddr.new('2001:db8::1') }), 'an IPv6 address is outside an IPv4 range'
       end
 
-      test 'ip: skips invalid CIDRs in allowed_ips gracefully' do
-        ps = create_permission_set(allowed_ips: 'invalid, 192.168.1.0/24')
-        assert evaluate(ps, { ip: '192.168.1.5' })
+      # An entry that is not an address used to be skipped, so the set passed
+      # on the entries beside it; since 0.15 such a list is refused on save
+      # and, where stored anyway, never passes (nobody can judge it).
+      test 'ip: an invalid CIDR is refused on save and never passes when stored' do
+        assert_raises(ActiveRecord::RecordInvalid) { create_permission_set(allowed_ips: 'invalid, 192.168.1.0/24') }
+
+        ps = stored(allowed_ips: 'invalid, 192.168.1.0/24')
+        assert_not evaluate(ps, { ip: '192.168.1.5' })
       end
 
       test 'ip: nil condition always passes' do
@@ -147,14 +153,51 @@ module PermissionForge
         assert_not evaluate(ps, { time: time_at_hour(15) })
       end
 
-      test 'hours: nil start always passes' do
-        ps = create_permission_set(allowed_hours_start: nil, allowed_hours_end: 17)
-        assert evaluate(ps, { time: time_at_hour(23) })
+      # A window with one hour of the two, the same hour twice, or an hour
+      # outside 0..23 (written past the model) cannot be judged: a granting
+      # set never passes on it (it used to pass with one hour).
+      test 'hours: a broken window never passes, at any hour' do
+        [[nil, 17], [9, nil], [9, 9], [25, 3]].each do |from, to|
+          ps = stored(allowed_hours_start: from, allowed_hours_end: to)
+
+          (0..23).each { |hour| assert_not evaluate(ps, { time: time_at_hour(hour) }), "#{[from, to].inspect} at #{hour}" }
+          assert PermissionSetConditionEvaluator.unjudgeable?(permission_set: ps, context: { time: time_at_hour(12) })
+          assert PermissionSetConditionEvaluator.broken?(permission_set: ps), [from, to].inspect
+        end
       end
 
-      test 'hours: nil end always passes' do
-        ps = create_permission_set(allowed_hours_start: 9, allowed_hours_end: nil)
-        assert evaluate(ps, { time: time_at_hour(3) })
+      # --- Broken IP lists -------------------------------------------------------
+
+      test 'ip: a list with an entry that is not an IP cannot be judged and never passes' do
+        ps = stored(allowed_ips: '10.0.0.0/8, office')
+
+        assert_not evaluate(ps, { ip: '10.1.2.3' })
+        assert PermissionSetConditionEvaluator.unjudgeable?(permission_set: ps, context: { ip: '10.1.2.3' })
+        assert PermissionSetConditionEvaluator.broken?(permission_set: ps)
+        assert_not PermissionSetConditionEvaluator.broken?(permission_set: stored(allowed_ips: '10.0.0.0/8'))
+      end
+
+      test 'ip: a list written with newlines or spaces is read entry by entry' do
+        ps = stored(allowed_ips: "10.0.0.0/8\n192.168.0.0/16 203.0.113.9")
+
+        assert evaluate(ps, { ip: '192.168.4.4' })
+        assert evaluate(ps, { ip: '203.0.113.9' })
+        assert_not evaluate(ps, { ip: '203.0.113.10' })
+        assert_not PermissionSetConditionEvaluator.broken?(permission_set: ps)
+      end
+
+      test 'ip: separators alone are a list with no entry, which cannot be judged' do
+        ps = stored(allowed_ips: ' , ')
+
+        assert_not evaluate(ps, { ip: '10.1.2.3' })
+        assert PermissionSetConditionEvaluator.broken?(permission_set: ps)
+      end
+
+      test 'unjudgeable? is false for a valid condition the context answers' do
+        ps = stored(allowed_ips: '10.0.0.0/8', allowed_hours_start: 9, allowed_hours_end: 17)
+
+        assert_not PermissionSetConditionEvaluator.unjudgeable?(permission_set: ps, context: { ip: '203.0.113.9' })
+        assert PermissionSetConditionEvaluator.unjudgeable?(permission_set: ps, context: { session_flags: [] })
       end
 
       test 'hours: uses Time.current when no time in context' do
@@ -210,10 +253,28 @@ module PermissionForge
         assert_not evaluate(ps, context)
       end
 
+      # Review R1 #11: a dual-stack server reports an IPv4 client as
+      # ::ffff:10.0.0.5, which never matched an IPv4 entry.
+      test 'an IPv4-mapped IPv6 request address matches the IPv4 entries' do
+        ps = stored(allowed_ips: '10.0.0.0/8')
+
+        assert evaluate(ps, ip: '::ffff:10.0.0.5')
+        assert evaluate(ps, ip: IPAddr.new('::ffff:10.0.0.5'))
+        assert_not evaluate(ps, ip: '::ffff:192.168.0.5')
+        assert evaluate(stored(allowed_ips: '2001:db8::/32'), ip: '2001:db8::1'), 'a native IPv6 address is read as it is'
+      end
+
       private
 
       def evaluate(permission_set, context)
         PermissionSetConditionEvaluator.call(permission_set: permission_set, context: context)
+      end
+
+      # A row as the table holds it, whatever the validations refuse today.
+      def stored(**attrs)
+        ps = create_permission_set
+        ps.update_columns(attrs)
+        ps.reload
       end
 
       def time_at_hour(hour)

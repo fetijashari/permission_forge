@@ -39,7 +39,7 @@ module PermissionForge
         assert_equal @res.id, changes.first.resource.id
         assert export.is_permitted
         assert export.is_active
-        assert_equal 'Export', export.label
+        assert_equal 'export', export.label, 'the key itself, never English made up from it'
         assert_not archive.is_permitted
       end
 

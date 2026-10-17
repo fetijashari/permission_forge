@@ -1,4 +1,6 @@
 require 'test_helper'
+require_relative '../field_variant_models'
+require_relative '../sti_variant_models'
 
 module PermissionForge
   module Services
@@ -122,7 +124,8 @@ module PermissionForge
         @muting_resource.update!(read_access: true)
 
         fields = build_hash.dig(:resources, 'Customer', :fields)
-        assert_equal %w[contact_count email full_address name owner_id owner_uuid], fields.keys.sort
+        # owner_id is no Customer column, and owner_uuid no Customer name: no variant entry (FieldVariants)
+        assert_equal %w[contact_count email full_address name owner_id], fields.keys.sort
         fields.each do |name, entry|
           assert_equal [false, false], entry.values_at(:read_access, :edit_access), name
         end
@@ -148,40 +151,61 @@ module PermissionForge
       end
 
       # --- Field variant muting (regression: muting must cover _uuid/_cents variants) ---
+      # PfVariantOrder has owner_uuid and price, so the variants are entries.
+
+      def variant_resources
+        granting = create_resource(permission_set: @granting_set, name: 'PfVariantOrder', read_access: true, edit_access: true)
+        muting = create_resource(permission_set: @muting_set, name: 'PfVariantOrder', read_access: false)
+        [granting, muting]
+      end
 
       test 'muting a _id field also revokes read on its _uuid variant' do
+        granting, muting = variant_resources
         # Granting set exposes owner_id (and its owner_uuid variant).
-        create_resource_field(
-          resource: @granting_resource, name: 'owner_id', label: 'Owner',
-          read_access: true, edit_access: true
-        )
+        create_resource_field(resource: granting, name: 'owner_id', label: 'Owner', read_access: true, edit_access: true)
         # Muting set revokes read on owner_id.
-        create_resource_field(
-          resource: @muting_resource, name: 'owner_id', label: 'Owner',
-          read_access: true, edit_access: false
-        )
+        create_resource_field(resource: muting, name: 'owner_id', label: 'Owner', read_access: true, edit_access: false)
 
-        fields = build_hash.dig(:resources, 'Customer', :fields)
+        fields = build_hash.dig(:resources, 'PfVariantOrder', :fields)
         assert_not fields['owner_id'][:read_access], 'owner_id read_access should be muted'
         assert_not fields['owner_uuid'][:read_access], 'owner_uuid variant read_access must also be muted'
       end
 
       test 'muting a _cents field also forces mask on its base-name variant' do
-        create_resource_field(
-          resource: @granting_resource, name: 'price_cents', label: 'Price',
-          read_access: true, edit_access: true, mask_access: false
-        )
-        create_resource_field(
-          resource: @muting_resource, name: 'price_cents', label: 'Price',
-          read_access: false, edit_access: false, mask_access: true, mask_strategy: 'full'
-        )
+        granting, muting = variant_resources
+        create_resource_field(resource: granting, name: 'price_cents', label: 'Price',
+                              read_access: true, edit_access: true, mask_access: false)
+        create_resource_field(resource: muting, name: 'price_cents', label: 'Price',
+                              read_access: false, edit_access: false, mask_access: true, mask_strategy: 'full')
 
-        fields = build_hash.dig(:resources, 'Customer', :fields)
+        fields = build_hash.dig(:resources, 'PfVariantOrder', :fields)
         assert fields['price_cents'][:mask_access], 'price_cents mask_access forced true'
         assert fields['price'][:mask_access], 'price base-name variant mask_access must also be forced true'
       end
 
       # --- Action-level muting ---
+
+      # Field test round 8 (review P1): a base row reaches a subclass entry
+      # (single-table inheritance), and its variants are the subclass's —
+      # `price` is a reader only PfStiVipOrder has, so the variants of the
+      # muting row's own Resource (the base) left it readable while the
+      # column it derives from was hidden.
+      test 'a base row mutes the variants of each entry it reaches, a reader only the subclass has included' do
+        sales = create_permission_set(name: 'Orders')
+        %w[PfStiOrder PfStiVipOrder].each do |name|
+          create_resource_field(resource: create_resource(permission_set: sales, name: name, read_access: true, edit_access: true),
+                                name: 'price_cents', read_access: true, edit_access: true)
+        end
+        mute = create_permission_set(name: 'No prices', is_muting: true)
+        create_resource_field(resource: create_resource(permission_set: mute, name: 'PfStiOrder', read_access: false),
+                              name: 'price_cents', read_access: true)
+
+        fields = PermissionHashBuilder.call(user: @user, permission_sets: [sales, mute])[:resources]['PfStiVipOrder'][:fields]
+
+        assert_equal false, fields['price_cents'][:read_access]
+        assert_equal false, fields['price'][:read_access], 'the derived value of a hidden column is hidden too'
+        assert_equal false, fields['price'][:edit_access]
+      end
 
       test 'muting set revokes action is_permitted' do
         create_resource_action(
@@ -360,7 +384,7 @@ module PermissionForge
         )
         create_permission_set_rule(
           permission_set: @muting_set, resource: @muting_resource,
-          name: 'Muting Rule', field_name: 'status'
+          name: 'Muting Rule', field_name: 'domain'
         )
 
         rules = build_hash.dig(:resources, 'Customer', :permission_set_rules)

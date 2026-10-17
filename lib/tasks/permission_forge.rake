@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 namespace :permission_forge do
-  desc 'Report fields that match the personal-data patterns but are not masked, and matching model columns with no ResourceField'
+  desc 'Report personal-data fields that are not masked, and matching model columns with no field row. ' \
+       'ACTOR= names who ran it, REASON= why (recorded as report.generated).'
   task audit_masks: :environment do
     report = PermissionForge::RakeAudit.reporting('permission_forge:audit_masks', counts: ->(r) { { findings: r.size } }) do
       PermissionForge::Services::GdprFieldAuditor.call
@@ -13,11 +14,27 @@ namespace :permission_forge do
 end
 
 namespace :permission_forge do
-  desc 'Read-only security review of the PermissionForge setup. FORMAT=json, FAIL_ON=critical|high|medium|low'
+  # Exits 1 when FAIL_ON is given and a finding of that severity or worse
+  # exists (saying so on stderr, so FORMAT=json output stays parseable), and 2
+  # when FAIL_ON names no severity (before the review runs).
+  # It changes no permission data; every run is recorded (report.generated)
+  # when the audit log is on.
+  desc 'Security review of the setup: changes no permission data, records the run in the audit log. ' \
+       'FORMAT=json, FAIL_ON=critical|high|medium|low|info; ACTOR= names who ran it, REASON= why.'
   task audit: :environment do
-    report = PermissionForge::RakeAudit.reporting('permission_forge:audit', counts: :counts.to_proc) do
-      PermissionForge::Services::SecurityAudit.call
+    audit = PermissionForge::Services::SecurityAudit
+    given = ENV.fetch('FAIL_ON', nil).presence
+    fail_on = given && audit.severity_named(given)
+    if given && fail_on.nil?
+      warn "FAIL_ON must be one of #{audit::SEVERITIES.join(', ')} (got #{given.inspect}). " \
+           'Usage: rake permission_forge:audit FAIL_ON=high'
+      exit 2
     end
+
+    # A rake task does not eager-load: the review must see every model (an
+    # STI subclass's `encrypts`, the models on a table a rule joins).
+    PermissionForge::Admin::ModelCatalog.eager_load_app_models
+    report = PermissionForge::RakeAudit.reporting('permission_forge:audit', counts: :counts.to_proc) { audit.call }
 
     if ENV['FORMAT'] == 'json'
       puts JSON.pretty_generate(report.to_h)
@@ -25,7 +42,10 @@ namespace :permission_forge do
       puts PermissionForge::Services::SecurityAuditChecks::TextReport.new(report)
     end
 
-    fail_on = ENV.fetch('FAIL_ON', nil).presence
-    exit 1 if fail_on && report.at_least(fail_on).any?
+    failing = fail_on ? report.at_least(fail_on).size : 0
+    if failing.positive?
+      warn "Failing: #{failing} finding(s) at or above #{fail_on} (FAIL_ON=#{given})."
+      exit 1
+    end
   end
 end

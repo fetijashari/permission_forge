@@ -3,16 +3,16 @@
 <% form_attr = local_assigns[:form] ? { form: form } : {} %>
 <% requires = local_assigns[:requires] %>
 <label class="pf-cell<%= ' pf-cell--muting' if muting %><%= ' pf-cell--lg' if local_assigns[:size] == :lg %>"
-       title="<%= t('.needs_read') if requires && !muting %>">
+       title="<%= t('permission_forge.ui.needs_read_first') if requires && !muting %>">
   <%= tag.input(type: 'hidden', name: name, value: '0', **form_attr) %>
   <%= tag.input(type: 'checkbox', name: name, value: '1', checked: checked, disabled: locked,
                 'aria-label': aria, data: { pf_flag: flag, pf_requires: (muting ? nil : requires), pf_locked: (locked || nil) }, **form_attr) %>
   <% if muting %>
-    <span class="pf-cell__on"><span class="pf-cell__glyph" aria-hidden="true">⊘</span><%= t('.muted') %></span>
-    <span class="pf-cell__off"><span class="pf-cell__glyph" aria-hidden="true">–</span><%= t('.unchanged') %></span>
+    <span class="pf-cell__on"><%= pf_state_parts(pf_state(:crud, :muted)) %></span>
+    <span class="pf-cell__off"><%= pf_state_parts(pf_state(:crud, :unchanged)) %></span>
   <% else %>
-    <span class="pf-cell__on"><span class="pf-cell__glyph" aria-hidden="true">✓</span><%= t('.allowed') %></span>
-    <span class="pf-cell__off"><span class="pf-cell__glyph" aria-hidden="true">–</span><%= t('.no') %></span>
-    <span class="pf-cell__needs"><span class="pf-cell__glyph" aria-hidden="true">–</span><%= t('.needs_read_short') %></span>
+    <span class="pf-cell__on"><%= pf_state_parts(pf_state(:crud, :allowed)) %></span>
+    <span class="pf-cell__off"><%= pf_state_parts(pf_state(:crud, :no)) %></span>
+    <span class="pf-cell__needs"><%= pf_state_parts(pf_state(:crud, :needs_read)) %></span>
   <% end %>
 </label>

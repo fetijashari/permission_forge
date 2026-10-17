@@ -9,12 +9,19 @@ module PermissionForge
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::RequiresName # name present, on create or rename
+    include PermissionForge::Concerns::NormalizesLabel # a blank label is stored as the name
+    include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
     include PermissionForge::Concerns::HasPermissionSetUsers
     include PermissionForge::Concerns::PermissionsRegenerator
     include PermissionForge::Concerns::InvalidatesManagedActions
     include PermissionForge::Concerns::RecordsAuditEvents
+
+    # Its name is configuration, not personal data: #inspect shows it even
+    # when filter_parameters (the GDPR patterns) hide a `name` (InspectionFilters).
+    PermissionForge::InspectionFilters.show_configuration_names(self)
 
     permission_set_user_lookup :via_resource
 
@@ -28,10 +35,6 @@ module PermissionForge
     # instead of a RecordNotUnique 500. Checked when a row is created, renamed
     # or moved, so duplicates that predate the index stay editable; the
     # security audit lists them (`duplicate_actions`).
-    # Checked for a new row and on a rename only: a row whose name was
-    # blank before 0.14 stays editable in its other attributes.
-    validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },
-                     if: -> { new_record? || will_save_change_to_name? }
     validates :name, uniqueness: { scope: :resource_id,
                                    message: ->(*) { I18n.t('permission_forge.errors.admin.action_taken') } },
                      if: -> { new_record? || will_save_change_to_name? || will_save_change_to_resource_id? }
@@ -50,9 +53,15 @@ module PermissionForge
       is_active && resource.in_effect?
     end
 
-    # @return [String] the label, or the humanized name when there is none
+    # The action's name as the admin shows it (Admin::ActionLabel): the
+    # label an admin wrote; a label the gem generated (blank, the key, the
+    # key humanized: GeneratedText.label?) counts as none, and then, on an
+    # English page, Rails' English for the key ("Export csv"), else the key
+    # as stored ("export_csv").
+    #
+    # @return [String]
     def display_name
-      label.presence || name.humanize
+      PermissionForge::Admin::ActionLabel.for(self).text
     end
   end
 end

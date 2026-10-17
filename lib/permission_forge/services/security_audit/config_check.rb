@@ -9,8 +9,8 @@ module PermissionForge
         RULES = %i[
           admin_ui_exposed process_local_cache unconfigured_fields_pass write_protection_off nested_parent_fallback
           nil_user_bypass masked_nil_user_bypass gdpr_defaults_off log_filtering_off audit_trail_off conditional_sets_lenient
-          detection_raises_in_production api_without_auth api_mutations_unguarded api_sequential_ids
-          api_rule_values_exposed tenantless_admin strict_overrides
+          detection_raises_in_production api_without_auth api_mutations_unguarded api_authorization_unset
+          api_sequential_ids api_rule_values_exposed tenantless_admin strict_overrides
         ].freeze
 
         def call
@@ -29,12 +29,18 @@ module PermissionForge
                   'a controller that authenticates and authorizes admins, or turn HTTP Basic back on.')
         end
 
+        # The one definition of "process-local" is the store's own
+        # (Cache::Base#process_local?: `cache_backend = :memory`, or
+        # `Rails.cache` a `:memory_store`), asked of the store the reviewed
+        # configuration builds.
         def process_local_cache
-          return unless production? && configuration.cache_backend.to_s == 'memory'
+          return unless production? && configuration.cache_store.process_local?
 
           finding(:high, :process_local_cache, 'Permission cache is local to each process',
-                  'cache_backend is :memory in production: a revoked permission stays cached in other Puma ' \
-                  'workers until their TTL expires. Use :rails_cache with a shared store.')
+                  'The permission cache store lives in each process in production (cache_backend :memory, or ' \
+                  'Rails.cache a :memory_store): a revoked permission stays cached in the other Puma workers until ' \
+                  'cache_ttl, and an invalidation from a console, runner or rake task never reaches the servers. ' \
+                  'Use :rails_cache with a shared store (Redis, Memcached, Solid Cache).')
         end
 
         def unconfigured_fields_pass
@@ -147,6 +153,19 @@ module PermissionForge
                   'api_auth proves identity, not admin rights. Set api_action_authorization and ' \
                   'api_assignment_authorization, or keep api_require_authorization = true (the default) ' \
                   'to refuse changes until they are set.')
+        end
+
+        # Fails closed (each refusal is a 403 naming the option): a note, so
+        # that the missing lambda is found before a caller is refused.
+        def api_authorization_unset
+          lines = PermissionForge::ApiAuthorizations.lines(configuration)
+          return if lines.empty?
+
+          finding(:info, :api_authorization_unset, 'The JSON API refuses what no authorization lambda guards',
+                  'The API is on and api_auth admits callers, but an authorization lambda it needs is not set: it ' \
+                  'answers 403 (naming the option) to everything that lambda guards. Set each one listed, or turn ' \
+                  'the API off if nothing calls it.',
+                  items: lines)
         end
 
         # Tenancy on, and an admin base controller that sets no tenant.

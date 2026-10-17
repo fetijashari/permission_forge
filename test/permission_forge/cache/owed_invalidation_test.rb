@@ -188,7 +188,8 @@ module PermissionForge
 
         @name.update!(edit_access: true) # hiccup gets a single attempt, which fails; fine's is confirmed
 
-        assert_equal [dead.id, dead.id, hiccup.id], reported.map(&:last)
+        # the holders' order is the database's (PostgreSQL gives none): what was reported, not when
+        assert_equal [dead.id, dead.id, hiccup.id].tally, reported.map(&:last).tally
         assert_not cached?(hiccup), 'tried again right after the invalidation of the third user'
         assert_not cached?(fine)
         assert Invalidation.backlog.include?(stamp_key_of(dead)), 'still owed: its keys keep failing'

@@ -9,12 +9,19 @@ module PermissionForge
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Operators::Constants
     include PermissionForge::Concerns::HasUuid
+    include PermissionForge::Concerns::KeepsCopiedValues
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::RequiresName # name present, on create or rename
+    include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
     include PermissionForge::Concerns::HasPermissionSetUsers
     include PermissionForge::Concerns::PermissionsRegenerator
     include PermissionForge::Concerns::RecordsAuditEvents
+
+    # Its name is configuration, not personal data: #inspect shows it even
+    # when filter_parameters (the GDPR patterns) hide a `name` (InspectionFilters).
+    PermissionForge::InspectionFilters.show_configuration_names(self)
 
     permission_set_user_lookup :direct
 
@@ -28,7 +35,25 @@ module PermissionForge
     # join_type is a join rule: auto_query_scoping skips it, so it only applies
     # through find_by/find_by! and permission_scoped.
     FILTER_JOIN_TYPES = [nil, '', 'filter'].freeze
-    scope :join_type_rules, -> { where.not(join_type: FILTER_JOIN_TYPES) }
+    # The rows that are not filter rules, as far as SQL can tell (a join_type
+    # of blanks is a filter to .filter_join_type? too: a caller that counts
+    # asks it, see Admin::AttentionItems#unenforced_rule_counts).
+    scope :join_type_rules, lambda {
+      where.not(join_type: FILTER_JOIN_TYPES).where(Arel::Nodes::NamedFunction.new('TRIM', [arel_table[:join_type]]).not_eq(''))
+    }
+
+    # include_nulls is off unless asked for — in code, through the API and in
+    # the admin's rule builder alike (the one default; the column's own
+    # default, true on installs before 0.15, is not read for a new row).
+    attribute :include_nulls, :boolean, default: false
+    # A name and a blocked message are what an admin writes: none unless
+    # given. The columns of installs made before 0.15 have English defaults
+    # ('Untitled Rule', 'You do not have permission to perform this
+    # action.'), which a rule created through the API or in code stored as
+    # if written — the name is a validation error now, and a rule without a
+    # message denies with the locale's sentence (GeneratedText).
+    attribute :name, default: nil
+    attribute :failure_message, default: nil
 
     # Whether a join_type means "filter on the model's own table": nothing,
     # blank or 'filter'. The one definition — the applier, the default scope
@@ -42,38 +67,220 @@ module PermissionForge
       !self.class.filter_join_type?(join_type)
     end
 
+    # What a rule names is checked for a new rule and when it changes (the
+    # *_check_due? predicates): a row saved before a check, or written past
+    # the model (the tables are shared with other applications; a newer
+    # version in a rolling deploy), stays editable in its other attributes.
+    # Such a row matches nothing (Operators::RuleProblem — the applier, the
+    # audit's rule check and the admin's Home all read it).
     validates :operator, inclusion: {
-      in: OPERATORS,
-      message: I18n.t('permission_forge.validations.permission_set_rule.invalid_operator',
-                      default: 'is not a valid operator')
-    }
+      in: OPERATORS, message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.invalid_operator') }
+    }, if: :operator_check_due?
     # An operator that takes no value (Operators::Validations.valueless?)
     # stores an empty one: the column is NOT NULL, and the natural API payload
     # for a null check has no field_value.
     before_validation { self.field_value = '' if field_value.nil? && valueless_operator? }
 
     validates :field_value, presence: {
-      message: I18n.t('permission_forge.validations.permission_set_rule.field_value_required',
-                      default: 'is required for this operator')
+      message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.field_value_required') }
     }, unless: :valueless_operator?
     validates :join_type, inclusion: {
-      in: JOIN_TYPES,
-      message: I18n.t('permission_forge.validations.permission_set_rule.invalid_join_type',
-                      default: 'is not a valid join type')
-    }, allow_nil: true, allow_blank: false
-    validates :field_name, presence: true
+      in: JOIN_TYPES, message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.invalid_join_type') }
+    }, allow_nil: true, allow_blank: false, if: :join_type_check_due?
+    validates :field_name, presence: { message: ->(*) { I18n.t('permission_forge.validations.blank') } }
+    # Checked for a new rule and on a rename (field_name_check_due?): a row
+    # that already carries such a name — a control character, written past
+    # the model — matches nothing and stays editable in its other
+    # attributes (it can be switched off).
     validates :field_name, format: {
       with: /\A[a-zA-Z_][a-zA-Z0-9_.]*\z/,
-      message: I18n.t('permission_forge.validations.permission_set_rule.invalid_field_name',
-                      default: 'must be a valid column name (letters, numbers, underscores, dots)')
-    }, allow_blank: true
+      message: ->(*) { I18n.t('permission_forge.validations.permission_set_rule.invalid_field_name') }
+    }, allow_blank: true, if: :field_name_check_due?
 
-    validate :validate_field_name_segments, if: :field_name_changed?
-    validate :validate_field_value_for_operator
+    validate :validate_field_name_segments, if: :field_name_check_due?
+    validate :validate_field_accessor_path, if: :path_check_due?
+    validate :validate_field_name_column, if: :column_check_due?
+    validate :validate_encrypted_column, if: :encrypted_check_due?
+    validate :validate_secret_column
+    validate :validate_field_value_text, if: -> { !copied_unchanged?(:field_value) && (new_record? || will_save_change_to_field_value?) }
+    validate :validate_field_value_for_operator, unless: -> { copied_unchanged?(:operator, :field_value) }
+    validate :validate_field_value_column, if: :value_check_due?
+    # The rule's column, looked up once per validation run (the column and
+    # the value checks both read it): forgotten before each run.
+    before_validation { @verified_column = nil }
 
     apply_tenant_scoping! # from the configuration, as the class loads (HasTenantScoping)
 
+    # A copy keeps these unchecked while they hold its original's values (KeepsCopiedValues).
+    keeps_copied :operator, :join_type, :field_name, :field_accessor_path, :field_value
+
+    # A copy (Services::Clonable) names what its original names. A rule
+    # written before its column was checked is copied as it is: it matches
+    # nothing, as the original does — leaving it out would widen the copy's
+    # access, refusing it would fail the clone. `rake permission_forge:audit`
+    # reports both. So is one whose operator, join type, field name or value
+    # a check made since refuses (KeepsCopiedValues).
+    def initialize_dup(other)
+      super
+      @copied_column = column_parts
+      @copied_value = value_parts
+    end
+
     private
+
+    # What the rule names a column by: the name, its path, the join type (nil,
+    # blank and 'filter' are one filter: the admin writes nil) and the model
+    # of its Resource (a copy onto another set's Resource of the same model
+    # names the same column).
+    def column_parts
+      column_parts_of([field_name, field_accessor_path, join_type, resource&.name])
+    end
+
+    def column_parts_was
+      model_was = resource_id_changed? ? PermissionForge::Resource.unscoped.where(id: resource_id_was).pick(:name) : resource&.name
+      column_parts_of([field_name_was, field_accessor_path_was, join_type_was, model_was])
+    end
+
+    # [name, path, join type, model name], the join type of a filter as nil.
+    def column_parts_of(parts)
+      name, path, join, model = parts
+      [name, path, self.class.filter_join_type?(join) ? nil : join, model]
+    end
+
+    # What the rule's value is judged against: the value, the operator and
+    # what names the column.
+    def value_parts
+      [field_value, operator, *column_parts]
+    end
+
+    # On a new rule and when its value, operator or column changes: a row
+    # that already holds a value its column cannot hold stays editable in
+    # its other attributes (it matches nothing; the audit reports it). A copy
+    # keeps its original's value.
+    def value_check_due?
+      return false if @copied_value && @copied_value == value_parts
+
+      new_record? || will_save_change_to_field_value? || will_save_change_to_operator? || column_parts != column_parts_was
+    end
+
+    def operator_check_due?
+      !copied_unchanged?(:operator) && (new_record? || will_save_change_to_operator?)
+    end
+
+    def join_type_check_due?
+      !copied_unchanged?(:join_type) && (new_record? || will_save_change_to_join_type?)
+    end
+
+    def field_name_check_due?
+      !copied_unchanged?(:field_name) && (new_record? || will_save_change_to_field_name?)
+    end
+
+    # On a new rule and when what it names changes: a row that already names
+    # a missing column stays editable in its other attributes (it matches
+    # nothing; the audit reports it). A copy onto another model's Resource is checked.
+    def column_check_due?
+      return false if @copied_column && @copied_column == column_parts
+
+      new_record? || column_parts != column_parts_was
+    end
+
+    # An encrypted column is checked with the column (a new rule, a change
+    # of its name, path, join type or model) and when the operator moves off
+    # the null checks: a rule stored before the host encrypted the attribute
+    # stays editable in its other attributes, its value and its operator
+    # among the ones that take a value (it matches nothing either way). A
+    # copy keeps its original's.
+    def encrypted_check_due?
+      column_check_due? || operator_left_null_checks?
+    end
+
+    def operator_left_null_checks?
+      return false if copied_unchanged?(:operator) || !will_save_change_to_operator?
+
+      PermissionForge::Operators::Validations.valueless?(operator_in_database) && !valueless_operator?
+    end
+
+    # A join rule's path is checked on a new rule and when the path, the join
+    # type or the model changes; a row that already carries a path that
+    # cannot be followed stays editable in its other attributes (it matches
+    # nothing; the audit reports it). A filter rule's path is never joined.
+    def path_check_due?
+      return false unless join_rule?
+
+      parts = column_parts.drop(1)
+      return false if @copied_column && @copied_column.drop(1) == parts
+
+      new_record? || parts != column_parts_was.drop(1)
+    end
+
+    # A path ActiveRecord cannot join (Operators::RulePath: no such
+    # association, an empty segment, or one no join can be built through —
+    # the message names the cause: polymorphic, a record-dependent scope, a
+    # broken :through / inverse_of, a class that cannot be loaded) would make
+    # the rule match nothing — the join raises. Skipped when the model
+    # cannot be loaded.
+    def validate_field_accessor_path
+      problem = PermissionForge::Operators::RuleProblem.of_path(self)
+      return unless problem
+
+      errors.add(:field_accessor_path, problem.validation_message)
+    end
+
+    # A name the model's table does not have (along the rule's path), or one
+    # qualified with a table that is not there on a rule that joins nothing,
+    # would make the rule match nothing — the database rejects the
+    # comparison. Only checked when the column can be told
+    # (Operators::RuleColumn.for_rule): a model that cannot be loaded now, a
+    # name qualified with a real table that is none of the rule's (the query
+    # may join it), or an alias a rule's own joins may give, is left to the query.
+    def validate_field_name_column
+      return if field_name.blank? || errors[:field_name].any?
+
+      problem = column_problem
+      errors.add(:field_name, problem.validation_message) if problem
+    end
+
+    # A column that holds ciphertext (an attribute declared with `encrypts`:
+    # Operators::RuleProblem :encrypted_column) cannot be compared with a
+    # value: the database holds the ciphertext. Only is_null / is_not_null
+    # can be asked of it.
+    def validate_encrypted_column
+      return if field_name.blank? || errors[:field_name].any?
+
+      problem = PermissionForge::Operators::RuleProblem.of_value(self, verified_column || nil)
+      errors.add(:field_name, problem.validation_message) if problem&.kind == :encrypted_column
+    end
+
+    # A column that holds a secret (PermissionForge::SecretColumns:
+    # config.rule_secret_column_patterns) is never compared by a rule: the
+    # rule would tell its value apart. Checked with the column (a new rule,
+    # or a change of its name, path, join type or model) and, on a rule
+    # stored before, with a change of its value or operator (each would be
+    # another guess at the secret); such a rule keeps evaluating and stays
+    # editable in its other attributes.
+    def validate_secret_column
+      return if field_name.blank? || errors[:field_name].any?
+      return unless column_check_due? || will_save_change_to_field_value? || will_save_change_to_operator?
+      return unless PermissionForge::SecretColumns.new.rule?(self)
+
+      errors.add(:field_name, I18n.t('permission_forge.validations.permission_set_rule.secret_column'))
+    end
+
+    # The rule's column problem (Operators::RuleProblem.of_column). The
+    # columns are compared with the database before a name is called missing
+    # (Operators::RuleColumn.for_rule, `verify: true`): the schema cache may
+    # predate a column a migration just added, or a table (a running server,
+    # an old process in a rolling deploy).
+    def column_problem
+      PermissionForge::Operators::RuleProblem.of_column(self, verified_column || nil)
+    end
+
+    # RuleColumn.for_rule(self, verify: true), once per validation run.
+    def verified_column
+      return @verified_column if defined?(@verified_column) && !@verified_column.nil?
+
+      @verified_column = PermissionForge::Operators::RuleColumn.for_rule(self, verify: true) || false
+    end
 
     def valueless_operator?
       PermissionForge::Operators::Validations.valueless?(operator)
@@ -89,6 +296,36 @@ module PermissionForge
 
       errors.add(:field_name, I18n.t('permission_forge.validations.permission_set_rule.invalid_field_name',
                                      default: 'must be a valid column name (letters, numbers, underscores, dots)'))
+    end
+
+    # A value with a NUL byte cannot reach SQL as a literal (the statement is
+    # read cut short): refused for a new or changed value; a stored one
+    # matches nothing (Operators::ValueTyping.unquotable?) and the row stays
+    # editable in its other attributes.
+    def validate_field_value_text
+      return unless PermissionForge::Operators::ValueTyping.unquotable?(field_value)
+
+      errors.add(:field_value, I18n.t('permission_forge.validations.permission_set_rule.nul_byte',
+                                      default: 'must not contain a NUL byte'))
+    end
+
+    # A value the column cannot hold (Operators::RuleProblem.of_value: `'5_id'`
+    # on an integer column, `'banana'` on a uuid one) would make the rule
+    # match nothing for everyone it applies to — and so would a LIKE operator
+    # on a column no pattern can be matched against, which is the operator's
+    # fault, not the value's. Judged only when the rule has no other problem
+    # and its column can be told (the columns compared with the database
+    # first, as for the column check). An encrypted column has its own check
+    # and occasions (validate_encrypted_column).
+    VALUE_PROBLEM_ATTRIBUTES = { unusable_value: :field_value, pattern_on_non_text: :operator }.freeze
+    private_constant :VALUE_PROBLEM_ATTRIBUTES
+
+    def validate_field_value_column
+      return if errors.any? || field_value.blank?
+
+      problem = PermissionForge::Operators::RuleProblem.of_value(self, verified_column || nil)
+      attribute = problem && VALUE_PROBLEM_ATTRIBUTES[problem.kind]
+      errors.add(attribute, problem.validation_message) if attribute
     end
 
     def validate_field_value_for_operator

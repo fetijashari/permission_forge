@@ -9,6 +9,11 @@ module PermissionForge
         super
       end
 
+      # Nothing written is kept (see Base#keeps_entries?).
+      def keeps_entries?
+        false
+      end
+
       # @return [nil] always a miss
       def read(_key)
         nil

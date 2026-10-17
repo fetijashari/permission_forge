@@ -19,6 +19,15 @@ ENV['RAILS_ENV'] = 'test'
 
 require_relative 'dummy/config/environment'
 
+# The suite runs without rails-i18n: its sq/mk files would hand Rails-core
+# keys (errors.messages.*, support.array, datetime) to the admin and hide
+# every string the gem renders but does not own. i18n-tasks depends on it,
+# so it is installed; nothing may load it (test/dummy/config/application.rb
+# requires permission_forge alone; html/locale_leak_test.rb is the proof).
+if (loaded = $LOADED_FEATURES.grep(%r{/rails[-_]i18n[/.]}).first) || (path = I18n.load_path.grep(%r{/rails-i18n-}).first)
+  raise "rails-i18n is loaded in the test process (#{loaded || path}): the suite must prove the gem owns every key it renders"
+end
+
 # When DB=postgres or DB=mysql, create the test database on first run —
 # rails/test_help's maintain_test_schema! connects immediately, before the
 # schema load below.
@@ -36,6 +45,11 @@ require 'rails/test_help'
 # Load schema
 ActiveRecord::Schema.verbose = false
 load File.expand_path('dummy/db/schema.rb', __dir__)
+# Column information read while the app booted (before the load above) is
+# that of the tables a previous run left in a database that persists
+# (PostgreSQL, MySQL): forget it, so every model reads the schema just loaded.
+ActiveRecord::Base.connection.schema_cache.clear!
+ActiveRecord::Base.descendants.each { |model| model.reset_column_information unless model.abstract_class? }
 
 # Configure PermissionForge for tests: the suite's base configuration, which
 # every test starts from (ConfigurationSnapshot below). Options not set here
@@ -80,6 +94,7 @@ ConfigurationSnapshot.take!
 SUITE_LOGGER = Rails.logger
 
 require_relative 'support/parallel_workers'
+require_relative 'support/committed_rows'
 
 module ActiveSupport
   class TestCase
@@ -97,6 +112,7 @@ module ActiveSupport
 
     include InstallTemplates
     include MethodStubs
+    prepend CommittedRows::Check # every test leaves the database as it found it
 
     # The suite's configuration and logger are put back before every test as
     # well as after it: a subclass teardown that raises stops the teardown
@@ -175,10 +191,12 @@ module ActiveSupport
       }.merge(attrs))
     end
 
+    # Set names are unique per tenant: without a name, the first free
+    # "Test Permission Set", "Test Permission Set 2", ...
     def create_permission_set(attrs = {})
       PermissionForge::PermissionSet.create!({
         uuid: SecureRandom.uuid,
-        name: 'Test Permission Set',
+        name: attrs.key?(:name) ? nil : PermissionForge::PermissionSet.unique_name('Test Permission Set'),
         description: 'A test permission set',
         is_active: true,
         is_editable: true

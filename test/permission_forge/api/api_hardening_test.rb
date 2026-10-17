@@ -67,16 +67,23 @@ module PermissionForge
       # --- error messages do not leak internals ---
 
       test 'generate_fields returns a generic error, not the exception text' do
-        # 'String' is a valid constant but not an AR model, so the generator hits
-        # String.column_names -> NoMethodError inside the rescue.
-        resource = @ps.resources.create!(uuid: SecureRandom.uuid, name: 'String', read_access: true)
+        # A Resource named after a constant that is no model is a 422 on `name`
+        # (ResourcesControllerTest); an error inside the generator itself is
+        # the generic message.
+        resource = @ps.resources.create!(uuid: SecureRandom.uuid, name: 'Customer', read_access: true)
+        generator = PermissionForge::Services::ResourceFieldGenerator
+        original = generator.method(:call)
+        replace_singleton_method(generator, :call) { |**| raise NoMethodError, "undefined method 'column_names' for module Kernel" }
         post "/permission_forge/api/permission_sets/#{@ps.uuid}/resources/#{resource.uuid}/generate_fields"
 
         assert_response :unprocessable_entity
         body = response.body
-        assert_includes body, I18n.t('permission_forge.api.errors.field_generation_failed')
+        assert_equal({ 'base' => [I18n.t('permission_forge.api.errors.field_generation_failed')] },
+                     JSON.parse(body).dig('error', 'messages'))
         assert_not_includes body, 'NoMethodError'
         assert_not_includes body, 'column_names'
+      ensure
+        replace_singleton_method(generator, :call, original) if original
       end
 
       # --- CSRF posture ---

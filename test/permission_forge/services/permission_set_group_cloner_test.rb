@@ -25,8 +25,8 @@ module PermissionForge
 
         cloned_sets = PermissionForge::PermissionSet.where(permission_set_group: cloned)
         assert_equal 2, cloned_sets.count
-        assert_equal 1, cloned_sets.find_by(name: 'Set 1').resources.count
-        assert_equal 1, cloned_sets.find_by(name: 'Set 2').resources.count
+        assert_equal 1, cloned_sets.find_by(name: I18n.t('permission_forge.permission_sets.copy_name', name: 'Set 1')).resources.count
+        assert_equal 1, cloned_sets.find_by(name: I18n.t('permission_forge.permission_sets.copy_name', name: 'Set 2')).resources.count
       end
 
       test 'does not copy user assignments' do

@@ -6,29 +6,946 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-16
+
+Upgrading from 0.14 is the three steps of the
+[migration guide's checklist](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015):
+no generator to run (`permission_forge:upgrade` is for installs older than 0.13), `bin/rails permission_forge:audit`
+before the deploy — it lists the stored rows this release reads differently (rules that match nothing, broken
+activation conditions, variant rows, unknown mask strategies) — and an RLS re-sync after it. From 0.13, see
+[From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013): a revocation
+made on 0.15 does not reach what 0.13 processes have cached. Most Changed
+entries need nothing from you. These may need a change in your app or its clients: **An unrescued denial answers 403
+Forbidden instead of 500.** (add `public/403.html`, or rescue the errors), **RLS: `RlsPolicyGenerator::GENERATOR_VERSION`
+is 7** (run `permission_forge:rls:sync` after the deploy), **`include_nulls` is off unless asked for — in code, through
+the JSON API and in the admin's rule builder alike.** (pass `include_nulls: true` where a rule should let empty values
+through), **A refusing `api_auth` answers 401 Unauthorized instead of 403.** and **API: a value of the wrong shape for
+its attribute is a 422 keyed by it, never dropped or cast.** (API clients), **A Permission Set, a group or a rule
+created without a name — or renamed to a blank one — is refused, and a rule created without a blocked message stores
+none.** (code and API clients that create without a name, or with a blank one), and **More warnings are SECURITY warnings.** (log alerts that match the warning text).
+
 ### Added
 
+- **`rake permission_forge:audit` reports every kind of rule that matches nothing.** `Operators::RuleProblem::KINDS`
+  is the one taxonomy, and each kind lands in exactly one finding: `missing_rule_columns` ("Rules naming a column,
+  table or association that does not exist": High while people hold the set, otherwise Medium; set, resource, field,
+  operator, value, rule and people per item) lists a rule whose field name is not a column of its table, one whose
+  name is qualified with a table this database does not have, one whose field name is not a name (a trailing or
+  doubled dot), and a join rule whose `field_accessor_path` names an association its model does not have (`ownr`) or
+  one no join can be built through (a polymorphic `belongs_to`, a scope that takes the record, a `:through` or
+  `inverse_of` naming nothing, a class that cannot be loaded); the new `unknown_rule_operators` (High while held,
+  otherwise Medium) lists rules with an operator or join type this version does not know (written by a newer version
+  in a rolling deploy, by another application on the shared tables, or past the model); the new
+  `foreign_table_names` (Info) lists rules qualified with a real table of another model, which are left to the
+  database. Run it before upgrading.
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#a rule naming a column its table does not have is a high finding while people hold the set -->
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#a rule whose association path cannot be followed is a high finding while people hold the set -->
+  <!-- pin: test/permission_forge/services/security_audit_rule_check_test.rb#each kind lands in exactly one finding -->
+- **Home lists the rules that match nothing.** A "Rules that match nothing" card on the admin's Home lists every active
+  rule in effect that the audit lists under `missing_rule_columns`, `unknown_rule_operators` or `unusable_rule_values`
+  (`AttentionItems#broken_rules`, by `Operators::RuleProblem`) — a missing column, table or relationship, a condition
+  or a way of joining this version does not know, a value the field cannot hold — with why, the name as stored
+  ("Matches nothing: `stauts` is not a column of Customer"), how many people hold the set, and **Fix rule** (the
+  rule's edit page; for a locked set the Locked badge and **Open rules**). The Rules tab, the rule's edit page and a
+  person's effective access say the same, in every locale.
+  <!-- pin: test/permission_forge/html/broken_rules_admin_test.rb#Home lists each rule in effect that matches nothing, with why, linking to the rule -->
+  <!-- pin: test/permission_forge/html/broken_rules_admin_test.rb#Home, the Rules tab and the edit page say why, for every kind, in every locale -->
+- **`rake permission_forge:audit` reports fields naming nothing on their model** (`integrity/unknown_fields`). A
+  `ResourceField` named `zzz` (or `emial`) on a `Customer` Resource was saved — 201 through the API — and configured
+  nothing, so a typo went unnoticed. The audit now lists the rows in effect whose name is none of: a column of the
+  model's table (read again before it is listed), an attribute or `alias_attribute`, a declared or discovered virtual
+  field, a public reader or writer, or a configured variant (`field_variant_mappings`) of one of those or of another
+  row of the Resource — on the model or on a loaded single-table-inheritance subclass of it. Low when a muting set
+  holds one (it mutes nothing it was meant to), otherwise Info; set, resource, field and people per row; Resources
+  whose model the app cannot load are skipped. Saving still accepts such a name: `FiltersResponseAttributes` filters
+  any key of a hash, so a key only a serializer computes is configured by a row of its name — declare it in
+  `extra_fields_for_permissions` to say it is meant.
+  <!-- pin: test/permission_forge/services/security_audit_unknown_fields_test.rb#a row naming nothing on its model still saves, and the audit lists it (info for a granting set) -->
+  <!-- pin: test/permission_forge/services/security_audit_unknown_fields_test.rb#a muting set holding one makes it low: it mutes nothing -->
+- **`rake permission_forge:audit` reports fields masked with a strategy this app does not know**
+  (`integrity/unknown_mask_strategies`: High while people hold the set, otherwise Medium — a row written past the
+  model, a blank, or a custom strategy since removed from `config.custom_mask_strategies`). Such a field is masked
+  fully until the row or the configuration is fixed.
+  <!-- pin: test/permission_forge/services/security_audit_integrity_check_test.rb#a field in effect with a mask strategy this app does not know is reported, high while people hold the set -->
+- **`rake permission_forge:audit` reports `secret_rule_columns`** (Medium): record rules in effect that compare a
+  password digest, a token, an `encrypted_*` column or a secret (`config.rule_secret_column_patterns`, by name; an
+  attribute declared with `encrypts` is `encrypted_rule_columns`, under Changed). The item leaves the rule value out.
+  <!-- pin: test/permission_forge/admin/attention_parity_test.rb#secret_rule_columns: the audit's finding is on a Home card (secret_rules) -->
+- **`rake permission_forge:audit` has a `conditions` check**: `incomplete_conditions` (Medium — stored activation
+  conditions nobody can judge: an IP entry that is not an address, a list with no entry, the same start and end hour,
+  one hour of the two, an hour outside 0–23 — with what each set does now) and `variant_rows_conflict` (Info — a row
+  next to an explicit row for one of its variants; the explicit row decides).
+  <!-- pin: test/permission_forge/services/security_audit_conditions_check_test.rb#incomplete_conditions lists every stored row the validation would refuse, saying what each does now -->
+- **Three more Home cards for what the security audit reports**: fields masked with a strategy this app does not
+  know (`unknown_mask_strategies`, with a link to the field drawer), Permission Sets whose activation conditions nobody
+  can judge (`incomplete_conditions`, with a link to the Conditions tab) and record rules that compare a secret column
+  (`secret_rule_columns`). Home and the audit read the same rows (`ResourceField.with_unknown_mask_strategy`,
+  `PermissionSet.with_broken_conditions`, `AttentionItems#secret_rules`).
+  <!-- pin: test/permission_forge/admin/attention_parity_test.rb#unknown_mask_strategies: the audit's finding is on a Home card (unknown_mask_strategies) -->
+- **`config.rule_secret_column_patterns`** — the column names a record rule may not compare
+  (`PermissionForge::SecretColumns`, matched against the column name in lower case; default
+  `[/\Apassword_digest\z/, /_digest\z/, /token/, /\Aencrypted_/, /_secret/]`). Listed on the Settings page (Record
+  rules) and in the configuration reference. See **Changed** for what it refuses.
+  <!-- pin: test/permission_forge/models/permission_set_rule_secret_columns_test.rb#rule_secret_column_patterns takes a list of regular expressions -->
 - **`NotAuthorizedError#failure_messages`.** The `failure_message` of each row-level rule that denied the record, as
-  the admin wrote it (in rule order, without blanks and repeats; `[]` when no rule denied), so a host can render a
-  friendly 403 without parsing `message` (`[Forbidden by Rule: <name>] with message: <failure_message>`). `message`
-  and `details` are unchanged. See [Handling Denials](docs/row-level-rules.md#handling-denials).
+  the admin wrote it, in rule order and without repeats (`[]` when no rule denied), so a host can render a friendly 403
+  without parsing `message` (`[Forbidden by Rule: <name>] with message: <failure_message>`). Only the rules that deny
+  the record on their own are named (each rule is checked against the record on the denial path, one query per rule;
+  should no single rule deny — a custom operator that is not a plain filter — the cumulative attribution is kept, so a
+  denial never names no rule). A rule whose `failure_message` is blank gives `permission_forge.denials.rule_default`
+  in the current locale ("You do not have permission to perform this action."). `message`, `details` and the
+  `access.denied` event's `messages` use the same list of rules. See
+  [Handling Denials](docs/row-level-rules.md#handling-denials).
+  <!-- pin: test/permission_forge/concerns/permission_scoped_findable_test.rb#NotAuthorizedError#failure_messages are the denying rules' own messages, without parsing -->
+  <!-- pin: test/permission_forge/concerns/permission_scoped_findable_test.rb#a denial names only the rules that deny the record on their own, in rule order -->
+  <!-- pin: test/permission_forge/concerns/permission_scoped_findable_test.rb#a denial no single rule explains falls back to the cumulative attribution, never to no rule -->
+  <!-- pin: test/permission_forge/services/rule_blame_property_test.rb#a denial blames exactly the rules that exclude the record on their own, in rule order -->
 - **The install generator prints the next steps.** After the files it lists `bin/rails db:migrate` (not with
   `--skip-migration`), the mount line, where the admin credentials go (`PF_ADMIN_USER` / `PF_ADMIN_PASSWORD`, or your
-  own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start. `rails destroy` prints none.
+  own admin controller), `bin/rails permission_forge:audit` and a link to the Quick Start, plus the line that makes
+  `can_*?` work: `include PermissionForge::Concerns::PermissionedUser` in your User model. `rails destroy` prints none.
+  <!-- pin: test/permission_forge/generators/install_generator_next_steps_test.rb#an install prints the next steps after the files -->
+  <!-- pin: test/permission_forge/generators/install_generator_next_steps_test.rb#rails destroy prints no next steps -->
+- **A boot warning in development when the permission cache is per process.** Rails 8.0+ generates
+  `config.cache_store = :memory_store` for development (7.1/7.2: after `bin/rails dev:cache`) and the generated
+  initializer caches through `Rails.cache`, so a permission change made from a console, `bin/rails runner`, a rake
+  task or `db:seed` invalidated only that process's cache: a running server kept the permissions it had cached until
+  `cache_ttl` (an hour) or a restart, and the change looked lost. The development boot now says so, with the two
+  remedies (`config.cache_store = :file_store, "tmp/cache/store"` in `config/environments/development.rb`, or
+  `cache_backend = :null` in development), when `cache_backend` is `:memory` or the store is a `MemoryStore`; file,
+  Redis, Solid Cache, Memcached and null stores are not warned about. The generated initializer's comment above
+  `cache_backend` and [Cache Consistency](docs/configuration.md#cache-consistency) say so.
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#development with Rails.cache as a :memory_store warns, naming what happens and both remedies -->
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#the development warning reads right in any process, not only a server -->
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#development with a shared or a null store does not warn -->
+- **A boot warning for an API-only application that mounts the engine** (`config.api_only = true`): it names the
+  middlewares its admin screens need (`ActionDispatch::Cookies`, `ActionDispatch::Session::CookieStore`,
+  `ActionDispatch::Flash`) and the lines to add — without them every admin page that renders a form is a 500; the
+  JSON API works without them. Checked once the routes are drawn (it never draws them); an app that uses only the
+  API sets `config.api_only_admin_warning = false`.
+  <!-- pin: test/permission_forge/boot_checks_api_only_test.rb#the warning goes through the emitter and names the middlewares and the lines to add -->
+  <!-- pin: test/permission_forge/boot_checks_api_only_test.rb#the warning comes when the routes are drawn, which the check never does itself -->
+  <!-- pin: test/permission_forge/boot_checks_api_only_test.rb#config.api_only_admin_warning = false silences the warning (an app that uses only the JSON API) -->
+- **One cache outcome for every operation that clears cached permissions.** `PermissionForge::Cache::Outcome`
+  (`confirmed`, `process_local`, `in_request`, `unconfirmed`), measured by `Cache::Report`, is what the terminal, the
+  admin flash, the API body and the summary audit event report: `PermissionCacheClearer`, `DataSubjectErasure`,
+  `ExpiredAssignmentCleaner`, `ConsentWithdrawalHandler` and `BulkPermissionSetAssignment` answer it under `cache:`;
+  `cache.cleared`, `erasure.performed`, `cleanup.expired_assignments` and `consent.withdrawn` record it in their data
+  (`cache.settled` the answer of the last two once their cache work ran); the admin's flashes (one assignment's
+  changes and a batch of edits too), `POST /api/permission_sets/:id/users/bulk` (`cache: {…}`) and `POST` / `DELETE
+  …/users` (`meta.cache`) say when the store did not confirm and when it lives in one process; inside a caller's
+  transaction every one of them reports `confirmed: nil` (`Cache::Report#deferred?`). `process_local` is
+  `PermissionForge.cache.process_local?` (`cache_backend = :memory`, or `Rails.cache` a `:memory_store`): there a clear
+  from rake reaches the rake process only, which the terminal said and the audit log did not.
+  <!-- pin: test/permission_forge/audit/cache_scope_events_test.rb#erasure.performed on the suite's memory store says process-local in the event and the result, in every locale -->
+  <!-- pin: test/permission_forge/services/permission_cache_clearer_test.rb#every event says whether the clear reached only this process (a memory store) or a shared store -->
+  <!-- pin: test/permission_forge/audit/cache_scope_events_test.rb#cleanup.expired_assignments on a shared store says process_local false and reads without a suffix -->
+- **The audit log says which processes kept their cached permissions.** One suffix per locale for an event whose
+  data says `process_local: true`, chosen by where the operation ran and what the store said: in a web server process
+  (an admin or API request, a host controller), "The cached permissions were cleared in this server process only (an
+  in-memory store): the other web workers and the job processes kept theirs."; from a rake task, runner, console or
+  job, "The cached permissions were cleared only in the process that ran it (an in-memory store): every other process
+  kept theirs."; when the store did not confirm, "The cache store lives in each process (an in-memory store): the other
+  processes keep their cached permissions either way." (`audit_log.cache_scope.server_process` / `own_process` /
+  `unconfirmed`, en/sq/mk). On a shared store the sentence reads as before.
+  <!-- pin: test/permission_forge/html/audit_sentences_test.rb#a clear made from an admin request names the other workers, not the server itself -->
+  <!-- pin: test/permission_forge/html/audit_sentences_test.rb#a cache clear that reached only its own in-memory store says so; one on a shared store reads as before -->
+- **`PermissionForge::RakeOutput`: one presenter for what the rake tasks print.** `rake permission_forge:erasure`,
+  `cleanup_expired_assignments`, `cache:clear` and `audit_events:purge` print one line per key of the result their
+  summary event records (the cache outcome included: "Cached permissions removed", "Cache scope", "Ran in"), name
+  people as the admin does (`Admin::PersonLabel`; "id 7 (not in the people list)" for someone outside
+  `user_list_resolver`) instead of `User 7` / `User IDs: 1, 2`, and say "would" on a dry run; `expired_assignments`
+  and `stale_assignments` name people the same way. The erasure prints how many audit-log name labels it would clear
+  (dry run) or cleared, as actor and as subject, as `erasure.performed` records them;
+  `Services::DataSubjectErasure` returns them (`actor_labels_to_clear` / `record_labels_to_clear` in a dry run,
+  `actor_labels_cleared` / `record_labels_cleared` otherwise).
+  <!-- pin: test/permission_forge/tasks/rake_output_contract_test.rb#permission_forge:erasure prints every key its summary event records, on the memory store with the process-local note -->
+  <!-- pin: test/permission_forge/tasks/rake_output_test.rb#the erasure says how many audit-log name labels it cleared -->
+  <!-- pin: test/permission_forge/services/data_subject_erasure_test.rb#a dry run counts the name labels to clear, the run returns the ones it cleared -->
+- **`rake -T permission_forge` shows every description whole.** Every task's first sentence is at most 100
+  characters, ends on a word (the erasure task's stopped at "(supports GDPR Art"; it now says "Article 17") and the
+  description names every environment variable the task reads (`ACTOR=`, `REASON=`, `USER_ID=`, `DRY_RUN=`,
+  `FAIL_ON=`, `FORMAT=`, `THRESHOLD_DAYS=`).
+  <!-- pin: test/permission_forge/tasks/rake_descriptions_test.rb#permission_forge:erasure: the first sentence shows whole in rake -T -->
+  <!-- pin: test/permission_forge/tasks/rake_output_test.rb#the erasure task description is not cut at an abbreviation -->
+- **`config.api_stats_authorization`.** A lambda called with the controller that decides who may read
+  `GET /api/stats` while `api_stats_require_admin` is on (the default); a truthy answer allows. It replaces an
+  `api_auth` that set `@admin = true` on the controller (see Deprecated). A refusal answers 403 with a body (it had
+  none) and is recorded as `api.auth_failed` with reason `stats_not_authorized`; while the lambda is unset the 403
+  names it. See [Dashboard Stats](docs/admin-api.md#dashboard-stats).
+  <!-- pin: test/permission_forge/api/dashboard_controller_test.rb#api_stats_authorization decides who reads the stats -->
+  <!-- pin: test/permission_forge/api/dashboard_controller_test.rb#GET /api/stats with api_stats_require_admin true and no api_stats_authorization is a 403 that names it -->
+- **`PermitsAttributes.call(..., report: true)` says what was dropped.** It answers a `PermitsAttributes::Result`:
+  `params` (the filtered Hash, as before), `dropped` (the paths of the dropped keys, never values), `dropped?` and
+  `dropped_fields` (the top-level keys), so a controller can say "Not saved: status, notes" instead of a silent
+  success. The paths are collected whether or not `params.filtered` is heard; with no model (`resource: nil`) every
+  key is reported as dropped. Without `report:` the return value is the Hash, unchanged. See
+  [Telling the user what was not saved](docs/field-filtering.md#telling-the-user-what-was-not-saved).
+  <!-- pin: test/permission_forge/services/permits_attributes_test.rb#report: true answers the same filtered hash plus the dropped paths -->
+  <!-- pin: test/permission_forge/services/permits_attributes_test.rb#report: true with no model to filter for lists every key, with or without a user -->
+- **Bulk assignment reports the ids it skipped.** `POST …/users/bulk` answers `skipped` next to `assigned`, `revoked`
+  and `invalidated`: the requested ids that name nobody `user_list_resolver` lists (`[99]`; `[]` when none), so a typo
+  in an automated list no longer goes unnoticed. An id outside the resolver and an unknown one read the same.
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#POST bulk reports the ids it skipped: nobody, or outside user_list_resolver -->
+- **`permission_set_group_id` takes the group's uuid.** The API answers with uuids (`api_record_identifier = :uuid`),
+  but `PATCH`/`POST …/permission_sets` read `permission_set_group_id` only as a numeric id: the group's uuid was a 422.
+  Under `:uuid` it now takes the uuid or the id; under `:id`, the id. The value is looked up in the current tenant
+  like every identifier (see Fixed for a uuid that starts with digits).
+  <!-- pin: test/permission_forge/api/record_identifier_test.rb#under :uuid permission_set_group_id takes the group uuid, or its id -->
+  <!-- pin: test/permission_forge/api/record_identifier_test.rb#under :id permission_set_group_id takes the id only -->
+- **API `GET /api/permission_sets/:id` answers `allowed_ip_list`** (the entries as the engine reads them) beside
+  `allowed_ips`.
+  <!-- pin: test/permission_forge/api/permission_set_conditions_api_test.rb#the serializer shows the entries as the engine reads them -->
+- **Cross-set unmasking findings name the masking sets too.** `GdprFieldAuditor`'s `:cross_set_unmasking` finding
+  gains `masked_in` (the names of the granting Permission Sets that mask the field), `rake permission_forge:audit_masks`
+  prints them ("masked in Permission Set Support") and `rake permission_forge:audit` lists them in parentheses after
+  the set that unmasks. The other keys are unchanged.
+  <!-- pin: test/permission_forge/services/gdpr_field_auditor_test.rb#a cross-set finding names the sets that mask the field -->
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#cross-set unmasking names the set that unmasks and the sets that mask -->
+- **`MaskValue.call!`** (strict: raises for a strategy this app does not know — the admin preview, the validation),
+  **`MaskValue.known?`**, and the **`mask_strategy_unknown.permission_forge`** notification (payload `strategy`,
+  `fallback`), published once per process per name together with a warning.
+  <!-- pin: test/permission_forge/services/mask_value_test.rb#call reports a strategy it does not know once per process per name: a warning and a notification -->
+- **`PermissionForge::ModelLookup.model_for(name)`** — the one definition of "this name is a model with a table"
+  (an ActiveRecord class, not abstract, whose table exists; nil for `Kernel`, `String`, an abstract model, a model
+  without its table, a constant whose file raises as it loads).
+  <!-- pin: test/permission_forge/model_lookup_test.rb#anything that is not a model with a table is nil -->
+- **The JSON API's `POST …/resources/:id/generate_fields` answers 422** `{ "name": ["names no model this app can
+  load"] }` for a Resource named after a constant that is no model (`Kernel`), instead of a 500 or the generic
+  message.
+  <!-- pin: test/permission_forge/api/resources_controller_test.rb#POST generate_fields on a Resource naming no model this app can load is a 422 on name -->
+- **`PermissionForge::ActivationConditions`**: the one reading of a Permission Set's `allowed_ips`
+  (`#allowed_ip_list`, `#allowed_ip_ranges`, `#invalid_ip_entries`) and hour window (`#hours_window`: `set?`,
+  `wraps?`, `broken?`, `include?`), with `#conditions_broken?` / `#condition_problems`; included in `PermissionSet` and
+  `ConditionalSets::Member`, read by the evaluator, the admin Conditions form, the sentences, the API serializer and
+  the audit.
+  <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#hours_window: none, a window, an overnight window, and the broken shapes -->
+- **`PermissionHashBuilder.granted_flags(resource)`**: the one definition of what a granting Resource row grants after
+  its dependencies; **`FieldPermissionMerger.targets_of(rows, variants)`**: the one definition of which names a
+  resource's rows write and in what order.
+  <!-- pin: test/permission_forge/services/field_permission_merger_test.rb#targets_of lists own names first, then the variants no row of the resource names -->
+- **`PermissionForge::SensitiveColumns`** — the one definition of "this column looks like personal data, with this
+  mask": `config.gdpr_field_patterns` first, then the host's `filter_parameters` (strategy `full`) while
+  `filter_parameters_integration` is on. `match(name)` answers a `Match` (`pattern`: the alternative that matched or
+  `filter_parameters`; `strategy`; `source`). The admin's presets, Sync, Fields tab and Home, the field generator,
+  `GdprFieldAuditor` and the boot warning all ask it.
+  <!-- pin: test/permission_forge/sensitive_columns_test.rb#matches gdpr patterns with the alternative that matched, its strategy and the source -->
+- **One row builder for generated field rows** — `ResourceFieldGenerator.build(resource:, column:, level:)` /
+  `.rows(resource)` (`ResourceFieldGenerator::RowBuilder`, reading the level tables of `PermissionForge::FieldLevel`,
+  moved from `Admin::FieldLevel`, which stays as an alias): the flags of the level, the privacy default (under
+  `gdpr_defaults`, on a granting set, a sensitive column granted Read-only starts Masked; Editable masks nothing;
+  Hidden stays Hidden), Rails' timestamps at most read-only, the recommended mask strategy on every row, the label,
+  and no row for a level that is none (Unchanged on a muting set). The admin's presets and "Sync fields"
+  (`Admin::ColumnFields`), the Fields tab's bulk add (`Admin::ChangeSet`) and the generator (the API's
+  `generate_fields`, `Resource.grant_full_access!`, the console) write the same row for the same level.
+  <!-- pin: test/support/decision_parity/fields.rb#(a) Customer, muting=false, gdpr_defaults=true, read: presets, bulk and the generator write the same rows -->
+  <!-- pin: test/permission_forge/services/resource_field_generator_gdpr_test.rb#build: the privacy default masks a sensitive column granted Read-only, and only that -->
+- **`ResourceField#exposes_in_clear?`** and the scope **`ResourceField.exposing_in_clear`** — the one definition of
+  "readable in the clear" (active, read on, no mask) that the GDPR audit, the security audit's `personal_data`
+  check, Home's privacy card and the boot warning ask.
+  <!-- pin: test/permission_forge/models/resource_field_in_clear_test.rb#the predicate and the scope agree on every combination of active, read and mask -->
+- **`Admin::EditableLock.locked?(record)` walks the chain and `EditableLock.permits?(record, action)` is the one
+  table of what the admin may offer on a locked record** (`:edit`, `:add`, `:toggle`, `:delete` — also the container,
+  a set in a locked group —, `:grant` / `:revoke` / `:change_expiry` by direction, `:duplicate` and `:review` always).
+  Every view asks it (`pf_locked?`, `pf_lock_badge(record)`); `html/locked_pages_test.rb` renders every page for a
+  locked set, resource, field, rule, group and Muting Permission Set and checks every enabled control against it.
+  <!-- pin: test/permission_forge/html/locked_pages_test.rb#a locked Permission Set offers no change to what it holds, only duplicate, review and narrowing -->
+- **`PermissionSetUser.ending_within(days)` / `#ending_soon?` / `#stale?(days)` / `.ended?(time)`** and
+  **`Admin::AttentionItems.stale_days`** — the one window of "ending soon" (`ENDING_SOON_DAYS`, 7) and the one review
+  threshold, read by Home, the People page, the end-date cell, the audit's `stale_assignments` and
+  `StaleAssignmentAuditor`.
+  <!-- pin: test/support/decision_parity/rules.rb#ending soon: the end-date cell, Home, the People filter and ending_within agree -->
+- **`PermissionSet.in_hash_order`** (the order sets merge in), **`Operators::RuleColumn.names_for(model)`** (the
+  columns a rule may compare), **`FiltersResponseAttributes.unconfigured_strategy`** (one lookup for the response
+  filter and the attribute guard).
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: the order sets merge in (PermissionSet.in_hash_order) -->
+- **`PermissionForge::SchemaRead`, the one reader of a model's columns** (`@api private`). A read that answers "no"
+  (not a column, no such table) reads the schema again once first — one metadata query, and `reset_column_information`
+  only when the database's columns differ from what Rails holds; a name confirmed missing costs nothing afterwards
+  until the table is read again, and a column that is there costs no query. Lists that build rows or reports, and the
+  save of a rule, compare with the database (`verify: true`). `SchemaRead.rereads` counts the re-reads.
+  <!-- pin: test/permission_forge/schema_freshness_test.rb#a name confirmed missing is not read again until the table is -->
+- **Rule values are typed for PostgreSQL's `uuid`, `inet`, `cidr` and native enum columns, and for `json` / `jsonb`
+  / array columns on every database** (`Operators::ValueCasters::PostgresqlTypes`, `ValueCasters::OPAQUE`). A `uuid`
+  column takes the text of a UUID in either case and in each notation PostgreSQL reads (RFC 4122 8-4-4-4-12, in
+  braces, after `urn:uuid:`, or the 32 digits without hyphens), normalised to RFC 4122 text; `inet` an IPv4 or IPv6
+  address IPAddr reads, with an optional prefix length (no netmask, no zone); `cidr` the same with no bits set right
+  of the prefix; a native enum (`CREATE TYPE … AS ENUM`) one of the type's labels exactly as the database has it, read
+  from `pg_enum` once per process and type and read again once before a label is called missing
+  (`SchemaRead.enum_label?`: a label `ALTER TYPE … ADD VALUE` added while the process runs); a model `enum` over a
+  native enum column maps its label first. A `json`, `jsonb` or array column takes no value under any built-in
+  operator but the null checks. `current_user` on a `uuid` column is the id where user ids are uuids. What this
+  changes for existing rules is under **Changed**.
+  <!-- pin: test/permission_forge/operators/value_typing_test.rb#a uuid column takes the text of a uuid, in any case and in each notation PostgreSQL reads, and nothing else -->
+- **One schema per API answer.** `PermissionForge::Api::Schema` (`@api private`) declares the success envelopes
+  (`single`, `collection` with `meta.pagination`, `list`), the error envelope `{error: {status, messages}}` (field →
+  messages for 422, one sentence for 400, 401, 403, 404), the answers without a body, every serializer's keys and
+  types, and what each endpoint answers (`Schema::ENDPOINTS`). The numeric ids of other PermissionForge records are
+  marked `:foreign_identifier`; their value is unchanged.
+  <!-- pin: test/permission_forge/api/envelope_schema_test.rb#every serializer's keys are its Api::Schema payload, and every payload has its serializer -->
+- **Every API route, in its success and every error class, is asserted against the schema**
+  (`api/envelope_schema_test.rb`, one test per verb and path, the catch-all included with `OPTIONS` and `TRACE`: 401
+  refused or unset, 404 API off or unknown record, 403 tenant, lambdas or lock, 400 for an unreadable JSON, form or
+  multipart body, 422), under the pseudo-locale `xx`.
+  <!-- pin: test/permission_forge/api/envelope_schema_test.rb#every API route has an Endpoint, and every Endpoint a route -->
+  <!-- pin: test/permission_forge/api/envelope_schema_test.rb#~answers the schema in its success and in every error class -->
+- **The JSON samples of docs/admin-api.md are generated** by `bundle exec rake docs:api`
+  (`PermissionForge::Docs::ApiSamples`) from the schema and the serializers; `docs/api_samples_test.rb` fails while
+  the document is stale. The success samples show every key a permission set, a group and an audit event answer.
+  <!-- pin: test/permission_forge/docs/api_samples_test.rb#the json samples of docs/admin-api.md are what the schema and the serializers render -->
+- **Rule builder: the preview is the saved rule's sentence, from the server.** A new `GET …/rules/preview` renders the
+  rule being built with the helper the Rules tab draws a saved rule with (`SentencesHelper#pf_rule_sentence`);
+  `pf_admin.js` fetches it as the value, "the current user", the list, the range or "or empty" change, instead of
+  rebuilding a value token in JavaScript (ticking "the current user" left the preview at "Only show Customers where
+  Owner is …." until the rule was saved). Without JavaScript the preview changes on the builder's refresh, and the
+  URL is a page of its own.
+  <!-- pin: test/permission_forge/html/rule_builder_explanations_test.rb#the preview is the sentence the saved rule shows, one string from one helper -->
+  <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#the rule preview names the current user once it is ticked, without a doubled period -->
+  <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#pf_admin.js fetches the preview sentence as the value inputs change -->
+- **`Operators::RuleProblem::REMEDIES` / `#remedy`** — what the admin changes to correct a rule that matches nothing,
+  by kind (`:join`, `:path`, `:operator`, `:field`, `:value`); the taxonomy guard fails for a kind without one.
+  <!-- pin: test/permission_forge/html/rule_builder_explanations_test.rb#the banner names the fix for each kind of problem, in every locale -->
+  <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#every kind has a remedy, and every remedy is a kind with a fix sentence in every locale -->
+- **Labels of stored names have one definition.** `Admin::FieldLabel` (a column, field or association name),
+  `Admin::ModelLabel` (a model or Resource, and its plural) and `Admin::ActionLabel` (an action key) answer the host's
+  own translation when it has one (`activerecord.attributes.*` / `activerecord.models.*`, through
+  `human_attribute_name` / `model_name.human` with a sentinel default — Rails' humanized English fallback is not a
+  translation), else the row's label, else the name verbatim, which the admin draws in `<code>`.
+  `Admin::ErrorSentence` says a validation sentence from the gem's keys (`permission_forge.validations.attributes.*`,
+  `full_message`), `Admin::Prefill` what a new-record form shows. Helpers `pf_field_label`, `pf_field_label_text`,
+  `pf_action_label_text`; `pf_resource_label` / `pf_resource_plural` read `ModelLabel`.
+  <!-- pin: test/permission_forge/admin/labels_test.rb#a field is labelled by the host translation, else the row label, else the name verbatim -->
+- **`Admin::StateLabel`** (the one registry of the admin's state words and glyphs, `ui.states.<kind>.<state>`) and
+  **`Admin::ActorLabel`** (how the admin names who made a change): internal.
+  <!-- pin: test/permission_forge/html/state_rendering_test.rb#the Effective access legend words the states as its cells do -->
+- **`PermissionForge::ParamShapes#pf_integer_param(key, default:, range:)`** — the one reader of a whole-number
+  request parameter (a page, a page size, a count): the number when the value is one inside the range (digits or a
+  JSON number), the default for every other shape (text, `2abc`, fractions, lists, objects, blanks, 0 and negatives
+  below the range). The API's pagination reads `page` and `per_page` through it (see **Changed**), and so do the audit
+  log's and the person list's page, the audit tab's `days` and the rule builder's `remove_step` (`ParamShapes.integer`);
+  a static guard refuses `params[...].to_i` in the admin and the API.
+  <!-- pin: test/permission_forge/controllers/param_shapes_test.rb#anything else is the default: 0 and negatives below the range, text, fractions, lists, objects, blanks -->
+- **Every code sample in README.md and docs/ says what it is**: its fence carries `run` (a console sample the
+  documentation app executes, `# => literal` asserted), `file=<path>` (a complete file written into that app) or
+  `fragment`. A ruby block that rescues a denial error is held to the handler that works in a Rails 8 Turbo app.
+  <!-- pin: test/permission_forge/docs/doc_blocks_test.rb#every ruby, erb and bash block in README.md and docs/ carries a marker and follows the rules -->
+- **The documentation names only what exists** (`docs/references_test.rb`): links and anchors (GitHub links to
+  this repository too, also those the code prints), options (`config.<name>`, `name = value`, a bare name shaped like
+  one), `permission_forge:<task>` names (each documented with the environment variables it reads, `ACTOR` / `REASON`
+  included), `PermissionForge::…` constants, and the defaults a sentence states.
+  <!-- pin: test/permission_forge/docs/references_test.rb#every defined rake task is documented, with the environment variables it reads -->
+  <!-- pin: test/permission_forge/docs/references_test.rb#every link to this repository the code prints names a file and anchor of it -->
+  <!-- pin: test/permission_forge/docs/references_test.rb#every option the docs write as `name = value`, or as a bare `name` shaped like an option, is one -->
+- **`bundle exec rake docs:configuration`** regenerates the Option reference of `docs/configuration.md` from the code
+  (the Settings catalog's sections and order, `Configuration.new`'s defaults, `StrategyValues`' values; every public
+  option has an entry); the suite fails while it is stale. Gem development only.
+  <!-- pin: test/permission_forge/docs/configuration_reference_test.rb#the Option reference in docs/configuration.md is what the code generates -->
+- **The admin's layout is measured in a browser**: `test/browser/layout_probe.js` renders every page, error state and
+  flow of `test/support/preview_app.rb` at phone and desktop widths in en, sq and mk under Chrome (the `browser` CI
+  job, non-required until green for a release); without a browser, `html/layout_lint_test.rb` checks placeholders,
+  wide grids and scroll containers, and `html/admin_page_paths_test.rb` keeps the screen list complete (every GET
+  route, every `422` render site).
+  <!-- pin: test/permission_forge/html/admin_page_paths_test.rb#every GET route of the admin is reached by a screen -->
+- **Scroll frames** (`pf_scroll_frame`, `.pf-scroll-x`) are regions a keyboard reaches (`tabindex="0"`, named for
+  assistive technology) with shadows at the edges that show when there is more to the side.
+  <!-- pin: test/permission_forge/html/layout_lint_test.rb#every wide grid is in a scroll frame that is reachable and named, on every screen -->
+- **The suite proves the gem owns every key it renders.** The dummy app runs without `rails-i18n`, and
+  `html/locale_leak_test.rb` renders every screen, re-rendered form, toast, CSV export and API error class under a
+  pseudo-locale (`test/support/pseudo_locale.rb`): a word that is neither a translation nor host data fails.
+  <!-- pin: test/permission_forge/html/locale_leak_test.rb#every screen shows only translated words and host data -->
+- **Static lints for the admin's words.** `release_readiness/inflection_guard_test.rb`: no English inflection
+  (`humanize`, `pluralize`, `to_sentence`, `full_messages`, `time_ago_in_words`, ...) and no Rails-core key family in
+  `app/` or `lib/permission_forge/`; `i18n_test.rb`: a sq/mk value identical to English needs a reason, one pair
+  of quotation marks per locale, one label per state; `release_readiness/column_default_prefill_test.rb`: no form
+  pre-fills a string column default; `AdminPagesTest` lints every re-rendered form as it does every screen.
+  <!-- pin: test/permission_forge/release_readiness/inflection_guard_test.rb#nothing in app/ or lib/permission_forge inflects English -->
+  <!-- pin: test/permission_forge/release_readiness/column_default_prefill_test.rb#no new-record screen or re-rendered form pre-fills a text default -->
+  <!-- pin: test/permission_forge/html/admin_pages_test.rb#markup is CSP-safe and namespaced, on every screen and every re-rendered form -->
+- **Release-readiness guards.** `stored_data_fail_closed_test.rb` poisons every interpreted column of the eight models
+  past validation (nothing raises or widens, the audit names the row); `one_definition_guard_test.rb` (G4) fails a
+  re-derivation of a one-definition rule (`test/support/one_definition/*.rb`); `decision_parity_test.rb` (G5) checks
+  that two surfaces answering one question agree; `schema_freshness_test.rb` (G6) alters a table while the suite runs;
+  `services/rule_blame_property_test.rb` (G7) checks a denial's blame on generated cases; `changelog_pins_test.rb`
+  ties every CHANGELOG bullet to its test.
+  <!-- pin: test/permission_forge/release_readiness/stored_data_fail_closed_test.rb#PermissionSet: every interpreted column, poisoned past validation, never raises or widens -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#a re-derivation is a hit (negative fixture) -->
+  <!-- pin: test/permission_forge/schema_freshness_test.rb#every reader sees a column a migration added after the schema was read, without a reset -->
+  <!-- pin: test/permission_forge/release_readiness/changelog_pins_test.rb#the guard reports what it should, on a fixture -->
+- **Host model shapes, Rails' reader surface and hostile parameters are covered end to end.** `host_shapes_test.rb`
+  runs every enforcement path on a namespaced model with a uuid primary key (`Billing::Invoice`) and one with
+  `encrypts` and an `enum` (`PfEncryptedNote`); `concerns/masked_reader_surface_test.rb` calls every attribute-method
+  pattern of the Rails in use on a hidden column (one that hands out the stored value must be a raw path
+  `docs/masked-attributes.md` lists); `security/route_fuzz_test.rb` says what each hostile parameter must be read as
+  and plays the uniqueness race; a canary watches the `default:` option of `human_attribute_name` / `ModelName#human`.
+  <!-- pin: test/permission_forge/host_shapes_test.rb#Billing::Invoice: permission_scoped lists the rows the rule allows and no other -->
+  <!-- pin: test/permission_forge/concerns/masked_reader_surface_test.rb#every pattern that returns the stored value of a hidden column is a documented raw path, and every documented raw path still does -->
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#~reads every shape of -->
+  <!-- pin: test/permission_forge/rails_internals_canary_test.rb#human_attribute_name / ModelName#human: the default: option is answered when the host has no translation, the host's translation when it has one -->
+- **`test/rls/rls_rule_parity_test.rb` has a case for every `Operators::RuleProblem` kind**: each compiles to `FALSE`,
+  selects nothing in the app layer and hides every row under a real policy; the matrix covers `uuid`, `inet`, `cidr`,
+  native enum, `jsonb` and `text[]` columns.
+  <!-- pin: test/rls/rls_rule_parity_test.rb#every kind of rule the app layer matches nothing for has a parity case -->
+- **`config.no_read_access_strategy`: record reads that need read access.** `:rules_only` (the default) keeps the
+  record reads as they were: `find_by`, `find_by!`, `permission_scoped` and the `auto_query_scoping` default scope
+  apply the rules of the user's entries, so a signed-in user with no entry for the model, or one without
+  `read_access`, has no rules there and gets every row. `:deny` refuses them whole: for a signed-in user whose
+  entries along the model's Resource chain do not all grant `read_access` (whatever took it — no grant, a Muting
+  Permission Set, a Resource renamed off its model, a granting set whose conditions cannot be judged),
+  `permission_scoped` and the default scope are `none`, and `find_by` / `find_by!` raise `NotAuthorizedError` for an
+  existing record with one `failure_messages` entry from the locale (`permission_forge.denials.no_read_access`; en,
+  sq, mk), `nil` / `RecordNotFound` for a missing one; each is an `access.denied` with reason `no_read_access`. View
+  All and Modify All never stand in for read; with nobody signed in `nil_user_strategy` decides. One definition,
+  `PermissionForge::RecordReadAccess`. A README checklist row, a Settings page row and a strategy value checked when
+  set. The PostgreSQL RLS policies follow it: under `:deny` the SELECT / UPDATE / DELETE policies show a session user
+  no row without read access to the table's Resource chain, read per statement as `ResourceChain.readable?` reads it
+  (an active, unexpired assignment to an active granting set with an active Resource row for the model, every entry
+  along the STI chain granting `read_access`, no Muting Permission Set taking it; a conditional set never grants read
+  there, a conditional muting set always takes it — narrower, never wider); under `:rules_only` the policy is
+  unchanged. The strategy is part of the policy digest, so `rls:status` reports `STALE` after it is switched until
+  the next `rls:sync`. Part of `GENERATOR_VERSION` 7 (new in this release, so no further bump).
+  <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#no entry, :deny: no rows, find_by raises with the locale message, a missing record is still missing -->
+  <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#no entry, :rules_only: every read returns every row, as before -->
+  <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#STI: an unreadable base denies the subclass that grants read itself -->
+  <!-- pin: test/permission_forge/release_readiness/stored_data_fail_closed_test.rb#~under no_read_access_strategy :deny, no poisoning widens a record read -->
+  <!-- pin: test/rls/rls_read_access_parity_test.rb#a user with no entry for the model: every row under :rules_only, none under :deny, in both layers -->
+  <!-- pin: test/rls/rls_read_access_parity_test.rb#read removed by a Muting Permission Set: none under :deny, in both layers -->
+  <!-- pin: test/rls/rls_read_access_parity_test.rb#STI: a subclass entry without read hides its rows (and its subclasses) under :deny -->
+  <!-- pin: test/permission_forge/services/rls_policy_generator_test.rb#the digest follows no_read_access_strategy, so rls:status reports the policy stale after it changes -->
+
+- **`cache.settled`: what the cache store said after an erasure or a consent withdrawal.** `erasure.performed` and
+  `consent.withdrawn` are written in the operation's transaction, before its cache work, so they record
+  `cache_confirmed: nil`. A `cache.settled` event (category `system`, `subject_user_id`, `data.operation` `erasure` or
+  `consent_withdrawal`, and the `Cache::Outcome`) now follows on the same `correlation_id` with the store's answer;
+  inside a caller's transaction the work runs again after its commit, measured, and the event is written then (never
+  after a rollback). A failed post-commit invalidation of an erased person leaves this trace
+  (`cache_confirmed: false`), and its sentence says the store did not confirm it (en/sq/mk).
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#an erasure records what the store said in cache.settled, on the erasure correlation id -->
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#inside a caller transaction cache.settled is written after the commit, with the outcome then -->
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#a rolled-back erasure settles nothing -->
+- **The route fuzz poisons each parameter alone, inside a valid request.** `security/route_fuzz_test.rb` poisoned
+  every parameter at once, so a parameter read only when another is valid (`days` behind `tab=audit`,
+  `rule[remove_step]` behind a rule form) was never reached. Per route it now poisons each parameter the controller
+  reads (found in the source by `FuzzParams`: `params[...]`, the `pf_*_param` readers, permitted keys) one at a time
+  inside each valid request of the route (`valid_contexts`), then each attribute of each attribute section, the API
+  also as a JSON body with `null`; a guard fails when a parameter the engine reads is missing from the fuzz table.
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#every parameter the engine reads is in the fuzz table -->
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#every attribute section the engine reads has a valid request that reaches it -->
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#~answers each read parameter alone below 500 -->
+- **Static guards: the cache report per method, integer parameters, warning severities.** The cache-report guard
+  places each invalidation per method (a `Cache::Report` block, `cache_outcome`, or a method all of whose callers are
+  measured) instead of exempting a whole file once it mentions `Cache::Report`, and also sees
+  `regenerate_permissions`, `cache.delete` / `expunge_many` / `delete_matched` and `lib/permission_forge/admin`; a new
+  guard refuses `params[...].to_i` and `.to_s.to_i` in the admin and the API; every `Warnings.emit` key has its
+  severity, and a reason when it is not SECURITY, in the warnings channel test, whose needle also sees a logger's
+  `error` / `add` / `fatal`.
+  <!-- pin: test/permission_forge/release_readiness/cache_report_guard_test.rb#negative fixture: an unmeasured method in a file that measures elsewhere is a hit -->
+  <!-- pin: test/permission_forge/release_readiness/integer_param_guard_test.rb#no request value is read with to_i -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#every warning has its severity in SEVERITY, the one its site passes, and a reason when it is config -->
+- **API: every reference to another record is answered by its uuid too.** Under `api_record_identifier = :uuid` the
+  answers named the records they refer to by numeric id only — a Permission Set said `permission_set_group_id: 4` right
+  after the PATCH that sent the group's uuid — so a client that only knows uuids could not follow them (field test
+  round 8, D#29). Each such key is now followed by the record's uuid: `permission_set_group_uuid` (a Permission Set, a
+  group member), `permission_set_uuid` (a Resource, a rule, an assignment) and `resource_uuid` (a field, an action, a
+  rule), under either identifier setting; the `_id` keys keep their value and type. One declaration in the serializer
+  layer (`Serializers::BaseSerializer.reference`), one query per reference for a page of records; `Api::Schema` types
+  the new keys `:foreign_uuid`. The `_uuid` keys are answer-only: send the `_id` key to change a reference (it takes
+  the uuid under `:uuid`, as before); a `_uuid` key sent back with a whole answer is ignored like any key the endpoint
+  does not take, so such a PATCH stays idempotent and a stale copy cannot undo another admin's move.
+  `user_id` (your user's key), a serializer of your own (`api_serializer_overrides`) and an AMS serializer are
+  unchanged.
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#a set moved into a group by its uuid answers the group by its uuid too -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#every answer names the set, the Resource and the group it refers to by their uuids -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#a page looks the uuids up in one query per reference, however many rows it has -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#an answer sent back whole moves the set as its id key says, the same every time -->
+  <!-- pin: test/permission_forge/api/reference_uuids_api_test.rb#a body with only permission_set_group_uuid changes nothing: the companion is answer-only -->
+  <!-- pin: test/permission_forge/api/envelope_schema_test.rb#every foreign identifier is followed by the uuid of the same record, null where it may be null -->
 
 ### Changed
 
+- **A rule whose field name is not a column of its model does not save.** `PermissionSetRule` adds "names
+  `onwer_id`, which is not a column of Customer" on `field_name` (en, sq, mk; it names the stored value, like the path
+  message) when the Resource's model loads and the name is no column of its table — along `field_accessor_path` for a
+  join rule — so the JSON API answers its field-keyed 422 instead of 201, and the admin shows the message. Checked for
+  a new rule and when the field name, path, join type or resource changes, so an existing row stays editable in its
+  other attributes (a stored `'filter'` join type and the admin's nil are one); saving compares the table's columns
+  with the database (`RuleColumn.for_rule(rule, verify: true)`, one metadata query per model along the path), so a
+  column a migration just added is accepted; skipped when the model cannot be loaded, its table does not exist or the
+  path cannot be followed. Copying a Permission Set (or a group) copies such a rule as it is: leaving it out would
+  widen the copy. **No opt-out:** the rule could only ever raise (and now matches nothing); write it past the model if
+  you must.
+  <!-- pin: test/permission_forge/models/permission_set_rule_column_test.rb#a field name that is no column of the model is refused on field_name -->
+  <!-- pin: test/permission_forge/api/permission_set_rules_controller_test.rb#POST create answers 422 on field_name for a column the model does not have -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_column_test.rb#an existing row is checked only when what it names changes -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_column_test.rb#a column the process confirmed missing before a migration added it is accepted at save -->
+  <!-- pin: test/support/decision_parity/rules.rb#the column-typo validation message names the stored value, like the path message -->
+- **A join rule whose association path cannot be joined does not save.** `PermissionSetRule` adds "names ownr, which
+  is not an association of Customer" on `field_accessor_path`, or why no join can be built through it (a polymorphic
+  association, a class that cannot be loaded, a scope that takes the record — also along a `:through` —, a `:through`
+  / `:source` / `inverse_of` naming nothing, an empty step in `parent..owner`; en, sq, mk;
+  `Operators::RuleProblem#cause` / `#key`), so the JSON API answers its field-keyed 422 instead of 201. Checked for a
+  new join rule and when its path, join type or resource changes (an existing row stays editable in its other
+  attributes); a filter rule's path is never checked. Every association ActiveRecord joins is accepted
+  (`Operators::RulePath` asks what `Associations::JoinDependency#build` asks; a canary watches it). Copying a
+  Permission Set copies such a rule as it is. **No opt-out:** the rule could only ever raise (and now matches
+  nothing).
+  <!-- pin: test/permission_forge/models/permission_set_rule_path_test.rb#each cause has its own message -->
+  <!-- pin: test/permission_forge/api/permission_set_rules_controller_test.rb#POST create answers 422 on field_accessor_path for an association the model does not have -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_path_test.rb#a path ActiveRecord cannot join is refused with its cause, and one it joins is accepted -->
+- **A rule qualified with a name its query gives no table matches nothing, and is refused for a new or changed
+  rule:** `nosuch.name`, the typo `customer.name`, a column of a join's ON clause (`supplier_id.id` on a rule joining
+  `supplier`) and, on a filter rule, another model's table (`suppliers.name`: a filter rule compares its own table).
+  They reached SQL as written and raised for every holder, also under `auto_query_scoping`. The audit
+  (`missing_rule_columns`, `foreign_table_filter_rules`) and Home list stored ones. A join rule may still name a table
+  its query joins itself or an alias its join gives (`parents_customers`). **Opt out:** use a join rule (`join_type` +
+  `field_accessor_path`) for a column of another table.
+  <!-- pin: test/permission_forge/models/permission_set_rule_column_test.rb#a qualifier naming no table is refused; a join rule may name a table or an alias its query gives -->
+  <!-- pin: test/permission_forge/services/permission_rule_applier_test.rb#a filter rule qualified with a table of another model matches nothing in every gem-built query -->
+  <!-- pin: test/permission_forge/services/permission_rule_applier_test.rb#a join rule qualified with a name the ON clause mentions, which is no table or alias, matches nothing -->
+- **A rule value its column cannot hold is refused on save** (`field_value`: "is not a value Customer.supplier_id can
+  hold"; the JSON API answers 422), for a new rule and when its value, operator, field name, path, join type or
+  resource changes — `'5_id'` on an integer column, `'maybe'` on a boolean one, `'banana'` on a `uuid` one, a
+  `between` bound or a list element the column cannot hold. Such a rule matched nothing for everyone it applies to. A
+  rule saved before (or written past the model) stays editable in its other attributes, still matches nothing, and is
+  still listed by the audit (`unusable_rule_values`) and on Home; a copy keeps its original's value. `current_user` is
+  refused only where no id could be held (a boolean, date, address, json or enum column). **No opt-out:** the rule
+  could only ever deny every record to its holders; saving it hid a lock-out behind a successful save.
+  <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#unusable_value: a new rule is refused with the problem's message -->
+- **What a rule or field row names is checked when it changes.** `operator` and `join_type` (`PermissionSetRule`) and
+  `mask_strategy` (`ResourceField`, also when `mask_access` changes) are validated for a new row and when the
+  attribute changes — as `field_name` and the association path are — so a row written before the check, or past the
+  model (a rolling deploy, another application on the shared tables, a custom mask strategy since removed from the
+  configuration), stays editable in its other attributes and can be switched off or renamed through the admin and the
+  API. It matches nothing (a rule) or masks fully (a field) until it is fixed; the audit and the admin name it.
+  **No opt-out:** a loosening (such rows could not be edited at all).
+  <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#unknown_operator: a row written before the check stays editable in its other attributes -->
+- **A rule whose field name is not a name** (a trailing or doubled dot) is listed by the audit under
+  `missing_rule_columns` (High while held) instead of `unusable_rule_values`, and on Home. **No opt-out:** a report
+  classification; the rule matched nothing before and after.
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#rules whose value the column cannot hold are reported as matching nothing -->
+- **The admin's rule builder refuses a posted condition it does not know** ("Pick a condition from the list.")
+  instead of silently rewriting it to "is" (`RuleFormInput` keeps the operator as posted); a saved rule's condition is
+  kept as stored on its edit page, which says the rule matches nothing. **No opt-out:** the form offers only the
+  conditions it knows.
+  <!-- pin: test/permission_forge/html/broken_rules_admin_test.rb#a posted condition that is not one is refused, never rewritten to "is" -->
+  <!-- pin: test/support/decision_parity/rules.rb#the operator is kept as posted, refused when it is none (no rewrite to equal) -->
+- **A new record rule on a column that holds a secret is refused.** A rule whose column (after its association path,
+  qualified or not) matches `config.rule_secret_column_patterns` — digests, tokens, `encrypted_*`, secrets, passwords,
+  salts, API / private / access keys, OTP seeds — fails validation on create and when its column, path, join type or model changes
+  (`names a column that holds a secret …`), and the admin's rule builder no longer offers such columns (except the one
+  a stored rule already names). Rules stored before keep evaluating as they did and stay editable except their value
+  and operator; the audit (`secret_rule_columns`) and Home list them. **Opt out:** `config.rule_secret_column_patterns =
+  []` (or a narrower list).
+  <!-- pin: test/permission_forge/models/permission_set_rule_secret_columns_test.rb#a new rule on a secret column is refused, with a message in every locale -->
+- **`include_nulls` is off unless asked for — in code, through the JSON API and in the admin's rule builder alike.**
+  The column default (`true`) made a rule created in code or through the API let the NULL rows through
+  (`owner_id equal 5` also matched unassigned records) while the admin's builder started unchecked; the model now
+  declares the default (`attribute :include_nulls, :boolean, default: false`; the install migration writes `false`
+  too, and on an upgraded install the model's default wins over the column's). Rows already stored keep their value.
+  **Opt out:** pass `include_nulls: true` (code, API) or tick "Also show records where … is empty" in the builder — per
+  rule, as before.
+  <!-- pin: test/support/decision_parity/rules.rb#include_nulls has one default: off in code, through the API and in the builder -->
+- **The rule builder offers every column of the table along the path, `id` included** (flagged "no field row
+  (ignored_fields)"), the same list the model's validation accepts (`RuleColumn.names_for`); a virtual field is never
+  offered. A rule on `id` — the docs' own example — can be built and repaired in the admin again. **No opt-out:** the
+  validation did not change; the admin stopped hiding columns it accepts.
+  <!-- pin: test/support/decision_parity/rules.rb#the builder offers exactly the columns the model accepts, ignored_fields included and flagged -->
+- **The rule builder only offers associations a join can be built through.** `Admin::ModelCatalog#associations` keeps
+  the reflections `Operators::RulePath.unjoinable_cause` accepts: an association with a record-dependent scope, a
+  broken `:through` / `inverse_of`, a polymorphic one or one whose class cannot be loaded is no longer listed (a path
+  through it matched nothing and the model refused it on save). **No opt-out:** a rule through such an association
+  could never match a record.
+  <!-- pin: test/permission_forge/admin/services_test.rb#associations are the ones a join can be built through -->
+- **RLS: `RlsPolicyGenerator::GENERATOR_VERSION` is 7** (5 in 0.14). A policy compiles every rule the application
+  layer matches nothing for — every `Operators::RuleProblem` kind — to `FALSE`, where such rules raised during the
+  sync or were skipped and left the policy wider than the application layer (a custom operator without SQL is still
+  skipped and reported). It types `uuid` / `inet` / `cidr` / native enum / `json` / array values like the app layer,
+  counts an assignment until its `expires_at` included (`>= now()`, as `PermissionSetUser.active_assignments`; it was
+  `>`), computes `today` / `now` / `tomorrow` / `yesterday` per statement (frozen at the sync before), grants the
+  bypass for View All alone (Modify All without it bypassed in the policy only), and only to a set without a condition as
+  `PermissionSet.unconditional` reads it (`conditions_present_sql`): a set with only an end hour no longer bypasses
+  the rules, and one whose condition texts are only blanks does. Existing installs see drift until they run `rake
+  permission_forge:rls:sync`. **No opt-out:** a policy is never wider than the application layer; the old policies
+  stay in force until the sync.
+  <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#unknown_operator: a row written past the model is named, denies, is listed, compiles to FALSE -->
+  <!-- pin: test/permission_forge/services/rls_policy_generator_test.rb#only unconditional sets grant the view_all bypass (consent guard) -->
+  <!-- pin: test/permission_forge/services/rls_policy_generator_test.rb#view_all bypass branch checks granting and muting sets -->
+  <!-- pin: test/rls/rls_rule_parity_test.rb#PostgreSQL's relative date words are read per statement by the app layer and by the policy -->
+- **PostgreSQL: a `uuid`, `inet`, `cidr` or native enum value the column cannot hold matches nothing** where it raised
+  `ActiveRecord::StatementInvalid` for every holder (`find_by`, `permission_scoped`, every query under
+  `auto_query_scoping`) — `'banana'` against a `uuid` column, an address IPAddr cannot read against an `inet` column, an
+  address with host bits against a `cidr` column, a word that is not a label against a native enum column. Such a rule
+  is refused on save and listed by `rake permission_forge:audit` (`unusable_rule_values`, Medium while held) and on
+  Home. **No opt-out:** a value PostgreSQL cannot read never matched a row; a custom operator (an injected
+  `operator_registry:`) still receives the value as written.
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#'banana' against a uuid column matches nothing, is refused on save and is listed by the audit -->
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#each of these rules is named by RuleProblem and refused on save -->
+- **PostgreSQL: a rule value the gem cannot type itself is asked of PostgreSQL, once per process** (a `CAST` in a
+  savepoint, `ValueCasters::PostgresqlTypes::ReadBack`): date and time text in another notation than ISO 8601
+  (`today`, `31 Jan 2026`) and every column type no caster knows that PostgreSQL can compare (`money`, `interval`,
+  `macaddr`, ...; `xml`, `point`, `hstore` cannot: no value, only the null checks). A timeout is not kept as unreadable.
+  What PostgreSQL reads is compared as written, as before; what it cannot read (`'banana'` for a date, `'noon'` for a
+  time) now matches nothing and is refused on save — it raised for every holder of the rule, on every query, and failed
+  `rake permission_forge:rls:sync`. `citext` is text. **No opt-out:** such a rule never matched anything; a custom
+  operator still gets the value as written.
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#date text and types no caster knows are read back: what PostgreSQL cannot read matches nothing -->
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#a type PostgreSQL cannot compare takes no value: xml and point match nothing, the null checks work -->
+  <!-- pin: test/permission_forge/operators/read_back_memo_test.rb#a timeout, a lock timeout or a lost connection denies one read and is asked again -->
+- **PostgreSQL: a LIKE operator (`contains`, `starts_with`, ...) matches text columns only.** On an integer, decimal,
+  boolean, date, `uuid`, `inet`, `cidr`, native enum, `json` or other non-text column it matches nothing and is refused
+  on save — PostgreSQL has no LIKE for those, so the query raised for every holder (the RLS policy already compiled it
+  to `FALSE`). MySQL and SQLite, which compare such a column's text, are unchanged. **No opt-out:** such a rule never
+  matched anything.
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#LIKE matches text columns only: an integer, a date or a boolean matches nothing instead of raising -->
+- **A rule on a `json`, `jsonb` or array column matches nothing under every built-in operator but `is_null` /
+  `is_not_null`** — also an array or JSON literal that PostgreSQL used to compare as a whole document (`codes equal
+  '{1,2}'`), and on MySQL and SQLite, where a `json` column was compared as text. **Opt out:** register a custom
+  operator (`operator_registry:`), which receives the value as written.
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#a json or array column matches nothing under every built-in operator but the null checks -->
+- **An explicit field row for a variant name decides that name within its Resource.** An `owner_uuid` row next to an
+  `owner_id` row used to be OR-ed with the variant derived from `owner_id`, so an explicit Hidden `owner_uuid` read as
+  Editable in either row order. Now the row the admin wrote wins, whichever row is older; a derived variant only fills
+  a name no row of the resource has. Muting rows still mute their variants. The audit's `variant_rows_conflict` lists
+  the pairs before you upgrade. **No opt-out:** the explicit row is what the admin wrote.
+  <!-- pin: test/permission_forge/services/permission_hash_builder_test.rb#G5f: the owner_uuid entry is the explicit row when there is one, else the derived variant, in either order -->
+- **A field variant gets a permission-hash entry only when the model has that name.** The default
+  `field_variant_mappings` (`_id` → `_uuid`, `_cents` → base name) added an entry for every mapped name, so a
+  `Customer` with an `owner_id` row and no `owner_uuid` column had an `owner_uuid` entry, which the admin's Effective
+  access listed and counted. A variant is now added (and muted) only when the model has it: a column or `attribute`,
+  an `alias_attribute`, a public reader or writer, or a declared virtual field; a model this app cannot load keeps
+  every variant. The hash format is unchanged, with fewer keys:
+  `permissions_hash_for(:Customer)[:fields][:owner_uuid]` is `nil` for a name the model lacks.
+  `FiltersResponseAttributes` still filters such a key of a serializer's hash by the entry of its base field.
+  **No opt-out:** none needed; if your code reads the entry of a computed variant, give the model the reader (or declare it
+  in `extra_fields_for_permissions`).
+  <!-- pin: test/permission_forge/field_variants_test.rb#the permission hash has entries for the real variants only -->
+  <!-- pin: test/permission_forge/field_variants_test.rb#a response key that is a variant the model lacks follows its base field -->
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#no variant field for a name the model does not have, in the engine or here -->
+- **A grant counts only with the permission it depends on**, at read time as well as at save time: a field row with
+  `edit_access` but no `read_access`, a Resource row with `edit_access` / `delete_access` but no `read_access` or
+  `modify_all` without `view_all` (rows written past `ValidatesDependency`: SQL, an older version, another app) no
+  longer grant the dependent permission, and `PermitsAttributes` keeps a key only where the field is readable and
+  editable. The audit's `dependency_violations` lists such rows. **No opt-out:** the validation already forbade it.
+  <!-- pin: test/permission_forge/services/permission_hash_builder_test.rb#resource flags count edit and delete only with read, Modify All only with View All -->
+- **A broken activation condition is unjudgeable in every mode.** An IP entry that is not an address, a list of
+  separators, one hour of the two, the same hour twice, or an hour outside 0–23 (stored past the validation) now makes
+  a **muting** set apply to every request (it never applied: a lockdown written with newlines through the API muted
+  nothing) and a **granting** set never pass, with or without a request context (a blank one let it grant). Called out: a granting set with **one hour of the two** used to pass (the
+  hours were ignored) and now never does; a granting set with `start == end` never passed before either. IP lists
+  written with newlines or spaces are now read entry by entry (they used to be one invalid entry). The audit's
+  `incomplete_conditions` lists every such set — run `rake permission_forge:audit` before upgrading; the admin's
+  Conditions tab and the API normalise the list on the next save. **No opt-out:** fix the condition on the set's
+  Conditions tab.
+  <!-- pin: test/permission_forge/conditional_sets_test.rb#a muting set with a broken condition applies in every mode; a granting one never passes -->
+  <!-- pin: test/permission_forge/concerns/conditional_sets_per_context_test.rb#a granting set with a broken condition grants nothing, not even without a context -->
+- **A Permission Set's activation conditions are validated on a new row or a changed condition**: an `allowed_ips`
+  entry that is not an IP address or CIDR range, a window whose start equals its end, one hour of the two (en/sq/mk
+  messages); the stored list is normalised to commas on save, a text of whitespace alone (any Unicode space) to nil (a
+  row stored before keeps SQL's narrower reading); a copy keeps its original's. A row stored before the check stays
+  editable in its other attributes. **No opt-out:** such a condition cannot be judged (see above).
+  <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#a legacy row with a broken list stays editable until the list changes -->
+  <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#a new row with the same start and end hour is refused -->
+  <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#a condition text of whitespace alone is stored as nil, so Ruby and SQL read it the same -->
+- **`PermissionSet#conditional?` and the `conditional` / `unconditional` scopes agree**: a text of blanks is no
+  condition (`TRIM`), one hour of the two is one. Counts on pages and in the audit may change for such rows.
+  **No opt-out:** two readings of one row.
+  <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#conditional? and the SQL scopes agree: whitespace is no condition, one hour of the two is -->
+- **The admin's condition sentence names a broken hour window as one** ("between 09:00 and 09:00 (a window nobody can
+  judge — fix it on the Conditions tab)") instead of calling it overnight; the Conditions form refuses a start hour
+  equal to the end hour (error keyed `:hours`). **No opt-out:** wording.
+  <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#hours_window: none, a window, an overnight window, and the broken shapes -->
 - **An unrescued denial answers 403 Forbidden instead of 500.** The engine registers
-  `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` (a row-level rule denies `find_by` /
-  `find_by!`, or nobody is signed in under `nil_user_strategy = :raise`) and `PermissionForge::ActionNotAuthorizedError`
-  (the action guard) in `config.action_dispatch.rescue_responses` as `:forbidden`, as ActiveRecord registers
-  `RecordNotFound` as 404. In production Rails renders `public/403.html`, which Rails apps do not ship: an HTML request
-  gets an empty 403 page until you add one (a JSON request gets `{"status":403,"error":"Forbidden"}`). Like every mapped
-  exception, an unrescued denial is no longer reported to `Rails.error` as unhandled; it stays in the audit log
-  (`access.denied`, `action.denied`). Request tests under `show_exceptions = :rescuable` (the Rails 7.1+ test default)
-  now get the 403 response instead of the raised error. A `rescue_from` in your controllers runs first and keeps
-  deciding, as before. **Opt out:** rescue the errors yourself, or set another status in `config/application.rb`,
-  e.g. `config.action_dispatch.rescue_responses['PermissionForge::ActionNotAuthorizedError'] = :internal_server_error`.
+  `PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError` and
+  `PermissionForge::ActionNotAuthorizedError` in `config.action_dispatch.rescue_responses` as `:forbidden`, as
+  ActiveRecord registers `RecordNotFound` as 404. In production Rails renders `public/403.html`, which Rails apps do
+  not ship (an HTML request gets an empty 403 page until you add one; JSON gets `{"status":403,"error":"Forbidden"}`).
+  Like every mapped exception, an unrescued denial is no longer reported to `Rails.error` as unhandled; it stays in
+  the audit log (`access.denied`, `action.denied`). Request tests under `show_exceptions = :rescuable` get the 403
+  instead of the raised error. A `rescue_from` in your controllers still decides first. **Opt out:** rescue the errors
+  yourself, or set another status, e.g.
+  `config.action_dispatch.rescue_responses['PermissionForge::ActionNotAuthorizedError'] = :internal_server_error`.
+  <!-- pin: test/permission_forge/controllers/denial_status_test.rb#both denials are registered as 403 where ActionDispatch reads them -->
+  <!-- pin: test/permission_forge/controllers/denial_status_test.rb#an unrescued row-rule denial answers 403 with an empty page, and JSON for a JSON request -->
+  <!-- pin: test/permission_forge/controllers/denial_status_test.rb#a host rescue_from still decides, and reads the rule messages without parsing -->
+- **Permission Set names are unique within a tenant, ignoring case and surrounding spaces.** The admin form already
+  refused a second "Sales Team"; the console, seeds, services and the API created one silently, and both then showed
+  as "Sales Team" in every picker. A new set or a rename to a name another set of the same tenant uses is now a
+  validation error (`name_taken`). Two sets that already share a name stay valid until one of them is renamed. A
+  clone without a name (`PermissionSetCloner`, the group clone, `POST …/clone`) gets a numbered copy name ("Sales
+  Team (copy)", "Sales Team (copy) 2"). No migration: the check is a validation. **No opt-out:** give duplicates
+  distinct names.
+  <!-- pin: test/permission_forge/models/permission_set_name_uniqueness_test.rb#a second set with the same name is refused, whatever its case -->
+  <!-- pin: test/permission_forge/models/permission_set_name_uniqueness_test.rb#two sets that already share a name stay valid until one is renamed -->
+  <!-- pin: test/permission_forge/models/permission_set_name_uniqueness_test.rb#a clone without a name gets a numbered copy name instead of failing validation -->
+- **Full access applies no personal-data masks.** `ResourceFieldGenerator.call(grant_all: true)`, and through it
+  `Resource.grant_full_access!`, `Services::ResourceWithFieldsBuilder` and the admin API's `generate_fields` with
+  `grant_all`, now create every field readable and editable in the clear, also the columns that match
+  `gdpr_field_patterns` under `gdpr_defaults`. Before, those were created masked (a field test's Admin set read
+  customer names as `G*************tion`). The recommended strategy is still stored in `mask_strategy` (with
+  `mask_access: false`), so masking the field later uses it, and the fields are still flagged: `GdprFieldAuditor` and
+  `rake permission_forge:audit_masks` report them as `unmasked_field`, the admin's Home lists them under "Privacy
+  audit". (Without `grant_all`, see the next entry.) **Opt out:** generate without `grant_all` and open the other
+  fields, or mask the reported fields afterwards (`resource.resource_fields.where(name: %w[name email]).find_each { |f|
+  f.update!(mask_access: true) }`; the stored strategy applies).
+  <!-- pin: test/permission_forge/services/resource_field_generator_gdpr_test.rb#grant_all true with gdpr_defaults true leaves the email field unmasked -->
+  <!-- pin: test/permission_forge/models/resource_test.rb#.grant_full_access! applies no personal-data masks under gdpr_defaults -->
+  <!-- pin: test/permission_forge/api/resources_controller_test.rb#POST generate_fields with grant_all applies no masks under gdpr_defaults -->
+- **Generating fields without `grant_all` grants nothing — the personal-data columns included.**
+  `ResourceFieldGenerator.call(resource:)`, the API's `POST …/generate_fields` without `grant_all` and the console
+  used to create, under `gdpr_defaults`, the columns that look like personal data *readable and masked* while every
+  other column was Hidden. They are now Hidden like the rest, with the recommended mask strategy on the row — the same
+  row the admin's "Nothing" preset, "Add all new as Hidden" and bulk Hidden write. Rows already written are not
+  changed. **Opt out:** to have them readable and masked, add them Read-only (the admin's Sync "Add all new as
+  Read-only", bulk Read, or the field drawer: under `gdpr_defaults` a sensitive column granted Read-only starts
+  Masked), or generate with `grant_all: true` and mask what the audit lists.
+  <!-- pin: test/permission_forge/services/resource_field_generator_gdpr_test.rb#grant_all false with gdpr_defaults true grants nothing: the email field is Hidden, its strategy recorded -->
+- **Generating fields on a Muting Permission Set writes the level chosen, and no row without `grant_all`.** Without
+  `grant_all` the generator wrote, under `gdpr_defaults`, `read_access: true, mask_access: true` rows for the
+  personal-data columns of a muting set — rows that *hide* those columns for the set's holders and force a mask — and
+  an Unchanged row (every flag off) for every other column, where the admin's presets and bulk add write none.
+  `ResourceFieldGenerator.call(resource:)` (the API's `generate_fields`, the console) now writes no row on a muting set
+  (Unchanged mutes nothing, which is what no row means: `FieldLevel.row?`), and `grant_all: true` still writes the
+  Hide rows. Rows already written are not changed (the audit's `dependency_violations` and Home list the privacy
+  ones). **No opt-out:** a muting row written by a privacy default was a silent removal nobody chose, and the rows it
+  no longer writes took nothing away.
+  <!-- pin: test/support/decision_parity/fields.rb#(a) Customer, muting=true, gdpr_defaults=true, leave: presets, bulk and the generator write the same rows -->
+  <!-- pin: test/permission_forge/services/resource_field_generator_test.rb#without grant_all a Muting Permission Set gets no rows at all, the timestamps included -->
+- **Every field-creation path writes the same names and caps Editable alike.** The generator also writes rows for
+  virtual fields under `extra_fields_default_access = :grant` (Hidden without `grant_all`, replacing the implicit
+  grant), and Editable on a Resource without Edit is Read-only on every path, after the privacy default
+  (`ManagedFields`, `FieldLevel.capped`). **Opt out:** give the Resource Edit first; `grant_all` keeps virtual fields readable.
+  <!-- pin: test/support/decision_parity/fields.rb#(a) Editable on a Resource without Edit is Read-only on every path, and the privacy default does not mask it -->
+  <!-- pin: test/support/decision_parity/fields.rb#(a) a declared virtual field gets the level chosen on every path under extra_fields_default_access = :grant -->
+- **The admin's "Full access" masks nothing.** Adding a resource with the **Full access** preset, or Sync's "Add all
+  new with full access", now gives every field Editable, also the columns that look like personal data under
+  `gdpr_defaults` (the field test's `Customer.name` started Masked). Those columns keep the **Sensitive** badge and
+  their recommended mask strategy, and Home's Privacy audit lists them as shown unmasked, with **Fix** and **This is
+  intended**. **Read-only** (preset and Sync) still starts them Masked; the muting presets are unchanged. **Opt out:**
+  add the resource with **Read-only** and raise the other fields to Editable, or set the reported fields to Masked
+  from the Fields tab (bulk: filter **Sensitive**, select all, Set to Masked).
+  <!-- pin: test/permission_forge/html/full_access_privacy_test.rb#the Full access preset masks nothing and keeps the recommended strategy -->
+  <!-- pin: test/permission_forge/html/full_access_privacy_test.rb#sync: "with full access" masks nothing, "Read-only" masks the sensitive columns -->
+- **Generated rows always carry the recommended mask strategy** of a sensitive column (`email` for `email`,
+  `first1_last4` for `name`), also with `gdpr_defaults` off and also on a muting set, as the admin's rows already did;
+  it is used only when someone masks the field. **No opt-out:** the flags are unchanged.
+  <!-- pin: test/permission_forge/services/resource_field_generator_test.rb#without grant_all gdpr_defaults records the recommended strategy and grants nothing: every row Hidden -->
+- **Generated fields give `created_at` / `updated_at` a row, at most read-only.** They were in the default
+  `ignored_fields`, so they got no row and, under the default `unconfigured_field_strategy = :block`, every reader saw
+  `null` timestamps. `ignored_fields` no longer lists them, and every path that generates rows (the generator,
+  `Resource.grant_full_access!`, the API's `generate_fields`, the admin's presets, Sync and bulk add) gives them one
+  through `TimestampFields`: on a granting set, read-only unmasked for a level that grants read, hidden otherwise; on
+  a muting set, the level chosen. **What an existing install sees:** right after the upgrade the admin lists
+  `created_at` / `updated_at` as not configured on every resource until its fields are synced. **Opt out:**
+  `config.ignored_fields += %w[created_at updated_at]`.
+  <!-- pin: test/permission_forge/services/resource_field_generator_test.rb#a user granted the generated fields reads the timestamps under :block, and cannot edit them -->
+  <!-- pin: test/permission_forge/admin/column_fields_test.rb#a level that grants read gives the timestamps Read-only, never Editable or Masked -->
+  <!-- pin: test/permission_forge/configuration_test.rb#has default ignored_fields -->
+- **The GDPR audit, the security audit and the boot warning also count the columns your `filter_parameters` name.**
+  While `filter_parameters_integration` is on (the default), a column the host's `filter_parameters` name
+  (`api_token`, `license_key`, …) readable in the clear is reported as `unmasked_field` / `unmasked_personal_data`
+  with the suggested strategy `full`, and named by the boot warning — as the admin's presets and Sync already masked
+  it on Read-only. A String / Symbol entry names a column when a `_`-segment of it starts with the entry (`:otp`:
+  `otp_secret`, not `footprint`; `:_key`: `api_key`, also `sort_key`); a Regexp matches as written. **Opt out:**
+  `config.filter_parameters_integration = false`, or mark the field "This is intended" in the admin's privacy audit.
+  <!-- pin: test/support/decision_parity/fields.rb#(b) the GDPR audit and the boot warning name exactly the columns SensitiveColumns matches, with its strategy -->
+  <!-- pin: test/support/decision_parity/fields.rb#(a) a column named only by the host filter_parameters starts Masked on every path (Read-only, gdpr_defaults) -->
+- **The boot warning about unmasked personal data counts the rows that reach someone.** `unmasked_gdpr_fields` used
+  to name any row with `mask_access: false` — Hidden rows, switched-off rows, rows of a muting set. It now names a
+  row that is readable in the clear, in effect, in a granting set (`ResourceField.exposing_in_clear`). **No opt-out:**
+  a warning about a row that shows nothing was noise.
+  <!-- pin: test/support/decision_parity/fields.rb#(b) the GDPR audit and the boot warning name exactly the columns SensitiveColumns matches, with its strategy -->
+- **`email_address` is detected as an email.** `DEFAULT_GDPR_FIELD_PATTERNS` adds `email_address` and
+  `*_email_address` (the column Rails 8's authentication generator creates) to the email pattern, so it is recommended
+  and generated with the `email` strategy (`j***@example.com`) instead of `full` (it matched `address`). Log filtering
+  is unchanged. Existing field rows are never rewritten (a row generated with `full` keeps the stricter mask); `rake
+  permission_forge:audit_masks` suggests `email` for an unmasked one. Apps that set `gdpr_field_patterns` to their own
+  hash keep their patterns; apps that merged into `DEFAULT_GDPR_FIELD_PATTERNS` get the new alternatives. **Opt out:**
+  put a pattern ahead of the defaults: `config.gdpr_field_patterns = { /\Aemail_address\z/ => 'full'
+  }.merge(PermissionForge::Configuration::DEFAULT_GDPR_FIELD_PATTERNS)`.
+  <!-- pin: test/permission_forge/gdpr_default_patterns_test.rb#email_address is detected as an email, everywhere the patterns are read -->
+- **The admin says a privacy flag may not be personal data.** Detection is unchanged (by column name, for every
+  model: `name` on a company model is still flagged). The field drawer's recommendation now reads "Matches privacy
+  pattern “name”, so it may be personal data", and Home's Privacy audit says that fields are flagged by column name
+  and that **This is intended** takes a field that is fine unmasked off the list. **No opt-out:** wording only.
+  <!-- pin: test/permission_forge/html/full_access_privacy_test.rb#a flag may not be personal data: the card says so, and This is intended clears it -->
+- **A Muting Permission Set's column with no setting is "Unchanged" in the admin.** Its Fields tab counted such
+  columns under "Not configured" next to an "Unchanged 0" chip, and their level control had no segment selected,
+  although "Not configured · Mutes nothing" and Unchanged are one state. The row now starts on Unchanged (saving it
+  still creates no field row), the muting Fields filters drop "Not configured", and the field drawer and "Across all
+  Permission Sets" say Unchanged too (`FieldLevel.unconfigured_level`). A turned-off row keeps its saved choice and
+  its "Turned off · Mutes nothing" badge. Granting sets are unchanged. **No opt-out:** wording and counts only.
+  <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#in a Muting Permission Set a column with no setting is on Unchanged, counted under Unchanged -->
+  <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#saving a muting column left on Unchanged creates no field row -->
+  <!-- pin: test/permission_forge/html/state_rendering_test.rb#a column with no setting: Not configured on a granting set, Unchanged on a muting one, alike everywhere -->
+- **The admin words each state one way.** Every field level, effective outcome, CRUD cell, action state, lock and
+  actor kind renders from `Admin::StateLabel` (glyph and word together). Visible differences: "Across all
+  Permission Sets" shows a muting set's Hide as "⊘ Hide" (was "Muted: hidden"), its Force mask with the strategy;
+  the Effective access legend reads "⊘ Blocked" and "– No", as its cells do (was "Muted" / "Not given"); the Fields
+  tab's filter for Hide reads "Hide" (was "Hidden"). Locale keys moved: `ui.levels.*` → `ui.states.field_level.*`,
+  `ui.states.{granted,blocked,none}` → `ui.states.effective.*`, `people.effective_tab.hidden_by_muting` →
+  `ui.states.effective.hidden_by_muting`, `audit_log.actor_types.*` → `ui.states.actor.*`, `ui.badges.locked` →
+  `ui.states.lock.locked`, `shared.crud_cell.needs_read` → `ui.needs_read_first`; removed `ui.levels.muted`,
+  `ui.badges.not_configured`, `ui.audit.system`, `people.effective_tab.legend_muted` / `legend_none`,
+  `shared.across_sets.muted_hidden` and the level keys under `resources.fields_tab.filters`. **Opt out:** a host that
+  overrides one of these keys in its own locale files renames it to the new key; the gem's own locales need nothing.
+  <!-- pin: test/permission_forge/i18n_test.rb#one state, one label: no English label repeats within the label namespaces -->
+  <!-- pin: test/permission_forge/html/state_rendering_test.rb#a column with no setting: Not configured on a granting set, Unchanged on a muting one, alike everywhere -->
+- **Settings' health summary reads Home.** While Home lists items that need attention, the summary says how many
+  ("Home lists 3 items that need attention.", with a link to Home) and no longer says the settings "look good"
+  ("N settings are set as recommended" instead); "look good" is said only with no risky setting and nothing on
+  Home — it said "7 settings look good" while Home warned that automatic query scoping leaves record rules to
+  `find_by` / `permission_scoped`, which Settings now flags too. `unconfigured_field_strategy = :warn` is now a
+  flagged row, as `:pass_through` was (it lets an unconfigured field through too). **No opt-out:** wording and a flag;
+  nothing is enforced differently.
+  <!-- pin: test/permission_forge/html/labels_and_attention_admin_test.rb#Settings never says the settings look good while Home lists items that need attention -->
+  <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#Settings warns about automatic query scoping while Home lists rules it leaves out -->
+- **A host model, column, association or action without a translation is never inflected into English on a page in
+  another language.** "Full address", "Created at", "Customers", "Archive" and "Supplier" on a Macedonian or Albanian
+  page read `full_address`, `created_at`, "Customer records" (`permission_forge.ui.resource_plural`), `archive`,
+  `supplier`, in every admin screen and in `Admin::ModelCatalog`'s labels (the rule builder, Sync, "Add resource"); an
+  English page keeps Rails' own English for a column or action name ("Created at", `human_attribute_name`), and names
+  a model by its constant. `ResourceAction#display_name` without a label is the key (Rails' English on an English
+  page). **Opt out:** translate your models and columns (`activerecord.models.<model>` with `one`/`other`,
+  `activerecord.attributes.<model>.<name>`, [docs/i18n.md](docs/i18n.md#your-models-and-columns-in-the-admin)) or give
+  the row a label; there is no switch back to `humanize` on a page that is not English.
+  <!-- pin: test/permission_forge/admin/labels_test.rb#a model is labelled by the Resource row, else the host translation, else the constant name; the plural likewise -->
+  <!-- pin: test/permission_forge/admin/services_test.rb#labels are the host translation, else the stored name verbatim (Rails' English on an English page) -->
+- **Every validation message of the gem's models is the gem's own, in the request's locale.** Rails' default messages
+  (`uniqueness`, `length`, `numericality`, `presence`, `ValidatesDependency`, `HasUuid`) and the messages that were
+  translated once at class load read from `permission_forge.validations.*` at validation time: `blank`, `taken`,
+  `too_long`, `requires`, `permission_set.hours_range` ("must be between 0 and 23"), `resource.name_taken`,
+  `permission_set_user.taken` ("already holds this Permission Set"), `permission_set_group_user.taken` ("is already a
+  member of this group"). The English wording changes for the two assignment uniqueness messages (was "has already
+  been taken") and the hours range (was "must be in 0..23"). The audit log's refused filters (`Audit::EventQuery`) say
+  `validations.blank` / `validations.invalid`. **No opt-out:** these replace Rails-core keys that are English, or
+  "Translation missing", in every host without rails-i18n.
+  <!-- pin: test/permission_forge/html/locale_leak_test.rb#every API error class answers in the request language -->
+- **A validation sentence in the admin names the attribute with the gem's label.** The uniqueness race flash and
+  `Admin::ChangeSet::Invalid` say "Person already holds this Permission Set" (`Admin::ErrorSentence`), not Rails'
+  `full_messages` ("User has already been taken"). **No opt-out:** `full_messages` is English without rails-i18n.
+  <!-- pin: test/permission_forge/unique_conflict_test.rb#the real error of each indexed table is answered with the message its validation gives -->
+- **The rule builder starts a new rule's name and blocked message blank** instead of the install migration's English
+  column defaults, which admins of an Albanian or Macedonian admin saved for their end users; a rule left without a
+  blocked message denies with `permission_forge.denials.rule_default` in the current locale (see
+  `NotAuthorizedError#failure_messages` under Added). **Opt out:** write a `failure_message` on the rule; the stored
+  English default of rules created before 0.15 stays until edited (docs/i18n.md
+  [Column Defaults Are English](docs/i18n.md#column-defaults-are-english) has the one-liner that blanks them).
+  <!-- pin: test/permission_forge/release_readiness/column_default_prefill_test.rb#no new-record screen or re-rendered form pre-fills a text default -->
+  <!-- pin: test/permission_forge/concerns/permission_scoped_findable_test.rb#NotAuthorizedError#failure_messages are the denying rules' own messages, without parsing -->
+- **`pf_user_option_label`** (the group "Add member" select) is `Admin::PersonLabel`'s answer: a formatter that
+  returns blank falls through to the name as everywhere else in the admin (was "User #id"); the default
+  `profile_builder` reads `name` raw-column-first (`PersonLabel.raw_value`) past a masked User model. **No opt-out:**
+  one definition of a person's label.
+  <!-- pin: test/permission_forge/helpers/application_helper_test.rb#pf_user_option_label falls through to the name when the formatter returns blank (Admin::PersonLabel) -->
+- **Settings draws configuration values as `<code>`** (the enum pills, the key → value map, the default and the docs
+  link's key); the locale keys `settings.row.default` and `settings.row.docs` became `default_html` and `docs_html`.
+  **Opt out:** a host that overrode the two keys renames them.
+  <!-- pin: test/permission_forge/html/locale_leak_test.rb#every screen shows only translated words and host data -->
+- **Three placeholders are short hints**: `permission_forge.ui.search_people` and `home.index.search_placeholder`
+  read "Name or email" (sq "Emër ose email", mk "Име или е-пошта"), the Home explanation moved to the new
+  `home.index.search_help` under the search box, and `permission_set_rules.builder.message_placeholder` became
+  `permission_set_rules.builder.message_help`, a hint under the blocked-message textarea. **Opt out:** a host that
+  wants the old sentences overrides these keys in its own locale files (a placeholder longer than 40 Latin / 34
+  Cyrillic characters clips on a phone).
+  <!-- pin: test/permission_forge/html/layout_lint_test.rb#every placeholder fits a phone-width box in every locale -->
+- **"Refresh cached permissions" says when it is needed.** The person page's menu read "Rarely needed: changes
+  already apply immediately.", which is wrong with a per-process cache (a memory store) after a change from a
+  console, runner or job: the process that made the change cleared only its own entries, and the server keeps the old
+  permissions until they expire. It now says that (en, sq, mk), in the words `Cache::Outcome` reports.
+  **No opt-out:** text only.
+  <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#Refresh cached permissions says when it is needed, in every locale -->
+- **"What people lose" (Remove, Remove all, a set's impact line) counts the resources in effect**
+  (`Resource.in_effect`: active rows of an active set), not every active row. **No opt-out:** a label.
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: the resources that count right now (Resource.in_effect), also for "what people lose" -->
+- **Boot and configuration warnings reach the terminal where the log is not read.** Every boot/configuration warning
+  of the gem (the per-process cache, conditional sets with an empty context, the API without authorization lambdas,
+  unmasked GDPR fields, missing or stale RLS policies, `audit_events = false`, ...) goes through one emitter,
+  `PermissionForge::Warnings.emit`: the log always; standard error as well in development and, outside test, in any
+  process that is not a web server (a console, a runner, a rake task, a job worker) — once per warning per process,
+  and not when the logger already writes to standard output or error. Before, only the development cache warnings
+  reached standard error, and every SECURITY warning (a fail-open condition) was in the log alone. The warnings about
+  the admin and the API stay in the log outside a server process (next entry). **No opt-out:** one line per warning per
+  process, only where the log is not on the terminal; each warning names the setting that removes its condition.
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#the emitter writes where the policy table says -->
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#development writes both warnings to standard error as well, once each -->
+- **The warnings about the admin and the API are printed by the server, not by every runner.** HTTP Basic auth
+  without credentials ("The admin UI will return 401 for all requests"), a shared Basic-auth login without
+  `audit_actor_resolver`, an API-only host missing the admin's middlewares, tenantless admin access and the API without
+  its authorization lambdas went to standard error in every `bin/rails runner`, rake task, console and `db:seed`, which
+  serve no admin — and with the README's credentials set for the server only, the 401 sentence was untrue there.
+  `Warnings.emit` takes `audience: :server` (beside `severity:`): such a warning goes to the log only outside a server
+  process; the server prints it as before. Every other warning keeps reaching every process. A server process is now
+  also one started by `unicorn` / `unicorn_rails` (`Unicorn::Launcher`), Passenger (`PhusionPassenger::App`), `falcon`
+  (`Falcon::Command`), `pitchfork` or `rackup` (by program name: the name the process was started with,
+  `Process.argv0`, which pitchfork's process titles do not change, or `$0`, which `bundle exec rackup` sets), as by
+  `bin/rails server` and `puma`; a server started some other way is not recognised (docs/configuration.md "Where
+  warnings appear"). In production these write
+  every warning to the log only, as Puma's processes do (they wrote them to standard error), and a change their host
+  controllers make reports `in_request: true` in its cache outcome (`Cache::Report.in_request?`). **No opt-out:** the
+  log keeps every warning; a runner that must check the admin's setup reads it there.
+  <!-- pin: test/permission_forge/install/runner_warnings_test.rb#bin/rails runner keeps the admin warnings off standard error; the log has them, the other warnings print -->
+  <!-- pin: test/permission_forge/install/runner_warnings_test.rb#bin/rails server prints the admin warnings -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#every warning has its audience in AUDIENCE, the one its site passes, and a reason when it is server -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#a server warning is written where the server policy table says -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#a server process is one bin/rails server or a web server command started -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#a process the pitchfork or rackup command started is a server, by its original program name -->
+- **Nothing is checked or logged while `bin/rails generate` or `destroy` boots the app.** The install generator boots
+  the app before it writes the initializer and the migration that creates the audit table, and that boot logged six
+  `[PermissionForge]` lines describing the defaults (the in-memory cache, HTTP Basic Auth without credentials, masking
+  not complete) and told a fresh install to run `permission_forge:upgrade`. While a generator runs
+  (`Warnings.generator_running?`: the `generate` / `destroy` command is loaded) the boot checks, their warnings, the
+  missing-table check (the first audit event checks again), the "Added N GDPR patterns" line, `PermissionForge.configure`'s
+  model-binding warning and the masking machinery keep quiet; `validate_gdpr_explicit_choice!` still raises.
+  **No opt-out:** the next server, console or task boot checks and warns about the configuration the app has.
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#nothing is written while a generator boots the app -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#BootChecks.run checks and logs nothing while a generator boots the app -->
+  <!-- pin: test/permission_forge/audit/boot_warnings_test.rb#no missing-table warning while a generator runs; the first event checks again -->
+- **The development masking note is written to standard error too** (with `auto_apply_masked_attributes = :auto` and a
+  per-process or null cache store): it says the server re-reads the `Resource` names from the database in development
+  and that production would mask a model first named in another process only after a restart. It was in the log only.
+  **Opt out:** share the store (`config.cache_store = :file_store, "tmp/cache/store"` in development), list the models
+  in `auto_apply_masked_attributes`, or include `MaskedAttributes` in the models with `auto_apply_masked_attributes =
+  false` — each removes the condition, and the warning with it.
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#development writes both warnings to standard error as well, once each -->
+- **The production boot warning about an in-process cache also covers a `:memory_store`.** It fired only for
+  `cache_backend = :memory`; `cache_backend = :rails_cache` over a `Rails.cache` that is a `:memory_store` (or a
+  `MemoryStore` instance as `cache_backend`) is as inconsistent across Puma workers and is now warned about too. The
+  line reads "Using an in-process permission cache in production" (it said "in-process MemoryCache"): update a log
+  alert that matches the old text. **Opt out:** use a store the workers share.
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#production gets the production warning, not the development one -->
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#production with a shared store does not warn -->
+- **What the cache tasks print is one outcome.** `rake permission_forge:cache:clear`, `erasure` and
+  `cleanup_expired_assignments` print through `RakeOutput` (see Added): "Cached permissions removed: yes (the cache
+  store confirmed it)" and a "Cache scope" line that says what the clear means (a shared store: every process sees it,
+  each user rebuilds on their next request; a per-process store: this process only), instead of "Cache cleared: true",
+  "invalidated 1 user(s)" and a "The cache is cold" line followed by the per-process note it contradicted. Labels
+  changed ("Audit log name labels cleared as actor: 2", one key per line). **No opt-out:** output only; the result
+  Hashes and events are additive. A script that matched `Cache cleared: true` matches `Cached permissions removed:`.
+  <!-- pin: test/permission_forge/tasks/cache_clear_task_test.rb#with ACTOR and REASON: every holder is invalidated, the event names the actor from rake -->
+  <!-- pin: test/permission_forge/tasks/rake_output_test.rb#an erasure on an in-memory store says the running servers kept the cached permissions, in output and event -->
+- **`DRY_RUN=1`, `yes` or `TRUE` now mean a dry run for `rake permission_forge:erasure` and `audit_events:purge`;
+  only `false`, `0` or `no` executes.** The erasure took only the literal `true` as a dry run, so `DRY_RUN=1` (the
+  purge's documented dry run) erased the person. Unset, each keeps its default: the erasure is a dry run, the purge
+  deletes. **No opt-out:** a value other than an explicit false never deletes.
+  <!-- pin: test/permission_forge/tasks/gdpr_erasure_task_test.rb#test DRY_RUN values other than an explicit false are a dry run -->
+- **Service results gained keys (additive).** `ConsentWithdrawalHandler.call` answers the same keys for a real run and
+  a dry run (the real run answered `{ revoked_sets:, invalidated: }` only; it now also answers `affected_sets`,
+  `affected_assignment_count` and `dry_run: false`, and a dry run also answers `invalidated: false`), and both answer
+  `cache`; `ExpiredAssignmentCleaner.call` answers `affected_user_ids`, `permission_sets` and `cache`;
+  `DataSubjectErasure.call` answers `permission_sets`, `groups`, `events_scrubbed` and `cache` (`cache_cleared` kept);
+  `BulkPermissionSetAssignment.call` and `PermissionCacheClearer.call` answer `cache`. See
+  [GDPR data handling](docs/gdpr-data-handling.md). **No opt-out:** nothing was removed or renamed.
+  <!-- pin: test/permission_forge/services/consent_withdrawal_handler_test.rb#a real run answers the keys a dry run answers -->
+- **`rake permission_forge:audit` reports a per-process cache from the configured store.** `process_local_cache`
+  (High, production) now asks the store the configuration builds (`cache_store.process_local?`), so `cache_backend =
+  :rails_cache` over a `:memory_store` is reported too, not only `cache_backend = :memory`. **No opt-out:** a finding.
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#a process-local cache is flagged only in production -->
+- **`rails -T` descriptions.** `permission_forge:audit` no longer says "Read-only": it changes no permission data and
+  records the run in the audit log (`report.generated`); the report's footer says "No permission data was changed"
+  and that the run is recorded (it said "Read-only: nothing was changed"). `permission_forge:cache:clear` says what it
+  does first; the upgrade hint for 0.13 installs comes last. **No opt-out:** text only.
+  <!-- pin: test/permission_forge/tasks/rake_output_test.rb#the audit task says it changes no permission data and records the run -->
+  <!-- pin: test/permission_forge/tasks/rake_output_test.rb#the cache:clear description leads with what it does, the upgrade hint last -->
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#report counts, threshold filtering and renderings -->
 - **The stale-assignment report and the admin agree on the threshold.** Without `THRESHOLD_DAYS` the rake task, and
   `Services::StaleAssignmentAuditor.call` without `threshold_days:`, now use `config.admin_stale_assignment_days`, as
   the Home Stale list, the person page and `rake permission_forge:audit` already did; they used a fixed 90 before.
@@ -36,9 +953,792 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   `threshold_days:` (the security audit does) are unaffected; `threshold_days: nil` now means the setting instead of
   raising. **Opt out:** run the task with `THRESHOLD_DAYS=90`, and call
   `Services::StaleAssignmentAuditor.call(threshold_days: 90)`.
+  <!-- pin: test/permission_forge/services/stale_assignment_auditor_test.rb#the default threshold follows admin_stale_assignment_days -->
+  <!-- pin: test/permission_forge/tasks/audit_rake_tasks_test.rb#stale_assignments without THRESHOLD_DAYS uses admin_stale_assignment_days -->
+- **`rake permission_forge:audit` refuses a `FAIL_ON` it does not know.** A typo counted as `info` and failed the build
+  on any finding; the task now prints the levels on stderr and exits 2 before the review runs (as `stale_assignments`
+  does with a bad `THRESHOLD_DAYS`). Levels are read in any case (`FAIL_ON=HIGH` is `high`). **No opt-out:** a valid
+  level reads as before; `FAIL_ON=info` keeps failing on every finding.
+  <!-- pin: test/permission_forge/tasks/rake_output_test.rb#an unknown FAIL_ON stops before the review with exit 2 and the levels -->
+  <!-- pin: test/permission_forge/tasks/rake_output_test.rb#FAIL_ON is read in any case -->
+- **`rake permission_forge:audit_masks` names the Permission Set, the suggested strategy and what matched.** An
+  unmasked field is reported once per set, and the lines looked like duplicates; "matches pattern 'first1_last4'"
+  named the mask the pattern suggests, not the pattern. The lines now read `[UNMASKED] Customer.email (Permission Set:
+  Support) — personal data, not masked (suggested strategy: 'email'; matches 'email')` and `[UNMAPPED] Customer.phone
+  — personal data, no active ResourceField (suggested strategy: 'last4')` (plus `; matches '<pattern>'` or `; named by
+  filter_parameters` where the finding records what matched); `unmasked_field` and `unmapped_column`
+  findings gain a `pattern` key (the other keys are kept). A CI step that greps `[UNMASKED] Customer.name` still
+  matches; one that matches the rest of the old line must change. **No opt-out:** match on `[UNMASKED]
+  <Model>.<field>` (or read `Services::GdprFieldAuditor.call`'s Hash) instead of the whole line.
+  <!-- pin: test/permission_forge/tasks/audit_masks_task_test.rb#prints one line per finding and exits 1 -->
+  <!-- pin: test/permission_forge/services/gdpr_field_auditor_text_report_test.rb#keeps the start of the lines existing CI output already had, names the set and the suggested strategy -->
+- **`rule/unenforced_rules` leaves out Resources named after no model.** A Resource named `Custmer` was listed under
+  `integrity/unknown_models` and, with its rules, under `rule/unenforced_rules` (and Home's record-rules card) — there
+  is no query to scope. Only Resources whose model the app can load (`Admin::ModelCatalog#find`) are listed there now.
+  **No opt-out:** `integrity/unknown_models` still names the Resource.
+  <!-- pin: test/permission_forge/admin/services_test.rb#rules of a Resource named after no model the app can load are not flagged -->
+  <!-- pin: test/permission_forge/services/security_audit_integrity_check_test.rb#a Resource named after a constant that is no model with a table is a Resource for a model this app does not have -->
+- **A missing column costs one metadata query per process, and a reset only after a real schema change.** The engine,
+  the admin and the services read a missing name (a `_uuid` variant, a timestamp a model lacks, a declared virtual
+  field) again through `SchemaRead` once per process: one metadata query, and a model reset only when the database's
+  columns differ from Rails' (a migration while the process was up). Pages that list models (Sync, the rule
+  builder) compare their columns with the database once per render; Home and the navigation read the schema cache. `FieldVariants` asks `FieldNames.declares?` plus
+  `VirtualFields#include?` whether the model has a variant name. **No opt-out:** the alternative is the stale answer
+  until the process restarts.
+  <!-- pin: test/permission_forge/schema_freshness_test.rb#a missing name on an unchanged schema never resets the model -->
+  <!-- pin: test/permission_forge/schema_freshness_test.rb#every reader sees a column a migration added after the schema was read, without a reset -->
+- **The JSON API answers JSON only.** `GET /api/permission_sets.xml` (any extension but `.json`) answered the JSON list
+  with a 200; it now names no endpoint and gets the API's JSON 404 (`No API endpoint answers this path and method`).
+  No extension and `.json` answer as before. **No opt-out:** the API has no other format.
+  <!-- pin: test/permission_forge/api/unmatched_routes_test.rb#an extension other than .json reaches no endpoint: the JSON 404 envelope -->
+  <!-- pin: test/permission_forge/api/unmatched_routes_test.rb#.json and no extension still answer -->
+- **Unrouted API calls answer the JSON 404 envelope.** Any other path or method under the API mount
+  (`/api/unknown`, a `POST`, `PATCH` or `DELETE` on the read-only `audit_events`) answered Rails' HTML 404 page; it is
+  now `{"error":{"status":404,"messages":"No API endpoint answers this path and method"}}`, after the same guards as
+  every endpoint (a disabled API stays a bodiless 404, a refused `api_auth` a 401). **No opt-out:** an HTML page was no
+  API answer.
+  <!-- pin: test/permission_forge/api/unmatched_routes_test.rb#an unknown path or method under the API answers the JSON 404 envelope -->
+  <!-- pin: test/permission_forge/api/unmatched_routes_test.rb#it runs api_auth first: an unauthenticated caller gets the 401, recorded like any API call -->
+- **Every API 422 has one shape: field-keyed messages.** Input the API cannot read answered `messages` as one string
+  (`"expires_at is not an ISO 8601 date or time"`, `"param is missing or the value is empty or invalid:
+  permission_set"`, `"Invalid action: …"`), while a failed validation answered an object. Both are now an object that
+  maps the field to a list of messages, keyed by the request parameter (`{"expires_at": ["is not an ISO 8601 date or
+  time"]}`, `{"permission_set": ["is missing, empty or not an object"]}`, `{"bulk_action": ["must be assign or
+  revoke"]}`) or `base` when the error names none (`generate_fields`' failure). The messages follow the request's
+  locale. 401, 403 and 404 keep their string. **No opt-out:** a client that read the string reads
+  `messages.values.flatten` instead. See [`docs/admin-api.md`](docs/admin-api.md#response-format).
+  <!-- pin: test/permission_forge/api/permission_sets_controller_test.rb#a section that is not an object is a field-keyed 422, like a validation error -->
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#an expires_at that is not ISO 8601 is a 422 and assigns nobody, single and bulk -->
+- **An API `expires_at` given as a date means the end of that day.** `"2026-10-22"` on `POST …/users` and
+  `POST …/users/bulk` is now 23:59:59.999999 of that day in `Time.zone`, as the admin's end-date presets and its custom
+  date; it was the beginning of the day (00:00), so the assignment had ended when its last day started. A date and time
+  (`2026-10-22T10:00`, with or without an offset) is read as before. **Opt out:** send the moment you mean,
+  `2026-10-22T00:00`.
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#a date alone is the end of that day, so today is accepted and lasts through it -->
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#a date or a time without an offset is read in Time.zone -->
+- **The API refuses an `expires_at` that is not after now.** A single assignment or a bulk `assign` with an end that
+  has passed (`"2020-01-01"`, yesterday, a minute ago) created an assignment that granted nothing, answered 201/200. It
+  is now a 422 (`{"expires_at": ["must be in the future"]}`) and nobody is assigned. A bulk `revoke` ignores
+  `expires_at`, also one that is not ISO 8601 (a revoke removes the assignments whatever their end); the admin's Undo
+  still restores a removed assignment with the end it had. **No opt-out:** such an assignment granted nothing.
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#an expires_at that is not in the future is a 422 and assigns nobody, single and bulk -->
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#a bulk revoke ignores an expires_at it cannot read -->
+- **A refusing `api_auth` answers 401 Unauthorized instead of 403.** A wrong or missing token is a failed
+  authentication: clients that refresh credentials on 401 did not on the 403. The body is
+  `{"error":{"status":401,"messages":"Not authenticated"}}`, in the request's locale; the `api.auth_failed` event keeps
+  its reason (`api_auth_denied`) and records `status: 401`. No `WWW-Authenticate` challenge is invented (the gem does
+  not know your scheme): one your `api_auth` sets on `controller.response.headers` is kept. 403 now means an
+  authenticated caller the authorization lambdas refuse, a lock, a missing tenant or `audit_log_authorization`.
+  **No opt-out:** a client that treated 403 as "bad token" checks 401.
+  <!-- pin: test/permission_forge/api/base_controller_test.rb#a WWW-Authenticate challenge set by api_auth is sent with the 401; none is invented -->
+  <!-- pin: test/permission_forge/audit/admin_plane_events_test.rb#an API request api_auth refuses records api.auth_failed (401) with who the host knows -->
+- **A 403 for a missing authorization lambda says so.** While `api_require_authorization` is on and
+  `api_action_authorization` / `api_assignment_authorization` is unset, a change or an assignment answered "Action not
+  authorized" / "Assignment not authorized", the same text as a real denial. It now names the missing option ("API
+  changes need config.api_action_authorization; …"); a lambda's refusal keeps its message. **No opt-out:** a message.
+  <!-- pin: test/permission_forge/api/base_controller_test.rb#a mutation refused because an authorization lambda is unset says which option is missing -->
+- **`generate_fields` reads `grant_all` as a boolean.** Only the strings `"true"` and `"1"` granted: a JSON `true`
+  (or `1`) answered 201 with fields without edit. `true`, `1` and the words `true`, `t`, `on`, `1` (any case) now
+  grant; `false`, `0`, the words `false`, `f`, `off`, `0`, `null` and no `grant_all` do not — the one boolean reading
+  of the admin and the API (`ParamShapes.boolean`); anything else (`"yes"`, `""`, `2`) is a 422
+  `{"grant_all": ["must be true or false"]}` and creates no field. **No opt-out:** send one of the values above.
+  <!-- pin: test/permission_forge/api/resources_controller_test.rb#POST generate_fields reads grant_all as a JSON boolean, 1 or their strings -->
+  <!-- pin: test/permission_forge/api/resources_controller_test.rb#POST generate_fields refuses a grant_all it cannot read with a 422 keyed by grant_all -->
+- **A bulk assignment that names nobody is a 422.** `POST …/users/bulk` without `user_ids` (missing, `[]`, `""` or
+  only blanks) answered 200 with nothing done; it is now `{"user_ids": ["must name at least one user"]}`, on `assign`
+  and `revoke`, and records no event, like the other 422s. Ids that name nobody are still reported in `skipped`.
+  **No opt-out:** such a request did nothing.
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#a bulk request that names nobody is a 422 keyed by user_ids, recorded like the other 422s -->
+- **A bulk `user_ids` that is not a list is a 422.** `"user_ids": "1,3"` was read as one unknown id and answered 200
+  `{"assigned": 0, "skipped": ["1,3"]}`; a string, a number or an object now answers
+  `{"user_ids": ["must be a list of user ids"]}` and changes nothing. **No opt-out:** send a JSON list.
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#a bulk user_ids that is not a list is a 422 keyed by user_ids and changes nothing -->
+- **API: a value of the wrong shape for its attribute is a 422 keyed by it, never dropped or cast.** Every attribute
+  section (`permission_set`, `resource`, `resource_field`, `resource_action`, `permission_set_rule`,
+  `permission_set_group`) is read through one shape table, `PermissionForge::Api::InputShapes` (each attribute's shape
+  from its column; the activation conditions folded in), and every wrong attribute of the request is named. Strong
+  parameters dropped a list or an object sent for a scalar with a log line (`PATCH {"is_active": [false]}` answered 200
+  with the set still active: a deactivation or revocation that did nothing), and ActiveModel cast the rest: `"nope"`
+  read as `true`, a JSON `true` for a name stored `"t"`, `1.5` for a description `"1.5"`. A boolean now takes `true`,
+  `false`, `1`, `0` and the words `true`, `false`, `t`, `f`, `on`, `off`, `1`, `0` in any case (`""` is no boolean);
+  text a String; `null` is passed on (a nullable column is cleared, a NOT NULL one keeps its own 422). A rule's
+  `field_value` takes a JSON number or boolean (stored as its text, `5` → `"5"`) and, under `in`, `not_in` and
+  `between`, a list stored joined with commas (`["active", "lead"]` → `"active,lead"`: it was a 422 "can't be blank");
+  `permission_set_group_id` goes on taking the group's id or uuid, `null` or `""` clearing it. Outside a section, a
+  copy's `name` that is not text (`…/clone`; it became the default name) and a bulk `user_ids` element that is no id (it
+  was left out) — an object, a list, a fraction, a boolean — are 422s too; a blank string beside an id is ignored, as
+  Rails' own `collection_singular_ids=` ignores it (a form built with `collection_check_boxes` sends one), and a JSON
+  `null` in the list is removed by Rails' parameter parsing before the API reads it. The admin reads its flags the same way (the field drawer, a group, an action, the set
+  editor): a crafted `group[is_active]=nope` switched the group on; it now goes back with "is_active must be true or
+  false. Nothing was changed." A static guard keeps `.permit` out of the API controllers. **No opt-out:** send each
+  attribute in its shape (docs/admin-api.md "Attribute shapes"); a dropped or miscast value was a silent no-op or an
+  inverted flag.
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a list, an object, an unknown word, a fraction or "" for a boolean is a 422 keyed by it and changes nothing -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#true, a number, a list or an object for a text attribute is a 422 keyed by it; nothing is renamed -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a list for field_value under in, not_in or between is joined with commas -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a copy name that is not text is a 422 keyed by name, and nothing is copied -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids with an element that is no id is a 422 keyed by user_ids, and nobody is assigned -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#a bulk user_ids holding a blank string beside an id ignores the blank, as Rails does -->
+  <!-- pin: test/permission_forge/api/input_shapes_test.rb#no .permit in the API controllers outside pf_record_attributes -->
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#~answers a wrong shape of each section attribute with a 422 keyed by it -->
+  <!-- pin: test/permission_forge/html/admin_boolean_params_test.rb#a group flag the admin cannot read is a flash, and the group is unchanged -->
+- **A single assignment or membership with an unusable `user_id` is a 422 keyed by `user_id`.**
+  `POST …/permission_sets/:id/users` and `POST …/permission_set_groups/:id/users` answered 404 `"Record not found"`
+  for a missing `user_id`, for one that is not an id (`"abc"`, `[2]`) and for one that names nobody, which read as if
+  the set or the group were wrong. They now answer `{"user_id": ["is missing"]}`, `["is not a user id"]` or
+  `["names nobody who can be assigned"]`, after the authorization lambdas, and assign nobody. An unknown id and
+  someone `user_list_resolver` leaves out read the same, as in a bulk request's `skipped`; a 404 now always means the
+  set or the group in the path. **No opt-out:** a client that treated that 404 as "no such person" reads the 422.
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#a missing or malformed user_id is a 422 keyed by user_id, on a set that exists -->
+  <!-- pin: test/permission_forge/api/permission_set_group_users_controller_test.rb#a missing, malformed or unknown user_id is a 422 keyed by user_id, on a group that exists -->
+- **An unknown `permission_set_group_id` is a 422 keyed by `permission_set_group_id`.** A value that names no group of
+  the current tenant was a validation error under `permission_set_group`; the API now answers
+  `{"permission_set_group_id": ["…"]}`, the parameter the request sent, before anything is saved. **No opt-out:** a
+  client that read `messages.permission_set_group` reads `messages.permission_set_group_id`.
+  <!-- pin: test/permission_forge/api/record_identifier_test.rb#a permission_set_group_id that names no group is a 422 keyed by it -->
+- **A request body the API cannot parse is a 400 in the API's envelope.** Invalid JSON sent as `application/json`
+  answered Rails' own `{"status":400,"error":"Bad Request"}` (or raised where exceptions are not shown); it is now
+  `{"error":{"status":400,"messages":"The request body could not be read. …"}}`, in the `Accept-Language` locale.
+  Rails parses the body before `api_auth` runs, so this 400 can come before a 401; a disabled API stays a 404.
+  **No opt-out:** the envelope is the API's.
+  <!-- pin: test/permission_forge/api/base_controller_test.rb#a body that is not valid JSON is a 400 in the API envelope, in the Accept-Language locale -->
+  <!-- pin: test/permission_forge/api/base_controller_test.rb#a body that is not valid JSON on a disabled API stays a bodiless 404 -->
+- **A `per_page` or `page` the API cannot read is the default, not 1.** `per_page=abc`, `0` or a negative number gave
+  pages of one row; anything that is not a positive whole number is now `api_default_per_page` (a `page`, the first
+  page). The `api_max_per_page` cap is unchanged. **No opt-out:** `meta.pagination` says what was used.
+  <!-- pin: test/permission_forge/security/pagination_limits_test.rb#a per_page of 0, a negative one or one that is not a number is the default page size -->
+  <!-- pin: test/permission_forge/security/pagination_limits_test.rb#a page that is not a positive whole number is the first page; the max clamp stays -->
+- **An API clone without a name is named as the admin's Duplicate names it.** `POST …/permission_sets/:id/clone`
+  and `POST …/permission_set_groups/:id/clone` named the copy `"<name> (Copy)"` in English; they now use
+  `permission_sets.copy_name`, `"<name> (copy)"` in the request's locale (`(kopje)`, `(копија)`), a set's copy
+  numbered when taken, as the admin and the cloners do. **Opt out:** send `name`.
+  <!-- pin: test/permission_forge/api/permission_sets_controller_test.rb#POST clone without a name names the copy as the admin does, numbered when taken, in the request locale -->
+- **`config.preset = :strict` sets `no_read_access_strategy = :deny`.** Under the strict preset a signed-in user
+  whose Permission Sets do not grant Read on a model finds none of its records: `permission_scoped` and auto-scoping
+  return no rows (associations and `belongs_to` presence checks included), `find_by` raises `NotAuthorizedError`.
+  Give each role Read on the models its pages and validations load. The library default is unchanged. **Opt out:** `config.no_read_access_strategy = :rules_only`.
+  <!-- pin: test/permission_forge/concerns/no_read_access_strategy_test.rb#the library default is :rules_only, the strict preset :deny -->
+  <!-- pin: test/permission_forge/configuration_presets_test.rb#:strict closes exactly the README hardening checklist -->
+
+- **One assignment's change says what the cache store confirmed, as a bulk revoke does.** Assigning, changing the end
+  date, keeping, removing, restoring and undoing one person's assignment in the admin, and saving a batch of edits
+  (Review and save, a field's drawer), were announced as done whatever the store answered; with the store down the
+  toast is now an alert that adds "The cache store did not confirm that the cached permissions were cleared: the old
+  permissions may stay in use until the cache lifetime ends." (`flash.cache_not_confirmed`, en/sq/mk), and on a
+  per-process store every such toast ends with `flash.cache_process_local`. Group membership changes no cached
+  permissions and reports none. **No opt-out:** a toast's wording; share the cache store to drop the per-process
+  sentence.
+  <!-- pin: test/permission_forge/html/assignment_cache_outcome_test.rb#removing one assignment with the store down is an alert, and still removes it -->
+  <!-- pin: test/permission_forge/html/assignment_cache_outcome_test.rb#saving batched edits with the store down is an alert -->
+- **`POST` and `DELETE …/permission_sets/:uuid/users` answer the cache outcome.** The single grant answers
+  `{ "data": {…}, "meta": { "cache": { "confirmed", "process_local", "in_request", "unconfirmed" } } }` (201), as the
+  bulk endpoint answers `cache`; the single revoke answers 200 with the removed assignment and the same `meta.cache`
+  (through 0.14.x a 204 without a body). Declared in `Api::Schema` (`single_with_cache`). **No opt-out:** a client
+  that requires 204 must accept 200 (every 2xx is success); `meta` is additive.
+  <!-- pin: test/permission_forge/api/assignment_cache_outcome_api_test.rb#a single revoke with the store down answers that nothing was confirmed -->
+  <!-- pin: test/permission_forge/api/assignment_cache_outcome_api_test.rb#a single grant answers the cache outcome -->
+- **More warnings are SECURITY warnings.** A warning means access wider than configured, or a change unrecorded, and
+  now says so (`[PermissionForge] SECURITY warning:`) for: a model loaded with another `tenant_model` (or none) than the
+  configuration's; auto-applied masking not complete at boot, a masking token the store did not take, a store that
+  fails the masking sync, and a sync that raised (it was a bare `logger.error`); the production per-process cache and
+  the production masking that cannot be announced (their `WARNING:` prefix is gone); `database_row_level_security` on
+  an adapter that is not PostgreSQL; the audit table that cannot be checked (a bare `logger.warn` before). A log alert
+  that matched `WARNING: Using an in-process permission cache` matches `Using an in-process permission cache`.
+  **No opt-out:** log text and severity; each warning names the setting that removes its condition.
+  <!-- pin: test/permission_forge/model_bindings_test.rb#a tenant_model mismatch is a SECURITY warning; a user_class one is not -->
+  <!-- pin: test/permission_forge/boot_warnings_channel_test.rb#every warning has its severity in SEVERITY, the one its site passes, and a reason when it is config -->
+- **Inside a caller's transaction, a consent withdrawal and the expired-assignment clean-up report a pending cache
+  outcome.** They reported the outcome measured before the commit as confirmed, while the bulk assignment and the
+  erasure reported `confirmed: nil`. "Deferred" has one reading now, `Cache::Report#deferred?` (a transaction was open
+  when the work was measured): `cache[:confirmed]` and `invalidated` are `nil` there, as is
+  `cleanup.expired_assignments`' `invalidated`. **No opt-out:** the answer is only known at the commit; `cache.settled`
+  records it for the consent withdrawal.
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#inside a caller transaction a consent withdrawal reports deferred, not confirmed -->
+  <!-- pin: test/permission_forge/services/cache_settlement_outcome_test.rb#inside a caller transaction the clean-up reports deferred, not confirmed -->
+- **The audit log's page reads like every page parameter.** A whole number past the last page (`page=99999…`, 40
+  digits) is the last page, as `page=99` was; it was the first. **No opt-out:** a page that does not exist was never
+  meant.
+  <!-- pin: test/permission_forge/release_readiness/integer_param_guard_test.rb#the audit log reads its page with the one reader: a number past the last page is the last page -->
+
+- **A rule comparing a value with an attribute declared with `encrypts` is refused, and a stored one is named.**
+  Active Record encryption keeps the column's name and stores the ciphertext in it; a rule compares the column in raw
+  SQL, so `phone equal '+1 555 0100'` compared the plaintext with the ciphertext — deterministic encryption included
+  (Active Record encrypts a value only in `where(attribute: value)`) — and silently matched nothing (field test round 7,
+  E#73). Every built-in operator that takes a value now matches nothing on such a column in the application layer and in
+  the RLS policy (version 7 compiles it to `FALSE`), and `PermissionSetRule` refuses a new rule — or a change of its
+  column, path, join type or resource, or of its operator off the null checks — on `field_name` ("names phone, an
+  encrypted attribute of Customer: the database holds its ciphertext, so a rule can only check whether it is empty";
+  en, sq, mk; the JSON API answers 422). `is_null` / `is_not_null` keep working: the ciphertext is NULL exactly when the
+  value is. A rule saved before the host encrypted the attribute stays editable in its other attributes (a copy keeps
+  it as it is), the audit lists it as `encrypted_rule_columns` (High while people hold the set) and Home under "Rules
+  that match nothing" (`Operators::RuleProblem` kind `:encrypted_column`; one reader of the declarations,
+  `PermissionForge::EncryptedAttributes`, a canary watches `encrypted_attributes`). The column is found wherever the
+  rule reaches it: in any table its query joins — an alias (`twins_notes.body` on a self-join), a `has_many :through`'s
+  join table, a table a default scope or a host's join brings in (each name the query gives a table is resolved to that
+  table, `Operators::RuleSources.tables`, and to every loaded model on it, `EncryptedAttributes.models_on`; a name no
+  loaded model is on counts as encrypted when any model along the rule's path encrypts a column of that name) — and
+  under single-table inheritance (a column is encrypted when the
+  class, its base class or any loaded class of the hierarchy on the same table encrypts it — a subclass's `encrypts`
+  also refuses a rule on its parent, and Rails' own answer for the parent depends on load order; a class not loaded yet
+  is not seen, so `rake permission_forge:audit`, which runs without eager loading, loads the application's models
+  first, through the admin's model list's one definition, `Admin::ModelCatalog.eager_load_app_models`). Under
+  `support_unencrypted_data` such a rule used to match the rows still stored in plaintext; it no longer does.
+  **Opt out:** compare a deterministically encrypted attribute through a custom operator whose strategy calls
+  `query.where(attribute => value)` (a custom operator gets the value as written).
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_column_test.rb#a new rule comparing a value with an encrypted attribute is refused on field_name, with a message in every locale -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_column_test.rb#a stored one matches nothing, is named, and stays editable in its other attributes -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_column_test.rb#it is checked again when its column changes or its operator moves off the null checks -->
+  <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#encrypted_column: a row written past the model is named, denies, is listed, compiles to FALSE -->
+  <!-- pin: test/rls/rls_rule_parity_test.rb#a rule on an encrypted attribute: the null checks agree, every other built-in operator matches nothing -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a stored one through the alias matches nothing, never the row it should hide, and is reported -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#an alias that cannot be resolved counts as encrypted when a model along the path encrypts the column -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a stored one on the join table matches nothing, never the row it should hide, and is reported -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a table a default scope joins is seen by the applier: the rule matches nothing -->
+  <!-- pin: test/permission_forge/tasks/audit_rake_tasks_test.rb#the audit loads the application models before it reviews -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_encrypted_reach_test.rb#a rule on the base class is refused, and a stored one matches nothing for the base and the subclass -->
+- **The default `profile_builder` leaves out an attribute the user model encrypts.** The profile is cached with each
+  person's permission hash, in the cache store (Redis, Solid Cache, a file or memory store). With `encrypts :email` (or
+  `:name`) on the user model, the default builder stored the ciphertext JSON there before 0.15; reading it decrypted
+  would put the plaintext in the cache store. `permissions_hash[:profile][:email]` and `[:name]` are now `nil` for an
+  encrypted attribute (an encrypted `email` gives way to a plain `email_address`), and so is a name or email the model
+  composes in a reader while it encrypts any attribute a name or email is read from (`name`, `full_name`,
+  `display_name`, `first_name`/`last_name`, `firstname`/`lastname`, `email`, `email_address`: such a reader would hand
+  over their plaintext; an encrypted attribute the label never reads is not looked at); the admin's labels, which are
+  never cached, still read them decrypted (`Admin::PersonLabel`, `decrypt: false` for the profile). The generated
+  initializer no longer sets `profile_builder`: the line is a commented example, which calls the public readers (they
+  decrypt), so a new install uses this default; an initializer generated before keeps its own lambda, which does the
+  same: remove the line to get the default. **Opt out:** set a `config.profile_builder` of your own that returns what the cache store may hold.
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#the default profile_builder leaves encrypted attributes out; the admin label reads them decrypted -->
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#under decrypt: false no reader is asked for a name or email while the model encrypts one the label reads -->
+  <!-- pin: test/permission_forge/release_readiness/claims_regression_test.rb#CLAIMS-32 the generated initializer works without a Current class and keeps uuid in the profile -->
+- **A LIKE operator on a column that is not text is refused on `operator`, naming the column's type.** `seats
+  contains '1'` on an integer column (PostgreSQL), or any LIKE operator on a `json` column, was refused as "is not a
+  value Customer.seats can hold" on `field_value`, although the value was fine (field test round 7, D#22). It is now
+  "matches text only, and Customer.seats is a column of type integer: use a condition that compares values" on
+  `operator` (en, sq, mk; the JSON API's 422 is keyed `operator`), checked on the same occasions as a value; a stored one
+  still matches nothing, and the audit lists it as `non_text_pattern_rules` (Medium while people hold the set) instead of
+  `unusable_rule_values` (`Operators::ValueTyping.problem`, `RuleProblem` kind `:pattern_on_non_text`). **No opt-out:**
+  such a rule never matched anything; a client that reads the 422 reads `operator`, and an alert on the finding's name
+  uses the new one.
+  <!-- pin: test/permission_forge/models/permission_set_rule_pattern_operator_test.rb#a LIKE operator on a column no pattern matches is refused on operator, naming the column type -->
+  <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#POST create answers 422 on operator, naming the column type, for a LIKE operator on a column it cannot match -->
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#a LIKE operator on an integer, date or boolean column is refused on operator, naming the column type -->
+  <!-- pin: test/permission_forge/operators/rule_problem_taxonomy_test.rb#pattern_on_non_text: a row written past the model is named, denies, is listed, compiles to FALSE -->
+- **Field and action rows the gem creates are labelled with their name, never with English made up from it.** The
+  field generator, the admin's presets, Sync and bulk add, a row created without a label, and an action row added from
+  a controller action stored `name.humanize` ("Billing email", "Created at"), which the Albanian and Macedonian admin
+  then showed as if an admin had written it (field test round 7, A#127); a field label an admin blanks is stored as the
+  name too (it went back to the humanized English). Rows already stored keep their label;
+  `PermissionForge::GeneratedText` recognises a label equal to the name, to the humanized name or to "Untitled Field" as
+  generated. `release_readiness/inflection_guard_test.rb` scans all of `lib/permission_forge` now. **Opt out:** write a
+  label of your own (admin or API), or translate the column (`activerecord.attributes.<model>.<column>`).
+  <!-- pin: test/permission_forge/services/resource_field_generator_test.rb#labels a generated row with its column name, never the humanized English -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#an action row made from a controller action key is labelled with the key -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#a field label an admin blanks is stored as the name -->
+  <!-- pin: test/permission_forge/release_readiness/inflection_guard_test.rb#nothing in app/ or lib/permission_forge inflects English -->
+- **A Permission Set, a group or a rule created without a name — or renamed to a blank one — is refused, and a rule
+  created without a blocked message stores none.** The install migration's English column defaults ("Untitled Permission Set", "Untitled
+  Permission Set Group", "Untitled Rule", "You do not have permission to perform this action.") were stored by an API
+  create or a create in code that sent none, and then shown in every language, returned by
+  `NotAuthorizedError#failure_messages` and recorded as the audit's `record_label` (field test round 7, D#47). The models
+  declare no default (`attribute :name, default: nil`, `attribute :failure_message, default: nil`), so the JSON API
+  answers 422 on `name`. A name that is empty or only whitespace is refused the same way, in code, through the API and in
+  the admin: every named model (Permission Set, group, rule, Resource, field row, action row) takes the one rule of
+  `Concerns::RequiresName`, checked on create and on rename; a rule could be saved with name `""` or `"   "` before
+  (field test round 8), and a row stored so stays editable and shows as "Untitled …" in the admin; the install migration of a new install gives those columns no default (an upgraded install
+  keeps its column defaults: the model's wins; see the migration guide). A rule whose stored message is the install
+  default denies with the locale's sentence (`permission_forge.denials.rule_default`), read at denial time — the cached
+  permission hash keeps the stored text. **Opt out:** send a name, and write a `failure_message` of your own.
+  <!-- pin: test/permission_forge/generated_text_test.rb#a Permission Set, a group or a rule created without a name is refused, in every locale -->
+  <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#POST create without a name answers 422 on name for a Permission Set, a group and a rule -->
+  <!-- pin: test/permission_forge/models/requires_name_test.rb#a new record with a blank name is refused, with one message -->
+  <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#a blank name is refused on create and on update for a Permission Set, a group and a rule -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#a rule created without a blocked message stores none, and denies with the sentence of the locale -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#a stored install default denies with the sentence of the current locale -->
+  <!-- pin: test/permission_forge/generated_text_test.rb#the install migration gives no name of a set, group or rule and no blocked message an English default -->
+- **The audit log's own words are codes, shown in the page's language.** The reason the expired-assignment cleanup
+  records when given none (`expired`, `Audit::ReasonCodes`) read "Arsyeja: expired" on an Albanian page (field test
+  round 7, E#70); the event page, the log's rows and a person's audit tab render it from the locale
+  (`pf_audit_reason`). An API change nobody names is stored with the actor label `api_client` (was "API client") and
+  the settings observer's `boot` is a code too (`Audit::ActorCodes`); `Admin::ActorLabel` names both in the page's
+  language (also an "API client" stored before), and so does the "who holds what" export's `granted_by` (a document
+  people read; `granted_by_type` and `granted_by_id` stay as stored). The events export and the API return the stored
+  values. **Opt out:** set `config.audit_actor_resolver`, so an API change names its client.
+  <!-- pin: test/permission_forge/audit/generated_codes_test.rb#the cleaner records the reason code, and the event page, the log and the person tab render it translated -->
+  <!-- pin: test/permission_forge/audit/generated_codes_test.rb#an API client nobody names and the boot are stored as codes and named in the locale -->
+  <!-- pin: test/permission_forge/admin/audit_log_test.rb#who holds what names an actor stored as a code in the language of the export -->
+
+- **A label the gem generated is shown as no label, and an English page keeps Rails' English.** A field or action row
+  labelled with its own name, the name in English ("Created at", what the generator stored through 0.14) or "Untitled
+  Field" read on a Macedonian or Albanian page as written — "Created at created_at" on the Fields tab (field test
+  round 7, A#127) — and a column with a row and one without carried two names on one grid ("Api token" against
+  `api_token`, B#26). `Admin::FieldLabel` and `Admin::ActionLabel` treat a generated label as none
+  (`PermissionForge::GeneratedText.label?`) and fall back to the host's translation, then — only while `I18n.locale` is
+  English — Rails' own English for the name (`human_attribute_name`: "Created at", what an English host saw before),
+  then the name in `<code>`, shown once (the grid no longer reads "api_token api_token"); a label an admin wrote still
+  wins. The field drawer, the action form, a set's and a group's name and the rule builder show generated text as a
+  blank field with a translated placeholder (`Admin::Prefill.text`), and saving that blank back is no change: the
+  stored text stays and no change or audit event is recorded (`Admin::Prefill.posted`, asked by every one of those
+  saves; a set's and a group's name field is not `required` while it holds generated text, so a page under an
+  install-default name saves any other change; typed text renames, and a blank over a label an admin wrote is stored
+  as the name, as before). A blank sent for a description that holds nothing is no change either. A Permission Set,
+  group or rule stored under an install-default English name ("Untitled Rule") is named in the page's language
+  wherever the admin shows it (`Admin::RecordName`, `pf_record_name`; the locale-leak walk stores those defaults on the
+  walked records) — the record lists of a Permission Set's and a person's Audit tab included (under
+  `audit_trail_enabled`), whose CSV exports keep the stored values. **Opt out:** write a label or a name of your own, or
+  translate the column (`activerecord.attributes.<model>.<column>`).
+  <!-- pin: test/permission_forge/admin/generated_text_display_test.rb#a generated field label is no label: Rails English on an English page, the name verbatim elsewhere -->
+  <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#a generated label and no row read the same on a muting set, in every language (B#26) -->
+  <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#the field drawer pre-fills no generated label, and keeps an admin label -->
+  <!-- pin: test/permission_forge/html/generated_text_unchanged_submit_test.rb#an unchanged field drawer keeps a generated label: no change, no event -->
+  <!-- pin: test/permission_forge/html/generated_text_unchanged_submit_test.rb#a set under an install-default name: an unchanged submit changes nothing, a change saves -->
+  <!-- pin: test/permission_forge/html/generated_text_unchanged_submit_test.rb#a rule under an install-default name and message: an unchanged builder save changes nothing -->
+  <!-- pin: test/permission_forge/html/generated_text_pages_test.rb#the Permission Set Audit tab names generated text in the page language; its CSV keeps the stored values -->
+  <!-- pin: test/permission_forge/admin/generated_text_display_test.rb#a set, group or rule stored under an install default name is named in the page language -->
+  <!-- pin: test/permission_forge/html/locale_leak_test.rb#every screen shows only translated words and host data -->
+- **The rule builder's preview says what the save would say.** It runs the save path in memory — the builder's own
+  checks, then the model's validations on the attributes the sentence shows — and shows the first refusal
+  (`Admin::RulePreview`): an "is between" with one end typed read "a, is not a value status of Customer can hold"
+  (field test round 7, B#87), and now reads "⚠ Will not save Enter both ends of the range.", as the save does; a rule
+  the save would take shows its sentence. A preview before a value is entered names the missing value instead of
+  "…". **No opt-out:** the preview only words what the save already refuses.
+  <!-- pin: test/permission_forge/html/rule_preview_property_test.rb#the preview says the first error the save would show, or none when the save goes through -->
+  <!-- pin: test/permission_forge/html/rule_preview_property_test.rb#B#87: an "is between" with one end says the range needs both ends -->
+- **The rule builder's checkboxes are read as every admin flag is.** `current_user`, `include_nulls` and `is_active`
+  were compared with `"1"`, so `"true"` or `"on"` read as false; they go through `ParamShapes.flag` now (`true`, `on`,
+  `1`, `t` in any case; an unchecked box keeps its default), and a value that is no boolean goes back with the
+  `flash.invalid_param` message, nothing saved. **No opt-out:** the admin's own forms post `1` and `0`, which read as
+  before.
+  <!-- pin: test/permission_forge/html/rule_form_flags_test.rb#the builder reads "true", "on", "off" as the one boolean reading does -->
+  <!-- pin: test/permission_forge/html/rule_form_flags_test.rb#a include_nulls the admin cannot read goes back with the flash, nothing saved -->
+- **Dry runs say "would", and answer that they did no cache work.** `rake permission_forge:audit_events:purge` with
+  `DRY_RUN=1` printed "Would delete 3 audit event(s)" above "Audit events deleted: 3" (field test round 7, E#55); every
+  label of `RakeOutput` that says a change was made has its dry-run form in the same table ("Audit events that would
+  be deleted"). The dry runs of `ConsentWithdrawalHandler`, `DataSubjectErasure` and `ExpiredAssignmentCleaner` answer
+  `cache: { confirmed: nil, ..., work: false }` (`Cache::Outcome.none`, `Cache::Report#none`; the consent dry run
+  answered `confirmed: true`, the other two had no `cache`), and the rake line reads "none — no cache work was done".
+  An outcome of real cache work keeps its four keys. **No opt-out:** a script that read a dry run's `cache[:confirmed]`
+  reads `work`.
+  <!-- pin: test/permission_forge/tasks/dry_run_output_test.rb#every label that says a change was made has its "would" form -->
+  <!-- pin: test/permission_forge/tasks/dry_run_output_test.rb#the purge's dry run says would on every line -->
+  <!-- pin: test/permission_forge/tasks/dry_run_output_test.rb#the consent withdrawal's dry run did no cache work, and says so -->
+  <!-- pin: test/permission_forge/tasks/dry_run_output_test.rb#every dry run answers no cache work -->
+### Deprecated
+
+- **An `api_auth` that sets `@admin = true` on the controller to open `GET /api/stats`.** Set
+  `config.api_stats_authorization = ->(controller) { … }` instead. While that option is unset, `@admin` still allows,
+  warning once per process through `PermissionForge.deprecator`; once it is set, `@admin` is ignored. Removed in 0.16.
+  <!-- pin: test/permission_forge/api/dashboard_controller_test.rb#an @admin set by api_auth still allows the stats, with a deprecation warning -->
+  <!-- pin: test/permission_forge/api/dashboard_controller_test.rb#with api_stats_authorization set, @admin no longer decides -->
+- **`PermissionForge::Admin::SensitiveColumns`** — use `PermissionForge::SensitiveColumns`; the old constant answers
+  with the new class and warns through `PermissionForge.deprecator`. Removed in 0.16.
+  <!-- pin: test/permission_forge/sensitive_columns_test.rb#PermissionForge::Admin::SensitiveColumns is a deprecated name for the same class -->
+- **`pf_time_ago`** (`ApplicationHelper`): it read Rails' `datetime.distance_in_words` keys, English without
+  rails-i18n; it now answers as `pf_relative` and warns once through `PermissionForge.deprecator`. Removed in 0.16.
+  <!-- pin: test/permission_forge/helpers/application_helper_test.rb#pf_time_ago is deprecated and reads as pf_relative -->
+
+### Removed
+
+- **`PermissionForge::Engine.apply_masked_attributes_to_managed_models`**, deprecated in 0.14: use
+  `PermissionForge::MaskedModels.apply(only:)`.
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#the engine carries no boot, masking or warning logic, and nothing reaches into it -->
+- **The removal of 0.13's cache keys.** Through 0.14 every invalidation also removed the bare keys 0.13 wrote
+  (`user_<id>`, `tenant_<t>_user_<id>`), so that a rolling deploy from 0.13 reached both versions' entries;
+  `Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES` is now empty and an invalidation removes this version's (`v2:`) entries
+  only: a revocation made by a 0.15 process no longer reaches what a 0.13 process has cached, which keeps serving it
+  until `cache_ttl`. An application still on 0.13 follows
+  [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013), which states
+  both directions and its two paths (through 0.14, with no such window, or straight to 0.15, accepting it).
+  <!-- pin: test/permission_forge/cache/user_keys_test.rb#an invalidation names the stamp and the v2 keys, and no bare key of 0.13 -->
+  <!-- pin: test/permission_forge/cache/user_keys_test.rb#the entries live under one namespace, the previous ones are gone -->
+  <!-- pin: test/permission_forge/docs/upgrade_notes_test.rb#From 0.13 states the cache gap in both directions and the two paths -->
 
 ### Fixed
 
+- **A session flag with a control character is a condition nobody can judge.** `requires_session_flag` with a newline,
+  a tab or a NUL byte is refused on save; a stored one makes a muting set apply to every request and a granting set grant
+  nothing (`ActivationConditions#session_flag_broken?`), and `rake permission_forge:audit` and Home list it with the other
+  broken conditions. <!-- pin: test/permission_forge/models/permission_set_condition_rows_test.rb#a session flag with a control character is refused, and a stored one cannot be judged -->
+- **A NUL byte in any text attribute of the permission models is a validation error.** A save from code (the console,
+  a host's service) with one raised — PostgreSQL's driver refuses any statement carrying it, the uniqueness checks
+  included, and SQLite on Rails 7.1 reads the statement cut short; the admin and the API already dropped NUL bytes from
+  request parameters. A value stored before keeps the row's other attributes editable.
+  <!-- pin: test/permission_forge/concerns/validates_column_lengths_test.rb#a NUL byte in a string being written is a validation error, before any validator queries with it -->
+- **The rule builder's live sentence keeps up with typing**: a newer input aborts the request before it, so a late
+  answer no longer overwrites the newer sentence, and a redirect (a lapsed session) or a whole page is never put into
+  the panel.
+  <!-- pin: test/permission_forge/html/admin_script_hygiene_test.rb#the rule preview aborts a stale request and injects fragments only -->
+- **The dependency validation names the prerequisite by its label** ("requires Read to be enabled", in the request's
+  language) instead of the column (`read_access`); sq and mk no longer say "Permission Set", "commit and deploy" or
+  "fail-open" in English, and the Effective access action pills word their state, not only a glyph.
+  <!-- pin: test/permission_forge/models/resource_test.rb#the dependency message names the prerequisite by its label in every locale -->
+  <!-- pin: test/permission_forge/i18n_test.rb#the left-behind lint bites -->
+  <!-- pin: test/permission_forge/html/state_rendering_test.rb#an action pill on Effective access words its state, not only its glyph -->
+- **A toast no longer covers the sidebar's language and theme switch at desktop widths** (1024px): toasts centre over
+  the main column (`--pf-sidebar-width`). The browser layout check now also runs at 390 and 1024px.
+  <!-- pin: test/permission_forge/html/layout_lint_test.rb#every scroll container in the stylesheet is a containing block, and the frame paints its cue -->
+- **"Review and save" titled the browser tab with a raw value** (`{one: "Review %{count} change", …}`) in every locale:
+  the page title now counts the changes. Every admin template is now rendered by the whole-UI walks (the reviews,
+  previews, Home cards, the audit log off or refused), so their lints cover it.
+  <!-- pin: test/permission_forge/html/admin_page_paths_test.rb#every POST answered with a page renders it -->
+  <!-- pin: test/permission_forge/html/admin_page_paths_test.rb#every template under app/views is rendered by a walked screen -->
+- **A stored rule never raises at read time.** A rule row with an operator this version does not know (`regex`) raised
+  `ArgumentError`, one with a join type that is none (`inner`) raised `ConfigurationError` — from `permission_scoped`,
+  `find_by`, `find_by!`, and under `auto_query_scoping = :filter_only` from `Customer.count` and every other query —
+  a 500 for every holder of the set. Such a rule matches nothing: `permission_scoped` is empty, `find_by` denies with
+  `NotAuthorizedError`. A registry injected as a Hash or as an object answering `fetch(name)` is asked the same way.
+  <!-- pin: test/permission_forge/services/permission_rule_applier_test.rb#the holder of such rules is denied every record, in every read path, never a 500 -->
+- **A rule naming a missing column denies instead of raising.** A rule whose field name is not a column of its table
+  (`onwer_id` on `Customer`, written past the model, or a column renamed since) reached the database, so every
+  `find_by` / `find_by!` / `permission_scoped` (and every query under `auto_query_scoping`) of each holder of its
+  Permission Set raised `ActiveRecord::StatementInvalid` — a 500 in the host app. Under every built-in operator it now
+  matches nothing, like a value the column cannot hold: its holders are denied every record of the resource. A custom
+  operator's rule is still left to the database.
+  An RLS policy compiles such a rule to `FALSE` (the sync failed on it; see `GENERATOR_VERSION` 7 under Changed). A new
+  such rule is refused on save (see Changed). See
+  [Using the wrong field name](docs/row-level-rules.md#using-the-wrong-field-name).
+  <!-- pin: test/permission_forge/services/rule_value_typing_test.rb#a column the table does not have matches nothing, under every built-in operator -->
+  <!-- pin: test/permission_forge/services/rule_value_typing_test.rb#a table that is none of the rule's matches nothing; a custom operator is still left to the database -->
+  <!-- pin: test/permission_forge/services/rls_operator_sql_test.rb#a column the table does not have compiles to FALSE, whatever the operator or value -->
+- **Duplicating a set no longer fails on a row stored before today's checks** (an unknown operator or join type, a
+  mask strategy that is not one, an IP entry that is no address): the copy keeps the stored values and behaves like
+  its original; whatever a copy still cannot hold is a flash naming the row, never a 500 (admin Duplicate, "Start
+  from", group Duplicate, API `clone`).
+  <!-- pin: test/permission_forge/services/copy_stored_values_test.rb#admin_duplicate copies a set holding a stored rule_operator and keeps it -->
+  <!-- pin: test/permission_forge/services/copy_stored_values_test.rb#a copy the validations still refuse is a flash naming the row, in the admin -->
+- **A join type this version does not know is applied by the default scope too** (it matches nothing); skipped there,
+  it left `auto_query_scoping` wider than `find_by` and `permission_scoped`. A stored rule whose field name holds a
+  control character can be edited (switched off). An IPv4-mapped request address (`::ffff:10.0.0.5`) matches IPv4
+  entries. `EditableLock.permits?` answers for a group membership.
+  <!-- pin: test/permission_forge/security/rule_join_type_test.rb#a blank join_type is a filter rule to the applier, the default scope and the model alike -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_validation_test.rb#a stored field name the format refuses stays editable in its other attributes, refused when it changes -->
+  <!-- pin: test/permission_forge/services/permission_set_condition_evaluator_test.rb#an IPv4-mapped IPv6 request address matches the IPv4 entries -->
+  <!-- pin: test/permission_forge/admin/editable_lock_test.rb#permits? answers for a group membership: refused both ways while the group is locked -->
+- **A rule whose association path cannot be joined denies instead of raising.** A join rule whose
+  `field_accessor_path` names no association (`ownr` instead of `owner`, saved through the API with a 201 before this
+  release) made every `find_by` / `find_by!` / `permission_scoped` of each holder of its Permission Set raise
+  `ActiveRecord::ConfigurationError` ("Can't join 'Customer' to association named 'ownr'") — a 500 in the host app —
+  and the audit did not list it. Such a rule — and one through a polymorphic `belongs_to`, a record-dependent scope
+  (also one reached along a `:through`, which raised `NoMethodError` when Rails built the join), a broken `:through` /
+  `inverse_of` or a class that cannot be loaded — now matches nothing under every operator: the join is never built.
+  Paths ActiveRecord joins are unchanged. An RLS policy compiles such a rule to `FALSE` (see Changed).
+  <!-- pin: test/permission_forge/models/permission_set_rule_path_test.rb#a holder of a rule whose path cannot be followed is denied every record, never a 500 -->
+  <!-- pin: test/permission_forge/security/rule_join_type_test.rb#an association path that cannot be followed matches nothing -->
+  <!-- pin: test/permission_forge/operators/rule_path_test.rb#every path ActiveRecord raises for is broken, at the segment it raises for -->
+- **A rule value with a NUL byte, or a field name with a control character, matches nothing.** A `field_value`
+  carrying a NUL byte (a row written past the model; the request layer drops NUL bytes from parameters) was quoted
+  into the statement, which the database read cut short — `ActiveRecord::StatementInvalid` for every holder. It is
+  now unusable under every operator, built-in or custom (`Operators::ValueTyping.unquotable?`): the rule matches
+  nothing, the audit lists it (`unusable_rule_values`) and Home names it; a new or changed value with a NUL byte is
+  refused ("must not contain a NUL byte"; a stored one leaves the row editable). A `field_name` with a control
+  character (a newline, a NUL byte) in a segment is no name (`Operators::RuleColumn.name?`): it matches nothing under
+  a custom operator too, where a missing column used to reach the database as written.
+  <!-- pin: test/permission_forge/services/permission_rule_applier_test.rb#a value with a NUL byte, or a field name with a control character, matches nothing -->
+- **The admin no longer draws a rule that matches nothing as a working rule, and shows what it names as stored.** A
+  rule naming a missing column read "Only show Customers where Stauts is active, or Stauts is empty" on the Rules tab.
+  The Rules tab, the delete confirmation, the field page, the rule preview, a person's effective access (and its
+  Records cell, which now summarises such a rule first) and the Permission Set's records summary now say "⊘ Matches
+  nothing" and why ("`stauts` is not a column of Customer", "`ownr` is not a relationship of Customer") with the rule
+  as stored, never "or empty"; the rule's edit page opens with a banner saying so (a rule written with
+  `update_column` is still `valid?` — the checks run when what it names changes — so the page shows what the row
+  holds) (en, sq, mk). A missing name is shown as code as stored (it read "Onwer" and "Ownr" like real names); a
+  relationship that exists but cannot be followed keeps its label.
+  <!-- pin: test/permission_forge/html/broken_rules_admin_test.rb#the Rules tab says the rule matches nothing, and never "or empty" -->
+  <!-- pin: test/permission_forge/html/broken_rules_admin_test.rb#the edit page of such a rule says so, as stored -->
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#a broken name is shown as stored, in code, wherever the problem is said -->
+- **An empty step in a rule's association path no longer breaks the admin.** A path like `parent..owner` (written past
+  the model) made Home and the Rules tab raise (`human_attribute_name('')`); it reads "The relationship path has an
+  empty step (two dots in a row, or a dot at the start)", and saving one says "has an empty association name".
+  <!-- pin: test/permission_forge/html/broken_rules_admin_test.rb#Home says why a relationship cannot be followed, and names an empty step of the path -->
+  <!-- pin: test/permission_forge/models/permission_set_rule_path_test.rb#each cause has its own message -->
+- **A model file that raises while it loads no longer breaks Home or the Rules tab.** `Operators::RuleProblem` and
+  `Operators::RuleColumn.for_rule` rescued only `NameError`, `ArgumentError` and `ActiveRecordError`: a model (or an
+  association's class) whose file raised while it loaded made every page that describes rules a 500. A `ScriptError`
+  (`SyntaxError`, `LoadError`) there, or any error while the rule's own model loads, is now "cannot tell" for those
+  callers (no problem shown, the save not refused); a `StandardError` while an association's class loads makes the
+  path broken ("… whose class cannot be loaded": shown, refused on save, matches nothing). The applier never answers
+  for a model it cannot load: a `ScriptError` propagates from the query as before.
+  <!-- pin: test/permission_forge/models/permission_set_rule_path_test.rb#a model file that raises while it loads is "cannot tell" for the admin, never an answer from the applier -->
+- **A field masked with a strategy this app does not know never raises.** `Services::MaskValue.call` raised
+  `ArgumentError` for a strategy it did not know — from the model's masked getter, `attributes`, `as_json`,
+  `FiltersResponseAttributes`, the admin's Fields tab — for a row written past the model, a blank strategy, or a custom
+  strategy removed from `config.custom_mask_strategies` after rows named it. It masks fully (`********`) and reports
+  the name once per process.
+  <!-- pin: test/permission_forge/services/mask_value_test.rb#call masks fully with a strategy it does not know, blank included, and never raises -->
+- **The field drawer no longer rewrites a mask strategy this app does not know to `full`.** Saving another change
+  (a label) saved `full`, audited as a strategy change, and the drawer showed "Masked (emial)" with no option
+  selected. It now flags the strategy ("Unknown mask strategy — masked fully until fixed") and offers the stored name,
+  selected and marked unknown, so a save that changes something else keeps it; only picking a strategy changes it.
+  <!-- pin: test/permission_forge/html/broken_rules_admin_test.rb#saving the drawer with another change keeps a strategy this app does not know; picking one changes it -->
+  <!-- pin: test/permission_forge/html/broken_rules_admin_test.rb#a field whose mask strategy this app does not know is drawn masked, with a badge, never a 500 -->
+- **A Resource named after a constant that is no model** (`Kernel`, `String`, a model without its table) made
+  `ResourceFieldGenerator`, `ResourceWithFieldsBuilder` (the admin's "Add resource" preset path) and the API's
+  `generate_fields` raise `NoMethodError`. The generator creates no fields and logs one line; the API answers 422.
+  <!-- pin: test/permission_forge/services/resource_field_generator_test.rb#returns empty array when resource name is not a valid class -->
+- **API: an activation condition is never dropped silently.** `POST`/`PATCH /api/permission_sets` permitted
+  `allowed_ips` as a scalar only, so a JSON array was dropped without a word (201 with `allowed_ips: null`, 200
+  changing nothing) and an "office only" granting set applied from any IP. `allowed_ips` now takes a String (commas,
+  newlines or spaces between entries) or an Array of Strings, normalised by the one parser; hours take an integer (or a
+  String of digits); a session flag a String; `null` clears. Any other shape (an object, a boolean, a number for a
+  list, an array for a flag or an hour) is a 422 keyed by the attribute, as is a list with no entry (`[]`, `[""]`).
+  <!-- pin: test/permission_forge/api/permission_set_conditions_api_test.rb#the recorded scenario: an office-only granting set written as an array grants from the office only -->
+  <!-- pin: test/permission_forge/api/permission_set_conditions_api_test.rb#an IP list with no entry is a 422 saying null clears the condition -->
+- **A uniqueness race is no longer a 500.** Two requests that create the same assignment, group membership, Resource
+  or field at the same moment both pass the uniqueness validation, and the unique index refuses the second INSERT
+  (`ActiveRecord::RecordNotUnique`), which nothing rescued. The API now answers it with the validation's own 422,
+  keyed by the attribute (`{"user_id": ["already holds this Permission Set"]}`, `{"name": ["already exists in this
+  permission set"]}`); the admin goes back to the page the form was on (303, never another host; its home page
+  without a Referer) with the same message in an alert. `PermissionForge::UniqueConflict` names the validation from
+  the index the adapter's error names and parses nothing else; an index that belongs to no validation of the gem's
+  models is a 422 on `base` / a generic alert.
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#duplicate insert: POST /api/permission_sets/:set/users is the validation 422 -->
+  <!-- pin: test/permission_forge/security/route_fuzz_test.rb#duplicate insert: POST /assignments goes back to the form with the message -->
+- **A column a migration added while the process was up was invisible**: a rule on it matched nothing at run time
+  (`RuleColumn.find`), "Sync fields" and the field generator did not create its row, the Fields tab and the rule
+  builder did not offer it and flagged a configured row on it "missing", a new `updated_at` was not made read-only, a
+  `_uuid` variant got no entry in the permission hash, a declared virtual field that became a column stayed
+  "virtual", the GDPR audit skipped it and the RLS generator left the tenant predicate out. Each reads it now without
+  a restart (`SchemaRead`). A removed column leaves the process at its next comparing read (the admin's Resource page,
+  Sync fields, the audit). A table a migration created while the process was up is found too (`data_source_exists?`
+  caches a negative answer; `SchemaRead.table?` asks again at most every 30 s).
+  <!-- pin: test/permission_forge/schema_freshness_test.rb#every reader sees a column a migration added after the schema was read, without a reset -->
+  <!-- pin: test/permission_forge/schema_freshness_test.rb#a table created after the schema cache said it is not there is found -->
+- **A response key two fields map to reads by the stricter of them.** With custom `field_variant_mappings` that send
+  two fields to one name (`supplier_id` and `supplier_ref` both to `supplier_key`) and a model without that name,
+  `FiltersResponseAttributes` read a serializer's `supplier_key` by the first field's entry, so a hidden second field
+  left the key readable. It now reads by the strictest of the fields' entries: read only if every one reads, edit only
+  if every one edits, masked if any masks (with that field's strategy). The default mappings never send two fields to
+  one name.
+  <!-- pin: test/permission_forge/field_variants_test.rb#a response key two fields map to is hidden when either field is -->
+  <!-- pin: test/permission_forge/field_variants_test.rb#a variant two fields map to gets the strictest of their entries -->
+- **The admin's effective-access explanation follows the engine on explicit-over-derived variant rows** (`variant_of`
+  is nil for an explicit row).
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#an explicit Hidden row for a variant name is hidden, in the engine and here -->
+- **A person's effective access composes single-table inheritance the way the engine does.** The view of
+  `VipCustomer` showed the subclass entry's own fields and rules, while the engine reads the strictest field entry
+  along the chain (`ResourceChain.fields`) and the rules of every entry: a field the base masks read as Editable, and a
+  base entry without Read (which hides every field) was not shown at all. A subclass entry now lists the rules of its
+  base entries too (a View All on the subclass skips only its own rules), its fields are composed along the chain, the
+  resource flags follow `PermissionHashBuilder.granted_flags` (edit and delete only with read, Modify All only with
+  View All), the Why panel says which Resource decided ("Decided by Customer, which this inherits from …", "Hidden: it
+  inherits from Customer, which doesn't allow Read."), and a field drawer's "In other sets" / "Explain for" reach the
+  base Resources a subclass answers to.
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#a subclass entry lists the base entry's rules too, and View All on the subclass skips only its own -->
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#a subclass shows its fields as the chain composes them: the strictest entry decides -->
+- **Effective access: the Why panel credits a set only with what it did to the entry.** A Muting Permission Set that
+  masks or hides a field no set shows made the panel read "⊘ Hidden by muting" and "Contractors forces this field
+  masked." for a field that was hidden because nobody granted it; a muting row that takes editing away was listed for
+  a field nobody could edit; with two mutes the weaker one was named first; two masking sets were listed in an
+  unstable order, so the first strategy named could differ from the one applied; a mask on a field already masked, or
+  a mute on a subclass field its base's grants already hide, was credited too. The badge and the first reason now
+  always word the entry's level (and strategy).
+  <!-- pin: test/permission_forge/html/admin_view_models_test.rb#every WHY level word equals the level the hash entry gives, for every state -->
+- **Effective access says how each Permission Set shows a field.** The WHY panel of a field said "✓ Sales rep shows
+  this field." when Sales rep shows it masked. It now reads by level: "shows this field masked (Email)", "shows this
+  field read-only", "shows this field and lets people edit it", and for Muting Permission Sets "hides this field" or
+  "forces this field masked" (`Admin::EffectiveAccess::FieldSource`, `FieldOutcome#grants` / `#mutes`).
+  <!-- pin: test/permission_forge/html/field_test_round_two_copy_test.rb#the WHY panel says how each set shows the field -->
+  <!-- pin: test/permission_forge/html/field_test_round_two_copy_test.rb#a muting set that forces a mask says so, in every locale -->
+- **A field hidden by a Muting Permission Set reads "⊘ Hidden by muting" everywhere.** The field's row said so, but its
+  Why panel and the field drawer's "Explain for" showed "∅ Hidden", the badge of a field no set grants; "Explain for"
+  also did not say which base Resource decides an inherited field. Row, panel and "Explain for" now draw the same
+  badge (`pf_effective_field_badge`) and the same "Decided by …" sentence.
+  <!-- pin: test/permission_forge/html/field_test_round_four_admin_ui_test.rb#the Why panel of a field hidden by muting reads as its row does -->
+  <!-- pin: test/permission_forge/html/labels_and_attention_admin_test.rb#Explain for names the base Resource that decides an inherited field, as the Why panel does -->
+- **"Across all Permission Sets" on an action drew two glyphs** ("✎ ✓ Permitted", "⊘ ⊘ Blocked"); it now reads as
+  the action's "Right now" badge.
+  <!-- pin: test/permission_forge/html/state_rendering_test.rb#action permitted: Right now and Across all sets word it alike -->
+- **The Conditions tab dropped the "same start and end hour" error**: the form refused the window but showed no
+  message. The error is drawn under the hour selects, which are marked invalid and point to it.
+  <!-- pin: test/permission_forge/html/labels_and_attention_admin_test.rb#the same start and end hour is said next to the hour selects, which are marked invalid -->
+- **A record footer that reads "Unknown" says it once, and why.** A change written with no actor (a runner, a job)
+  read "Last edited by Unknown" with nothing more, a record created and edited that way read "Created by Unknown · … ·
+  Last edited by Unknown", and an explanation started with "Unknown:" again. The footer names Unknown once ("… · Last
+  edited today"), adds that no actor was named for the change and that `PermissionForge.with_audit_actor` names one —
+  the event page's explanation, from the same helper.
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#the footer and the event page explain Unknown with one helper and the same words -->
+  <!-- pin: test/permission_forge/html/field_test_round_two_copy_test.rb#a change made by code with no audit actor names it as the audit log does, with a hint -->
+  <!-- pin: test/permission_forge/html/labels_and_attention_admin_test.rb#a record created and edited with no known actor reads Unknown once in its footer -->
+- **The audit event page explains an unknown actor.** An event with no actor read "Unknown · Unknown" with an "All
+  events by this actor" link. It now names Unknown once, gives the same explanation as the record footer without
+  repeating "Unknown:" in front of it, and the link reads "All events with no known actor".
+  <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#the event page of a change with no actor explains Unknown and links to every such event -->
+  <!-- pin: test/permission_forge/html/field_test_round_four_admin_ui_test.rb#the event page names Unknown once: the explanation does not start with it again -->
+- **"Created by" names who the audit log names.** A record created by the HTTP Basic admin (or an API client) has
+  no `created_by_id` — the column holds a user id — so the footer said "Created by System" and a Permission Set's
+  Assignments tab "by System", next to "Last edited by admin (password prompt)" and an audit log that named
+  "admin (password prompt)". Footers, the Assignments tab, "Assigned by" (person pages, Home), the audit tabs of the
+  Person and Permission Set pages and their CSV now take the creator from the record's creation event
+  (`permission_set.created`, `assignment.granted`, ...) when the audit log has one, and fall back to `created_by`
+  otherwise. The `created_by_id` / `updated_by_id` columns are unchanged.
+  <!-- pin: test/permission_forge/html/creator_label_test.rb#a set and an assignment made by the HTTP Basic admin: footer, grid and audit tab name who the audit log names -->
+  <!-- pin: test/permission_forge/html/creator_label_test.rb#a person stamped in created_by, with no event, is still named from the column -->
+- **Views decided "locked" from the record alone** (13 sites) and so offered what the server refused: Remove and bulk
+  revoke on a locked Muting Permission Set's holders, Delete on a set in a locked group, adding or removing members of a
+  locked group, the rule links on a locked field's drawer; the Locked badge on a row now follows the chain (a resource or
+  rule of a locked set is locked).
+  <!-- pin: test/permission_forge/html/locked_pages_test.rb#a locked Muting Permission Set: holders may be added and kept longer, not removed or ended sooner -->
+- **A locked Permission Set only offers the end dates it accepts.** The "Change end date…" menu of a locked granting set
+  offered "30 days from today" and "No expiry", which the lock then refused; it now lists only the presets that narrow
+  access (the other way round for a Muting Permission Set; `Admin::EditableLock.expiry_choices`). A person's Assign
+  drawer lists a locked set that cannot take holders as disabled with a "Locked" badge and a note, instead of leaving it
+  out. Home's "Ending soon" card shows the "Locked" badge in place of "Extend 30 days" where extending would be
+  refused (a locked granting set), and keeps offering it for a locked Muting Permission Set, where extending narrows.
+  <!-- pin: test/permission_forge/admin/editable_lock_test.rb#expiry_choices offers only what the lock lets through, in the set's direction -->
+  <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#the Assign drawer lists a locked granting set as locked, not hidden, and cannot assign it -->
+  <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#Home offers "Extend 30 days" only where the lock lets it through, and says Locked where not -->
+- **Home's privacy audit no longer offers "Fix" for a field of a locked Permission Set.** The field drawer refuses
+  every change to a locked set's (or Resource's, or field's) fields, including a mask, so "Fix" opened a drawer with
+  nothing to do and "This is intended" was offered when only the set was locked. Such a finding now shows the Locked
+  badge and a "View field" link (`AttentionItems::SensitiveFinding#locked?`, by `Admin::EditableLock`), and the
+  drawer of a locked field says "Locked, so nothing here can be saved." instead of "Saving applies to … immediately."
+  The note under the card's title says to choose "This is intended" only while a listed finding has the button
+  (`AttentionItems::SensitiveFinding#acknowledgeable?`).
+  <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#the privacy audit shows a field of a locked set as Locked, with no Fix and no This is intended -->
+  <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#the drawer of a locked field does not say what saving would do -->
+  <!-- pin: test/permission_forge/html/field_test_round_four_admin_ui_test.rb#a privacy audit whose rows are all locked does not tell the admin to choose This is intended -->
+- **A locked rule that matches nothing says how it gets fixed.** On Home its row has the Locked badge (as on the
+  privacy card) and says the set is managed by the system or API that created it, so the rule is fixed there (or the
+  set unlocked in code): its page only offers a copy, which would leave the rule as it is.
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#Home shows the Locked badge on a locked rule and says where it gets fixed -->
+- **Read-only inputs look read-only.** A locked record's inputs (the field drawer's Label and Description, the
+  conditions' IP list) were white boxes like editable ones; they are now filled and do not light up on hover (still
+  focusable and announced read-only), and a locked set's name and description no longer show an edit outline.
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#read-only inputs are drawn filled, without the hover of an editable one -->
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#a locked field drawer keeps Label and Description read-only, labelled -->
+- **Re-saving a filter rule that carried a relationship path turned it into a join rule.** The builder loaded the
+  stored path of a filter rule (`join_type` nil) and saved it back as `joins`, which changed what the rule matched. It
+  loads a path for join rules only (`PermissionSetRule#join_rule?`, the one definition), so a filter rule stays one.
+  <!-- pin: test/support/decision_parity/rules.rb#a filter rule that carries a path stays a filter rule through the builder -->
+- **Fixing a misspelled relationship keeps the rule's field.** A join rule whose stored path names no relationship
+  (`ownr`) showed the first relationship as if it were chosen next to "This model or relationship no longer exists";
+  its select now shows "Pick a relationship…" (marked invalid) and the field select keeps the stored field
+  (`email_address (as stored)`), so picking the relationship again keeps it when it is a column there — Save answered
+  "Pick the field to check." and the field was lost.
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#a relationship that is not there shows "Pick a relationship…", not the first one as if chosen -->
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#picking the relationship again keeps the stored field when it is a column there -->
+- **A save the rule builder refuses names the field as the builder does.** The model's errors were shown as Rails'
+  full messages ("Field accessor path names ownr, …", in English in every locale); they now carry the builder's own
+  label ("Relationship names ownr, …", "Field to check names `onwer_id`, which is not a column of …", in the page's
+  language). The API's field-keyed messages are unchanged.
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#a refused save names the field as the builder does, in every locale -->
+- **Rule builder: the banner of a rule that matches nothing names the right fix.** It said "Pick the field again" for
+  an unknown condition, join type or a value the column cannot hold; it now says what to change for each kind of
+  problem (`RuleProblem#remedy`), and no longer repeats the stored name ("`stauts` is not a column of Customer ·
+  stauts").
+  <!-- pin: test/permission_forge/html/rule_builder_explanations_test.rb#the banner says the stored name once -->
+- **Home's "unenforced rules" and "rules that match nothing" worked on two different sets of resources** (one added
+  `read_access`); both read `Resource.in_effect` now. A `join_type` of blanks counted as a join rule in SQL and as a
+  filter rule in Ruby; Home and the boot warning count by `filter_join_type?`. A `requires_session_flag` /
+  `allowed_ips` of newlines counted as a condition to the SQL scopes and not to `conditional?`; the scopes strip them
+  too.
+  <!-- pin: test/support/decision_parity/rules.rb#join_type_rules agrees with filter_join_type? on whitespace, for Home and the boot warning -->
+- **One definition per decision, read where it was re-derived.** `ManagedIndex.cache_key` reads the tenant through
+  `PermissionForge.ambient_tenant_id`; `FieldVariants` composes a shared variant through `ResourceChain.strictest`;
+  the cloner copies rows in the hash builder's order (`PermissionHashBuilder.sort_rows`).
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: the ambient tenant (PermissionForge.ambient_tenant_id / .ambient_tenant) -->
+- **The People page marked every permanent assignment "due for review" while `admin_stale_assignment_days` was nil**
+  (`nil.to_i` days); it now uses the same threshold as Home and the audit (the 90-day default).
+  <!-- pin: test/support/decision_parity/rules.rb#stale: the People page, Home, the audit and the auditor agree with the setting nil and set -->
+- **The Fields tab's bulk "Add" wrote rows the presets and Sync never would.** Bulk "Editable" on new columns gave
+  `created_at` / `updated_at` edit access (the presets and Sync give Rails' timestamps read-only), and bulk "Read-only"
+  on `email` gave it unmasked under `gdpr_defaults` (the presets start it Masked), Editable on a Resource without Edit
+  gave `email` Masked, and any posted name (`id`, `xyz`) got a row. The three paths now build the row in one place.
+  <!-- pin: test/support/decision_parity/fields.rb#(a) Customer, muting=false, gdpr_defaults=true, edit: presets, bulk and the generator write the same rows -->
+- **Under Rails 7.2+ `permanent_connection_checkout = :disallowed` a schema read raised** (saving a Permission Set with
+  tenancy on, a rule's column, the timestamps): reads go through the connection pool. An unreadable schema now leaves
+  generated timestamps Read-only, not Editable.
+  <!-- pin: test/permission_forge/schema_read_connection_test.rb#a Permission Set saves with tenancy on, and the tenant readers answer, where the deprecated reader raises -->
+  <!-- pin: test/permission_forge/schema_read_connection_test.rb#a timestamp row stays Read-only when the columns cannot be read (fail closed) -->
+- **A column added after `MaskedAttributes` arrived was read raw through its getter** (`[]` and `as_json` hid it); it
+  is guarded once Rails defines the attribute methods again.
+  <!-- pin: test/permission_forge/concerns/masked_late_columns_test.rb#a column added after the concern arrived is guarded by its getter, as by [] and as_json -->
+- **"This is intended" did not reach `rake permission_forge:audit_masks` (exit 1) or the boot warning**, which also
+  said "GDPR pattern" for a `filter_parameters` match; all four surfaces share one predicate now.
+  <!-- pin: test/support/decision_parity/fields.rb#(b) a row marked "This is intended" is reported by no surface, and by every surface without the mark -->
+  <!-- pin: test/support/decision_parity/fields.rb#(b) the boot warning names what matched: the GDPR pattern, or the host filter_parameters -->
+- **The GDPR audit reported a Hidden row as "readable unmasked".** `rake permission_forge:audit_masks`, the
+  `unmasked_personal_data` finding and `cross_set_unmasking` took every row with `mask_access: false`, so a Hidden
+  row (read off) of `email` was listed as personal data in the clear and as overriding another set's mask. Only a row
+  that exposes the field (read on, no mask) is reported now.
+  <!-- pin: test/support/decision_parity/fields.rb#(g) the GDPR audit names exactly the rows that expose a field in the clear; a Hidden row never -->
+- **`config.ignored_fields` given as Symbols were ignored by the field generator** (the admin honoured them): the
+  generator created rows for `uuid`, `id`, …
+  <!-- pin: test/support/decision_parity/fields.rb#(a) Symbol ignored_fields keep their columns out on every path -->
+- **A blank virtual field name made "Add resource", Sync and the Fields tab fail** (`ActiveRecord::RecordInvalid`, a
+  500) for a host whose `extra_fields_method` lists one; the generator already skipped it. Every path skips it.
+  <!-- pin: test/permission_forge/services/blank_name_rows_test.rb#the admin paths skip a blank virtual field name like the generator does -->
+- **Copying a Permission Set that holds a field or action row with a blank name failed whole** (such a row, written
+  before the names were checked, cannot be created again). The copy leaves those rows out, copies the rest and logs
+  how many it skipped.
+  <!-- pin: test/permission_forge/services/blank_name_rows_test.rb#cloning a set with blank-named field and action rows skips those rows and copies the rest -->
+- **`GdprFieldAuditor`'s `view_all_on_pii_resource` finding listed switched-off field rows** among the resource's
+  personal-data fields.
+  <!-- pin: test/permission_forge/services/gdpr_field_auditor_view_all_test.rb#a switched-off field row is not among the personal-data fields of a bypassing resource -->
+- **A field row created without a label is labelled with its name.** A `ResourceField` created through the
+  API or a console without a label took the install migration's column default, "Untitled Field", and the admin
+  (Home's privacy audit, the Fields tab) showed that instead of the field; generated rows already had a label from
+  their name. A new row whose label is blank or "Untitled Field" now gets its name as its label (`billing_email`) on
+  create; a label set later is kept, and existing rows are not changed (rename them in the admin). Resource actions
+  have no label default (a blank one reads as the action key).
+  <!-- pin: test/permission_forge/models/resource_field_test.rb#a new row without a label is labelled with its name -->
+  <!-- pin: test/permission_forge/models/resource_field_test.rb#the label default applies on create only -->
+- **The console shows the gem's own configuration names.** With `filter_parameters_integration` the GDPR pattern
+  `\Aname\z` (meant for people's names) reached the gem's models through `ActiveRecord::Base.filter_attributes`, so
+  `#inspect` printed `name: [FILTERED]` for a Permission Set, a Permission Set Group, a Resource, a field, an action
+  and a rule. Each of these models now sets its own `filter_attributes`: the application's filters, unable to match
+  `name`, `label` or `field_name` (configuration), still hiding whatever else they matched (a rule's `field_value`, a
+  description). `AuditEvent` hides `actor_label` and `record_label`, which name people, whenever the application's
+  filters hide a `name`. Request-parameter logging, SQL bind logging and the host's models are unchanged.
+  <!-- pin: test/permission_forge/inspection_filters_test.rb#a gem model's inspect shows its name under the GDPR patterns; another attribute stays filtered -->
+  <!-- pin: test/permission_forge/inspection_filters_test.rb#AuditEvent hides the labels that name people when the application's filters hide a name -->
+- **Auto-applied masking reaches the development server.** With Rails 8's development `:memory_store` (or 7.1/7.2's
+  `:null_store`) and `auto_apply_masked_attributes = :auto`, a `Resource` row created from a runner, a console or a
+  rake task never reached the running server, which served the model's columns in clear while `masked_field?` said
+  `true`, until a restart. In development, with a store that cannot carry the masking token, each request or job now
+  re-reads the `Resource` names (one query at most every 2 seconds) and masks the model at the next request. No other
+  environment runs that query; there the boot warns that a model first named in another process stays unmasked until a
+  restart, with the remedies (a shared store, `include PermissionForge::Concerns::MaskedAttributes` with
+  `auto_apply_masked_attributes = false`, or a list of models). See [Cache
+  Consistency](docs/configuration.md#cache-consistency).
+  <!-- pin: test/permission_forge/masking_sync_test.rb#development with a per-process store masks a model named from another process at the next request -->
+  <!-- pin: test/permission_forge/masking_sync_test.rb#development re-reads the Resource names at most every DATABASE_RECHECK seconds -->
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#production with a per-process or a null store warns that masking is not announced -->
+- **The masking-token warning says why, and a store that keeps nothing is not asked.** A store that keeps nothing
+  (`cache_backend = :null`, a `:null_store`, Rails 7.1/7.2's development default) logged "The cache store did not
+  give or keep the masking token" at boot with no cause or remedy; such a store is no longer asked for the token (the
+  boot warning above explains what it means). For a store that fails, the warning now names what the store did — its
+  error, or "(it did not answer, or a read right after a write came back empty: the store is down, full, or evicts the
+  key at once)" — before the consequence and the remedy (a shared store that keeps entries, or `MaskedAttributes`
+  included in the models).
+  <!-- pin: test/permission_forge/masking_sync_test.rb#a store that keeps nothing is asked for no token and logs no token warning -->
+  <!-- pin: test/permission_forge/release_readiness/masking_sync_regression_test.rb#PERF-N1b a store that does not answer is asked once per pause and logged once -->
+- **A gem that loads `rails/generators` at boot no longer hides the audit-table check.** The boot took any process
+  with `Rails::Generators` loaded for a generator run and skipped the missing-table warning. It now looks for the
+  command `bin/rails generate` / `destroy` loads (`Rails::Command::GenerateCommand` / `DestroyCommand`).
+  <!-- pin: test/permission_forge/audit/boot_warnings_test.rb#Rails::Generators alone is no generator run -->
+  <!-- pin: test/permission_forge/audit/boot_warnings_test.rb#a generator is running while bin/rails generate or destroy boots the app -->
+- **The admin's Erase and Home Clean-up said the web processes kept the cached permissions — while running in the web
+  process.** Both recorded `process_local: true` and the log read "in its own process only: the web and job processes
+  kept theirs" although the serving process had cleared its store (the person lost access at once). The outcome now
+  records where it ran (`in_request`), and the sentence and the flash name the *other* web workers and the job
+  processes.
+  <!-- pin: test/permission_forge/audit/cache_scope_events_test.rb#cleanup.expired_assignments from an admin request says process-local for the other processes only -->
+- **`ConsentWithdrawalHandler` from a runner on a per-process store answered `invalidated: true` and recorded no
+  scope.** `consent.withdrawn` carries the outcome like the other three events, the result carries `cache`, and the
+  admin's Withdraw consent flash says when the store is per-process.
+  <!-- pin: test/permission_forge/audit/cache_scope_events_test.rb#consent.withdrawn on the suite's memory store says process-local in the event and the result, in every locale -->
+- **`ExpiredAssignmentCleaner` and `BulkPermissionSetAssignment` from the admin and the API ignored the cache store's
+  answer in the flash and said nothing about scope.** The Home Clean-up flash and the bulk assign/revoke flashes say
+  when the store did not confirm (`maintenance.cleaned_cache_kept`, `bulk_assignments.assigned_cache_kept` /
+  `revoked_cache_kept`) and when it is per-process.
+  <!-- pin: test/permission_forge/html/refresh_cache_failure_test.rb#a refresh the store confirmed is announced as done -->
+- **`permissions.invalidated` says which processes it reached.** The runtime event (the `cache` group) now carries
+  `process_local` and `in_request` (the scope every summary event's `Cache::Outcome` carries), so with a per-process
+  store its audit sentence ends with the same cache-scope suffix instead of reading as if every process dropped the
+  user's permissions; with `confirmed: false` it says the store did not confirm the removal, never that it was
+  cleared.
+  <!-- pin: test/permission_forge/audit/runtime_plumbing_test.rb#a rebuilt and an invalidated permission hash are published, stored only with the cache group -->
 - **Users made by Rails 8's `bin/rails generate authentication` show and are found by their email.** That generator
   names the column `email_address`, and PermissionForge only read `email`: a person without a name column showed as
   "User #2" in the admin, searching people by email found nobody, "Paste emails or names" in bulk assignment reported
@@ -48,41 +1748,522 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   profile's `email` key from `email_address` when `email` is missing or blank. An existing generated initializer keeps
   its `profile_builder`: change its `email:` to `user.try(:email).presence || user.try(:email_address)` to get the
   same. Users with an `email` column see no change.
+  <!-- pin: test/permission_forge/admin/email_address_people_test.rb#the label shows the email_address when there is no name -->
+  <!-- pin: test/permission_forge/admin/email_address_people_test.rb#people search finds an email_address in SQL -->
+  <!-- pin: test/permission_forge/admin/email_address_people_test.rb#the default profile_builder fills email from email_address and still prefers email -->
 - **An `expires_at` that is not ISO 8601 is refused.** The API (`POST …/users`, `POST …/users/bulk`) and the admin's
   Undo after a removal read `expires_at` with `Time.zone.parse`, which takes any text with a recognisable fragment:
   `"tuesday"` or `"next tuesday-ish"` became today 00:00 and was answered 201 with an assignment that had already ended,
-  and `"2030-02-30"` became 2 March. `expires_at` is now read only as an ISO 8601 date (`2026-10-22`, the beginning of
-  that day in `Time.zone`, as before) or date and time (`2026-10-22T10:00`, optional seconds and fraction, `T` or one
+  and `"2030-02-30"` became 2 March. `expires_at` is now read only as an ISO 8601 date (`2026-10-22`, now the end of
+  that day in `Time.zone`: see **Changed**) or date and time (`2026-10-22T10:00`, optional seconds and fraction, `T` or one
   space, optional `Z` or `±HH:MM`); anything else is a 422 in the API (a 400 in the admin) and assigns nobody. The
   formats are listed in [`docs/admin-api.md`](docs/admin-api.md#expires_at-formats). The values the admin itself sends
   are unchanged.
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#an expires_at that is not ISO 8601 is a 422 and assigns nobody, single and bulk -->
+  <!-- pin: test/permission_forge/api/permission_set_users_controller_test.rb#every accepted expires_at form is stored as the time it names, single and bulk -->
+  <!-- pin: test/permission_forge/security/bad_input_test.rb#restore with an unreadable end date is a 400, not a permanent assignment -->
+- **An API `permission_set_group_id` that starts with digits no longer names another group.** The integer column cast
+  `"12ab…"` (a uuid that starts with digits) to 12, so `PATCH …/permission_sets/:uuid` could move the set into the
+  group whose id is 12. Only a string of digits is read as an id now; anything else is a uuid (under `:uuid`) or a 422.
+  <!-- pin: test/permission_forge/api/record_identifier_test.rb#a uuid that starts with digits is never read as a group id -->
+- **The 401 of a refused `api_auth` was always in the default locale** (the request's locale was assigned by a later
+  callback); it now follows `locale` / `Accept-Language` like every other API error.
+  <!-- pin: test/permission_forge/api/envelope_schema_test.rb#GET /api/permission_sets (permission_sets#index) answers the schema in its success and in every error class -->
+- **`GET …/permission_sets/new`, `…/:identifier/edit`** (and the same under resources, fields, actions, rules and
+  groups) raised `AbstractController::ActionNotFound` — Rails' own 404 page, outside the API envelope: the API routes
+  no longer draw `new` / `edit`, so `…/new` reads as an identifier (the JSON 404 "Record not found") and `…/edit`
+  reaches the catch-all (the JSON 404 "No API endpoint answers this path and method").
+  <!-- pin: test/permission_forge/api/envelope_schema_test.rb#…/new and …/:identifier/edit answer the JSON 404 envelope -->
+- **The audit called `current_user` on a `uuid` column a value the column cannot hold** (it judged the id as `0`); it
+  now judges it as a number and as a uuid, and lists it only when neither fits.
+  <!-- pin: test/permission_forge/operators/postgres_column_types_test.rb#current_user on a uuid column is a uuid only when the user id is one -->
+- **RLS: the policy's "no activation condition" quoted a newline, a carriage return and a tab through `squish`**,
+  which turned them into spaces; the `view_all` EXISTS is built without it.
+  <!-- pin: test/rls/rls_rule_parity_test.rb#a set whose condition texts are blanks is unconditional to the policy, as to the app layer -->
 - **`rake permission_forge:stale_assignments` refuses a `THRESHOLD_DAYS` it cannot read.** The value was read with
   `to_i`, so `THRESHOLD_DAYS=`, `abc`, `0` or `-3` became a threshold of 0 (or less) days and reported every permanent
   assignment, exiting 1. Anything that is not a whole number of days from 1 to 36500 now prints what is expected on
   stderr and exits 2, without running the report.
+  <!-- pin: test/permission_forge/tasks/audit_rake_tasks_test.rb#stale_assignments refuses a THRESHOLD_DAYS that is not a number of days -->
+- **`rake permission_forge:audit` says why `FAIL_ON` fails the build**: `Failing: N finding(s) at or above <level>
+  (FAIL_ON=<value>).` on stderr before the exit 1 (FORMAT=json output on stdout stays parseable).
+  <!-- pin: test/permission_forge/tasks/rake_output_test.rb#FAIL_ON says why it fails the build -->
+  <!-- pin: test/permission_forge/tasks/rake_output_test.rb#FORMAT=json keeps stdout parseable when FAIL_ON fails -->
+- **The `no_rules` finding's advice follows `auto_query_scoping`.** It said "enable auto_query_scoping" also when it
+  was on (under `config.preset = :strict`).
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#no_rules advises enabling auto_query_scoping only while it is off -->
+- **Lists in the admin read in Albanian and Macedonian.** A list of people, sets or resources ("Bob Sales and Carol
+  Support" on the set page, the review, the assign drawer, the confirmations, the "Assigned" notice) was joined by
+  `Array#to_sentence`, which reads Rails' `support.array` keys: an app without `rails-i18n` has them in English only.
+  The admin now joins every list with the connectors of the gem's own keys (`permission_forge.support.array.*`, in
+  en, sq and mk; helper `pf_to_sentence`, `Admin::ListSentence`); a test fails on a bare `to_sentence` in `app/` or
+  `lib/`.
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#a list reads with the connectors of each locale -->
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#nothing in app/ or lib/ joins a list with a bare to_sentence -->
+- **In Albanian and Macedonian the admin showed English where it had no key of its own**: Rails-core validation
+  messages ("can't be blank", "has already been taken", or "Translation missing: sq.errors.messages.blank"),
+  humanized column, model, association and action names in the effective-access tab, the Home privacy card, the Field
+  lookup, the rule builder's selects and sentences, the sync panel and the "New Resource" list, the audit log's record
+  names ("Permission Set #1" from `titleize`), the person and Permission Set audit CSV headers, the Settings page's
+  configuration values. Each now comes from a `permission_forge.*` key or is the stored name verbatim.
+  <!-- pin: test/permission_forge/html/locale_leak_test.rb#every screen shows only translated words and host data -->
+- **Locale file fixes.** The sq locale file mixed „…“ and “…” (three keys); `ui.badges.fail_open` was "Fail-open" in sq
+  and mk; the Settings intro said "deploy" in both.
+  <!-- pin: test/permission_forge/i18n_test.rb#sq quotes with one pair of quotation marks -->
+- **`pf_operator_label`, the audit log's actor type / category / source / filter labels and the condition flag
+  labels showed an unknown value humanized** ("made up operator"); they show it as stored.
+  <!-- pin: test/permission_forge/helpers/application_helper_test.rb#pf_operator_label shows an unknown operator as stored, never humanized -->
+- **Admin wording.** The empty Rules tab says "every Customer record they can read" (it said "every Customers"); the
+  banner of a Muting Permission Set's resource says "take access away from everyone who has “No PII exports”" (it
+  said "No PII exports's people"). A person shown by the email or the "User #2" fallback is named in full in sentences
+  ("What User #2 can do right now"; it said "What User can do"), and an email label takes its initials from the local
+  part (`dave@acme.test` is "DA"; it was "DT"). In a Muting Permission Set the drawer of a field without a setting
+  says the set takes nothing away from it, instead of "Blocked by default" and a link to
+  `unconfigured_field_strategy`, which only decides for granting sets.
+  <!-- pin: test/permission_forge/html/admin_copy_test.rb#the empty Rules tab names the resource in the singular, in every locale -->
+  <!-- pin: test/permission_forge/html/admin_copy_test.rb#the muting banner quotes the set name instead of a possessive -->
+  <!-- pin: test/permission_forge/html/admin_copy_test.rb#a person labelled by the fallback is named in full on the person page -->
+  <!-- pin: test/permission_forge/admin/services_test.rb#an email label takes its initials from the local part -->
+  <!-- pin: test/permission_forge/html/admin_copy_test.rb#the field drawer of a Muting Permission Set explains the unconfigured field the same way -->
+- **Adding a resource to a Muting Permission Set says what it takes away.** With "Leave everything unchanged" the toast
+  read "Added Customer with 0 fields" and the page warned "⚠ Sync fields with model · 8 new columns not configured",
+  although a column with no setting in a Muting Permission Set takes nothing away. The toast now says "Added Customer.
+  It mutes nothing yet: choose below what it takes away." (or what the preset took away: "It takes away Create, Edit,
+  and Delete."), and the sync panel is shown as information ("8 columns with no setting, so they mute nothing"). It
+  still warns when a configured field's column is gone, and for granting sets as before
+  (`Admin::FieldRows#sync_warning?`).
+  <!-- pin: test/permission_forge/html/field_test_round_two_copy_test.rb#a muting resource added with nothing changed says it mutes nothing yet, and the sync panel is no warning -->
+  <!-- pin: test/permission_forge/html/field_test_round_two_copy_test.rb#a muting resource added with a preset that takes something away says what it takes away -->
+- **The savebar of a Permission Set only shows up on its other tabs once there is something to save.** The
+  Assignments tab said "Assigning or revoking applies immediately" above "No unsaved changes · Review and save". On
+  every tab but Resources the bar is hidden while nothing joined to it (the set's name, description, group, Active)
+  has changed; without JavaScript it stays, as the way to save those.
+  <!-- pin: test/permission_forge/html/field_test_round_two_copy_test.rb#the set savebar is quiet on the tabs that apply at once, and stays rendered for the header -->
+  <!-- pin: test/permission_forge/html/field_test_round_two_copy_test.rb#only a page running the script hides a quiet savebar, and only while nothing changed -->
+- **"Review and save" says what it did not apply.** A request that turns on Edit (or Delete, View All, Modify All)
+  while Read is off — a form the admin never sends — was answered "No changes to save." It now says "Customer: Edit not
+  turned on, because Read is off" (Modify All: "because it needs View All and Edit"), in the alert when nothing else
+  changed and on the review page next to the changes that do apply (`Admin::ChangeSet#refused`).
+  <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#a crafted Edit-without-Read says Edit was not turned on because Read is off -->
+  <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#the review lists a refused flag next to the changes that do apply -->
+  <!-- pin: test/permission_forge/admin/change_set_test.rb#Modify All without View All and Edit is refused as needing them -->
+- **A success toast no longer covers the "unsaved changes" bar.** On a page with that sticky bar the toasts are shown
+  at the top of the window instead of the bottom.
+  <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#toasts move to the top of a page that has a savebar -->
+- **Effective access shows the whole rule in the Records cell**, wrapped, instead of cutting it mid-word ("Owner is
+  the cur").
+  <!-- pin: test/permission_forge/html/admin_behaviour_test.rb#the Records cell shows the whole rule, wrapped, not cut with an ellipsis -->
+- **Every Permission Set page scrolled the whole document sideways on a phone** (to 619px at 360–600px) and the
+  Permission Set index to 410px, with no cue: a screen-reader-only header cell of the wide grid is `position:
+  absolute` and the scroll frame was not its containing block, so the cell sat at its static position in the page,
+  outside the frame's clipping, and widened the document. `.pf-scroll-x` and every scroll container are `position:
+  relative` now, so what they clip scrolls with them.
+  <!-- pin: test/permission_forge/html/layout_lint_test.rb#every scroll container in the stylesheet is a containing block, and the frame paints its cue -->
+- **Placeholders that were sentences clipped at phone width**: the Home search in every locale, the people pickers in
+  Macedonian, the Permission Set description in Macedonian (53 characters). They are short now (a value or
+  placeholder wider than its input ends in an ellipsis), with the sentence as a hint under the control where one is
+  needed.
+  <!-- pin: test/permission_forge/html/layout_lint_test.rb#every placeholder fits a phone-width box in every locale -->
+  <!-- pin: test/permission_forge/html/field_test_round_five_admin_ui_test.rb#the Permission Set description placeholder fits a phone-width input in every locale -->
+- **On a phone, long content ran past the card's edge**: a setting's long option list or pattern, the how-to snippet
+  panel, a person's long email, a long model name and the group's people picker were cut off; they wrap, or scroll
+  inside their own box.
+- **The Assignments grid's column headers line up with their cells.** Each row was its own grid, so the
+  content-sized actions column took a different width in the header (empty) than in the rows, and "Until 14 Nov"
+  sat under "Assigned". The Assignments and Permission Sets tables now share one grid between head and rows
+  (CSS subgrid). When the card is narrower than the table (a phone), each Assignments row stacks instead of scrolling
+  sideways, where "Reason" was cut off.
+  <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#a table with a content-sized column shares one grid between its head and rows (subgrid) -->
+  <!-- pin: test/permission_forge/html/field_test_round_four_admin_ui_test.rb#a narrow card stacks each Assignments row instead of scrolling it -->
+- **The Fields grid's level controls line up across rows.** A masked row's strategy preview ("Email · j***@acme.com")
+  was a cell of its own that pushed its level control left, and at 600px wrapped "Details ›" onto its own line. The
+  preview now sits under the level control, no wider than it.
+  <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#the mask preview sits under the level control, inside its column -->
+  <!-- pin: test/permission_forge/html/field_test_round_three_admin_test.rb#the preview does not widen the level column -->
 
+- **JSON `null`, or a blank form value, for a NOT NULL column was a 500.** `"is_active": null`, `"label": null`,
+  `"mask_strategy": null`, a rule's `"name": null` or `"include_nulls": null` on any API create or update — and a
+  blank Active flag on the admin's group form (a boolean column casts `""` to nil) — raised
+  `ActiveRecord::NotNullViolation`. The eight permission models now refuse nil for every column the schema declares
+  NOT NULL (`ValidatesRequiredColumns`, read from the schema, so a new column is covered; the primary key, the
+  timestamps and `uuid` are filled on create, a column with a presence rule of its own or of a required `belongs_to`
+  keeps that message): a 422 keyed by the attribute in the API, the form again with the message in the admin (a blank
+  flag is no boolean: "must be true or false"). A NOT NULL violation no validation foresaw is the 422 envelope (`base`)
+  in the API and a flash in the admin.
+  <!-- pin: test/permission_forge/security/not_null_input_test.rb#API: JSON null or a blank form value on a NOT NULL column is a 422 keyed by the attribute, on create and update -->
+  <!-- pin: test/permission_forge/security/not_null_input_test.rb#admin: a blank Active flag on the group form goes back to the group with the message -->
+  <!-- pin: test/permission_forge/security/not_null_input_test.rb#API: an unforeseen NotNullViolation is a 422 envelope -->
+  <!-- pin: test/permission_forge/concerns/validates_required_columns_test.rb#every permission model refuses nil in each of its NOT NULL columns -->
+- **A Hash or a list in the audit tab's `days`, `who`, `type` or `views` was a 500** (a Permission Set's audit tab, its
+  CSV, and a person's audit tab). They are read as typed text, `days` as one of the offered counts.
+  <!-- pin: test/permission_forge/security/bad_input_test.rb#the audit tab reads a Hash or a list in days, who, type or views as no filter -->
+- **A negative or huge `rule[remove_step]` in the rule builder was a 500** (`path.first(-1)`); it is read as a count
+  of steps between 0 and the path's length, else no removal.
+  <!-- pin: test/permission_forge/security/bad_input_test.rb#the rule builder reads a negative or huge remove_step as no removal -->
+- **The person list read `page=2abc` as page 2.** A page is read by `ParamShapes.integer` there too: anything that is
+  not a whole number is the first page.
+  <!-- pin: test/permission_forge/release_readiness/integer_param_guard_test.rb#a page that is not a whole number is the first page of people -->
+- **An audit sentence said "cleared" when the cache store said no.** `cache.cleared` with `cache_confirmed: false` and
+  `permissions.invalidated` with `confirmed: false` read "cleared the cached permissions", and on a per-process store
+  the suffix added "cleared in its own process only". They now say the store did not confirm the clear, and the suffix
+  for an unconfirmed operation says only that the store lives in each process (`audit_log.cache_scope.unconfirmed`,
+  en/sq/mk).
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#a clear of every cache the store did not confirm is not told as cleared -->
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#an invalidation the store did not confirm is not told as cleared -->
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#the scope suffix of an unconfirmed operation on a per-process store does not say cleared either -->
+- **An invalidation inside a host's web request said the web processes kept their cached permissions — from a web
+  process.** `in_request` was true only for the admin and the API; it is now true for any code of a web server
+  process (`Cache::Report.in_request?`, the one definition, with `Warnings.server_process?`), and the suffix for a
+  process of its own no longer names the web processes ("…cleared only in the process that ran it (an in-memory
+  store): every other process kept theirs.").
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#an invalidation inside a host controller request of a server process records in_request -->
+  <!-- pin: test/permission_forge/audit/cache_sentence_truth_test.rb#the own-process suffix never names the web processes -->
+- **`OPTIONS` and `TRACE` under the API, and a form or multipart body Rack cannot parse, answered Rails' own pages.**
+  The verbs reached no route (`RoutingError`); a body such as `a[=1&%%%` raised `ActionController::BadRequest` while
+  Rails read the parameters for its instrumentation, before `rescue_from`, giving Rails' 400 in `text/html`. The verbs
+  now get the JSON 404 envelope, the bodies the 400 envelope an unreadable JSON body gets.
+  <!-- pin: test/permission_forge/api/unmatched_routes_test.rb#OPTIONS and TRACE under the API answer the JSON 404 envelope -->
+  <!-- pin: test/permission_forge/api/envelope_schema_test.rb#~answers the schema in its success and in every error class -->
+
+- **Every admin form works in an API-only application.** `rails new --api` also leaves out `Rack::MethodOverride`, so
+  with the three middlewares docs/admin-ui.md names, every edit and delete form (a POST with a hidden `_method`) answered
+  404 "No route matches [POST] …" (field test round 7, D#67). The engine brings its own,
+  `PermissionForge::AdminMethodOverride`, in the engine's middleware stack: it runs for the admin's paths only (a
+  full-stack host's own is a no-op before it) and skips the JSON API's. A full-stack host's own `Rack::MethodOverride`
+  runs before the router for every path, the API's included, as Rails has it: there a POST with `_method` or
+  `X-HTTP-Method-Override` reaches the API as that verb, and `api_auth`, the forgery posture and the authorization
+  lambdas still decide it (docs/admin-api.md "Method override"). An API-only host has none, so its API sees the verb
+  that was sent.
+  <!-- pin: test/permission_forge/engine_method_override_test.rb#an admin form posted with _method=delete reaches the destroy route -->
+  <!-- pin: test/permission_forge/engine_method_override_test.rb#the JSON API is left alone: _method and the override header do not change its verb -->
+  <!-- pin: test/permission_forge/engine_method_override_test.rb#in a full-stack host the host's Rack::MethodOverride applies to the JSON API too, behind api_auth -->
+  <!-- pin: test/permission_forge/docs/doc_samples_test.rb#an API-only host: the JSON API works, the admin names the middlewares it needs -->
+- **The admin reads a person's encrypted name or email decrypted.** With `encrypts :email` (or `:name`) on the user
+  model, people labels showed the ciphertext JSON, the people search's LIKE matched it (`iv` found everyone) and bulk
+  assignment compared it with the pasted text (nobody). Labels read such a column through its attribute type; the
+  search and bulk matching leave it out, and match a deterministically encrypted one against the whole value exactly.
+  A value this application cannot decrypt (another key) is no label, also under `support_unencrypted_data`, where
+  Rails answers it with the stored ciphertext; a value stored in plaintext there reads as written. The default
+  `profile_builder` leaves such an attribute out (Changed).
+  <!-- pin: test/permission_forge/encrypted_attributes_test.rb#decrypt is nil for ciphertext under another key, whether support_unencrypted_data is on or off -->
+  <!-- pin: test/permission_forge/encrypted_attributes_test.rb#decrypt reads a value stored in plaintext under support_unencrypted_data, and nil without it -->
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#a label reads the name and email decrypted, never the ciphertext -->
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#the search never matches the ciphertext -->
+  <!-- pin: test/permission_forge/admin/encrypted_people_test.rb#bulk matching finds a deterministically encrypted email exactly, and nobody by an encrypted name -->
+- **A missing name or value is said once.** A Permission Set or a group created without a name answered
+  `{"name": ["can't be blank", "can't be blank"]}` (a rule without a value too, on `field_value`): the presence rule
+  holds a condition, and the NOT NULL check (`ValidatesRequiredColumns`) did not see it. The NOT NULL check now runs
+  after every other validation and adds nothing to an attribute that already has an error, whatever the order the
+  validations were declared in (a canary watches the `validate` chain's `:after` callbacks).
+  <!-- pin: test/permission_forge/concerns/validates_required_columns_test.rb#a column that already has an error gets no second one, whatever the order of the validators -->
+  <!-- pin: test/permission_forge/api/generated_defaults_api_test.rb#POST create without a name or a value names each once -->
+
+- **The Conditions tab explains a condition with the definition that judges it.** A window from 9 to 9 read "☾
+  Overnight: active from 09:00 until 09:00 the next morning" under its own error, and the tab's summary sent the reader
+  "to the Conditions tab" they were on (field test round 7, E#32): the tab asks `ActivationConditions::HoursWindow`
+  (`set?`, `wraps?`, `broken?`), and its summary has an on-tab form. An IP list with an entry that is no address read
+  "Only works from office-network." (B#48a): the summary says the list cannot be judged, and one banner lists every
+  problem `ActivationConditions#condition_problems` names, with the effect Home's card names (a granting set grants
+  nothing, a muting set applies to every request; one key for both, `ui.conditions.effect`). The form refuses what
+  the model refuses for the same reason (`HoursWindow#problem`, an hour outside 0–23 included;
+  `ActivationConditions.ip_range`).
+  <!-- pin: test/permission_forge/html/conditions_explanations_test.rb#a window from an hour to the same hour is never shown as overnight, nor sent to the tab it is on -->
+  <!-- pin: test/permission_forge/html/conditions_explanations_test.rb#a granting set's list with an entry that is no address shows one banner with Home's effect -->
+  <!-- pin: test/permission_forge/html/conditions_explanations_test.rb#the form refuses an hour outside the day for the reason the model has -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: an hour window: set, overnight, broken (ActivationConditions::HoursWindow) -->
+- **A stored rule on a secret column says so where Home's "Fix rule" leads.** The builder opened with no banner and a
+  preview that read as fine (field test round 7, B#48b). `Admin::RuleNotes.for(rule)` is the one list of what is said
+  beside a stored rule — why it matches nothing (`RuleProblem`), then a secret column (refused for a new rule; this one
+  still applies) — drawn by the builder's banner, the preview and a badge on the Rules tab's row. The builder no
+  longer offers a column declared with `encrypts`, beside the secret ones, except the one a stored rule names.
+  <!-- pin: test/permission_forge/html/rule_notes_test.rb#Home's Fix rule opens a builder that says the rule compares a secret column -->
+  <!-- pin: test/permission_forge/html/rule_notes_test.rb#the preview of that rule says it too, and the Rules tab badges the row -->
+  <!-- pin: test/permission_forge/html/rule_notes_test.rb#the builder offers no encrypted column, but keeps the one a stored rule names -->
+- **A rule's sentence reads its operators from the definitions that decide.** "The current user" is said only where
+  the user's id is substituted (one value compared, `ValueTyping.current_user?`), not in a list, where the word is
+  compared as written; a range's ends are split as `ValueTyping.split` splits them; "or empty" follows
+  `Operators::Registry::NULL_INCLUDING`, the list the RLS policy reads too. `SentencesHelper` keeps no operator list of
+  its own.
+  <!-- pin: test/permission_forge/helpers/rule_sentence_operators_test.rb#"the current user" is said only where one value is compared -->
+  <!-- pin: test/permission_forge/helpers/rule_sentence_operators_test.rb#the operators that add the NULL rows are the strategies that do, and the policy reads the same list -->
+- **A Permission Set with two Resources of one single-table-inheritance chain is named with the Resource.** The field
+  drawer's "Across all Permission Sets" showed "Sales rep ∅ Hidden" and "Sales rep ◉ Read-only" side by side, and a
+  person's effective access "from Sales rep" (field test round 7, B#35); such a row reads "Sales rep · VipCustomer",
+  the model marked as host data (`Admin::ChainEntries`, `pf_set_entry_name`). A Muting Permission Set's reasons there —
+  a flag, a field or an action it takes away — name the Resource whose row does the muting the same way
+  (`pf_muting_set_name`).
+  <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#the drawer's rows name the Resource when the set holds more than one of the chain -->
+  <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#a person's effective access names the Resource the same way -->
+  <!-- pin: test/permission_forge/html/sti_set_entries_test.rb#a person's effective access names the muting Resource the same way -->
+- **Home counts people with one Macedonian noun.** "1 лице го има овој сет" stood beside "1 корисник" (field test round
+  7, C#92); every count of people on Home uses the noun of `ui.people_count`, in every locale (a glossary test).
+  <!-- pin: test/permission_forge/locale_glossary_test.rb#mk: Home counts people with the noun of ui.people_count -->
+- **A save that changed nothing says "No changes to save." on every admin form.** The action form said "Saved
+  “Export”. It applies immediately.", the rule builder "Saved the rule “Own customers”.", the group page "Group saved.
+  No one's access changed.", the Conditions tab "Activation conditions saved.", an applied batch "Saved 0 changes", and
+  an end date set to the one the assignment had restated it — none of them changed a row or wrote an audit event (field
+  test round 8, B#70). "The save changed something" has one definition, `RecordsAuditEvents#saved_audited_changes?`
+  (saved changes minus the bookkeeping columns), which also decides whether the change event is written, with its twin
+  before the save, `#audited_changes_pending?`: the admin saves a record only when it holds such a change
+  (`SaveNotice#pf_save_changed`), so an unchanged submit no longer invalidates every holder's cached permissions (Rails
+  runs the commit callbacks of a save that wrote nothing). The flash goes through `SaveNotice#pf_save_flash`, with no
+  cache note; an apply whose every requested change was refused says why, as the review step does. The group keeps its
+  sentence for a change that affects nobody. The key moved from `flash.permission_sets.no_changes` to
+  `flash.no_changes`.
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#every admin form that saves a record, submitted unchanged, says No changes to save, writes no event, keeps the cache -->
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#every walked form submitted with a change says what it saved, writes one event, invalidates the holder -->
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#an apply whose every change was refused says why, as the review does -->
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#no admin controller decides by itself whether a save changes something -->
+  <!-- pin: test/permission_forge/html/unchanged_save_flash_test.rb#every template with a PATCH form is classified: walked as a save, or why it is not one -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: a save changed something (RecordsAuditEvents#saved_audited_changes?, #audited_changes_pending?) -->
+- **The rule builder names a relationship path in the page's language.** Under the relationship picker it printed
+  `field_accessor_path: ownr` — the column's name — in every locale, while the banner and the picker's label said
+  "Relationship" in the page's language (field test round 8, B#95); it reads "Relationship path: `ownr`" (en, sq, mk).
+  A walk of every admin screen, error state and posted page now refuses a column name of the gem's tables followed by a
+  colon anywhere but the Technical details panels and the initializer snippets.
+  <!-- pin: test/permission_forge/html/raw_attribute_names_test.rb#the rule builder names the stored relationship path in the page language -->
+  <!-- pin: test/permission_forge/html/raw_attribute_names_test.rb#no screen prints a column name of the gem as a label -->
+- **A person's Effective access row names the Resource a Muting Permission Set acts through.** On a single-table-
+  inheritance subclass, Email (muted on Customer) and Phone (muted on VipCustomer) both read "Hidden by No PII exports"
+  beside "from Sales rep · VipCustomer", while the Why panel said "No PII exports · Customer" / "· VipCustomer" (field
+  test round 8, B#38): the row named the set by itself, and the Why panel found the Resource by walking the set's rows
+  again (a guess that missed a field variant and a row whose mute the resource's Read made moot). Each
+  `EffectiveAccess::FieldSource` now carries the Resource whose row it credits (`resource_name`: the deciding entry's
+  for a grant, the muting row's for a mute) and each blocked flag or action the Resource whose row blocks it
+  (`Outcome#muted_on`, the row nearest the model first); the row, the Why panel and "Explain for" name every set
+  through `pf_field_source_set_name` / `pf_muting_set_name`. The row and "Explain for" also word the level the
+  deciding mutes give and name the same sets (`FieldOutcome#deciding_mutes`: the strongest mute, when its level is the
+  level shown, and every set at it): "Masked by MaskA" / "Ana sees it masked: MaskA masks it.", where the row said
+  "Hidden by" next to a Masked badge and "Explain for" said "MaskA and NoEditB hides or masks it" (counted now: "HideA
+  and HideB hide it", per-level keys in en, sq and mk). A mute that only takes editing away decides nothing when a
+  grant shows the field masked (the Why panel still lists it), and is not credited at all when the Resource gives no
+  Edit: the field reads "from Sales rep", shown as Read-only because Edit isn't allowed.
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#the row names the Resource whose row mutes the field, as the Why panel and the grants beside it do -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a muting reason words the level the mute decides, not always Hidden -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#Explain for words the deciding mute's level and names the sets the row names -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#two sets that hide a field are counted in Explain for -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a mute that only takes editing away from a masked field does not decide it: the mask does -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#an edit mute on a resource that gives no Edit changes nothing and is not credited -->
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#each source names the Resource whose row it credits; a set with two rows, the one nearest the model -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: the Resource a set acts through on a person's effective access (FieldSource#resource_name, Outcome#muted_on) -->
+- **A field hidden by the entry it inherits says so on every surface.** Bob's VipCustomer › Notes row read "∅ Hidden ·
+  No set shows it" and "Explain for" said "No set shows this field to Bob.", beside "Sales rep · VipCustomer ◉
+  Read-only", while the Why panel said Customer decides (field test round 8, B#39). What decides is the granting
+  Customer entry, which hides Notes — not No PII exports, whose mute on Customer.notes changes nothing the granting
+  sets showed, so it still never reads "Hidden by muting". `EffectiveAccess::FieldOutcome#reason` is the one decision
+  (`:muted`, `:unconfigured`, `:granted`, `:implicit`, `:unreadable`, `:inherited`, `:none`) the row, its colour, the
+  Why panel and "Explain for" all word: an inherited hidden field reads "Hidden on Customer, which this inherits from."
+  on all three (Explain for draws no other sentence then), and an entry without Read says why on the row too, where it
+  read "No set shows it".
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a field hidden on the base reads the same on the row, the Why panel and Explain for, in every locale -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#every field of the subclass reads the same reason on the row, the Why panel and Explain for, in every locale -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#the hidden-on reason follows the decision: muting the subclass row too still leaves the base deciding -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#a subclass entry without Read says so on the row, as the Why panel does -->
+  <!-- pin: test/permission_forge/html/sti_field_reasons_test.rb#Explain for draws no empty sentence when the inherited entry decides -->
+  <!-- pin: test/permission_forge/release_readiness/one_definition_guard_test.rb#one definition: why a person's field is at its level (EffectiveAccess::FieldOutcome#reason) -->
+- **A muting row on a single-table-inheritance base mutes the variants of the subclass entries it reaches.** This
+  widens protection: a muting set whose base Resource hid `price_cents` left the subclass entry's `price` (a reader
+  only the subclass defines, a configured field variant) readable and editable in the permission hash, so the derived
+  value of a hidden column stayed readable through the subclass, while the admin showed it hidden (field test round 8,
+  review P1). `PermissionHashBuilder` took the variants from the muting row's Resource; it now takes each reached
+  entry's own (`FieldVariants` of the entry's model), the variants the granting phase wrote. The hash format is
+  unchanged.
+  <!-- pin: test/permission_forge/services/permission_hash_builder_muting_test.rb#a base row mutes the variants of each entry it reaches, a reader only the subclass has included -->
+  <!-- pin: test/permission_forge/admin/effective_access_test.rb#a base row hides a variant only the subclass has, in the engine and here -->
+- **An app with no database configured boots.** A fresh `rails new --skip-kamal` app comments its production database
+  paths out (the deploy supplies `DATABASE_URL`), and `RAILS_ENV=production SECRET_KEY_BASE_DUMMY=1 bin/rails
+  assets:precompile` (the Dockerfile's build step) or any production runner aborted once the gem was installed: the
+  boot ping rescued Active Record's errors only, and the sqlite3 adapter refuses a configuration without a file with an
+  `ArgumentError` (field test round 8, E#7). `PermissionForge::DatabaseReach` is the one definition of "this process
+  cannot use its database" (Active Record's errors and an adapter's `ArgumentError` for its configuration, rescued
+  only around Rails' own connection code, a ping or `table_exists?`). The boot ping, auto-applied masking, the audit
+  table checks and the audit's `audit_trail` check ask it; the audit table check of `Audit.record` keeps its narrower
+  list (`UNREACHABLE_ERRORS`: a database that does not answer or does not exist), so a configuration error there still
+  rolls the change back under `audit_change_failure_strategy :raise`. The boot skips its database checks with one line
+  naming the cause (`The database could not be reached at boot, or the gem's models could not be loaded
+  (ArgumentError: No database file specified. ...)`), and a request
+  or job of a process that has not synced reads neither the Resource rows nor the masking token until the Resource
+  table can be read: a production runner of such an app — Solid Cache, its production cache store, has no database
+  either — logs no SECURITY warning ("masking could not be synced", "The cache store did not give or keep the masking
+  token"). A missing table is not remembered either: Active Record's schema cache kept the "no" of a process that
+  booted before the Resource table existed, which then never masked until a restart; `DatabaseReach.table_exists?`
+  drops a "no" from the cache, so such a process syncs at its first request or job after the migration. A model whose
+  table check raises is named in its unmaskable warning with the error. A process that runs
+  nothing but asset tasks (`assets:precompile`, `assets:clean`, `assets:clobber`: `BootChecks.asset_build?`) runs the
+  configuration warnings only and never connects. (An adapter whose driver gem is missing still fails as Active Record
+  loads, as it does without the gem.)
+  <!-- pin: test/permission_forge/install/production_boot_without_database_test.rb#assets:precompile boots in production with no database file configured, and never connects -->
+  <!-- pin: test/permission_forge/install/production_boot_without_database_test.rb#a production runner with no database file configured boots, says the checks were skipped, and runs -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#DatabaseReach.problem counts an adapter that refuses its configuration as no database -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#MaskedModels.apply answers false, without raising, when the database is not configured -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#a process that has not synced and cannot use its database does not read the masking token -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#a model whose table check raises is named with the error in the unmaskable warning -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#a configuration error of the audit table check rolls the change back; a database gone is unchecked -->
+  <!-- pin: test/permission_forge/masking_sync_test.rb#a process that found no Resource table syncs at its next run once the table is there -->
+  <!-- pin: test/permission_forge/engine_boot_paths_test.rb#asset_build? is true only when every task Rake was asked for is an asset task -->
+- **A production boot no longer calls a `:memory_store` "the Rails development default".** The masking warning of a
+  production boot with `config.cache_store = :memory_store` said so (field test round 8, E#66); the clause is now
+  added in a development boot only (`CacheWarnings::DEVELOPMENT_DEFAULT`).
+  <!-- pin: test/permission_forge/cache_warnings_test.rb#a :memory_store is called the development default in a development boot only -->
+- **The JSON API says which authorization lambda it lacks before the first 403.** With `api_enabled` and `api_auth`
+  set but `api_action_authorization`, `api_assignment_authorization` or `api_stats_authorization` unset, the API refused
+  every change, assignment or stats read (each 403 names the option) and nothing said so earlier (field test round 8,
+  D#7; round 7 #12). The server's boot now logs one note naming each missing lambda and what the API refuses without
+  it (`api_authorization_unset`, audience `:server`), `rake permission_forge:audit` lists them as the info finding
+  `api_authorization_unset`, both read from `PermissionForge::ApiAuthorizations`, and the generated initializer shows
+  `api_stats_authorization` beside the other two. The stats item says that an `api_auth` setting the deprecated
+  `@admin = true` still passes until 0.16 (the note cannot see it).
+  <!-- pin: test/permission_forge/security/api_require_authorization_default_test.rb#the boot names each authorization lambda the API needs and does not have, and what it refuses -->
+  <!-- pin: test/permission_forge/services/security_audit_test.rb#an API with api_auth whose authorization lambdas are unset gets an info note naming each and what it guards -->
+  <!-- pin: test/permission_forge/security/api_require_authorization_default_test.rb#the install initializer shows all three authorization lambdas -->
+- **A blank label is "no label" on every write path: `null`, `""` and white space store the row's name.** Through the
+  JSON API a field row's `label: null` was a 422 `{"label": ["can't be blank"]}` while `label: ""` answered 200 and
+  stored the empty label, and an action row stored either as sent; the admin stored a blanked field label as the name
+  and a blanked action label as `""` (field test round 8, D#25). One model concern, `Concerns::NormalizesLabel`, now
+  stores a blank label — and on a new row the install's `'Untitled Field'` column default — as the row's name, on create
+  and on update, in code, through the API (200 / 201) and in the admin alike; a Resource's blank label is stored as
+  `nil`. A rename relabels a row whose label the gem would generate (the old name or its humanized form:
+  `GeneratedText.label?`) instead of leaving
+  the old name to read as a label an admin wrote. Checked on create, when the label changes and on a rename only: a
+  row stored with a blank label keeps it through a save of its other attributes, whose audit event names no label
+  change. **No opt-out:** a label was never meant to be empty; write a label of
+  your own to show something else.
+  <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a blank field or action label is stored as the name, on create and on update -->
+  <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a blank Resource label is stored as nil -->
+  <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a save of other attributes leaves a stored blank label, and its event says nothing of a label -->
+  <!-- pin: test/permission_forge/models/normalizes_label_test.rb#a rename relabels a row whose label was generated, and keeps one someone wrote -->
+  <!-- pin: test/permission_forge/api/blank_label_api_test.rb#a blank label is stored as the name on PATCH, for a field row and an action row alike -->
+  <!-- pin: test/permission_forge/api/blank_label_api_test.rb#a blank label is stored as the name on POST, for a field row and an action row alike -->
+  <!-- pin: test/permission_forge/html/editing_flows_test.rb#an action label an admin blanks is stored as the name, on create and on edit -->
 ### Documentation
 
-Gaps found by following the docs in a fresh Rails 8.1 app with Rails 8's authentication generator:
-
-- README Installation and the getting-started guide now mount the admin UI and set its credentials; without them there
-  is no admin to open. The README Quick Start defines the `user` it assigns.
+- [Migration guide](docs/migration-guide.md#upgrading-to-015): "Upgrading to 0.15" — run `rake
+  permission_forge:audit` first, the behaviour changes with their opt-outs, the locale keys that moved, the removed
+  deprecations, and the RLS re-sync (`GENERATOR_VERSION` 7).
+  <!-- pin: docs/migration-guide.md#upgrading-to-015 -->
+- Every `run` and `file=` block of README.md and docs/*.md executes in a generated Rails 8.1 app (`bin/rails generate
+  authentication` + a scaffold `Customer` as generated, PermissionForge installed by the README's own install lines)
+  on every test run, one console per document where nobody holds a set yet, with `# => literal` comments asserted;
+  the denial flows of "Handling Denials" (a
+  Turbo sign-in with no Permission Set, Reload, Sign out, the public index with and without `resume_session`, the
+  sign-in page under the guard, README step 4 after an admin-made set, seeds under `:strict`) are driven as requests,
+  and in Chrome with Turbo in the `browser` CI job (`test/browser/docs_flows.spec.js`).
+  <!-- pin: test/permission_forge/docs/doc_samples_test.rb#every run and file= block of the documentation executes in the docs app, and every literal # => claim holds -->
+- [Handling denials](docs/row-level-rules.md#rescuing-them-yourself): the denial handler lives in one place, the
+  complete `app/controllers/application_controller.rb` of a Rails 8 authentication-generator app;
+  `docs/controller-actions.md` points to it. It renders `errors/forbidden` in the app's layout (with Sign out) and
+  sends to sign in only a visitor with no session — never to the refused page (`redirect_back` looped on a refused
+  root; a Turbo sign-in ending on a bare 403 reloaded into an empty form). `resume_session` ahead of the guard is
+  required on a guarded public action; the `SessionsController` sample is the generator's file plus one `new` line.
+  All of it is `file=` blocks the docs app applies.
+  <!-- pin: test/permission_forge/docs/doc_blocks_test.rb#the five handler versions the rounds went through are refused -->
+  <!-- pin: docs/row-level-rules.md#rescuing-them-yourself -->
+- `permission_scoped` / `find_by` apply the row-level rules only: the resource's CRUD flags are the guard's (REST
+  actions → flags) or your own `can_read?` check; documented with a driven scenario (a set with a rule and no read:
+  rows answered, the page refused).
+  <!-- pin: test/permission_forge/docs/doc_samples_test.rb#every run and file= block of the documentation executes in the docs app, and every literal # => claim holds -->
+- README Installation and the getting-started guide mount the admin UI and set its credentials; without them there
+  is no admin to open. The README Quick Start defines the `user` it assigns, says to run step 4's lines in order (a
+  failing `create!` first), and step 5 looks up the person step 4 assigned instead of `User.first`.
+  <!-- pin: README.md#installation -->
 - The initializer template, README and guides no longer call `controller.current_user` / `controller.current_admin` in
   the authorization examples, which Rails 8's generator does not define (a 500 on the default base controllers):
   they use `PermissionForge.current_user`, and the `audit_actor_resolver` examples show a Rails 8 and a Devise variant
   for HTTP Basic auth.
+  <!-- pin: README.md#1-tell-it-who-is-signed-in -->
 - [Admin UI](docs/admin-ui.md#rails-8-authentication-generator): with Rails 8's generator as `base_controller_class`, a
   signed-out visit was a 500 (`new_session_path` does not resolve inside the engine); a complete admin base controller
-  that redirects through `main_app` and checks for an admin.
+  that redirects through `main_app` and checks for an admin. "API-only applications" sections in the admin UI and
+  admin API guides.
+  <!-- pin: docs/admin-ui.md#rails-8-authentication-generator -->
 - [Controller actions](docs/controller-actions.md#callback-order): the user must be resolved before the guard and any
   model read; an action opened with `allow_unauthenticated_access` needs `prepend_before_action :resume_session`.
+  <!-- pin: docs/controller-actions.md#callback-order -->
 - [Configuration](docs/configuration.md#how-people-are-labelled-and-searched): how people are labelled, which columns
   are searched in SQL, and that an Array-returning `user_list_resolver` is searched in Ruby and loads every user.
+  <!-- pin: docs/configuration.md#how-people-are-labelled-and-searched -->
+- [Configuration](docs/configuration.md#where-warnings-appear), Where warnings appear: the one channel policy of
+  every boot and configuration warning.
+  <!-- pin: docs/configuration.md#where-warnings-appear -->
 - [Admin API](docs/admin-api.md#response-format): a flat JSON body is accepted where Rails wraps parameters (only an
-  empty, missing or non-object section answers 422); the collection sample shows `meta.pagination`.
+  empty, missing or non-object section answers 422); the collection sample shows `meta.pagination`; the condition
+  shapes and their 422; the `RecordNotUnique` 422.
+  <!-- pin: docs/admin-api.md#response-format -->
+- [Admin API](docs/admin-api.md#who-the-audit-log-names-for-an-api-change): why API changes read "API client" even
+  from a signed-in browser (the default `api_base_controller_class` runs none of your sign-in, so `Current.user` is not
+  set), and the two ways to name the caller: an `api_base_controller_class` that resumes the session, or an
+  `audit_actor_resolver` that maps the credential `api_auth` verified (never a caller-chosen header).
+  <!-- pin: docs/admin-api.md#who-the-audit-log-names-for-an-api-change -->
+- [Admin API](docs/admin-api.md#permission-set-group-users-group-membership--grants-nothing): the group-member
+  endpoints say that membership is organisational and grants none of the group's sets.
+  <!-- pin: docs/admin-api.md#permission-set-group-users-group-membership--grants-nothing -->
+- [Admin API](docs/admin-api.md#disabling-the-api-entirely): while `api_enabled` is off the empty 404 (not the JSON
+  envelope) is deliberate: it does not reveal that the API exists.
+  <!-- pin: docs/admin-api.md#disabling-the-api-entirely -->
 - [Assignment expiration](docs/assignment-expiration.md#rake-task-stale-assignments): `rake
   permission_forge:stale_assignments`, its `THRESHOLD_DAYS`, its output and its exit status 1 when it finds stale
   assignments.
+  <!-- pin: docs/assignment-expiration.md#rake-task-stale-assignments -->
+- [Getting started](docs/getting-started.md#wiring-a-scaffold): `as_json` leaves out a field with a Hidden row, but a
+  column with no row is serialized as `null` under the default `unconfigured_field_strategy = :block`; how to give
+  every column a row. The jbuilder example's `only:` keeps the scaffold's columns, and the scaffold's HTML partial
+  skips the fields the user may not read (a helper on `field_permissions`). `ResourceFieldGenerator` without
+  `grant_all` leaves every column Hidden, `created_at` / `updated_at` and the personal-data columns included; only
+  `grant_all` makes the timestamps read-only.
+  <!-- pin: docs/getting-started.md#wiring-a-scaffold -->
+- [Getting started](docs/getting-started.md#using-rails-8s-authentication-generator): the symptoms of a guarded
+  sign-in page (the 403 page where the form should be, also after Sign out) and of a public action without
+  `resume_session`; steps 5 and 6 look up the person they assign by email instead of `User.first`, which may be
+  someone holding no set; a seed's `find_or_create_by!` run with nobody signed in creates a duplicate on every run
+  under `config.preset = :strict` (also in the generated initializer's comment).
+  <!-- pin: docs/getting-started.md#using-rails-8s-authentication-generator -->
+- [Field filtering](docs/field-filtering.md#telling-the-user-what-was-not-saved): an unchanged form posts every field
+  back, so "Not saved: …" named every field the user may not edit; the form renders such fields disabled (not
+  submitted) and leaves out the ones they may not read.
+  <!-- pin: docs/field-filtering.md#telling-the-user-what-was-not-saved -->
+- The generated initializer, README and [Presets](docs/configuration.md#presets): `config.preset = :strict` does not
+  close every fail-open default. `masked_attributes_nil_user_strategy` stays `:bypass` (the audit keeps reporting
+  `masked_nil_user_bypass`), and the checklist rows that need your code are in no preset.
+  <!-- pin: docs/configuration.md#presets -->
+- [filter_parameters_integration](docs/configuration.md#filter_parameters_integration) and the GDPR guide: the patterns
+  filter every `name` parameter in the app's request logs, the admin's own forms included; how to narrow them. While
+  on, the columns `filter_parameters` name count as personal data for the presets, Sync, the audits and the boot
+  warning.
+  <!-- pin: docs/configuration.md#filter_parameters_integration -->
+- [Activation conditions](docs/activation-conditions.md#ip-range-restrictions): IP lists (entries, separators, arrays
+  through the API, refusal of entries that are not addresses, normalisation), hour windows (both hours or none;
+  `start == end` refused; what a broken stored window does) and the model methods (`allowed_ip_list`, `hours_window`,
+  `condition_problems`); [Security audit](docs/security-audit.md): the `conditions` check rows.
+  <!-- pin: docs/activation-conditions.md#ip-range-restrictions -->
+- [I18n](docs/i18n.md#your-models-and-columns-in-the-admin): what "fully internationalized" means and how it is
+  proven; translating `activerecord.models` / `activerecord.attributes` per locale for the admin's labels, else the
+  row's label, else the stored name in code; [Column Defaults Are English](docs/i18n.md#column-defaults-are-english)
+  (the install migration's defaults, the admin never pre-fills them, the blank-message denial, the one-liner for
+  existing rows); the locale-file lints for contributors; the `denials` and `validations` key families.
+  <!-- pin: docs/i18n.md#your-models-and-columns-in-the-admin -->
+- `rake permission_forge:erasure` is documented with `USER_ID`, `DRY_RUN`, `ACTOR` and `REASON`
+  ([GDPR data handling](docs/gdpr-data-handling.md#running-checks-without-claude)), and `rake
+  permission_forge:rls:remove` by its full name next to `rls:sync` and `rls:status`
+  ([Query scoping](docs/query-scoping.md#how-the-policies-work)).
+  <!-- pin: docs/query-scoping.md#how-the-policies-work -->
+- The wave-1 docs of this release applied: [Using the wrong field name](docs/row-level-rules.md#using-the-wrong-field-name)
+  and the other rule problems (unknown operators and mask strategies, NUL bytes, values the column cannot hold —
+  refused on save, matching nothing when stored), activation conditions, variants and the merge logic, the cache scope
+  every operation reports, the `RecordNotUnique` 422, the pagination rule, the raw reader table of masked attributes,
+  and phone width.
+  <!-- pin: test/permission_forge/docs/references_test.rb#every relative link and anchor in the docs resolves -->
+- **Upgrading to 0.15 opens with a three-step checklist**, and the 0.13 path is stated once
+  ([From 0.13](docs/migration-guide.md#from-013)): `permission_forge:upgrade` is for installs older than 0.13, the
+  audit runs before the deploy and RLS is re-synced after it; the README, this section's intro and its Removed entry
+  link there (field test round 7, A#131). `docs/i18n.md` says what an English page shows for a host name without a
+  translation ([Your Models and Columns in the Admin](docs/i18n.md#your-models-and-columns-in-the-admin)).
+  <!-- pin: test/permission_forge/docs/upgrade_notes_test.rb#Upgrading to 0.15 opens with the three-step checklist -->
+  <!-- pin: test/permission_forge/docs/upgrade_notes_test.rb#the 0.13 path is stated once, in From 0.13, and the rest link to it -->
+- [Wiring a scaffold](docs/getting-started.md#wiring-a-scaffold) says what to change in the scaffold's migration:
+  `owner:references` writes `foreign_key: true`, a foreign key to a table `owners`, so the first insert failed on
+  SQLite (`no such table: main.owners`); the guide points it at the users table (`foreign_key: { to_table: :users }`)
+  (field test round 8, A#13).
+  <!-- pin: docs/getting-started.md#wiring-a-scaffold -->
 
 ## [0.14.1] - 2026-10-14
 

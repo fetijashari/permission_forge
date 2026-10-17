@@ -68,7 +68,7 @@ module PermissionForge
       def holder_of(sets:, resources:, fields:, actions: 0, rules: 0)
         user = create_user
         sets.times do |s|
-          set = create_permission_set(name: "Set #{s}")
+          set = create_permission_set(name: PermissionForge::PermissionSet.unique_name("Set #{s}"))
           create_permission_set_user(user: user, permission_set: set)
           resources.times do |r|
             resource = create_resource(permission_set: set, name: "PfRrPerfRes#{r}", read_access: true, edit_access: true)

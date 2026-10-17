@@ -167,7 +167,7 @@ module PermissionForge
 
         assert_response :created
         assert_audit_event('permission_set.created', actor_type: 'api', actor_id: nil,
-                                                     actor_label: ActorResolver::API_CLIENT_LABEL, source: 'api')
+                                                     actor_label: ActorCodes::API_CLIENT, source: 'api')
       end
 
       # ---- request id, IP ------------------------------------------------------------
@@ -295,7 +295,7 @@ module PermissionForge
         post "#{ROOT}/api/permission_sets", params: { permission_set: { name: 'From API' }, actor: 'Mallory', actor_id: '1' },
                                             headers: { 'X-PF-Actor' => 'Mallory' }
 
-        assert_audit_event('permission_set.created', actor_type: 'api', actor_id: nil, actor_label: ActorResolver::API_CLIENT_LABEL)
+        assert_audit_event('permission_set.created', actor_type: 'api', actor_id: nil, actor_label: ActorCodes::API_CLIENT)
       end
 
       # ---- nothing left behind --------------------------------------------------------

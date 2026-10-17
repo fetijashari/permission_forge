@@ -409,6 +409,30 @@ module PermissionForge
         in_context({}) { assert_not reader.can_delete?(:Customer) }
       end
 
+      # Review R4 P1-1: a granting set whose condition nobody can judge
+      # (ActivationConditions#conditions_broken?) never applies, with a
+      # context or without one, strict mode or not; a muting one always does.
+      test 'a granting set with a broken condition grants nothing, not even without a context' do
+        grant(allowed_hours_start: 9, allowed_hours_end: 17)
+        @conditional.update_columns(allowed_hours_start: 9, allowed_hours_end: 9)
+        assert @conditional.reload.conditions_broken?
+
+        [false, true].each do |strict|
+          PermissionForge.configuration.conditional_sets_strict_mode = strict
+          [nil, {}, { ip: '10.1.2.3', session_flags: [], time: Time.current.change(hour: 9) }].each do |context|
+            in_context(context) { assert_not reader.can_read?(:Customer), "strict=#{strict} context=#{context.inspect}" }
+          end
+        end
+      end
+
+      test 'a muting set with a broken condition still mutes without a context' do
+        unconditional_grant
+        lockdown = mute(allowed_ips: '10.0.0.0/8')
+        lockdown.permission_set.update_columns(allowed_ips: 'office')
+
+        [nil, {}].each { |context| in_context(context) { assert_not reader.can_delete?(:Customer) } }
+      end
+
       # --- what an invalidation removes (review MAJOR-1, probe R15) ----------------------
 
       # Q9 (was: "invalidate_permissions removes every cached variant along
@@ -683,19 +707,19 @@ module PermissionForge
 
       # --- the entry namespace (review MINOR-5) --------------------------------------------
 
-      test 'the entry key is namespaced, and an invalidation also removes the keys of the previous namespace' do
+      # The 0.13 keys were removed with 0.15 (Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES is empty):
+      # an invalidation removes this namespace's keys only.
+      test 'the entry key is namespaced, and an invalidation removes it' do
         unconditional_grant
         namespace = PermissionForge::Cache::UserKeys::ENTRY_NAMESPACE
         key = @user.permission_cache_key
         assert key.start_with?("#{namespace}:"), key
-        legacy = key.delete_prefix("#{namespace}:")
-        PermissionForge.cache.write(legacy, sentinel_entry(read_access: true))
         reader.permissions_hash
 
         reader.invalidate_permissions
 
-        assert_nil PermissionForge.cache.read(legacy), 'the key a 0.13 process reads'
         assert_nil PermissionForge.cache.read(key)
+        assert_empty PermissionForge::Cache::UserKeys::PREVIOUS_ENTRY_NAMESPACES
       end
 
       # --- details (review NITs, probes R6, R7, N1 and N5) ----------------------------------
@@ -763,7 +787,7 @@ module PermissionForge
 
       def grant(**attrs)
         conditions = attrs.slice(:requires_session_flag, :allowed_ips, :allowed_hours_start, :allowed_hours_end)
-        @conditional = create_permission_set(name: 'Conditional', **conditions)
+        @conditional = create_permission_set(name: PermissionForge::PermissionSet.unique_name('Conditional'), **conditions)
         @assignment = create_permission_set_user(user: @user, permission_set: @conditional)
         access = { read_access: true, delete_access: true }.merge(attrs.except(*conditions.keys))
         @conditional_resource = create_resource(permission_set: @conditional, name: 'Customer', **access)

@@ -16,7 +16,7 @@ Without field-level permissions, you'd need complex if/else logic everywhere. Wi
 
 ### Manual Setup
 
-```ruby
+```ruby fragment
 resource = PermissionForge::Resource.create!(
   permission_set: pset,
   name: 'Customer',
@@ -34,12 +34,15 @@ PermissionForge::ResourceField.create!(resource: resource, name: 'credit_limit',
 
 Instead of creating fields one by one, you can auto-generate them:
 
-```ruby
-# Creates a ResourceField for every column in the Customer model
-# (except ignored fields like id, created_at, password, etc.)
+```ruby fragment
+# Creates a ResourceField for every column and virtual field of the
+# Customer model (except ignored fields like id, uuid, password; on a
+# granting set created_at / updated_at are at most read-only: read-only with
+# grant_all, hidden like the rest without it; on a Resource without Edit,
+# grant_all's rows are Read-only)
 PermissionForge::Services::ResourceFieldGenerator.call(
   resource: resource,
-  grant_all: false  # Set to true to grant read+edit on all fields
+  grant_all: false  # Set to true to grant read+edit on all fields, unmasked
 )
 ```
 
@@ -47,17 +50,18 @@ PermissionForge::Services::ResourceFieldGenerator.call(
 
 For admin-level permission sets:
 
-```ruby
+```ruby fragment
 PermissionForge::Resource.grant_full_access!(
   permission_set: admin_pset,
   resource_name: 'Customer'
 )
-# Creates resource with all CRUD = true AND all fields with read+edit = true
+# Creates resource with all CRUD = true AND all fields with read+edit = true, unmasked
+# (also the personal-data ones under gdpr_defaults: GdprFieldAuditor still reports them)
 ```
 
 ## Reading Field Permissions
 
-```ruby
+```ruby fragment
 entry = user.permissions_hash_for(:Customer)
 fields = entry[:fields]
 
@@ -85,7 +89,7 @@ Muting sets are applied after this merge; see [Muting Permission Sets](muting-pe
 
 Use `PermitsAttributes` to automatically strip fields the user can't edit:
 
-```ruby
+```ruby fragment
 class CustomersController < ApplicationController
   def update
     customer = Customer.find_by(uuid: params[:uuid])
@@ -119,13 +123,50 @@ Pass params you have already permitted (`customer_params.to_h`, or the permitted
 
 Without a current user `PermitsAttributes` returns `{}`: every key is dropped. A key the user may not edit is dropped whatever its value — a Hash or an Array under it is a value (a json column), never looked into. The resource may be a record or a model class.
 
+### Telling the user what was not saved
+
+Dropping is silent: the update succeeds with the keys that were kept, and a scaffold then says "Customer was successfully updated." although `status` and `notes` were ignored. Pass `report: true` to learn what was dropped. The call then answers a `PermitsAttributes::Result` instead of the Hash: `params` (the same filtered Hash), `dropped` (the paths of the dropped keys: `status`, `supplier_attributes.secret`, `lines_attributes.*.price`; never their values), `dropped?` and `dropped_fields` (the top-level keys, for a message). Without `report:` the return value is the Hash, as before.
+
+```ruby fragment
+def update
+  result = PermissionForge::Services::PermitsAttributes.call(
+    resource: @customer, permitted_params: customer_params, report: true
+  )
+
+  if @customer.update(result.params)
+    notice = 'Customer was successfully updated.'
+    notice += " Not saved: #{result.dropped_fields.join(', ')}." if result.dropped?
+    redirect_to @customer, notice: notice
+  else
+    render :edit, status: :unprocessable_entity
+  end
+end
+```
+
+Translate the message as you do your others.
+
+`dropped` lists every key the user may not edit **that the request sent**, changed or not. An unchanged scaffold form posts every field back, so the message above says "Not saved: email, phone, status, notes, owner_id" after an edit that touched only `name`, and on create it names the blank fields nobody filled in. Do not post what will be dropped: render a field the user may not edit as a disabled input (browsers do not submit disabled inputs, so `dropped` then holds only keys a client sent on purpose), and leave out a field they may not read, by asking the same permissions the filter uses:
+
+```erb fragment
+<%# app/views/customers/_form.html.erb %>
+<% access = Current.user&.field_permissions(:Customer, :status) || {} %>
+<% if access[:read_access] %>
+  <div>
+    <%= form.label :status %>
+    <%= form.text_field :status, disabled: !access[:edit_access] %>  <%# masked by MaskedAttributes when the field is masked %>
+  </div>
+<% end %>
+```
+
+`field_permissions` returns `nil` for a field without a row; the form then leaves it out, and `PermitsAttributes` would drop it too. Repeat the block for each field, or wrap it in a helper.
+
 ## Filtering in Serializers
 
 > **Note:** Since v0.9.0, models with the `MaskedAttributes` concern applied (the default via `config.auto_apply_masked_attributes` for every model with a `Resource` record) already filter and mask direct attribute reads and the `attributes` / `as_json` / `serializable_hash` output — see [masked-attributes.md](masked-attributes.md). The manual pattern below is only needed when auto-apply is disabled.
 
 For read access, filter fields before sending the response:
 
-```ruby
+```ruby fragment
 class CustomerSerializer
   def initialize(customer, user)
     @customer = customer
@@ -160,11 +201,17 @@ So when you create a field permission for `company_id`, the user automatically g
 
 Muting permission sets follow the same mappings (v0.10.0+): a muting set that revokes `company_id` also revokes `company_uuid`, and revoking `price_cents` also revokes `price`.
 
+An explicit row for a variant name (`owner_uuid`) decides that name within its Resource, whichever row is older; the variant derived from `owner_id` only fills a name no row of the resource has. Across Permission Sets the entries still merge as granting rows do (a set with only an `owner_id` row grants `owner_uuid` through it). Muting rows mute their variants as before. `rake permission_forge:audit` lists the pairs under `variant_rows_conflict`.
+
+A variant gets an entry in the permission hash only when the model has that name (0.15+): a column or `attribute`, an `alias_attribute`, a public reader or writer (`delegate :uuid, to: :company, prefix: true` defines `company_uuid`), or a declared virtual field (`extra_fields_for_permissions`). A `Customer` with `owner_id` and no `owner_uuid` gets no `owner_uuid` entry, and the admin's Effective access does not list one. A Resource whose model this app cannot load (no such class, or its schema cannot be read) keeps every variant.
+
+`FiltersResponseAttributes` still treats a key that is a variant the model does not have — a `company_uuid` your serializer computes — as the field it is a variant of: hidden, masked or shown as `company_id` is. `user.field_permissions(:Customer, :company_uuid)` and `permissions_hash_for(:Customer)[:fields][:company_uuid]` answer `nil` for such a name; give the model a `company_uuid` reader (or declare it) if your code reads the entry.
+
 ### Custom Variants
 
 Add your own mappings in the initializer:
 
-```ruby
+```ruby fragment
 config.field_variant_mappings = {
   /_id\z/    => ->(name) { "#{name.sub(/_id\z/, '')}_uuid" },
   /_cents\z/ => ->(name) { name.sub(/_cents\z/, '') },
@@ -177,7 +224,7 @@ config.field_variant_mappings = {
 
 Some models have computed or virtual attributes that aren't database columns. You can register these for permission tracking:
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   def self.extra_fields_for_permissions
     %w[full_address contact_count total_revenue]
@@ -186,6 +233,8 @@ end
 ```
 
 A virtual field is configured like a column: give it a `ResourceField` row (Hidden, Masked, Read-only or Editable) in the admin's Fields tab or in code. The row is what `PermitsAttributes` and `FiltersResponseAttributes` enforce; record rules never use virtual fields, because rules are SQL.
+
+A key only your serializer computes (no reader on the model) can be configured the same way: declare it here, then give it a row. A row whose name is nothing the model has — no column, attribute, alias, public method, declared or discovered virtual field, or [variant](#field-variant-mappings) of one of those or of another row — still saves (`FiltersResponseAttributes` filters it as a hash key), but `bin/rails permission_forge:audit` lists it as `unknown_fields` (a typo such as `emial` configures nothing; Low when a muting set holds it, else Info), and the admin's Fields tab shows it as **Column missing**. Declaring the key says it is meant.
 
 ### A virtual field nobody configured
 
@@ -196,7 +245,7 @@ What a declared virtual field gets when a resource has no row for it is set by `
 | `:grant` (default) | Gets an implicit entry that follows the resource: `read_access` when the user's merged resource grants read, `edit_access` when it grants edit, never masked. (Before 0.14 the entry was read + edit for everyone the resource was readable for, so a read-only user could write a declared virtual field.) |
 | `:unconfigured` | Gets no entry. It follows `config.unconfigured_field_strategy` on the read path, like a column nobody configured, and is never editable. With the default `:block` it is hidden until an admin gives it a level. |
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.extra_fields_default_access = :unconfigured
 end
@@ -216,7 +265,7 @@ The admin helps with that under `:grant`:
 - The Fields tab lists every unconfigured virtual field as **Not configured · Editable by default**, and *Sync fields with model* adds them at a level you choose. A row that is turned off shows **Turned off · Editable by default**.
 - The privacy audit on the home page, `GdprFieldAuditor` (`:implicit_virtual_grant`) and `rake permission_forge:audit` (`implicit_virtual_personal_data`) report virtual fields that look like personal data and are still on the implicit grant, including fields whose only row is turned off.
 
-`ResourceFieldGenerator` and `Resource.grant_full_access!` create rows for virtual fields only under `:unconfigured`. Under `:grant` they leave them to the implicit entry, as before.
+`ResourceFieldGenerator` and `Resource.grant_full_access!` create rows for declared and discovered virtual fields like the admin does, under either value (since 0.15.0; before, only under `:unconfigured`): generating without `grant_all` gives them a Hidden row, which replaces the implicit entry. Generate with `grant_all: true`, or set their level afterwards, to keep them readable.
 
 ### When `extra_fields_for_permissions` raises
 
@@ -249,7 +298,7 @@ By default a virtual field's level is enforced where your code filters: `Permits
 
 A nested payload is filtered record by record against the **association model's own** resource (with its STI ancestors'), not the parent's:
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   has_many :contacts
   accepts_nested_attributes_for :contacts
@@ -290,7 +339,7 @@ When `FiltersResponseAttributes` encounters a field that has no `ResourceField` 
 | `:warn` | Pass through + log warning | Catch missing field configs during migration |
 | `:pass_through` | Field passes through unmasked | Legacy behavior, NOT recommended for production |
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.unconfigured_field_strategy = :block  # default (secure)
 end
@@ -308,7 +357,7 @@ Related fail-closed behavior (v0.10.0+):
 
 Call your own code for each field-level decision the gem makes (response filtering and `MaskedAttributes` reads; not `pluck` or raw SQL):
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.on_field_filtered = lambda { |resource_name:, field_name:, action:, user:|
     AuditLog.create!(
@@ -328,10 +377,10 @@ The hook is called for each configured field during `FiltersResponseAttributes.c
 
 1. **Cache invalidation is automatic for ActiveRecord changes** — saving a `ResourceField` (or any permission record) invalidates the affected users' cached hashes, and the hash rebuilds automatically on the next read (read-through, v0.10.0+). Call `user.invalidate_permissions` or `user.regenerate_permissions` manually only after changes that bypass AR callbacks (`update_all`, `insert_all`, raw SQL) — and note that such changes write no audit event either.
 
-2. **Use `grant_all: true` for admin sets** — saves time when you want full access. Note: with `gdpr_defaults: true`, GDPR-sensitive fields will still be masked even with `grant_all`.
+2. **Use `grant_all: true` for admin sets** — saves time when you want full access. Since 0.15.0 it applies no mask, also with `gdpr_defaults: true` (before, GDPR-sensitive fields were still masked). Run `rake permission_forge:audit_masks` afterwards and mask the personal-data fields the set should not read in the clear; or generate without `grant_all` (every field Hidden, the personal-data ones with their recommended strategy on the row) and open what is needed — a sensitive field opened Read-only in the admin starts Masked.
 
-3. **Check the ignored_fields config** — fields like `id`, `password`, and `created_at` are excluded by default. Customize the list if needed.
+3. **Check the ignored_fields config** — fields like `id`, `uuid` and `password` are excluded by default (Rails' timestamps get a row, at most read-only, instead). Customize the list if needed.
 
 4. **Field names are case-sensitive** — `Name` and `name` are different fields to the engine. Always use the exact database column name. (On a case-insensitive collation, MySQL's default, the two cannot both be saved on one resource: the second is a validation error.)
 
-5. **Run the GDPR audit regularly** — `bundle exec rake permission_forge:audit_masks` detects both unmasked fields and unmapped model columns matching PII patterns.
+5. **Run the GDPR audit regularly** — `bundle exec rake permission_forge:audit_masks` detects both unmasked fields and unmapped model columns matching PII patterns. Each run records a `report.generated` event; `ACTOR=` and `REASON=` name who ran it and why.

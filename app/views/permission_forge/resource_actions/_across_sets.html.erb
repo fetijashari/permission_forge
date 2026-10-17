@@ -7,18 +7,15 @@
     <div class="pf-option">
       <span class="pf-option__main"><span class="pf-row pf-row--tight">
         <% if set.is_muting %><span class="pf-text-restrict" aria-hidden="true">⊘</span><% end %>
-        <span class="pf-fw-600"><%= set.name %></span>
+        <span class="pf-fw-600"><%= pf_record_name(set) %></span>
         <%= pf_off_badge unless row[:in_effect] %>
       </span></span>
-      <% if action.nil? %>
-        <%= pf_level_badge('none', label: t('permission_forge.ui.badges.not_configured')) %>
-      <% elsif set.is_muting %>
-        <%= pf_level_badge(action.is_permitted ? 'muted' : 'leave',
-                           label: action.is_permitted ? "⊘ #{t('permission_forge.resource_actions.states.blocked')}" : t('permission_forge.resource_actions.states.unchanged')) %>
-      <% else %>
-        <%= pf_level_badge(action.is_permitted ? 'edit' : 'none',
-                           label: action.is_permitted ? "✓ #{t('permission_forge.resource_actions.states.permitted')}" : t('permission_forge.resource_actions.states.not_permitted')) %>
-      <% end %>
+      <%# The row's state, worded as the action page's "Right now" badge (Admin::StateLabel, kind :action). %>
+      <% state = if action.nil? then :none
+                 elsif set.is_muting then action.is_permitted ? :blocked : :unchanged
+                 else action.is_permitted ? :permitted : :not_permitted
+                 end %>
+      <%= pf_level_badge(state, kind: :action) %>
     </div>
   <% end %>
 </div>

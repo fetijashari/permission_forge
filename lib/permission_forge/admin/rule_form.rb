@@ -14,7 +14,8 @@ module PermissionForge
         'between' => :range, 'is_null' => :none, 'is_not_null' => :none
       }.freeze
       USER_OPERATORS = %w[equal not_equal in not_in is_null is_not_null].freeze
-      NULLABLE = %w[equal not_equal in not_in].freeze
+      # The operators whose strategy adds the NULL rows ("or empty").
+      NULLABLE = PermissionForge::Operators::Registry::NULL_INCLUDING
       JOINS = %w[auto joins left_joins].freeze
       CURRENT_USER = 'current_user'
       VALUE_ERRORS = { one: :value, list: :list, range: :range }.freeze
@@ -22,16 +23,23 @@ module PermissionForge
       attr_reader :name, :path, :field_name, :operator, :value, :values, :value_from, :value_to,
                   :current_user, :include_nulls, :failure_message, :join, :is_active, :errors
 
+      # @param rule [PermissionSetRule, nil] the stored rule: the inputs with
+      #   no params; with params, what a blank name or blocked message is
+      #   compared with (Prefill.posted: blank over generated text keeps it)
       def initialize(resource:, params: nil, rule: nil, catalog: ModelCatalog.new)
         @resource = resource
         @catalog = catalog
         @errors = {}
         if params
           assign_inputs(RuleFormInput.from_params(normalize(params)))
-          @operator = 'equal' unless operators.include?(@operator)
         else
           assign_inputs(RuleFormInput.from_rule(rule))
         end
+        # What the save stores: as posted, or the stored generated text a
+        # blank leaves as it is (Prefill.posted); the builder keeps showing
+        # the inputs as posted.
+        @saved_name = Prefill.posted(rule, :name, @name)
+        @saved_failure_message = Prefill.posted(rule, :failure_message, @failure_message)
       end
 
       # --- choices ----------------------------------------------------------------
@@ -61,8 +69,22 @@ module PermissionForge
         @target_model
       end
 
+      # The columns a rule may compare (Operators::RuleColumn.names_for: every
+      # column of the table, as the validation accepts them) — not the
+      # fields that get rows: a column config.ignored_fields leaves out
+      # (`id`) is offered, flagged (#ignored_field?); a virtual field never.
+      # A column holding a secret (PermissionForge::SecretColumns) or
+      # ciphertext (an attribute declared with `encrypts`:
+      # Operators::RuleColumn.encrypted?) is not offered — the model refuses
+      # a rule on one — except the one the rule already names, so a rule
+      # stored before stays editable as it is.
       def field_options
-        target_model ? target_model.columns.reject(&:virtual?) : []
+        @field_options ||= target_model ? build_field_options : []
+      end
+
+      # Whether the column gets no field row (config.ignored_fields).
+      def ignored_field?(column)
+        target_model.ignored_column_names.include?(column.name)
       end
 
       def column
@@ -106,17 +128,19 @@ module PermissionForge
 
       def valid?
         @errors = {}
-        @errors[:name] = :name_blank if @name.blank?
+        @errors[:name] = :name_blank if @saved_name.blank?
         @errors[:field] = :field if column.nil?
+        @errors[:operator] = :operator unless operators.include?(@operator)
         validate_value
         @errors.empty?
       end
 
       def attributes
         {
-          name: @name, field_name: @field_name, operator: @operator, field_value: field_value,
+          name: @saved_name, field_name: @field_name, operator: @operator, field_value: field_value,
           field_accessor_path: @path.any? ? @path.join('.') : nil, join_type: join_type,
-          include_nulls: nullable? && @include_nulls, failure_message: @failure_message.presence,
+          include_nulls: nullable? && @include_nulls,
+          failure_message: @saved_failure_message.presence,
           is_active: @is_active
         }
       end
@@ -142,12 +166,22 @@ module PermissionForge
         @include_nulls ? 'left_joins' : 'joins'
       end
 
-      # Unsaved rule for previews.
-      def preview_rule
-        PermissionForge::PermissionSetRule.new(attributes.merge(resource: @resource))
+      private
+
+      # The columns are compared with the database once, by the catalog's
+      # model (ModelInfo#column_names, memoized for this form); the builder's
+      # list then reads them without asking again.
+      def build_field_options
+        target_model.column_names
+        names = PermissionForge::Operators::RuleColumn.names_for(target_model.klass, verify: false)
+        names.reject { |name| name != @field_name && refused_column?(name) }.map { |name| target_model.column(name) }
       end
 
-      private
+      # A column the model refuses a new rule on: a secret or an encrypted one.
+      def refused_column?(name)
+        @secrets ||= PermissionForge::SecretColumns.new
+        @secrets.secret?(name) || PermissionForge::Operators::RuleColumn.encrypted?(target_model.klass, name)
+      end
 
       def normalize(params)
         (params.respond_to?(:to_unsafe_h) ? params.to_unsafe_h : params.to_h).deep_stringify_keys

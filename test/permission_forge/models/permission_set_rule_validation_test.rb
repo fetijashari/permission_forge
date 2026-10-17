@@ -18,7 +18,9 @@ module PermissionForge
         elsif op == 'between'
           attrs[:field_value] = '1,10'
         elsif op.in?(%w[in not_in])
-          attrs[:field_value] = 'a,b'
+          attrs[:field_value] = '1,2'
+        elsif PermissionForge::Operators::ValueTyping::SHAPES[op] == :pattern
+          attrs[:field_name] = 'name' # a LIKE pattern on a text column: PostgreSQL has no LIKE for an integer
         end
         rule = PermissionForge::PermissionSetRule.new(attrs)
         assert rule.valid?, "Expected rule with operator '#{op}' to be valid, errors: #{rule.errors.full_messages}"
@@ -83,13 +85,26 @@ module PermissionForge
 
     # --- in / not_in operator ---
 
+    # A value the column cannot hold makes the rule match nothing: refused
+    # for a new or changed value (Operators::RuleProblem :unusable_value).
+    test 'a value the column cannot hold is refused, in every element of a list' do
+      { 'equal' => '5_id', 'in' => '1, abc', 'between' => '1,abc', 'not_equal' => 'true' }.each do |operator, value|
+        rule = build_rule(operator: operator, field_value: value)
+
+        assert_not rule.valid?, operator
+        assert_equal ['is not a value Customer.supplier_id can hold'], rule.errors[:field_value], operator
+      end
+      assert_predicate build_rule(operator: 'equal', field_value: 'current_user'), :valid?
+      assert_predicate build_rule(operator: 'in', field_value: '1, 2'), :valid?
+    end
+
     test 'in with 1 value is valid' do
-      rule = build_rule(operator: 'in', field_value: 'active')
+      rule = build_rule(operator: 'in', field_name: 'name', field_value: 'active')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
     test 'in with 3 values is valid' do
-      rule = build_rule(operator: 'in', field_value: 'a,b,c')
+      rule = build_rule(operator: 'in', field_name: 'name', field_value: 'a,b,c')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
@@ -100,7 +115,7 @@ module PermissionForge
     end
 
     test 'not_in with 1 value is valid' do
-      rule = build_rule(operator: 'not_in', field_value: 'inactive')
+      rule = build_rule(operator: 'not_in', field_name: 'name', field_value: 'inactive')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
@@ -146,18 +161,54 @@ module PermissionForge
 
     # --- field_name validation ---
 
-    test 'field_name status is valid' do
-      rule = build_rule(field_name: 'status')
+    test 'field_name domain is valid' do
+      rule = build_rule(field_name: 'domain')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
-    test 'field_name user.email is valid' do
-      rule = build_rule(field_name: 'user.email')
+    # A NUL byte cannot reach SQL as a literal (the statement is cut short):
+    # refused for a new or changed value; a stored one matches nothing and
+    # the row stays editable in its other attributes.
+    test 'a field_value with a NUL byte is refused on a new or changed rule, and a stored one stays editable' do
+      if ActiveRecord::Base.connection.adapter_name == 'PostgreSQL'
+        skip 'PostgreSQL refuses a NUL byte in any string it is sent; no such value can be stored there'
+      end
+
+      %w[equal in contains].each do |operator|
+        rule = build_rule(operator: operator, field_name: 'name', field_value: "a\0b")
+
+        assert_not rule.valid?, operator
+        assert_equal [I18n.t('permission_forge.validations.permission_set_rule.nul_byte')], rule.errors[:field_value], operator
+      end
+
+      rule = build_rule(field_name: 'name', field_value: 'ab')
+      rule.save!
+      rule.update_columns(field_value: "a\0b")
+      rule.reload
+      rule.name = 'Renamed'
+
+      assert rule.valid?, rule.errors.full_messages.inspect
+
+      rule.field_value = "c\0d"
+
+      assert_not rule.valid?
+    end
+
+    # A table of another model: a filter rule compares its own table
+    # (review R1 #2) — refused, pointing at a join rule; a join rule's query
+    # may join it itself.
+    test 'field_name users.email is refused on a filter rule and left to the query of a join rule' do
+      rule = build_rule(field_name: 'users.email')
+
+      assert_not rule.valid?
+      assert_match(/join rule/, rule.errors[:field_name].join)
+      rule = build_rule(field_name: 'users.email', join_type: 'joins', field_accessor_path: 'supplier')
+
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
     test 'field_name created_at is valid' do
-      rule = build_rule(field_name: 'created_at')
+      rule = build_rule(field_name: 'created_at', field_value: '2026-01-01')
       assert rule.valid?, "Errors: #{rule.errors.full_messages}"
     end
 
@@ -208,7 +259,7 @@ module PermissionForge
     end
 
     test 'field_name with a schema or database before the table is valid' do
-      %w[customers.supplier_id public.customers.supplier_id mydb.customers.Supplier_Id a.b.c.d].each do |name|
+      %w[customers.supplier_id public.customers.supplier_id mydb.customers.supplier_id a.b.customers.supplier_id].each do |name|
         assert build_rule(field_name: name).valid?, name
       end
     end
@@ -260,6 +311,23 @@ module PermissionForge
       rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
       assert rule.persisted?
       assert rule.valid?
+    end
+
+    # Review R1 #8: the format check ran on every save, so a stored rule
+    # with a control character in its field name could not be switched off.
+    test 'a stored field name the format refuses stays editable in its other attributes, refused when it changes' do
+      rule = create_permission_set_rule(permission_set: @permission_set, resource: @resource)
+      rule.update_columns(field_name: "supplier_id\n")
+      rule.reload
+
+      rule.is_active = false
+
+      assert rule.valid?, rule.errors.full_messages.inspect
+      assert rule.save
+      rule.field_name = "supplier\tid"
+
+      assert_not rule.valid?
+      assert rule.errors[:field_name].any?
     end
 
     private

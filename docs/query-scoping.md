@@ -9,6 +9,10 @@ relation or an association (`Model.where(nil).find_by!`, `Model.unscoped.find_by
 A user with no rules for a model sees every row: rules only narrow. Rules from several granting
 sets apply together (AND), and for an STI subclass the rules of its own resource and of every
 ancestor's apply together — see [row-level-rules.md](row-level-rules.md#several-permission-sets).
+With `config.no_read_access_strategy = :deny` (part of `config.preset = :strict`), a signed-in
+user whose sets do not grant Read on the model sees no row at all, through `find_by`,
+`permission_scoped`, Level 1 and the Level 3 RLS policies alike — see
+[Rules only, not the CRUD flags](row-level-rules.md#rules-only-not-the-crud-flags).
 
 This guide covers the three optional defense levels that close that gap. Each is
 independently configurable and **all default to OFF** — nothing changes until you opt in.
@@ -26,7 +30,7 @@ Level 2 `:raise` in test/CI → Level 1 → Level 3 where rules must hold below 
 
 ## Level 1 — ENFORCE (`auto_query_scoping = :filter_only`)
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.auto_query_scoping = :filter_only   # default: :off
 end
@@ -36,7 +40,7 @@ Every relation built on a protected model (a model including
 `PermissionForge::Concerns::PermissionScopedFindable`) now carries the current user's
 **filter-type** rules automatically:
 
-```ruby
+```ruby fragment
 Customer.where(active: true)   # rules applied
 Customer.all                   # rules applied
 Customer.find(42)              # RecordNotFound if rule-denied
@@ -61,6 +65,10 @@ user.customers                 # association traversal scoped too
 - **Nil current user** follows `nil_user_strategy`: `:bypass` → unscoped, `:deny`/`:raise`
   → empty relation (fail closed — the auto path never raises from inside a scope, so
   consoles and rake tasks don't detonate).
+- **A signed-in user without Read** on the model's resource (no entry for it at all included)
+  gets no rules there and every row under the default `no_read_access_strategy = :rules_only`;
+  under `:deny` the scope is an empty relation (`access.denied`, reason `no_read_access`, once
+  per request).
 - **The scope is decided when the relation is built, not when it loads.** A relation built
   while there is no current user (under the default `:bypass`) stays unscoped after a user is
   set: `Customer.where(nil)` built before authentication returns every row when it is loaded
@@ -74,7 +82,7 @@ user.customers                 # association traversal scoped too
 
 ### Escape hatches
 
-```ruby
+```ruby fragment
 # Block form — intentional unscoped access (reports, admin maintenance, jobs):
 PermissionForge.without_permission_scope do
   Customer.all.find_each { |c| ... }
@@ -83,7 +91,7 @@ end
 
 `without_permission_scope { }` suspends auto-scoping and detection, and with nobody signed in lets `find_by`, `find_by!` and `permission_scoped` past `nil_user_strategy`; a signed-in user's `find_by` and `permission_scoped` still apply their rules (reported as `rule.bypassed`, `scope_suspended`). Inside the block nobody signed in is trusted more than a signed-in user: wrap trusted code only (jobs, seeds, rake tasks, sign-in lookups), never code an anonymous request reaches. A block that runs inside one of the gem's own suspensions (a model callback during a permission-cache invalidation or an audit lookup) is not trusted that way: there nobody signed in still follows `nil_user_strategy` (fails closed). Only the gem's admin controllers use the public block (after your authentication); the flags are per fiber.
 
-```ruby
+```ruby fragment
 # Per-model opt-out:
 class AuditLog < ApplicationRecord
   include PermissionForge::Concerns::PermissionScopedFindable
@@ -95,7 +103,7 @@ end
 
 ## Level 2 — DETECT (`unscoped_query_detection = :log | :raise`)
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.unscoped_query_detection = :log                        # default: :off
   config.unscoped_query_detection_environments = %w[development test]  # default
@@ -133,12 +141,12 @@ connection whose session variable names a user. A session **without** the variab
 `:bypass` it sees every row. Only with `nil_user_strategy = :deny` or `:raise` does such a session
 see no rows:
 
-```bash
+```bash fragment
 bin/rails generate permission_forge:rls   # migration: enable RLS + install policies
 bin/rails db:migrate
 ```
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.database_row_level_security = true
   # config.rls_session_variable = 'permission_forge.user_id'   # default
@@ -147,7 +155,7 @@ end
 
 Then tell Postgres who the current user is:
 
-```ruby
+```ruby fragment
 # Controllers (around_action):
 around_action do |_controller, action|
   PermissionForge::RLS.set_user!(current_user)
@@ -177,18 +185,21 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   Whether a set and its resource row are active is read live by the policy, so switching
   either off or on needs no re-sync. After editing rules run:
 
-  ```bash
+  ```bash fragment
   rake permission_forge:rls:sync     # regenerate policies
   rake permission_forge:rls:status   # per-table drift report (exit 1 when stale)
+  rake permission_forge:rls:remove   # drop the policies and switch row-level security off
   ```
 
   A digest of the rule state is stored on the policy; a boot warning fires when the live
   policies drift from the current rules.
 - **Semantics parity:** muting sets contribute no rules but *do* cancel a view_all bypass;
-  users in no rule-bearing set see all rows (rules only restrict); a missing session
+  under `no_read_access_strategy = :rules_only` (the default) users in no rule-bearing set
+  see all rows (rules only restrict); under `:deny` a user without read access sees none
+  (see [Read access in a policy](#read-access-in-a-policy)); a missing session
   variable follows `nil_user_strategy` (`:bypass` allows, `:deny`/`:raise` hides all rows).
-- **The view_all bypass needs a resource row in effect.** A `view_all` / `modify_all` grant
-  bypasses the rules only while its resource row and its set are active and, with tenancy
+- **The view_all bypass needs a resource row in effect.** A `view_all` grant (`modify_all`
+  counts only with it, as in the application layer) bypasses the rules only while its resource row and its set are active and, with tenancy
   on, only for rows of the grant's own tenant: a grant in tenant A never bypasses the rules
   on tenant B's rows. A row whose tenant column is NULL gets no bypass under RLS (narrower
   than the application layer there, never wider). If the protected table has no tenant
@@ -199,24 +210,44 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   boolean, a date, the stored value of an enum label. A value the column cannot hold
   compiles to `FALSE` — the policy is created and hides every row from the members of that
   set, exactly as the application layer denies them. A date or time that is not ISO 8601
-  is written into the policy as it is, for PostgreSQL to read. A word like `tomorrow` or
-  `infinity` is read **once, when the policy is created** — it does not move with the
-  clock the way it does in the application layer, which sends it with every query. Text
-  PostgreSQL cannot read as a date fails the sync at that table: its policies, and those of
-  the tables that come after it, stay as they were. Use ISO dates in rules that back a
-  policy. `contains` and the other string operators compile to `ILIKE` on the column itself
+  is asked of PostgreSQL first, as in the application layer (once per process,
+  `ValueCasters::PostgresqlTypes::ReadBack`): text it reads is written into the policy as
+  it is, text it cannot read compiles to `FALSE` (through version 6 it failed the sync at
+  that table). `today`, `now`, `tomorrow` and `yesterday` compile to what PostgreSQL computes
+  per statement (`CURRENT_DATE`, `now()`, `CURRENT_DATE ± 1`, cast to the column's type), so
+  the policy moves with the clock as the application layer does; such a word with more text
+  (`today 10:00`) compiles to `FALSE` (narrower). A constant word (`infinity`, `epoch`) is
+  written as it is. `contains` and the other string operators compile to `ILIKE` on the column itself
   (the padding of a `char(n)` value counts, as in the application layer), and
   `include_nulls` adds the NULL rows for `equal`, `not_equal`, `in` and `not_in` only — both
   as in the application layer.
 - **A policy is never wider than the application layer.** Where the application layer's
-  query raises — a string operator on a number, date or boolean column — the rule compiles
-  to `FALSE`. A field name that is not a name (`owner_id.`) compiles to `FALSE` as well.
+  query raises — a string operator on a number, date or boolean column — or on a uuid,
+  inet, cidr, native enum, json or array column, where the application layer now matches
+  nothing too — the rule compiles to `FALSE`. A field name that is not a name (`owner_id.`) compiles to `FALSE` as well, and
+  so does one that is not a column of the table (`onwer_id`), which the application layer
+  denies too (see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name)).
 - **What a rule compiles to also depends on the model** — the column's type, an enum's
   stored values. Re-sync after changing either; the drift report covers the compiled SQL.
 - **After upgrading the gem,** `rake permission_forge:rls:status` reports drift whenever the
   generated SQL changed between versions (`RlsPolicyGenerator::GENERATOR_VERSION`, part of
   the stored digest). Run `rake permission_forge:rls:sync` once after the upgrade. Until you
   do, the old policies stay in force.
+  - **Version 7 (0.15):** every rule the application layer matches nothing for compiles to
+    `FALSE` (an operator, join type or table this version does not know, a relationship
+    path no join is built through, a value the column cannot hold — now also for `uuid`,
+    `inet`, `cidr`, native enum, `json` and array columns —, and a value compared with an
+    attribute declared with `encrypts`, whose column holds ciphertext; its `is_null` /
+    `is_not_null` compile as before); an assignment counts until its
+    `expires_at`, that instant included (`>= now()`, as the application layer); and the
+    `view_all` bypass reads "no activation condition" as the application layer does — a
+    set with only an end hour no longer bypasses the rules (policies from before version 7
+    are wider there), and a set whose session flag or IP list is only blanks does. Under
+    `no_read_access_strategy = :deny` the policy also hides every row from a user without
+    read access ([Read access in a policy](#read-access-in-a-policy)); policies from before
+    version 7 applied the rules alone there.
+  - **Version 6:** a rule whose field name is not a column of the table compiles to
+    `FALSE`; the sync used to fail at that table.
   - **Version 5 (0.14):** the view_all bypass requires the resource row to be active and,
     with tenancy on, in the row's tenant (rows with a NULL tenant get no bypass); a rule set
     is compiled whatever its set's and resource row's state, and its membership check
@@ -243,6 +274,33 @@ Call `set_user!` / `clear_user!` at the request level (an `around_action`), neve
   `rake permission_forge:rls:sync` with eager loading (`config.rake_eager_load = true`), or
   the rules of a subclass that was not loaded are left out of the report without a word. The same holds for the protected models themselves: the sync
   covers the models that include `PermissionScopedFindable` and are loaded when it runs.
+
+### Read access in a policy
+
+The policies follow `no_read_access_strategy`, read when they are generated:
+
+- **`:rules_only` (the default):** the policy applies the rules alone and never reads
+  `read_access`, as the application layer does — a user in no rule-bearing set sees every row.
+- **`:deny` (the `:strict` preset):** a session user sees a row only with read access to the
+  table's Resource chain, decided per statement the way `RecordReadAccess` decides it: an
+  entry for the model (an active, unexpired assignment to an active granting set with an
+  active `Resource` row for it — with tenancy on, of the row's tenant, as for the view_all
+  bypass), and every entry along the chain granting `read_access`, with no Muting Permission
+  Set taking it (one naming the model or an STI ancestor). View All never stands in for read.
+  Assigning, revoking, switching read on or off and muting need no re-sync.
+- **Activation conditions:** a set with an activation condition never grants read in a policy
+  (the condition cannot be judged there), and a conditional Muting Permission Set always takes
+  it — narrower than the application layer, never wider.
+- **STI:** a policy is per table and compiled for the class that includes the concern, so every
+  row needs that class's chain readable. A row of a loaded STI subclass (its type column names
+  the subclass) also needs each entry of the subclass's own Resources to grant read when the
+  user has one: a subclass whose own entry has no read shows none of its rows, where a read
+  through the base class in the application layer shows them (narrower, never wider). A
+  subclass that is not loaded when the sync runs gets the base class's check only — sync with
+  eager loading.
+- **Switching the option:** the strategy is part of the policy digest, so after you switch it
+  (or the preset) `rls:status` reports every protected table `STALE` until the next
+  `rake permission_forge:rls:sync`. Until then the old policies stay in force.
 
 ### Critical deployment notes
 

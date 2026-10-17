@@ -70,13 +70,13 @@ sit next to one (for example Pundit for controller decisions, PermissionForge fo
 
 Add to your `Gemfile`:
 
-```ruby
+```ruby fragment
 gem 'permission_forge'
 ```
 
 Then run:
 
-```bash
+```bash run
 bundle install
 bin/rails generate permission_forge:install
 bin/rails db:migrate
@@ -87,12 +87,12 @@ audit log, prefixed with `permission_forge_` by default.
 
 Then mount the admin UI and give it credentials. It is behind HTTP Basic auth and answers 401 until both are set:
 
-```ruby
+```ruby fragment
 # config/routes.rb
 mount PermissionForge::Engine, at: "/permissions"
 ```
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb: uncomment Option A ("Admin screens")
 config.http_basic_auth_user     = ENV['PF_ADMIN_USER']
 config.http_basic_auth_password = ENV['PF_ADMIN_PASSWORD']
@@ -124,7 +124,7 @@ Upgrading? Read the [CHANGELOG](https://github.com/fetijashari/permission_forge/
 The generated initializer reads `Current.user` when your app has a `Current` class that answers `user` (as Rails 8's
 authentication generator creates). Otherwise point it at your own lookup:
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   config.user_class = 'User'
@@ -148,7 +148,7 @@ module, add a callback), use `Rails.application.config.to_prepare` or
 
 ### 2. Include the concern in your User model
 
-```ruby
+```ruby fragment
 class User < ApplicationRecord
   include PermissionForge::Concerns::PermissionedUser
 end
@@ -162,7 +162,7 @@ those, not the private helpers.
 
 ### 3. Protect models with row-level rules (optional)
 
-```ruby
+```ruby fragment
 class Customer < ApplicationRecord
   include PermissionForge::Concerns::PermissionScopedFindable
 end
@@ -176,7 +176,11 @@ rules for a model gets every row.
 
 ### 4. Create a Permission Set and assign it
 
-```ruby
+Run these lines in order, in one console. If a `create!` raises (a Permission Set name is unique: one made in the
+admin already holds "Sales Team"), fix it and run it again before going on: the lines after it use its record and,
+without it, fail with a database `NOT NULL` error that hides the first one.
+
+```ruby run
 pset = PermissionForge::PermissionSet.create!(name: 'Sales Team', is_active: true)
 
 resource = PermissionForge::Resource.create!(
@@ -191,16 +195,31 @@ PermissionForge::ResourceField.create!(
   read_access: true, edit_access: true
 )
 
-user = User.first # the person who gets the set
+user = User.find_by!(email_address: 'bob@example.com') # the person who gets the set (`email:` on a Devise app)
 PermissionForge::PermissionSetUser.create!(permission_set: pset, user: user)
 ```
+
+Only `name` has a field row here. A column with no row is refused by the default
+`unconfigured_field_strategy = :block`: its getter returns `nil` and `as_json` keeps the key as `null` (a Hidden row,
+read off, leaves the key out). `PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)` gives every
+column (and declared virtual field) without a row one: Hidden, `created_at` / `updated_at` included — also the columns
+that look like personal data, which get their recommended mask strategy on the row. With `grant_all: true` every row is
+readable and editable (Read-only on a Resource without Edit), unmasked, and the timestamps read-only. The admin's "Sync fields with model" adds the rows at a level you pick (under
+the default `gdpr_defaults`, "… as Read-only" starts the personal-data columns Masked). Then open the ones the set should read.
 
 Each change invalidates the cached permissions of the users it affects; the next read rebuilds them. The admin UI
 (mounted at `/permissions` in [Installation](#installation)) does the same through forms.
 
+Every change is also an audit event. Made in a console, a seed or a script, it is recorded with actor `unknown`;
+wrap it to say who and why: `PermissionForge.with_audit_actor(user: admin, reason: 'onboarding') { ... }` (see
+[Audit Log](https://github.com/fetijashari/permission_forge/blob/main/docs/audit-log.md)).
+
 ### 5. Check permissions at runtime
 
-```ruby
+Look up the same person step 4 assigned (`User.first` may be someone else, who holds no set: `false` and `{}`):
+
+```ruby run
+user = User.find_by!(email_address: 'bob@example.com') # the person you assigned in step 4
 user.can_read?('Customer')   # => true
 user.can_delete?('Customer') # => false
 user.permissions_for(:Customer)
@@ -219,7 +238,8 @@ Several defaults fail open so that installing the gem changes nothing until you 
 through this list. `bin/rails permission_forge:audit` reports most of these settings.
 
 `config.preset = :strict` closes every row below that a setting can close, except masking with nobody signed in (an
-explicit choice: see its row); a setting you make yourself always wins over the preset. New installs get the safe
+explicit choice: see its row; `permission_forge:audit` keeps reporting it as `masked_nil_user_bypass`, medium, until
+you set it); a setting you make yourself always wins over the preset. New installs get the safe
 part (`action_guard_nil_user_strategy = :deny`, `conditional_sets_strict_mode = true`, `cache_backend = :rails_cache`)
 and the preset as a commented line with what it costs. The rows that need your code (`base_controller_class`,
 `admin_assignment_authorization`, `audit_log_authorization`, `user_active_check`) are not in a preset.
@@ -232,6 +252,7 @@ and the preset as a commented line with what it costs. The rows that need your c
 | `masked_attributes_nil_user_strategy = :bypass` | Attribute readers, `attributes` and `as_json` of a masked model return the stored values when nobody is signed in, whatever `nil_user_strategy` says | `:hide` (every guarded attribute reads as hidden with no user; the primary key and the raw paths are untouched), and set the current user in the jobs and mailers that read masked models. Not part of `config.preset = :strict`. The user model (`user_class` and its subclasses) stays readable for sign-in; validations read stored values |
 | `response_filter_nil_user_strategy = :bypass` | `FiltersResponseAttributes` returns every attribute when there is no user | `:block` |
 | `auto_query_scoping = :off` | Only class-level `find_by` / `find_by!` and `permission_scoped` apply row rules | `:filter_only`, and use `permission_scoped` for join rules; consider RLS on PostgreSQL |
+| `no_read_access_strategy = :rules_only` | A signed-in user whose Permission Sets do not grant Read on a model (no `Resource` for it at all included) has no rules there: `find_by`, `permission_scoped` and auto-scoping return every row. Only `can_read?` (or the controller guard) refuses them | `:deny` (no rows; `find_by` raises `NotAuthorizedError` for an existing record) |
 | `unconfigured_action_strategy = :allow` | A controller action no Permission Set manages is allowed; unmapped actions are always allowed | `:block` |
 | `action_guard_nil_user_strategy = nil` | The guard follows `nil_user_strategy` (`:bypass`) for signed-out requests to mapped actions | `:deny` (new installs get it from the generator) |
 | `conditional_sets_strict_mode = false` | With an empty request context (no resolver configured), every conditional Permission Set applies, MFA- or IP-gated grants included | A `request_context_resolver` that returns the request's IP and session flags, and `true`: without a request context, conditional granting sets are then dropped and conditional muting sets still apply |
@@ -244,8 +265,9 @@ and the preset as a commented line with what it costs. The rows that need your c
 | `base_controller_class` / `api_base_controller_class` | With tenancy on, a request with no current tenant is refused (403) | Controllers that authenticate and set the tenant |
 | `user_active_check` | Only reported by the security audit; an inactive user keeps every grant | Revoke the assignments of users you deactivate |
 
-Upgrading from 0.13: once the last 0.13 process is gone, run `bin/rails permission_forge:cache:clear` (see the
-[CHANGELOG](https://github.com/fetijashari/permission_forge/blob/main/CHANGELOG.md)).
+Upgrading to 0.15: run `bin/rails permission_forge:audit` before you deploy (see the
+[Migration Guide](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015)).
+From 0.13: follow [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013) — a revocation made on 0.15 does not reach what 0.13 processes have cached.
 
 Already closed by default, keep them so: `api_require_authorization = true` (API changes need
 `api_action_authorization` and `api_assignment_authorization`), `admin_tenantless_access = :deny`,
@@ -287,7 +309,7 @@ Behind your own admin controller (`base_controller_class`) the actor is the user
 Under HTTP Basic auth your app's sign-in does not run in the admin, so admins share one login name unless
 `audit_actor_resolver` names them:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   # Rails 8's authentication generator (with Devise: controller.request.env['warden']&.user(:user))
   config.audit_actor_resolver = ->(controller) { Session.find_by(id: controller.request.cookie_jar.signed[:session_id])&.user }

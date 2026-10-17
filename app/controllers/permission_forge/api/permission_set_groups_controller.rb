@@ -49,10 +49,11 @@ module PermissionForge
         authorize_action!(:clone, @group)
         return if performed?
 
-        # As the admin's Duplicate: the copy of the group and of its sets is editable.
+        # As the admin's Duplicate: the copy of the group and of its sets is
+        # editable, and named "<name> (copy)" in the request's locale.
+        name = pf_copy_name.presence || I18n.t('permission_forge.permission_sets.copy_name', name: @group.name)
         cloned = PermissionForge::Services::PermissionSetGroupCloner.call(
-          permission_set_group: @group, attrs: { name: pf_text_param(:name).presence || "#{@group.name} (Copy)", is_editable: true },
-          unlock: true
+          permission_set_group: @group, attrs: { name: name, is_editable: true }, unlock: true
         )
         render_created(cloned, serializer_for(:permission_set_group))
       end
@@ -64,7 +65,7 @@ module PermissionForge
       end
 
       def group_params
-        pf_require_hash(:permission_set_group).permit(:name, :description, :is_active, :is_editable)
+        pf_record_attributes(:permission_set_group, PermissionForge::PermissionSetGroup, :name, :description, :is_active, :is_editable)
       end
     end
   end

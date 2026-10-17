@@ -1,6 +1,7 @@
 module PermissionForge
   module Services
-    # Creates a Resource with full CRUD access and its generated fields, all or nothing.
+    # Creates a Resource with full CRUD access and its generated fields (read and
+    # edit, unmasked: ResourceFieldGenerator with grant_all), all or nothing.
     #
     # @api public
     class ResourceWithFieldsBuilder

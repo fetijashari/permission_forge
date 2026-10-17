@@ -8,6 +8,7 @@ module PermissionForge
 
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
     include PermissionForge::Concerns::RecordsAuditEvents
@@ -20,7 +21,8 @@ module PermissionForge
     # Mirrors the DB unique index so a repeat assignment returns a 422 instead of
     # a RecordNotUnique 500 (and prevents silent duplicate rows on schemas that
     # predate the index).
-    validates :user_id, uniqueness: { scope: :permission_set_group_id }
+    validates :user_id, uniqueness: { scope: :permission_set_group_id,
+                                      message: ->(*) { I18n.t('permission_forge.validations.permission_set_group_user.taken') } }
 
     # See PermissionSetUser: never store a truncated user key.
     before_validation { PermissionForge::Services::HostKeyGuard.verify! }

@@ -1,5 +1,6 @@
 require 'test_helper'
 require_relative '../virtual_field_models'
+require_relative '../rule_path_models'
 
 module PermissionForge
   module Admin
@@ -16,23 +17,6 @@ module PermissionForge
       test 'rejects unknown levels' do
         assert_raises(ArgumentError) { FieldLevel.flags_for('nope', muting: false) }
         assert_not FieldLevel.valid?('hide', muting: false)
-      end
-    end
-
-    class SensitiveColumnsTest < ActiveSupport::TestCase
-      test 'matches gdpr patterns with the alternative that matched' do
-        match = SensitiveColumns.new.match('national_id')
-
-        assert_equal 'national_id', match.pattern
-        assert_equal 'last4', match.strategy
-        assert_nil SensitiveColumns.new.match('status')
-      end
-
-      test 'treats Rails filter_parameters as sensitive when integration is on' do
-        PermissionForge.configuration.filter_parameters_integration = true
-        match = SensitiveColumns.new(filter_parameters: [:secret_code]).match('secret_code')
-
-        assert_equal 'full', match.strategy
       end
     end
 
@@ -60,6 +44,22 @@ module PermissionForge
         assert_equal 'ana@acme.test', label.secondary
         assert_equal 'AK', label.initials
         assert_equal 'Ana', label.first_name
+      end
+
+      # f-fixes-verified #12: "dave@acme.test" read "DT" (first and last word of "dave acme test").
+      test 'an email label takes its initials from the local part' do
+        assert_equal 'DA', PersonLabel.new(create_user(name: nil, email: 'dave@acme.test')).initials
+        assert_equal 'DS', PersonLabel.new(create_user(name: nil, email: 'dave.smith@acme.test')).initials
+      end
+
+      # a-onboarding #42: the first word of "User #2" or of an email is no first name.
+      test 'first_name is the whole label when the label is the email or the fallback' do
+        email_only = create_user(name: nil, email: 'dave@acme.test')
+        nameless = create_user(name: nil, email: nil)
+
+        assert_equal 'dave@acme.test', PersonLabel.new(email_only).first_name
+        assert_equal "User ##{nameless.id}", PersonLabel.new(nameless).first_name
+        assert_equal 'Ana', PersonLabel.new(create_user(name: 'Ana Krasniqi')).first_name
       end
 
       test 'honors user_label_formatter' do
@@ -279,13 +279,23 @@ module PermissionForge
         PermissionForge.configuration.auto_query_scoping = :filter_only
         set = create_permission_set
         filtered = create_resource(permission_set: set, name: 'Customer', read_access: true)
-        joined = create_resource(permission_set: set, name: 'User', read_access: true)
+        joined = create_resource(permission_set: set, name: 'Supplier', read_access: true)
         create_permission_set_rule(permission_set: set, resource: filtered)
-        create_permission_set_rule(permission_set: set, resource: joined, join_type: 'joins', field_accessor_path: 'customer')
+        create_permission_set_rule(permission_set: set, resource: joined, join_type: 'joins', field_accessor_path: 'owner',
+                                   field_name: 'id')
 
-        assert_equal(['User'], AttentionItems.new.unenforced_rules.map { |f| f.resource.name })
+        assert_equal(['Supplier'], AttentionItems.new.unenforced_rules.map { |f| f.resource.name })
       ensure
         PermissionForge.configuration.auto_query_scoping = old
+      end
+
+      # Field test round 5 (d #49): the audit listed a typo'd Resource's rules
+      # under rule/unenforced_rules as well as integrity/unknown_models.
+      test 'rules of a Resource named after no model the app can load are not flagged' do
+        typo = create_resource(permission_set: create_permission_set(name: 'Typo'), name: 'Custmer', read_access: true)
+        create_permission_set_rule(permission_set: typo.permission_set, resource: typo)
+
+        assert_empty AttentionItems.new.unenforced_rules
       end
 
       test 'rules bypassed by View All, on muting sets or on turned-off sets are not flagged' do
@@ -383,6 +393,28 @@ module PermissionForge
         assert_equal 'Supplier', customer.association('supplier').class_name
         assert catalog.find('Supplier').column('owner_id').user_reference?
         assert_nil catalog.find('PermissionForge::PermissionSet')
+      end
+
+      # C.14: the rule builder offers the associations a rule's path can
+      # follow (Operators::RulePath), never one the applier refuses to join.
+      test 'associations are the ones a join can be built through' do
+        offered = ModelCatalog.new.find('PfRulePathRecord').associations.map(&:name)
+        one_segment = ->(paths) { paths.reject { |path| path.include?('.') } }
+
+        assert_equal one_segment.call(PfRulePathRecord::JOINED).sort, offered.sort
+        one_segment.call(PfRulePathRecord::NOT_JOINED.keys).each { |name| assert_not_includes offered, name }
+      end
+
+      test 'labels are the host translation, else the stored name verbatim (Rails\' English on an English page)' do
+        I18n.with_locale(:sq) do
+          customer = ModelCatalog.new.find('Customer')
+          assert_equal 'Customer', customer.label
+          assert_equal 'email', customer.column('email').label
+          assert_equal 'supplier', customer.association('supplier').label
+        end
+        english = ModelCatalog.new.find('Customer')
+        assert_equal Admin::ModelLabel.plural(Customer), english.plural_label
+        assert_equal %w[Email Supplier], [english.column('email').label, english.association('supplier').label]
       end
 
       test 'honors admin_model_resolver' do

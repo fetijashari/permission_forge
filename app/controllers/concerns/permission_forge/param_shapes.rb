@@ -18,10 +18,106 @@ module PermissionForge
       value.is_a?(String) ? value.delete("\0").strip : ''
     end
 
+    # A request value that cannot be read, naming the parameter: a 400 in
+    # the admin, a 422 in the API keyed by the parameter like a validation
+    # error (`{ "expires_at": ["is not an ISO 8601 date or time"] }`).
+    #
+    # @api private
+    class InvalidParam < ActionController::BadRequest
+      # @return [String] the parameter, e.g. "expires_at"
+      attr_reader :param
+      # @return [String] what is wrong with it, without its name
+      attr_reader :detail
+
+      def initialize(param, detail)
+        @param = param.to_s
+        @detail = detail
+        super("#{@param} #{detail}")
+      end
+
+      # The field-keyed messages of the API's 422 (`{ "expires_at" => [...] }`).
+      #
+      # @return [Hash{String => Array<String>}]
+      def messages = { param => [detail] }
+    end
+
+    # A flag that is not true or false (ParamShapes.boolean): the API
+    # answers it like any InvalidParam (422 keyed by it); the admin, whose
+    # forms post "0" and "1", goes back with a flash and changes nothing
+    # (ApplicationController).
+    #
+    # @api private
+    class InvalidFlag < InvalidParam
+      # @param param [String, Symbol] the flag, e.g. "is_active"
+      def initialize(param)
+        super(param, I18n.t('permission_forge.api.errors.boolean_invalid'))
+      end
+    end
+
+    # What a boolean parameter is read as: JSON's true and false, their
+    # strings, and 1 / 0 as a number or a string (see .boolean).
+    BOOLEANS = { true => true, 'true' => true, 1 => true, '1' => true,
+                 false => false, 'false' => false, 0 => false, '0' => false }.freeze
+
+    # The words a boolean is also sent as, in any case: what a form posts
+    # (`on` for a checkbox without a value; `off`) and the letters
+    # PostgreSQL and ActiveModel write (`t`, `f`).
+    BOOLEAN_WORDS = { 'true' => true, 't' => true, 'on' => true, '1' => true,
+                      'false' => false, 'f' => false, 'off' => false, '0' => false }.freeze
+
+    # The one reading of a boolean the admin and the API take: BOOLEANS,
+    # or a String that is one of BOOLEAN_WORDS in any case. Anything else
+    # ("yes", "nope", "", 2, 1.5, a list) is no boolean: a reader refuses
+    # it (InvalidParam), never takes it for true as ActiveModel's cast does.
+    #
+    # @return [Boolean, nil] nil when the value is no boolean
+    def self.boolean(value)
+      return BOOLEANS[value] if BOOLEANS.key?(value)
+
+      BOOLEAN_WORDS[value.downcase] if value.is_a?(String)
+    end
+
+    # A flag `key` as true or false (.boolean).
+    #
+    # @raise [InvalidFlag] for anything else
+    # @return [Boolean]
+    def self.flag(key, value)
+      read = boolean(value)
+      read.nil? ? raise(InvalidFlag, key) : read
+    end
+
+    # `attrs` with each of `keys` it has read as a flag (.flag), in place.
+    #
+    # @raise [InvalidFlag] keyed by the first flag that is no boolean
+    # @return [Hash, ActionController::Parameters] attrs
+    def self.flags(attrs, keys)
+      keys.map(&:to_s).select { |key| attrs.key?(key) }.each { |key| attrs[key] = flag(key, attrs[key]) }
+      attrs
+    end
+
     # The time an ISO 8601 String names, in Time.zone: see IsoTime.
     #
     # @return [ActiveSupport::TimeWithZone, nil] nil for anything else
     def self.time(value) = IsoTime.parse(value)
+
+    # What a whole-number parameter is read from: digits with an optional
+    # minus sign, as a String or a JSON number. "2abc", "1.5", "+7" and ""
+    # are not one.
+    WHOLE_NUMBER = /\A-?\d+\z/
+
+    # The whole number `value` holds when it is inside `range`, else
+    # `default`: see #pf_integer_param.
+    #
+    # @param range [Range] of Integers, endless for an upper bound the
+    #   caller clamps itself (`1..`)
+    # @return [Integer, Object] the number, or `default`
+    def self.integer(value, default:, range:)
+      text = value.to_s.strip if value.is_a?(String) || value.is_a?(Integer)
+      return default unless text&.match?(WHOLE_NUMBER)
+
+      number = Integer(text, 10)
+      range.cover?(number) ? number : default
+    end
 
     # `value` with NUL bytes removed from every String in it, however deep.
     #
@@ -69,29 +165,67 @@ module PermissionForge
       tab if tabs.include?(tab)
     end
 
+    # params[key] when it is a whole number (digits, or a JSON number)
+    # inside `range`, else `default`. For a page, a page size, a count: a
+    # value that cannot be read is the default (`per_page=abc` lists the
+    # default page size), never 0, 1 or a 500 — a typo in a paging
+    # parameter must not refuse the page. A parameter whose misreading must
+    # refuse the request is read by a strict reader (pf_boolean_param,
+    # pf_time_param: InvalidParam).
+    #
+    #   pf_integer_param(:per_page, default: 25, range: 1..)
+    #   pf_integer_param(:hour, default: nil, range: 0..23)
+    def pf_integer_param(key, default:, range:)
+      ParamShapes.integer(params[key], default: default, range: range)
+    end
+
     # The Integer ids in params[key] (one value or a list); anything that is
     # not digits is dropped.
     def pf_id_list(key)
       Array.wrap(params[key]).filter_map { |value| PermissionForge::Admin::RecordId.cast(value) }
     end
 
+    # params[key] as true or false (ParamShapes.boolean); false when it is
+    # absent or null.
+    #
+    # @raise [InvalidFlag] for anything else ("yes", "", 2, a list): a value
+    #   that cannot be read must never be taken for false
+    def pf_boolean_param(key)
+      value = params[key]
+      return false if value.nil?
+
+      ParamShapes.flag(key, value)
+    end
+
+    # `attrs` (an attribute hash of a form) with each of `keys` it has read
+    # as true or false (ParamShapes.flags): the admin's flags. ActiveModel
+    # would read "nope" as true.
+    #
+    # @raise [InvalidFlag] keyed by the attribute for anything else (the
+    #   admin answers it with a flash: nothing is changed)
+    def pf_boolean_attributes(attrs, *keys)
+      ParamShapes.flags(attrs, keys)
+    end
+
     # The time params[key] names (an ISO 8601 date or date-time, IsoTime),
     # nil when it is blank.
     #
-    # @raise [ActionController::BadRequest] for anything else ("tuesday",
-    #   "2026-13-45"): a date that cannot be read must never become "no end
-    #   date", nor a time somebody did not mean
+    # @raise [InvalidParam] for anything else ("tuesday", "2026-13-45"): a
+    #   date that cannot be read must never become "no end date", nor a time
+    #   somebody did not mean
     def pf_time_param(key)
       value = params[key]
       return nil if value.blank?
 
-      ParamShapes.time(value) || raise(ActionController::BadRequest, "#{key} is not an ISO 8601 date or time")
+      ParamShapes.time(value) || raise(InvalidParam.new(key, I18n.t('permission_forge.api.errors.not_iso8601_time')))
     end
 
     # The ISO 8601 forms a time parameter is read in, and nothing else
     # (Time.zone.parse reads "tuesday" as today 00:00):
     #
-    # - a date, `2026-10-22`: the beginning of that day in Time.zone;
+    # - a date, `2026-10-22`: the end of that day in Time.zone
+    #   (23:59:59.999999999), as the admin's end-date presets: an assignment
+    #   that ends on a date lasts through it;
     # - a date and a time of day, `2026-10-22T10:00`, with optional seconds
     #   and fraction (`10:00:00`, `10:00:00.5`), `T` or one space between
     #   them, and an optional offset, `Z` or `+02:00`; without one the time
@@ -112,7 +246,9 @@ module PermissionForge
         match = FORMAT.match(value.strip) if value.is_a?(String)
         fields = match && fields_of(match)
         offset = match && match[:offset]
-        at(fields, offset) if fields && valid_offset?(offset)
+        return unless fields && valid_offset?(offset)
+
+        match[:hour] ? at(fields, offset) : Time.zone.local(*fields.first(3)).end_of_day
       end
 
       # [year, month, day, hour, minute, seconds with fraction], nil when a

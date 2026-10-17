@@ -81,12 +81,13 @@ Housekeeping and the log's own upkeep. Written by `Audit.record`.
 
 | Event | What it carries |
 |---|---|
-| `erasure.performed` | `subject_user_id`; `data`: `operation`, `set_uuids`, `set_names`, `group_uuids`, `group_names`, `assignments_removed`, `group_assignments_removed`, `assignments_remaining_elsewhere`, `group_assignments_remaining_elsewhere`, `events_scrubbed`, `actor_labels_cleared`, `record_labels_cleared`, `callback_invoked` (an `on_erasure` callback was given), `dry_run`. Written on every real run, also with zero counts. A run with no tenant set (`rake permission_forge:erasure`) writes one `erasure.performed` without a tenant, which tenant auditors do not see; each removed assignment's `assignment.revoked` is recorded in its own tenant |
-| `consent.withdrawn` | `subject_user_id`; `data`: `consent_flag`, `set_uuids`, `set_names`, `revoked`. Written on every real run, in one transaction with the revocations. With no tenant set while tenancy is on: one per tenant that lost assignments (in that tenant, with that tenant's counts and sets), plus one without a tenant with the totals and `tenants`, each with `across_tenants: true` |
-| `cleanup.expired_assignments` | `data`: `removed`, `invalidated` (users whose cache invalidation the store confirmed), `affected_user_count`, `affected_user_ids` (at most 100), `affected_user_ids_truncated` (there were more), `set_uuids`, `set_names`. Each removed assignment has its own `assignment.revoked` naming its person. Written only when something was removed; the run's events carry the reason `expired` unless a reason is given. With no tenant set while tenancy is on: one per tenant that lost assignments (in that tenant, with that tenant's counts and sets), plus one without a tenant with the totals and `tenants`, each with `across_tenants: true` |
-| `cache.cleared` | `data`: `operation` (`cache_clear`), `strategy` (`pattern` or `enumerated`), `users` (user visits invalidated; `nil` under `pattern`, with `counted: false`), `tenants`, `unconfirmed` (users the cache store did not confirm). Written by `rake permission_forge:cache:clear` / `PermissionCacheClearer`: one per tenant, in that tenant with that tenant's counts, plus one without a tenant with the totals and `across_tenants: true` |
+| `erasure.performed` | `subject_user_id`; `data`: `operation`, `set_uuids`, `set_names`, `group_uuids`, `group_names`, `assignments_removed`, `group_assignments_removed`, `assignments_remaining_elsewhere`, `group_assignments_remaining_elsewhere`, `events_scrubbed`, `actor_labels_cleared`, `record_labels_cleared`, `callback_invoked` (an `on_erasure` callback was given), `dry_run`, and the cache scope: `cache_confirmed` (`nil` here: the event is written in the operation's transaction, before the cache work; `cache.settled` records the answer), `process_local` (the store lives in each process — `cache_backend = :memory`, or `Rails.cache` a `:memory_store`), `in_request` (`true` when the operation ran in a web server process: a request the admin or the API served, or any code of a server process such as a host controller), `unconfirmed` (users the store did not confirm; `nil` when not known yet). The sentence then ends with "The cached permissions were cleared in this server process only (an in-memory store): the other web workers and the job processes kept theirs." (`in_request: true`) or "The cached permissions were cleared only in the process that ran it (an in-memory store): every other process kept theirs." (`in_request: false`, and events stored before 0.15 without the key); when the store did not confirm the work (`cache_confirmed: false`) it ends with "The cache store lives in each process (an in-memory store): the other processes keep their cached permissions either way." instead, and never says cleared. Written on every real run, also with zero counts. A run with no tenant set (`rake permission_forge:erasure`) writes one `erasure.performed` without a tenant, which tenant auditors do not see; each removed assignment's `assignment.revoked` is recorded in its own tenant |
+| `consent.withdrawn` | `subject_user_id`; `data`: `consent_flag`, `set_uuids`, `set_names`, `revoked`, and the cache scope as for `erasure.performed` (`cache_confirmed` `nil`, `process_local`, `in_request`, `unconfirmed`). Written on every real run, in one transaction with the revocations. With no tenant set while tenancy is on: one per tenant that lost assignments (in that tenant, with that tenant's counts and sets), plus one without a tenant with the totals and `tenants`, each with `across_tenants: true` |
+| `cleanup.expired_assignments` | `data`: `removed`, `invalidated` (users whose cache invalidation the store confirmed), `affected_user_count`, `affected_user_ids` (at most 100), `affected_user_ids_truncated` (there were more), `set_uuids`, `set_names`, and the cache scope: `cache_confirmed` (`true` / `false`, what the store confirmed), `process_local`, `in_request`, `unconfirmed` (as for `erasure.performed`). Each removed assignment has its own `assignment.revoked` naming its person. Written only when something was removed; the run's events carry the reason `expired` unless a reason is given (a code, `Audit::ReasonCodes`: the admin shows it in the page's language; the CSV and the API return `expired`). With no tenant set while tenancy is on: one per tenant that lost assignments (in that tenant, with that tenant's counts and sets), plus one without a tenant with the totals and `tenants`, each with `across_tenants: true` |
+| `cache.cleared` | `data`: `operation` (`cache_clear`), `strategy` (`pattern` or `enumerated`), `users` (user visits invalidated; `nil` under `pattern`, with `counted: false`), `tenants`, and the cache scope: `cache_confirmed` (`true` / `false`, what the store confirmed), `process_local` (the store lives in each process — `cache_backend = :memory`, or `Rails.cache` a `:memory_store`), `in_request`, `unconfirmed` (users the store did not confirm); the sentence ends as for `erasure.performed`, and with `cache_confirmed: false` says the clear was asked for and not confirmed. Written by `rake permission_forge:cache:clear` / `PermissionCacheClearer`: one per tenant, in that tenant with that tenant's counts, plus one without a tenant with the totals and `across_tenants: true` |
+| `cache.settled` | `subject_user_id`; `data`: `operation` (`erasure` or `consent_withdrawal`) and the cache scope: `cache_confirmed` (`true` / `false`, what the store answered once the cache work ran), `process_local`, `in_request`, `unconfirmed`. The follow-up of `erasure.performed` and `consent.withdrawn`, which are written in the operation's transaction, before the cache work (`cache_confirmed: nil`): it shares their `correlation_id`. Written right after the work; inside a caller's transaction, after its commit (the work runs again there, measured), never after a rollback. A consent withdrawal that revoked nothing writes none. `cache_confirmed: false` is the trace of a failed post-commit invalidation of an erased person (also reported through `config.on_cache_failure`); its sentence then says the store did not confirm it |
 | `audit.purged` | `data`: `operation`, `count`, `batch`, `cutoff`, `period_seconds`, `dry_run`, and `across_tenants: true` when the purge ran with no tenant set while tenancy is on. One per deleted batch, in the batch's own transaction; in that across-tenants case one per tenant whose events the batch deleted (in that tenant, with that tenant's `count`) plus one without a tenant when the batch deleted untenanted events. Never purged itself |
-| `audit.settings_observed` | `data.settings`: the ten audit options as they stood at boot (a lambda reads `set` or `unset`, never its code) |
+| `audit.settings_observed` | `data.settings`: the ten audit options as they stood at boot (a lambda reads `set` or `unset`, never its code). Its actor is `system` with the label `boot` (a code: the admin names it in the page's language) |
 | `report.generated` | `data.task` and `data.counts` of a read-only rake task (`audit`, `audit_masks`, `stale_assignments`, `expired_assignments`) |
 
 ### Admin events (6)
@@ -99,7 +100,7 @@ Viewing, exporting and refused requests. Written by `Audit.record`.
 | `audit.viewed` | `data.scope` (`log`, `event`, `person`, `permission_set`, `api`) and the filters used; the 2xx response only |
 | `audit.exported` | `data.scope` (`log`, `holdings`, `person`, `permission_set`), `data.format`, the filters |
 | `admin.auth_failed` | `data.reason` (`invalid_credentials`, `basic_auth_not_configured`, `assignment_not_authorized`, `audit_log_not_authorized`, `tenant_missing`), `method`, `path`, `endpoint`; for a Basic sign-in the typed username as actor label, never the password. An assignment refusal adds `hook`, `action`, `user_ids` (at most 100) and `user_count`. `tenant_missing`: tenancy is on, the request has no current tenant and `admin_tenantless_access` is not `:allow` |
-| `api.auth_failed` | `data.reason` (`api_auth_not_configured`, `api_auth_denied`, `action_not_authorized`, `assignment_not_authorized`, `audit_log_not_authorized`, `tenant_missing`), `hook` (the option that refused), `method`, `path`, `endpoint`; `status` for the two `api_auth` reasons; `action` for an action refusal; `user_ids` (at most 100) and `user_count` for an assignment refusal |
+| `api.auth_failed` | `data.reason` (`api_auth_not_configured`, `api_auth_denied`, `action_not_authorized`, `assignment_not_authorized`, `audit_log_not_authorized`, `stats_not_authorized`, `tenant_missing`), `hook` (the option that refused), `method`, `path`, `endpoint`; `status` for the two `api_auth` reasons; `action` for an action refusal; `user_ids` (at most 100) and `user_count` for an assignment refusal |
 | `admin.lock_refused` | a change refused because a record is locked (`is_editable: false`), from the admin screens or the API: `method`, `path`, `endpoint`; the event's record is the locked one, which may be the changed record itself or what holds it (its Resource, its Permission Set, or a membership's Permission Set Group). A change to a locked set's holders is refused only when it widens access: adding holders or extending/clearing end dates on a granting set, removing holders or ending them sooner on a Muting Permission Set |
 
 ### Runtime (access) events (9)
@@ -108,7 +109,7 @@ Published always, stored only for the groups in `config.audit_runtime_events`. W
 
 | Event | Group | What it carries |
 |---|---|---|
-| `access.denied` | `denied` | `data.model`, `data.reason` (`rule`, `nil_user`), `data.via` (`find_by`, `permission_scoped`, `auto_scope`); `subject_user_id` is the user denied |
+| `access.denied` | `denied` | `data.model`, `data.reason` (`rule`, `nil_user`, `no_read_access`: a signed-in user without Read on the model under `no_read_access_strategy = :deny`), `data.via` (`find_by`, `permission_scoped`, `auto_scope`); `subject_user_id` is the user denied |
 | `action.denied` | `denied` | `data.model`, `data.reason` (the Authorizer reason), `data.action`, `controller`, `action_name`, `via: action_guard` |
 | `rule.bypassed` | `bypass` | `data.model`, `data.via`, `data.reason`: `view_all`, `modify_all`, `nil_user`, `scope_suspended`, `auto_scope_opt_out`, `no_rules`, `guard_bypass` |
 | `query.unscoped` | `bypass` | `data.model`, `data.table`, `data.mode`, `data.call_site`; never the SQL |
@@ -116,7 +117,7 @@ Published always, stored only for the groups in `config.audit_runtime_events`. W
 | `params.filtered` | `params_filtered` | `data.model`, `data.reason` (`field_access`, `nil_user`), `data.dropped` (parameter paths, never values) |
 | `write.masked_skipped` | `params_filtered` | the record, `data.attribute`, `data.protection`, `data.detected_by` |
 | `permissions.rebuilt` | `cache` | `subject_user_id`; `data.read_through`, `data.withheld` |
-| `permissions.invalidated` | `cache` | `subject_user_id`; `data.tenant_id`, `data.confirmed` |
+| `permissions.invalidated` | `cache` | `subject_user_id`; `data.tenant_id`, `data.confirmed`, `data.process_local`, `data.in_request` (as for `erasure.performed`). With `confirmed: false` the sentence says the store did not confirm the removal |
 
 ### Columns of every event
 
@@ -159,7 +160,7 @@ Read this list before you tell an assessor what the log proves. Each item is a l
 
 **Database policies.** `rake permission_forge:rls:sync` and `rls:remove` (and the RLS generator's migration) write no audit event, by design: they only install, replace or remove PostgreSQL policies derived from rules whose changes are already recorded. `rls:remove` switches row-level security off without a trace in the log; record these runs in your change management.
 
-**Decisions that allow.** Only denials are recorded (`access.denied`, `action.denied`), and bypasses when their group is stored. An allowed controller action and the rows a rule allowed leave no event. Rows a row-level rule filters out are not denials either: `permission_scoped`, auto-scoping and `find` (which raises `RecordNotFound`) publish no event for them; only `find_by` and `find_by!` attribute a rule denial to the user. `user.can?` and `can_*?`, `Authorizer.allowed?` (the checks behind buttons in a view) and conditional-set activation (IP, hours, session flag) are not instrumented.
+**Decisions that allow.** Only denials are recorded (`access.denied`, `action.denied`), and bypasses when their group is stored. An allowed controller action and the rows a rule allowed leave no event. Rows a row-level rule filters out are not denials either: `permission_scoped`, auto-scoping and `find` (which raises `RecordNotFound`) publish no event for them; only `find_by` and `find_by!` attribute a rule denial to the user. A model refused whole under `no_read_access_strategy = :deny` is an `access.denied` (`no_read_access`) on each of the three paths (once per request under auto-scoping). `user.can?` and `can_*?`, `Authorizer.allowed?` (the checks behind buttons in a view) and conditional-set activation (IP, hours, session flag) are not instrumented.
 
 **Expiry.** An assignment whose `expires_at` has passed leaves no event at the moment access lapses; only the later removal by the expired-assignment cleaner is an event (`assignment.revoked`, `cleanup.expired_assignments`). Derive the lapse from `expires_at` in the grant's snapshot.
 
@@ -179,12 +180,12 @@ The actor of an event is the first of these that names someone (`Audit::Actor.cu
 
 1. An explicit block: `PermissionForge.with_audit_actor(...)` or `Audit::Context.with(actor: ...)`. A host that wraps requests in its own around-action wins over the request's resolution.
 2. The request (admin UI): `config.audit_actor_resolver`, called with the controller; then `config.current_user_resolver`; then, under HTTP Basic auth, the username that was checked (`actor_type: basic_auth`, no id).
-3. The request (API): `audit_actor_resolver`; then the current user; otherwise an anonymous `api` actor labelled "API client" (`api_auth` answers yes or no, so it cannot name a principal).
+3. The request (API): `audit_actor_resolver`; then the current user; otherwise an anonymous `api` actor stored with the label `api_client` (`Audit::ActorCodes`; the admin shows "API client" in its language; `api_auth` answers yes or no, so it cannot name a principal). On the default `api_base_controller_class` your app's sign-in does not run, so `Current.user` is not set there and changes read "API client" even from a signed-in browser: see [naming the API caller](admin-api.md#who-the-audit-log-names-for-an-api-change).
 4. Outside a request: `PermissionForge.current_user`; otherwise `unknown`.
 
 The actor is never taken from parameters or headers. A resolver that raises, or answers with something that is not an actor, gives `unknown` and is reported through `audit_hook_failure_strategy`.
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   # Under HTTP Basic auth your app's sign-in does not run in the admin: name the
@@ -206,7 +207,7 @@ end
 
 Outside a request, name the actor explicitly:
 
-```ruby
+```ruby fragment
 PermissionForge.with_audit_actor(user: admin, source: 'job', reason: 'TCK-12') do
   PermissionForge::Services::ExpiredAssignmentCleaner.call
 end
@@ -229,7 +230,7 @@ Each event carries `request_id` and `ip` from `request.request_id` and `request.
 
 Override either with a lambda; a key you return replaces the default (a key returned as `nil` stores nothing):
 
-```ruby
+```ruby fragment
 config.audit_request_context = ->(controller) {
   { request_id: controller.request.headers['X-Correlation-Id'], ip: controller.request.headers['CF-Connecting-IP'] }
 }
@@ -247,7 +248,7 @@ On an assignment or a group membership the reason is also kept on the row (`reas
 
 **Correlation.** Events of one action share a `correlation_id`: one id per mutating admin or API request, one per outermost transaction otherwise, one per standalone event when neither applies. `Audit.correlate { ... }` makes a block share one id (an outer block's id wins).
 
-```ruby
+```ruby fragment
 PermissionForge::Audit.correlate { change_set.apply! }
 ```
 
@@ -268,7 +269,7 @@ All ten options live in `PermissionForge::Configuration::AuditSettings`; the Set
 | `audit_log_authorization` | `nil` | `lambda(controller)`; the audit pages, exports and API endpoint are shown only when it returns exactly `true`. `nil`: anyone who can reach the admin. |
 | `admin_assignment_authorization` | `nil` | `lambda(controller, target, user_ids, action)`; see [configuration.md](configuration.md#admin_assignment_authorization). |
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.audit_events = :auto
   config.audit_runtime_events = %i[denied bypass]
@@ -313,7 +314,7 @@ Runtime events are published always (if somebody listens) and stored only for th
 
 Every event is published after the transaction that wrote it commits (at once outside a transaction, never after a rollback). Runtime events are published at once. The payload has every column as a symbol key, plus `tenant_id`, `stored` (was a row written), `deferred` (it will be written when the open transaction ends), `audit_event` (the row or `nil`) and, for in-process subscribers only, `objects`.
 
-```ruby
+```ruby fragment
 ActiveSupport::Notifications.subscribe(/\.permission_forge\z/) do |event|
   Rails.logger.info("#{event.name} #{event.payload[:actor_label]}")
 end
@@ -351,9 +352,10 @@ Mounted at `<mount path>/audit` (sidebar entry "Audit log"). It is read-only: no
 - **Timelines.** The Permission Set's Audit tab and the Person's Audit tab show the same events with paging (20 per page) and links into the log.
 - **Review labels.** Assignments read "Reviewed by *person* on *date*", "Reviewed on *date*" (reviewer is not a record, e.g. Basic auth) or "Never reviewed". Staleness is counted from the last review (`reviewed_at`), else from the grant (`created_at`).
 - **"Last edited by"** in a record's footer comes from the latest change event while auditing records, and says "History" with a link into the log; with auditing off it falls back to `updated_by_id` / `updated_at`.
+- **"Created by"** (footers, the Assignments tab, "Assigned by", the audit tabs and their CSV) comes from the record's creation event (`<model>.created`, `assignment.granted`, `group_membership.added`) while the log has one, so an HTTP Basic login or an API client is named as in the log rather than as "System"; without one it falls back to `created_by_id`, which stays a user id (nothing is stamped for an actor that is not a record of `audit_user_class`).
 - **Names as of the event.** A sentence names a Permission Set or group as it was when the event happened (the label of the record's latest event at or before it; failing that the earliest later event's previous name, then the live name, then `#id`) and a person by the label stored on the assignment or membership. A revocation of an assignment whose `expires_at` had passed reads "… after it expired on *date*".
 - **Home** shows a card when auditing is switched off, when the table is missing, or when `audit_events = true` has no table and every change fails; the log and timelines carry a note with the same three texts.
-- **Gating.** `audit_log_authorization` guards the page, the event page, the exports, the holdings export, the audit tabs of the Person and Permission Set pages and their CSV. A refusal answers 403 (a page, banner or empty body) and records `admin.auth_failed` with reason `audit_log_not_authorized`, once per request; the other tabs stay reachable. A lambda that raises counts as a refusal. Names taken from the log also appear outside the gate: the "Last edited by" footers, and "Assigned by" on a person's Access tab and in the Home stale-assignments card.
+- **Gating.** `audit_log_authorization` guards the page, the event page, the exports, the holdings export, the audit tabs of the Person and Permission Set pages and their CSV. A refusal answers 403 (a page, banner or empty body) and records `admin.auth_failed` with reason `audit_log_not_authorized`, once per request; the other tabs stay reachable. A lambda that raises counts as a refusal. Names taken from the log also appear outside the gate: the "Created by" and "Last edited by" footers, "by …" in a Permission Set's Assignments tab, and "Assigned by" on a person's Access tab and in the Home stale-assignments card.
 
 ## Exports
 
@@ -414,23 +416,24 @@ Newest first (`occurred_at desc, id desc`). Pagination follows `config.api_defau
 
 `audit_retention_period` defaults to `nil`: events are kept forever (the security audit reports this as `audit_kept_forever`, Info). Set it to your policy:
 
-```ruby
+```ruby fragment
 config.audit_retention_period = 2.years
 ```
 
 Nothing deletes events on its own. Run the purge from cron, a job or a rake task:
 
-```bash
+```bash run
+DRY_RUN=1 bin/rails permission_forge:audit_events:purge                    # counts only (a dry run)
 bin/rails permission_forge:audit_events:purge                              # deletes
-DRY_RUN=1 bin/rails permission_forge:audit_events:purge                    # counts only
 ACTOR="Ops nightly" REASON="TCK-88" bin/rails permission_forge:audit_events:purge
 ```
 
-```ruby
+```ruby run
 PermissionForge::Services::AuditEventPurger.call(dry_run: true)
 PermissionForge::Services::AuditEventPurger.call(actor: 'nightly job', reason: 'policy 7.2')
 ```
 
+- `DRY_RUN` decides whether the task deletes: unset (or empty), `false`, `0` or `no` deletes, so a scheduled purge keeps running; any other value (`1`, `true`, `yes`, `TRUE`) only counts. `rake permission_forge:erasure` reads `DRY_RUN` the same way but is a dry run when it is unset. `ACTOR=` and `REASON=` name who ran it and why on its `audit.purged` events.
 - Only events with `occurred_at` strictly before `now - period` are deleted. A Duration is subtracted by the calendar (`30.days` across a daylight-saving change, `1.year`); a number is seconds.
 - Deleted in id batches of 1000, each batch in one transaction with its own `audit.purged` event (`count`, `batch`, `cutoff`, `period_seconds`). A purge with no tenant set while tenancy is on writes one `audit.purged` per tenant whose events the batch deleted, in that tenant and with that tenant's `count` (`across_tenants: true`), plus one without a tenant for untenanted events, so each tenant's auditors see that their log was purged.
 - **`audit.purged` events are never purged.** The record of what was deleted outlives it.
@@ -457,6 +460,8 @@ This is the one sanctioned mutation of events (`update_all`, recorded by `erasur
 - with a tenant set: the person's assignments and memberships in other tenants (counted in `assignments_remaining_elsewhere` and `group_assignments_remaining_elsewhere`) and the labels in other tenants' events;
 - the person's user record and application data in your app, unless your `on_erasure` callback deletes them;
 - copies outside the table (see [What is not recorded](#what-is-not-recorded)).
+
+**The admin's Audit log page still shows the person's name** while their user record exists. The page names people from your user table, looked up by id when it renders, not from the stored labels, so it reads "Carol Support" on her events although the labels were cleared (the CSV export and `GET /api/audit_events` show the stored, now empty, labels). Once your `on_erasure` callback deletes or anonymises the user record, the page shows the id only.
 
 **`on_erasure:`** runs after the erasure commits. Called outside a transaction, it runs right after the erasure; an error it raises propagates (the erasure stands and is recorded) and the result's `callback_invoked` is `true`. Called inside your own transaction, it runs after your transaction commits, never if it rolls back; the result's `callback_invoked` is then `nil`, and an error it raises is reported through `Rails.error` and the log rather than raised (raising from the commit would skip other after-commit work). Events it writes keep the labels they are given.
 
@@ -523,7 +528,7 @@ From 0.13 to 0.14 no migration is needed. The deploy step `bin/rails permission_
 
 From a version without the audit log (before 0.13):
 
-```bash
+```bash fragment
 bin/rails generate permission_forge:upgrade --skip   # up to three migrations; reads your table prefix
 bin/rails db:migrate
 ```
@@ -542,7 +547,7 @@ Behaviour changes are listed in the [migration guide](migration-guide.md#upgradi
 
 Adding an event is one catalogue entry; recording it is one call.
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb (after configure)
 PermissionForge::Audit::EventCatalog.register('host.export_requested', category: 'admin')
 

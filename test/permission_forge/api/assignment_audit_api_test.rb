@@ -33,7 +33,7 @@ module PermissionForge
         assert event.data['snapshot']['expires_at']
 
         delete "#{users_path}/#{row.uuid}"
-        assert_response :no_content
+        assert_response :ok # the revoked assignment and meta.cache (R2 P1-2)
         assert_audit_event('assignment.revoked', record_id: row.id.to_s, actor_id: @admin.id.to_s)
       end
 
@@ -128,7 +128,8 @@ module PermissionForge
           ['explode', '', nil].each do |bulk_action|
             post "#{users_path}/bulk", params: { user_ids: [@holder.id], bulk_action: bulk_action }.compact
             assert_response :unprocessable_entity
-            assert_match 'Invalid action', JSON.parse(response.body)['error']['messages']
+            assert_equal({ 'bulk_action' => [I18n.t('permission_forge.api.errors.bulk_action_invalid')] },
+                         JSON.parse(response.body)['error']['messages'])
           end
         ensure
           replace_method(service.singleton_class, :call, service.singleton_class.instance_method(:pf_kept_call))

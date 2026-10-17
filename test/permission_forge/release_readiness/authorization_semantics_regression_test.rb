@@ -100,8 +100,11 @@ module PermissionForge
         end
       end
 
+      # The fields as the attribute guard reads them: composed along the STI
+      # chain (ResourceChain.fields), not the entry alone.
       def assert_field_parity(engine, shown, name)
-        levels = engine[:fields].to_h { |field, field_entry| [field.to_s, engine_level(engine, field_entry)] }
+        fields = PermissionForge::ResourceChain.fields(Current.user, PermissionForge::ResourceChain.names_for(name))
+        levels = fields.to_h { |field, field_entry| [field.to_s, engine_level(engine, field_entry)] }
         assert_equal levels.sort, shown.fields.reject(&:unconfigured).to_h { |f| [f.name, f.level] }.sort, "#{name} fields"
       end
 
@@ -384,7 +387,7 @@ module PermissionForge
       RAILS_OVERRIDES = %w[read_attribute attributes serializable_hash attribute_names_for_serialization
                            read_attribute_for_serialization read_attribute_for_validation run_validations!
                            attribute_for_inspect pretty_print read_store_attribute write_store_attribute].freeze
-      RAILS_CLASS_OVERRIDES = %w[alias_attribute].freeze
+      RAILS_CLASS_OVERRIDES = %w[alias_attribute define_attribute_methods].freeze
 
       def masking_modules(ancestors)
         ancestors.select { |mod| mod.name.to_s.start_with?('PermissionForge::Concerns::MaskedAttributes') }

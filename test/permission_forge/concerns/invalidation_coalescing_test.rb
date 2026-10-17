@@ -903,7 +903,7 @@ module PermissionForge
 
         assert_each_user_once calls
         assert_none_cached
-        assert_equal 200, deleted.size, 'four keys per person: this entry namespace and the previous one'
+        assert_equal 100, deleted.size, 'two keys per person in this entry namespace (no previous namespace since 0.15)'
         assert_equal 4, statements.size, 'the set of the resource, whether it is active, its assignments, their users'
       end
 

@@ -10,6 +10,8 @@ ENV['PARALLEL_WORKERS'] ||= '1'
 require 'test_helper'
 require 'pp'
 require 'tmpdir'
+require 'open3'
+require 'json'
 require 'active_support/cache/redis_cache_store'
 
 # Rails-internals canary: one test per private (`:nodoc:`, private, or
@@ -43,6 +45,12 @@ ActiveRecord::Schema.define do
     t.string :email
     t.text :prefs
     t.integer :parent_id
+  end
+  # For the encrypted_attributes canary (ignore_case needs its original_ column).
+  create_table :pf_canary_encrypted_records, force: true do |t|
+    t.string :name
+    t.string :email
+    t.string :original_email
   end
 end
 
@@ -104,11 +112,22 @@ module PermissionForge
       arel_between: Regexp.union('Arel::Nodes::Between.new(', 'Arel::Nodes.build_quoted('),
       arel_matches: 'column.matches(',
       arel_named_function: "Arel::Nodes::NamedFunction.new('COALESCE'",
-      schema_cache: 'connection.schema_cache.columns_hash(',
+      schema_cache: 'schema_cache(model).columns_hash(',
+      schema_cache_data_sources: Regexp.union('cache.data_source_exists?(', 'cache.clear_data_source_cache!('),
+      schema_cache_columns_identity: Regexp.union('columns.object_id', 'fresh.object_id'),
+      define_attribute_methods_again: 'super.tap { |generated| pf_define_late_column_accessors if generated }',
+      association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!',
+                                            'reflection.chain.any?', 'link.through_reflection?', 'link.source_reflection'),
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
       sandbox: 'application.sandbox?',
+      generator_commands: 'Rails::Command::GenerateCommand',
       journey_route: Regexp.union('@route.path.spec', '@route.verb', '@route.defaults', '@route.internal'),
-      association_target: Regexp.union('association.target.sort_by!', 'association(:user).target', 'return association.target if')
+      association_target: Regexp.union('association.target.sort_by!', 'association(:user).target', 'return association.target if'),
+      host_translation_default: Regexp.union('human_attribute_name(name, default: MISSING)',
+                                             'model_name.human(count: count, default: FieldLabel::MISSING)'),
+      encrypted_attributes: Regexp.union('model.encrypted_attributes', 'model.deterministic_encrypted_attributes',
+                                         'model.type_for_attribute(name.to_s).deserialize(', 'ActiveRecord::Encryption.encryptor.encrypted?('),
+      validate_after_callback: 'set_callback :validate, :after, :validate_required_columns'
     }.freeze
 
     # What to change, per touch point, when a test fails on something its own
@@ -157,11 +176,28 @@ module PermissionForge
       arel_between: 'adapt Operators::Registry (between) and the RLS operator SQL',
       arel_matches: 'adapt Operators::Registry (LIKE operators)',
       arel_named_function: 'adapt PermissionSetUser.last_reviewed_column',
-      schema_cache: 'adapt Operators::RuleColumn.on',
+      schema_cache: 'adapt SchemaRead.columns (Operators::RuleColumn.on and every reader of a model\'s columns go through it)',
+      schema_cache_data_sources: 'adapt SchemaRead.table? (a field name qualified with a table that is not there matches ' \
+                                 'nothing; the schema is read again once before that answer)',
+      schema_cache_columns_identity: 'adapt SchemaRead.reread! / .confirmed? (a name confirmed missing is tied to the ' \
+                                     'columns read: tell a read apart by something else, or a missing name re-reads every time)',
+      define_attribute_methods_again: 'adapt MaskedAttributes.define_attribute_methods (the hook that guards a column added ' \
+                                      'after the include: find where Rails defines a model\'s attribute methods after ' \
+                                      'reset_column_information, or a column a migration added is read raw through its getter)',
+      association_join_checks: 'adapt Operators::RulePath#through / #unjoinable_cause / #record_dependent? to what ' \
+                               'Associations::JoinDependency#build checks before it joins and the scopes a :through ' \
+                               'evaluates along its chain (a path it raises for must stay broken, one it joins followed)',
       preloader: 'adapt PermissionHashBuilder#preload',
       sandbox: 'adapt OpenTransaction.sandbox?',
+      generator_commands: 'adapt BootChecks.generator_running? (GENERATOR_COMMANDS: what `bin/rails generate` loads before it boots)',
       journey_route: 'adapt Admin::ControllerCatalog::RoutedAction',
-      association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)'
+      association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)',
+      host_translation_default: 'adapt Admin::FieldLabel.host_translation and Admin::ModelLabel.host_translation (how a host ' \
+                                'translation is told from Rails\' English fallback: the `default:` option is answered when no key ' \
+                                'of the lookup chain exists)',
+      encrypted_attributes: 'adapt PermissionForge::EncryptedAttributes (which columns hold ciphertext: a rule is refused ' \
+                            'on one, the people search leaves one out, a person label is read decrypted)',
+      validate_after_callback: 'adapt ValidatesRequiredColumns: its NOT NULL check must run after every validation, failing valid?'
     }.freeze
 
     # Marks a failure message as a canary's.
@@ -255,6 +291,11 @@ module PermissionForge
 
       def pool
         ActiveRecord::Base.connection_pool
+      end
+
+      # The cache SchemaRead reads: the pool's (Rails 7.2+), the connection's on 7.1.
+      def pool_schema_cache
+        pool.respond_to?(:schema_cache) ? pool.schema_cache : leased_connection.schema_cache
       end
 
       # The calling thread's connection, kept (lease_connection from 7.2).
@@ -684,6 +725,25 @@ module PermissionForge
       error = assert_raises(ActiveModel::MissingAttributeError) { record.send(:missing_attribute, 'email', caller) }
       assert_includes error.message, 'email'
       assert_raises(ActiveModel::MissingAttributeError) { record.email }
+    end
+
+    canary_test :host_translation_default,
+                'human_attribute_name / ModelName#human: the default: option is answered when the host has no translation, ' \
+                'the host\'s translation when it has one' do
+      model = canary_model('PfCanaryLabelled')
+      sentinel = "\u0000missing\u0000"
+
+      assert_equal sentinel, model.human_attribute_name('zzz_column', default: sentinel)
+      assert_equal sentinel, model.model_name.human(count: 1, default: sentinel)
+      assert_equal sentinel, model.model_name.human(count: 2, default: sentinel)
+
+      I18n.backend.store_translations(I18n.locale, activerecord: { attributes: { pf_canary_labelled: { zzz_column: 'Zed' } },
+                                                                   models: { pf_canary_labelled: { one: 'Canary', other: 'Canaries' } } })
+      assert_equal 'Zed', model.human_attribute_name('zzz_column', default: sentinel)
+      assert_equal 'Canary', model.model_name.human(count: 1, default: sentinel)
+      assert_equal 'Canaries', model.model_name.human(count: 2, default: sentinel)
+    ensure
+      I18n.backend.store_translations(I18n.locale, activerecord: { attributes: { pf_canary_labelled: nil }, models: { pf_canary_labelled: nil } })
     end
 
     canary_test :dangerous_attribute_methods, 'AttributeMethods.dangerous_attribute_methods: the method names of ActiveRecord::Base, as Strings' do
@@ -1331,8 +1391,8 @@ module PermissionForge
 
     # --- schema and loading -----------------------------------------------------------------------------------
 
-    canary_test :schema_cache, 'connection.schema_cache.columns_hash(table): Columns by name, with name and type' do
-      columns = pool.with_connection { |connection| connection.schema_cache.columns_hash('pf_canary_records') }
+    canary_test :schema_cache, 'connection_pool.schema_cache.columns_hash(table): Columns by name, with name and type' do
+      columns = pool_schema_cache.columns_hash('pf_canary_records')
 
       assert_equal %w[email id name parent_id prefs], columns.keys.sort, canary(
         :schema_cache, 'schema_cache.columns_hash no longer answers the columns of a table by name',
@@ -1341,6 +1401,115 @@ module PermissionForge
       assert_equal [:string, 'email'], [columns['email'].type, columns['email'].name],
                    canary(:schema_cache, 'a Column no longer answers name / type',
                           'Operators::ValueCasters pick a caster by column type: adapt RuleColumn')
+    end
+
+    canary_test :schema_cache_data_sources,
+                'connection_pool.schema_cache.data_source_exists?(name) / clear_data_source_cache!(name): whether a table is there' do
+      cache = pool_schema_cache
+
+      assert cache.data_source_exists?('pf_canary_records'), canary(
+        :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers true for a table that is there',
+        'SchemaRead.table? (Operators::RuleColumn.data_source?) asks it before a qualified field name is left to the database: adapt it'
+      )
+      assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
+        :schema_cache_data_sources, 'schema_cache.data_source_exists?(name) no longer answers false for a table that is not there',
+        'a rule qualified with a table that is not there must match nothing: adapt SchemaRead.table?'
+      )
+      cache.clear_data_source_cache!('pf_canary_no_such_table')
+
+      assert_not cache.data_source_exists?('pf_canary_no_such_table'), canary(
+        :schema_cache_data_sources, 'schema_cache.clear_data_source_cache!(name) no longer takes one name',
+        'SchemaRead.table? forgets a cached "no" before it answers it: adapt it'
+      )
+    end
+
+    canary_test :schema_cache_columns_identity,
+                'the pool\'s schema_cache.columns_hash(table) answers the same Hash until the table is read again (reset_column_information)' do
+      read = -> { pool_schema_cache.columns_hash(PfCanaryRecord.table_name) }
+      first = read.call
+
+      assert_same first, read.call, canary(
+        :schema_cache_columns_identity, 'schema_cache.columns_hash answers a new Hash on every call',
+        'SchemaRead ties a name confirmed missing to the read that confirmed it (its object_id): adapt SchemaRead.confirmed?'
+      )
+      PfCanaryRecord.reset_column_information
+
+      assert_not_same first, read.call, canary(
+        :schema_cache_columns_identity, 'reset_column_information no longer reads the table into a new Hash',
+        'SchemaRead tells a later read of the table from the one that confirmed a name missing by it: adapt SchemaRead.reread!'
+      )
+    end
+
+    canary_test :define_attribute_methods_again,
+                'define_attribute_methods (a class method) runs, answering true, the first time a record is built after reset_column_information' do
+      calls = []
+      model = canary_model('PfCanaryDefineAttributeMethods') do
+        define_singleton_method(:define_attribute_methods) { super().tap { |generated| calls << generated } }
+      end
+      model.instantiate('id' => 1)
+      calls.clear
+      model.reset_column_information
+      model.instantiate('id' => 1)
+
+      assert_includes calls, true, canary(
+        :define_attribute_methods_again, 'building a record after reset_column_information no longer calls define_attribute_methods',
+        'MaskedAttributes defines the guarded getter of a column a migration added there'
+      )
+    end
+
+    canary_test :association_join_checks,
+                '_reflect_on_association / check_validity! / check_eager_loadable! / polymorphic? / klass: what joins checks' do
+      model = canary_model('PfCanaryJoinModel') do
+        belongs_to :parent, class_name: 'PfCanaryRecord', optional: true
+        belongs_to :subject, polymorphic: true, optional: true
+        belongs_to :phantom, class_name: 'PfCanaryNoSuchModel', optional: true
+        has_many :namesakes, ->(record) { where(name: record.name) }, class_name: 'PfCanaryRecord', foreign_key: :parent_id
+        has_many :ghosts, through: :nowhere, source: :children
+        has_many :namesake_parents, through: :namesakes, source: :parent
+      end
+      joins = lambda do |name|
+        model.joins(name).to_sql
+        true
+      rescue StandardError
+        false
+      end
+
+      assert_nil model._reflect_on_association('nowhere')
+      assert_not joins.call(:nowhere)
+
+      parent = model._reflect_on_association('parent')
+      parent.check_validity!
+      parent.check_eager_loadable!
+
+      assert_not parent.polymorphic?
+      assert_equal [PfCanaryRecord, true], [parent.klass, joins.call(:parent)], canary(
+        :association_join_checks, 'an association joins builds was not found, or a check refused it',
+        RailsInternalsCanary::FIXES[:association_join_checks]
+      )
+      assert model._reflect_on_association('subject').polymorphic?
+      assert_raises(ArgumentError) { model._reflect_on_association('namesakes').check_eager_loadable! }
+      assert_raises(ActiveRecord::ActiveRecordError) { model._reflect_on_association('ghosts').check_validity! }
+      assert_raises(NameError) { model._reflect_on_association('phantom').klass }
+      # A record-taking scope along a :through: the through's own check
+      # passes, the join raises (RulePath#record_dependent? walks the chain).
+      through = model._reflect_on_association('namesake_parents')
+      through.check_eager_loadable!
+
+      assert through.through_reflection?
+      assert_equal :parent, through.source_reflection.name
+      assert through.chain.any? { |link| link.scope && !link.scope.arity.zero? }, canary(
+        :association_join_checks, 'a :through reflection\'s chain no longer lists the through association with its scope',
+        RailsInternalsCanary::FIXES[:association_join_checks]
+      )
+      assert_not joins.call(:namesake_parents), canary(
+        :association_join_checks, 'joins now builds a join through a record-taking scope along a :through',
+        RailsInternalsCanary::FIXES[:association_join_checks]
+      )
+
+      assert_equal [false] * 4, %i[subject namesakes ghosts phantom].map { |name| joins.call(name) }, canary(
+        :association_join_checks, 'joins now builds a join RulePath counts as broken (it matches nothing)',
+        RailsInternalsCanary::FIXES[:association_join_checks]
+      )
     end
 
     canary_test :preloader, 'Associations::Preloader.new(records:, associations:).call: loads the association of the records given' do
@@ -1396,6 +1565,92 @@ module PermissionForge
                       'Admin::ControllerCatalog::RoutedAction reads Journey::Route#verb ("GET|POST"), #path.spec ' \
                       '("…(.:format)"), #defaults and #internal (all :nodoc:): adapt it, or the admin lists no (or wrong) host actions'
                     )
+    end
+
+    # In a child process: loading the generate command here would make every
+    # later boot check in this process look like a generator's.
+    canary_test :generator_commands,
+                '`bin/rails generate` / `destroy` load Rails::Command::GenerateCommand / DestroyCommand (:nodoc:); ' \
+                'server, console and runner do not' do
+      script = <<~RUBY
+        require 'json'
+        require 'rails/command'
+        %w[server console runner].each { |name| Rails::Command.find_by_namespace(name) }
+        others = %w[GenerateCommand DestroyCommand].select { |name| Rails::Command.const_defined?(name, false) }
+        generators = %w[generate destroy].map { |name| Rails::Command.find_by_namespace(name)&.name }
+        puts JSON.generate('others' => others, 'generators' => generators)
+      RUBY
+      output, status = Open3.capture2e(RbConfig.ruby, '-e', script)
+      assert status.success?, output
+      result = JSON.parse(output.lines.reverse.find { |line| line.start_with?('{') })
+
+      assert_equal [], result['others'], 'a server, a console or a runner loads no generator command'
+      assert_equal %w[Rails::Command::GenerateCommand Rails::Command::DestroyCommand], result['generators']
+      assert_equal PermissionForge::BootChecks::GENERATOR_COMMANDS, result['generators']
+    end
+
+    # PermissionForge::EncryptedAttributes reads these: `encrypted_attributes`
+    # (no rdoc, not in the guides) and `deterministic_encrypted_attributes`.
+    # nil on a model that encrypts nothing (the gem reads it through Array()),
+    # Symbols, the `original_<name>` column of an ignore_case attribute among
+    # them; the attribute type decrypts the stored value.
+    canary_test :encrypted_attributes,
+                'encrypted_attributes / deterministic_encrypted_attributes: nil or Symbols; type_for_attribute decrypts' do
+      plain = canary_model('PfCanaryPlain')
+
+      assert_empty Array(plain.encrypted_attributes)
+      model = canary_model('PfCanaryEncrypted') do
+        self.table_name = 'pf_canary_encrypted_records'
+        encrypts :name
+        encrypts :email, deterministic: true, ignore_case: true
+      end
+      names = Array(model.encrypted_attributes)
+
+      assert names.all?(Symbol), names.inspect
+      assert_equal %i[email name original_email], names.sort
+      assert_includes Array(model.deterministic_encrypted_attributes), :email
+      assert_not_includes Array(model.deterministic_encrypted_attributes), :name
+      record = model.create!(name: 'Ana', email: 'Ana@acme.test')
+      raw = record.read_attribute_before_type_cast('name')
+
+      assert_not_equal 'Ana', raw
+      assert_equal 'Ana', model.type_for_attribute('name').deserialize(raw)
+    end
+
+    # EncryptedAttributes.decrypt: under support_unencrypted_data Rails
+    # answers a value it cannot decrypt with the stored value; the gem asks
+    # the encryptor whether what it got is still ciphertext.
+    canary_test :encrypted_attributes, 'ActiveRecord::Encryption.encryptor.encrypted? tells ciphertext from plaintext' do
+      other = ActiveRecord::Encryption::DerivedSecretKeyProvider.new('another-primary-key')
+      cipher = ActiveRecord::Encryption::Encryptor.new.encrypt('Ana', key_provider: other)
+
+      assert ActiveRecord::Encryption.encryptor.encrypted?(cipher)
+      assert_not ActiveRecord::Encryption.encryptor.encrypted?('Ana')
+    end
+
+    # ValidatesRequiredColumns registers its check as an :after callback of
+    # the chain `validate` / `validates` add to (`:validate`, no rdoc): it
+    # runs after every validation of the model, also one declared after it,
+    # and an error it adds still fails valid? (an after_validation callback
+    # would not: valid? is decided before it runs).
+    canary_test :validate_after_callback, 'set_callback(:validate, :after): runs after every validator, its errors count' do
+      order = []
+      model = canary_model('PfCanaryValidateAfter') do
+        set_callback :validate, :after, lambda {
+          order << :after
+          errors.add(:email, 'after') if errors.include?(:name)
+        }
+        validate { order << :declared_later }
+        validates :name, presence: true, if: -> { true }
+      end
+      record = model.new(name: nil)
+
+      assert_not record.valid?
+      assert_equal %i[declared_later after], order
+      assert_equal ['after'], record.errors[:email]
+      only_after = canary_model('PfCanaryValidateAfterOnly') { set_callback :validate, :after, -> { errors.add(:email, 'after') } }
+
+      assert_not only_after.new(name: 'x').valid?, 'an error the after callback adds fails valid?'
     end
 
     canary_test :sandbox, 'Rails.application.sandbox?: false outside `rails console --sandbox`' do

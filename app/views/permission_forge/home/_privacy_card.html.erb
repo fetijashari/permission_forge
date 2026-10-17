@@ -19,21 +19,29 @@
       <% if findings.any?(&:unconfigured?) %>
         <p class="pf-card__desc"><%= t('.per_set_note') %></p>
       <% end %>
+      <%# Detection reads column names only: say so where the admin can confirm a field, and
+          name the button only when a row offers it (a locked set's rows do not). %>
+      <% if can_ack && unmasked.positive? %>
+        <p class="pf-card__desc">
+          <%= t('.by_name_note') %>
+          <%= t('.intended_note') if shown.any?(&:acknowledgeable?) %>
+        </p>
+      <% end %>
     </div>
   </div>
   <% shown.each do |finding| %>
     <% resource = finding.resource %>
-    <% field_label = finding.field&.label.presence || resource.name.safe_constantize&.human_attribute_name(finding.name) || finding.name.humanize %>
+    <% field_label = pf_field_label_for(resource.name, finding.name, row: finding.field) %>
     <div class="pf-card__row pf-card__row--top">
       <div class="pf-stack pf-stack--tight pf-grow">
         <div class="pf-row pf-row--tight">
-          <strong><%= field_label %></strong>
+          <% unless field_label.verbatim? %><strong data-pf-host-data><%= field_label.text %></strong><% end %>
           <code class="pf-mono-key"><%= finding.name %></code>
           <%# A row that is turned off is not "not configured": the engine skips it, and Fix opens it. %>
           <% if finding.turned_off? %>
             <%= pf_off_badge %>
           <% elsif finding.unconfigured? %>
-            <%= pf_badge(t('permission_forge.ui.badges.not_configured'), variant: :unconfigured,
+            <%= pf_badge(pf_state(:field_level, :none).word, variant: :unconfigured,
                          href: pf_setting_path(finding.implicit_grant? ? 'extra_fields_default_access' : 'unconfigured_field_strategy')) %>
           <% end %>
         </div>
@@ -41,14 +49,20 @@
           <% where = finding.implicit_grant? ? '.where_virtual' : '.where_unconfigured' %>
           <% where = finding.implicit_grant? ? '.where_turned_off_virtual' : '.where_turned_off' if finding.turned_off? %>
           <%= t(finding.unconfigured? ? where : '.where',
-                resource: pf_resource_label(resource), set: finding.permission_set.name,
+                resource: pf_resource_label(resource), set: pf_record_name(finding.permission_set),
                 people: pf_people_text(finding.people_count)) %>
         </span>
       </div>
       <div class="pf-actions">
-        <%= pf_modal_link t('.fix'), permission_forge.permission_set_resource_field_path(finding.permission_set, resource.name, finding.name),
-                          kind: 'drawer', class: 'pf-btn pf-btn--sm' %>
-        <% if can_ack && !finding.unconfigured? && !pf_locked_record?(finding.field) %>
+        <% field_path = permission_forge.permission_set_resource_field_path(finding.permission_set, resource.name, finding.name) %>
+        <%# A locked set refuses every change to its fields (the drawer is read-only): no Fix, no "This is intended". %>
+        <% if finding.locked? %>
+          <%= pf_lock_badge %>
+          <%= pf_modal_link t('.view'), field_path, kind: 'drawer', class: 'pf-btn pf-btn--ghost' %>
+        <% else %>
+          <%= pf_modal_link t('.fix'), field_path, kind: 'drawer', class: 'pf-btn pf-btn--sm' %>
+        <% end %>
+        <% if can_ack && finding.acknowledgeable? %>
           <%= form_with url: permission_forge.acknowledge_permission_set_resource_field_path(finding.permission_set, resource.name, finding.name),
                         method: :post, class: 'pf-reason-form' do %>
             <input type="hidden" name="return_to" value="<%= permission_forge.root_path %>">

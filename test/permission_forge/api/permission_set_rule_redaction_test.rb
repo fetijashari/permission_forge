@@ -11,6 +11,7 @@ module PermissionForge
         @rule = create_permission_set_rule(
           permission_set: @ps,
           resource: @resource,
+          field_name: 'name',
           field_value: 'sensitive_account_123'
         )
       end

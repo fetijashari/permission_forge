@@ -7,6 +7,9 @@ module PermissionForge
     # off (today's behaviour) and on (endpoints, guard status, effect, adding
     # discovered actions through review → apply).
     class ActionDiscoveryTest < AdminTestCase
+      # An action key as the page names it (Admin::ActionLabel: Rails' English on an English page).
+      def action_label(key) = PermissionForge::Admin::ActionLabel.for(nil, key).text
+
       include PermissionForge::Admin::ActionCatalogSupport
 
       setup do
@@ -84,7 +87,7 @@ module PermissionForge
         post pf("#{@base}/review"), params: new_action_params('archive' => { is_permitted: '1' })
 
         assert_redirected_to pf(@base)
-        assert_equal I18n.t('permission_forge.flash.permission_sets.no_changes'), flash[:notice]
+        assert_equal I18n.t('permission_forge.flash.no_changes'), flash[:notice]
       end
 
       # The badge texts are the ones the drawer rendered before controller-action
@@ -100,7 +103,7 @@ module PermissionForge
 
         assert_equal ['Guests', 'Managers', 'Sales rep', 'Contractors', 'Interns'],
                      css_select('.pf-listbox .pf-option .pf-fw-600').map(&:text)
-        assert_equal ['– Not configured', '– Not permitted', '✎ ✓ Permitted', '⊘ ⊘ Blocked', '– Unchanged'],
+        assert_equal ['– Not configured', '– Not permitted', '✓ Permitted', '⊘ Blocked', '– Unchanged'],
                      css_select('.pf-listbox .pf-option .pf-level-badge').map(&:text)
         assert_select '.pf-listbox .pf-badge--off', count: 0
       end
@@ -297,7 +300,8 @@ module PermissionForge
           post pf("#{@base}/review"), params: params
 
           assert_response :success
-          assert_match I18n.t('permission_forge.ui.changes.action_new_on', resource: 'Customer', action: 'Archive'), response.body
+          assert_match I18n.t('permission_forge.ui.changes.action_new_on', resource: 'Customer', action: action_label('archive')),
+                       response.body
           assert_match I18n.t('permission_forge.ui.changes.action_managed_first'), response.body
           assert_select '.pf-change-list li', count: 1
           assert_select "input[type=hidden][name='pf[new_actions][#{@resource.id}][archive][is_permitted]'][value='1']"
@@ -319,7 +323,8 @@ module PermissionForge
         discovering do
           post pf("#{@base}/review"), params: new_action_params('archive' => { is_permitted: '0' }, 'merge' => { is_permitted: '1' })
 
-          assert_match I18n.t('permission_forge.ui.changes.action_new_off', resource: 'Customer', action: 'Archive'), response.body
+          assert_match I18n.t('permission_forge.ui.changes.action_new_off', resource: 'Customer', action: action_label('archive')),
+                       response.body
           assert_match I18n.t('permission_forge.ui.changes.action_managed_already', sets: 'Managers'), response.body
           assert_match I18n.t('permission_forge.ui.changes.action_managed_nobody'), response.body
         end
@@ -341,7 +346,8 @@ module PermissionForge
         params = { pf: { new_actions: { resource.id => { 'export' => { is_permitted: '1' } } } } }
         discovering do
           post pf("/permission_sets/#{muting.id}/resources/Customer/review"), params: params
-          assert_match I18n.t('permission_forge.ui.changes.action_new_muted', resource: 'Customer', action: 'Export'), response.body
+          assert_match I18n.t('permission_forge.ui.changes.action_new_muted', resource: 'Customer', action: action_label('export')),
+                       response.body
           assert_match I18n.t('permission_forge.ui.changes.action_managed_already', sets: 'Sales rep'), response.body
 
           patch pf("/permission_sets/#{muting.id}/resources/Customer/apply"), params: params
@@ -421,7 +427,8 @@ module PermissionForge
           assert_select 'input#pf-action-name[value=archive]'
           assert_match 'POST /stub/:id/archive', response.body
           assert_match 'pf_stub_guarded#archive', response.body
-          assert_match I18n.t('permission_forge.resource_actions.new.where', action: 'Archive'), response.body
+          assert_match I18n.t('permission_forge.resource_actions.new.where', action: action_label('archive')),
+                       response.body
           assert_match I18n.t('permission_forge.resource_actions.effect.permitted_by', sets: 'Managers'), response.body
           assert_select '.pf-listbox .pf-option', count: 2
           assert_select '.pf-listbox .pf-option', text: /Managers/

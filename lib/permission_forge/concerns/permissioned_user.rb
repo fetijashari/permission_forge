@@ -57,7 +57,7 @@ module PermissionForge
       # With no tenant ambient the associations above reached every row.
       def pf_destroy_permission_rows_in_other_tenants
         config = PermissionForge.configuration
-        return unless config.tenant_enabled? && defined?(::ActsAsTenant) && ::ActsAsTenant.current_tenant
+        return unless PermissionForge.ambient_tenant
 
         [PermissionForge::PermissionSetUser, PermissionForge::PermissionSetGroupUser].each do |model|
           model.unscoped.where(user_id: id).find_each do |row|

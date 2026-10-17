@@ -422,6 +422,42 @@
     }
   });
 
+  /* ------------------------------------------- rule builder preview */
+  // The preview is the sentence the saved rule shows, rendered by the server
+  // (the preview action, SentencesHelper): as the value, "the current user"
+  // or "or empty" change, the panel's content is fetched again. Field and
+  // operator changes re-render the whole builder (refresh above).
+  // Only the latest request may fill the panel: a newer input aborts the one
+  // before, so a late answer never overwrites a newer sentence. An answer that
+  // is no fragment — a redirect (a lapsed session's login page), a whole
+  // document — leaves the panel as it is: the builder's refresh and save,
+  // the no-JS path, still show the sentence.
+  let previewRequest = null;
+  function previewRule(form) {
+    const panel = form && $('[data-pf-rule-preview]', form);
+    if (!panel) return;
+    const data = new FormData(form); data.delete('authenticity_token'); data.delete('_method');
+    const base = panel.getAttribute('data-pf-rule-preview');
+    const url = base + (base.indexOf('?') < 0 ? '?' : '&') + new URLSearchParams(data).toString();
+    if (previewRequest) previewRequest.abort();
+    const request = new AbortController();
+    previewRequest = request;
+    fetch(url, { headers: { [FRAGMENT_HEADER]: '1' }, credentials: 'same-origin', signal: request.signal })
+      .then(function (res) { return res.ok && !res.redirected ? res.text() : Promise.reject(res.status); })
+      .then(function (html) {
+        if (request !== previewRequest || /<html[\s>]/i.test(html)) return;
+        setContent(panel, html);
+      })
+      .catch(function () {})
+      .then(function () { if (previewRequest === request) previewRequest = null; });
+  }
+  const previewHandler = debounce(previewRule, 250);
+  const PREVIEW_INPUTS = '[name="rule[value]"], [name="rule[values_text]"], [name="rule[values][]"], [name="rule[value_from]"], ' +
+    '[name="rule[value_to]"], [name="rule[current_user]"], [name="rule[include_nulls]"]';
+  ['input', 'change'].forEach(function (type) {
+    on(type, PREVIEW_INPUTS, function (e, el) { previewHandler(el.form); });
+  });
+
   /* ------------------------------------------- typed confirmation */
   on('input', 'input[data-pf-confirm-match]', function (e, input) {
     const btn = input.form && input.form.querySelector('[data-pf-confirm-target]');

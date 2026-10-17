@@ -10,7 +10,7 @@ module PermissionForge
             resource = unlocked_resource(id)
             next [] unless resource && attrs.is_a?(Hash)
 
-            ResourceEdit.new(resource, muting: muting?).changes(attrs)
+            ResourceEdit.new(resource, muting: muting?, refused: refused).changes(attrs)
           end
         end
       end

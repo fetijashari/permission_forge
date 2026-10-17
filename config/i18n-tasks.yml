@@ -43,9 +43,14 @@ ignore_unused:
   - 'permission_forge.resources.fields_tab.selected.*'
   - 'permission_forge.resources.rules_tab.filter_rule'
   - 'permission_forge.shared.savebar.*'
+  # The words of the CRUD cell and the action states, read by Admin::StateLabel (kinds :crud, :action) until 0.16.
+  - 'permission_forge.shared.crud_cell.*'
+  - 'permission_forge.resource_actions.states.*'
   - 'permission_forge.audit_log.sentences.*'
   - 'permission_forge.audit_log.actor_named.*'
-  - 'permission_forge.audit_log.actor_types.*'
+  # Codes the gem stores on an event itself (Audit::ActorCodes, Audit::ReasonCodes), read by key.
+  - 'permission_forge.audit_log.actor_codes.*'
+  - 'permission_forge.audit_log.reason_codes.*'
   - 'permission_forge.audit_log.boolean.*'
   - 'permission_forge.audit_log.categories.*'
   - 'permission_forge.audit_log.sources.*'

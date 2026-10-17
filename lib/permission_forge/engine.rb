@@ -1,7 +1,9 @@
 require_relative 'query_scoping_warnings'
+require_relative 'cache_warnings'
 require_relative 'boot_checks'
 require_relative 'masking_sync'
 require_relative 'masked_models'
+require_relative 'admin_method_override'
 
 module PermissionForge
   # Wires the gem into the host application: initializers, the executor and
@@ -16,6 +18,13 @@ module PermissionForge
       g.test_framework :minitest
     end
 
+    # The admin's edit and delete forms POST with a hidden `_method`: the
+    # engine's own stack (it runs for the engine's routes only) turns them
+    # into PATCH / DELETE, so an API-only host, which has no
+    # Rack::MethodOverride, needs nothing for it. The JSON API's paths are
+    # left alone (AdminMethodOverride).
+    config.middleware.use PermissionForge::AdminMethodOverride
+
     # A denial nobody rescues answers 403, not 500: the row-rule refusal of
     # find_by / find_by! and the action guard's refusal (Rails' exceptions
     # app renders the status: public/403.html when the host has one, else an
@@ -27,7 +36,11 @@ module PermissionForge
     # names, not constants: nothing is loaded for this.
     config.action_dispatch.rescue_responses.merge!(
       'PermissionForge::Concerns::PermissionScopedFindable::NotAuthorizedError' => :forbidden,
-      'PermissionForge::ActionNotAuthorizedError' => :forbidden
+      'PermissionForge::ActionNotAuthorizedError' => :forbidden,
+      # A request value the admin cannot read (ParamShapes::InvalidParam, an
+      # ActionController::BadRequest): 400 as its parent, which Rails maps by
+      # exact class name only. The API answers it with a 422 itself.
+      'PermissionForge::ParamShapes::InvalidParam' => :bad_request
     )
 
     # The models (app/models/permission_forge) are autoloaded like any engine
@@ -61,7 +74,11 @@ module PermissionForge
         new_filters = PermissionForge.gdpr_filter_parameters
         app.config.filter_parameters += new_filters
 
-        Rails.logger.info "[PermissionForge] Added #{new_filters.size} GDPR patterns to filter_parameters."
+        # Not while a generator boots the app (BootChecks): the install
+        # generator's boot predates the initializer it writes.
+        unless PermissionForge::BootChecks.generator_running?
+          Rails.logger.info "[PermissionForge] Added #{new_filters.size} GDPR patterns to filter_parameters."
+        end
       end
     end
 
@@ -101,6 +118,10 @@ module PermissionForge
       PermissionForge::BootChecks.run(PermissionForge.configuration)
     end
 
+    # The checks that read the routes, once they are drawn: at boot, or at
+    # their first use where Rails 8 draws them lazily (eager_load off).
+    config.after_routes_loaded { |app| PermissionForge::BootChecks.routes_loaded(app) }
+
     # A setting a model reads as it loads (user_class, audit_user_class,
     # tenant_model) changed by the host's own after_initialize, once a
     # production boot has eager-loaded the models: the classes keep what they
@@ -109,19 +130,6 @@ module PermissionForge
     # declared there; nothing loads a model.
     initializer 'permission_forge.model_bindings', after: :load_config_initializers do |app|
       app.config.after_initialize { PermissionForge::ModelBindings.warn! }
-    end
-
-    # Deprecated: the masking machinery left the Engine (0.14). Removed in
-    # PermissionForge::Deprecation::HORIZON.
-    #
-    # @return [Boolean] what MaskedModels.apply returns
-    def self.apply_masked_attributes_to_managed_models(only: nil)
-      PermissionForge::Deprecation.warn(
-        'PermissionForge::Engine.apply_masked_attributes_to_managed_models is deprecated; ' \
-        'use PermissionForge::MaskedModels.apply(only:)',
-        callstack: caller_locations(1) # the host's call, not this method
-      )
-      PermissionForge::MaskedModels.apply(only: only)
     end
   end
 end

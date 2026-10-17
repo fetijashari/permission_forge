@@ -1,7 +1,9 @@
 module PermissionForge
   # Group membership. Organisational only: it never gives Permission Sets.
   # Adding and removing go through the model callbacks (group_membership.*
-  # audit events) after config.admin_assignment_authorization.
+  # audit events) after config.admin_assignment_authorization. No cached
+  # permissions change, so the toast reports no cache outcome (unlike an
+  # assignment: CacheConfirmation).
   #
   # @api private
   class PermissionSetGroupUsersController < ApplicationController

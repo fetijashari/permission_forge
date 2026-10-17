@@ -3,27 +3,26 @@
 <% if rows.empty? %>
   <p class="pf-fs-13 pf-text-3"><%= t('.none') %></p>
 <% else %>
+  <% chain = rows.map { |row| row[:resource].name }.uniq %>
   <div class="pf-listbox">
     <% rows.each do |row| %>
       <% set = row[:set] %>
       <% field = row[:field] %>
-      <% level = field && PermissionForge::Admin::FieldLevel.level_of(field, muting: set.is_muting) %>
+      <% level_model = PermissionForge::Admin::FieldLevel %>
+      <%# No row: a Muting Permission Set is on Unchanged (it mutes nothing), as on its Fields tab. %>
+      <% level = field ? level_model.level_of(field, muting: set.is_muting) : level_model.unconfigured_level(muting: set.is_muting) %>
       <%= link_to permission_forge.permission_set_resource_field_path(set, row[:resource].name, key),
                   class: 'pf-option', 'aria-current': (local_assigns[:current_set] == set ? 'true' : nil) do %>
         <span class="pf-option__main">
           <span class="pf-row pf-row--tight">
             <% if set.is_muting %><span class="pf-text-restrict" aria-hidden="true">⊘</span><% end %>
-            <span class="pf-fw-600"><%= set.name %></span>
+            <%# "<set> · <Model>" when the set holds more than one Resource of the chain (B#35). %>
+            <span class="pf-fw-600"><%= pf_set_entry_name(set, row[:resource].name, chain) %></span>
             <%= pf_off_badge unless row[:in_effect] %>
           </span>
         </span>
-        <% if level.nil? %>
-          <%= pf_level_badge('none', label: t('permission_forge.ui.badges.not_configured')) %>
-        <% elsif set.is_muting %>
-          <%= pf_level_badge(level == 'hide' ? 'muted' : level, label: (t('.muted_hidden') if level == 'hide')) %>
-        <% else %>
-          <%= pf_level_badge(level, strategy: (field.mask_strategy if level == 'masked')) %>
-        <% end %>
+        <%# The set's level, worded as its Fields tab and the field drawer word it. %>
+        <%= pf_level_badge(level || 'none', strategy: (field.mask_strategy if %w[masked mask].include?(level))) %>
         <span class="pf-option__aside"><%= pf_people_text(row[:people]) %></span>
       <% end %>
     <% end %>

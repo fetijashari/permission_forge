@@ -17,10 +17,11 @@
     <svg class="pf-search-field__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
          aria-hidden="true" focusable="false"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
     <input id="pf-home-q" class="pf-input pf-search-field__input" type="search" name="q" autocomplete="off"
-           placeholder="<%= t('.search_placeholder') %>">
+           placeholder="<%= t('.search_placeholder') %>" aria-describedby="pf-home-q-help">
   <% end %>
   <%= pf_modal_link t('permission_forge.ui.field_lookup'), permission_forge.field_lookup_path, kind: 'drawer',
                     class: 'pf-btn', title: t('.field_lookup_title') %>
+  <p id="pf-home-q-help" class="pf-hint pf-toolbar__help"><%= t('.search_help') %></p>
 </div>
 
 <% if @first_run %>
@@ -54,11 +55,9 @@
   </section>
 <% else %>
   <%# Two independent stacks (no shared grid rows), so a tall card never leaves
-      a gap in the other column. Cards alternate in priority order. %>
-  <% cards = { 'audit_card' => @attention.audit_findings, 'privacy_card' => @attention.privacy_findings, 'rules_card' => @attention.unenforced_rules,
-               'ending_card' => @attention.ending_soon,
-               'expired_card' => @attention.expired, 'stale_card' => @attention.stale,
-               'tidy_card' => @attention.tidy }.select { |_, items| items.any? }.keys %>
+      a gap in the other column. Cards alternate in priority order
+      (Admin::AttentionItems::CARDS). %>
+  <% cards = @attention.cards %>
   <div class="pf-masonry">
     <% cards.partition.with_index { |_, i| i.even? }.reject(&:empty?).each do |column| %>
       <div class="pf-masonry__col">

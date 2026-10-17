@@ -11,7 +11,7 @@ module PermissionForge
       included do
         before_create :generate_uuid, if: -> { respond_to?(:uuid) && uuid.blank? }
 
-        validates :uuid, uniqueness: true, allow_nil: true
+        validates :uuid, uniqueness: { message: ->(*) { I18n.t('permission_forge.validations.taken') } }, allow_nil: true
       end
 
       private

@@ -102,14 +102,16 @@ module PermissionForge
 
           def pf_warn_virtual_readers_unmasked(error)
             method = PermissionForge.configuration.extra_fields_method
-            Rails.logger&.warn("[PermissionForge] SECURITY warning: the virtual readers #{name} declares are NOT " \
-                               "masked on the model: #{name}.#{method} raised #{error.class}: #{error.message}. " \
-                               'Fix it and restart, or call pf_mask_virtual_readers with explicit names.')
+            PermissionForge::Warnings.emit("virtual_readers.unmasked.#{name}",
+                                           "the virtual readers #{name} declares are NOT masked on the model: " \
+                                           "#{name}.#{method} raised #{error.class}: #{error.message}. Fix it and " \
+                                           'restart, or call pf_mask_virtual_readers with explicit names.',
+                                           severity: :security)
           end
 
           def pf_virtual_reader?(name)
             return false unless name.match?(READER_NAME)
-            return false if Array(primary_key).map(&:to_s).include?(name) || columns_hash.key?(name)
+            return false if Array(primary_key).map(&:to_s).include?(name) || PermissionForge::SchemaRead.column?(self, name, ignored: false)
 
             attribute_names.include?(name) || (!pf_framework_method?(name) && pf_argumentless_reader?(name))
           end

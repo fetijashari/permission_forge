@@ -18,7 +18,7 @@ module PermissionForge
 
     test 'any join type makes a join rule, even without a relationship path' do
       joined = create_permission_set_rule(permission_set: @set, resource: @resource, join_type: 'joins',
-                                          field_accessor_path: 'supplier')
+                                          field_accessor_path: 'supplier', field_name: 'owner_id')
       no_path = create_permission_set_rule(permission_set: @set, resource: @resource, join_type: 'left_joins')
 
       assert joined.join_rule?

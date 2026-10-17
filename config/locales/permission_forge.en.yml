@@ -3,14 +3,49 @@ en:
   permission_forge:
     api:
       errors:
+        action_authorization_missing: API changes need config.api_action_authorization;
+          they are refused while it is unset and config.api_require_authorization
+          is on
         action_not_authorized: Action not authorized
+        assignment_authorization_missing: API assignments need config.api_assignment_authorization;
+          they are refused while it is unset and config.api_require_authorization
+          is on
         assignment_not_authorized: Assignment not authorized
+        body_unreadable: The request body could not be read. Send valid JSON with
+          Content-Type application/json.
+        boolean_invalid: must be true or false
+        bulk_action_invalid: must be assign or revoke
+        expires_at_past: must be in the future
         field_generation_failed: Could not generate fields for this resource
+        field_value_shape: must be a string, a number, true or false; a list of them
+          (none with a comma) only for in, not_in and between
+        flag_shape: must be a string or null
         forbidden: Forbidden
+        hour_shape: must be a whole number from 0 to 23, or null
+        integer_shape: must be a whole number
+        ip_list_empty: has no entry; send null to clear the condition
+        ip_list_shape: must be a string or an array of strings (IP addresses or CIDR
+          ranges), or null
         not_editable: This record is not editable
         not_found: Record not found
+        not_iso8601_time: is not an ISO 8601 date or time
+        not_null: A required value is missing. Nothing was saved.
+        record_not_unique: Another request saved the same record a moment ago; it
+          already exists
+        resource_names_no_model: names no model this app can load
+        route_not_found: No API endpoint answers this path and method
+        section_missing: is missing, empty or not an object
+        stats_authorization_missing: GET /api/stats needs config.api_stats_authorization,
+          or config.api_stats_require_admin = false
         tenant_required: No tenant is set for this request. The admin API serves one
           tenant at a time.
+        text_shape: must be a string
+        unauthorized: Not authenticated
+        user_id_invalid: is not a user id
+        user_id_missing: is missing
+        user_ids_missing: must name at least one user
+        user_ids_not_list: must be a list of user ids
+        user_not_found: names nobody who can be assigned
     assignments:
       confirm_destroy:
         body: "%{name} will lose access to %{resources}, unless another Permission
@@ -32,6 +67,7 @@ en:
         expires: Expires
         filter_sets: Filter Permission Sets
         forever: with no end date
+        locked_hint: 'Managed by the system/API: holders can''t be added here.'
         muting_notice: "⊘ Muting. %{sets} takes access away from %{name}, whatever
           their other sets allow."
         no_sets: No Permission Sets match.
@@ -103,6 +139,7 @@ en:
         all_for_record: All events of this record
         all_for_set: All events of this Permission Set
         all_in_action: All events of this action
+        all_unknown_actor: All events with no known actor
         attribute: Attribute
         before: Before
         changes: Before and after
@@ -127,23 +164,30 @@ en:
         snapshot_destroyed: The record as it was when it was removed.
         source: Where
         title: Audit event %{event}
+        unknown_actor_html: No actor was named for this change (code run outside a
+          request, such as a runner or a job). Name one with %{method}.
         uuid: Event id
         value: Value
         what: What
         who: Who, where and why
     audit_log:
+      actor_codes:
+        api_client: API client
+        boot: Application start
       actor_named:
         api: "%{name} (API)"
         basic_auth: "%{name} (password prompt)"
-      actor_types:
-        api: API client
-        basic_auth: Password prompt
-        system: System
-        unknown: Unknown
-        user: Person
       boolean:
         'false': 'No'
         'true': 'Yes'
+      cache_scope:
+        own_process: 'The cached permissions were cleared only in the process that
+          ran it (an in-memory store): every other process kept theirs.'
+        server_process: 'The cached permissions were cleared in this server process
+          only (an in-memory store): the other web workers and the job processes kept
+          theirs.'
+        unconfirmed: 'The cache store lives in each process (an in-memory store):
+          the other processes keep their cached permissions either way.'
       categories:
         access: Access
         admin: Admin
@@ -172,6 +216,8 @@ en:
       page_of: Page %{page} of %{pages}
       pages_label: Pages
       person_id: 'Person #%{id}'
+      reason_codes:
+        expired: Its end date had passed
       reason_inline: 'Reason: %{reason}'
       refused:
         body: Reading the audit log is limited by the audit_log_authorization setting,
@@ -181,8 +227,17 @@ en:
       sentence_variants:
         assignment_revoked_expired: "%{actor} removed %{set} from %{person} after
           it expired on %{date}."
+        cache_cleared_unconfirmed: "%{actor} asked to clear the cached permissions
+          of every user, but the cache store did not confirm it: old permissions may
+          stay in use until the cache lifetime ends."
+        cache_settled_unconfirmed: 'The cached permissions of %{person} were to be
+          cleared after the change by %{actor}, but the cache store did not confirm
+          it: the old ones may stay in use until the cache lifetime ends.'
         field_access_limited: "%{actor} read %{record} with these fields hidden or
           masked: %{fields}."
+        permissions_invalidated_unconfirmed: 'The cached permissions of %{person}
+          were to be cleared, but the cache store did not confirm it: the old ones
+          may stay in use until the cache lifetime ends.'
       sentences:
         access:
           denied: "%{actor} was denied access to %{record}."
@@ -206,6 +261,8 @@ en:
           viewed: "%{actor} viewed audit records."
         cache:
           cleared: "%{actor} cleared the cached permissions of every user."
+          settled: The cached permissions of %{person} were cleared after the change
+            by %{actor}.
         cleanup:
           expired_assignments: "%{actor} removed expired assignments."
         consent:
@@ -312,6 +369,9 @@ en:
         will_assign:
           one: "%{count} will be assigned"
           other: "%{count} will be assigned"
+    denials:
+      no_read_access: You do not have permission to read %{resource} records.
+      rule_default: You do not have permission to perform this action.
     errors:
       admin:
         action_format: Use lowercase letters, numbers and underscores, starting with
@@ -322,6 +382,9 @@ en:
         flag: Session flags can only contain letters, numbers, dots, colons, dashes
           and underscores.
         group_blank: Give the group a name.
+        hours_equal: The start and end hour must differ (a window from 9 to 9 is empty).
+        hours_incomplete: Choose both the start and the end hour.
+        hours_range: Choose hours between 00:00 and 23:00.
         ip: 'Line %{line}: “%{ip}” isn''t a valid IP address or CIDR range.'
         person: Choose a person first.
         resource_model: Pick a model from the list.
@@ -369,9 +432,40 @@ en:
         assigned:
           one: Assigned %{set} to %{count} person.
           other: Assigned %{set} to %{count} people.
+        assigned_cache_kept:
+          one: Assigned %{set} to %{count} person, but the cache store did not confirm
+            that their cached permissions were cleared. The old permissions may stay
+            in use until the cache lifetime ends.
+          other: Assigned %{set} to %{count} people, but the cache store did not confirm
+            that their cached permissions were cleared. The old permissions may stay
+            in use until the cache lifetime ends.
         revoked:
           one: Revoked %{set} from %{count} person.
           other: Revoked %{set} from %{count} people.
+        revoked_cache_kept:
+          one: Revoked %{set} from %{count} person, but the cache store did not confirm
+            that their cached permissions were cleared. The old permissions may stay
+            in use until the cache lifetime ends.
+          other: Revoked %{set} from %{count} people, but the cache store did not
+            confirm that their cached permissions were cleared. The old permissions
+            may stay in use until the cache lifetime ends.
+      cache_not_confirmed: 'The cache store did not confirm that the cached permissions
+        were cleared: the old permissions may stay in use until the cache lifetime
+        ends.'
+      cache_process_local: 'The cache store lives in this server process only (an
+        in-memory store): the other web workers and the job processes keep their cached
+        permissions until they restart or the entries expire.'
+      copy_refused:
+        kinds:
+          permission_set: Permission Set “%{name}”
+          permission_set_group: Permission Set Group “%{name}”
+          permission_set_rule: rule “%{name}”
+          record: a row
+          resource: Resource “%{name}”
+          resource_action: action “%{name}”
+          resource_field: field “%{name}”
+        message: "“%{name}” was not copied: %{record} holds what a new row cannot
+          (%{errors}). Correct it, then copy again."
       fields:
         acknowledged: Got it. “%{field}” won't be flagged in the privacy audit again.
         recommendation_applied: Applied the recommended mask to “%{field}”.
@@ -385,6 +479,7 @@ en:
         set_added: Moved “%{set}” into this group.
         set_removed: Removed “%{set}” from this group.
         updated: Group saved. No one's access changed.
+      invalid_param: "%{param} %{detail}. Nothing was changed."
       locked_widening: 'This Permission Set is locked: access can be removed or shortened,
         not given or extended.'
       locked_widening_muting: 'This Muting Permission Set is locked: holders can be
@@ -393,7 +488,17 @@ en:
         cleaned:
           one: Removed %{count} expired assignment.
           other: Removed %{count} expired assignments.
+        cleaned_cache_kept:
+          one: Removed %{count} expired assignment, but the cache store did not confirm
+            that the affected people's cached permissions were cleared. The old permissions
+            may stay in use until the cache lifetime ends.
+          other: Removed %{count} expired assignments, but the cache store did not
+            confirm that the affected people's cached permissions were cleared. The
+            old permissions may stay in use until the cache lifetime ends.
+      no_changes: No changes to save.
       not_editable: This record is not editable.
+      not_null: A required value was missing. Nothing was changed; the page shows
+        what is there now.
       people:
         cache_refresh_failed: Could not refresh %{name}'s cached permissions. The
           cache store did not confirm it, so the old permissions may stay in use until
@@ -438,23 +543,33 @@ en:
         duplicated_outside_group: 'Duplicated “%{name}”: resources, fields, actions
           and rules were copied. Assignments were not. The copy is not in “%{group}”,
           which is locked.'
-        no_changes: No changes to save.
+        nothing_applied: 'Nothing to save: %{reasons}.'
         save_failed: 'Nothing was saved: %{errors}'
         saved:
           one: Saved %{count} change. It applies to %{people} now.
           other: Saved %{count} changes. They apply to %{people} now.
         switched_granting: "“%{name}” now grants access."
         switched_muting: "“%{name}” is now a Muting Permission Set."
+      record_not_unique: Another request saved the same thing a moment ago. Nothing
+        was changed; the page shows what is there now.
+      record_not_unique_detail: "%{detail} — another request saved it a moment ago.
+        Nothing was changed; the page shows what is there now."
       resources:
         added:
           one: Added %{resource} with %{count} field.
           other: Added %{resource} with %{count} fields.
+        added_muting: Added %{resource}. It takes away %{what}.
+        added_muting_nothing: 'Added %{resource}. It mutes nothing yet: choose below
+          what it takes away.'
         columns_added:
           one: Added %{count} column.
           other: Added %{count} columns.
         missing_removed:
           one: Removed %{count} field whose column no longer exists.
           other: Removed %{count} fields whose columns no longer exist.
+        muted_fields:
+          one: "%{count} field"
+          other: "%{count} fields"
         removed: Removed %{resource} from “%{set}”.
       rules:
         created: Added the rule “%{rule}”.
@@ -471,6 +586,28 @@ en:
         'off': Recording is switched off in the initializer (audit_events = false).
           No change is recorded.
         title: The audit log is not recording
+      broken_rules_card:
+        description: 'These record rules name a field, table, relationship or condition
+          that does not exist, or a value their field cannot hold. Each one matches
+          nothing: everyone it applies to is denied every record of the resource.'
+        fix: Fix rule
+        locked_fix_html: 'Locked (%{flag}): it is managed by the system or API that
+          created it, so fix the rule there (or unlock the set in code). A copy made
+          here would leave this rule as it is.'
+        open: Open rules
+        people:
+          one: "%{count} person has this set."
+          other: "%{count} people have this set."
+        rule: "“%{rule}” on %{resource} in “%{set}”"
+        title: Rules that match nothing
+      conditions_card:
+        description: These sets hold a condition that cannot be judged (an IP entry
+          that is no address, no entry at all, or a broken hour window).
+        open: Fix conditions
+        people:
+          one: "%{count} person has this set."
+          other: "%{count} people have this set."
+        title: Activation conditions nobody can judge
       ending_card:
         description: Assignments that end in the next 7 days.
         extend: Extend 30 days
@@ -515,8 +652,9 @@ en:
         people:
           one: "%{count} person has"
           other: "%{count} people have"
-        search_placeholder: Look up a person by name or email to see what they can
-          access, and why
+        search_help: Look up a person by name or email to see what they can access,
+          and why
+        search_placeholder: Name or email
         sets:
           one: "%{count} active Permission Set"
           other: "%{count} active Permission Sets"
@@ -525,10 +663,24 @@ en:
           one: "%{count} thing to review"
           other: "%{count} things to review"
         title: Needs attention
+      mask_strategies_card:
+        description: No built-in mask strategy and no custom strategy has these names,
+          so their values are masked fully until you pick a strategy or add the custom
+          one back.
+        field: "“%{field}” on %{resource} in “%{set}”"
+        fix: Fix field
+        people:
+          one: "%{count} person has this set."
+          other: "%{count} people have this set."
+        strategy_html: Strategy %{strategy}
+        title: Fields masked with an unknown strategy
       privacy_card:
+        by_name_note: Fields are flagged by column name, so some may not be personal
+          data (a company's name, for example).
         description: "%{unmasked}, %{unconfigured}."
         fix: Fix
         intended: This is intended
+        intended_note: If a field is fine unmasked, choose This is intended.
         per_set_note: Each line looks at one Permission Set on its own. A person who
           also holds another set that configures the field follows that set.
         show_all: Show all %{count}
@@ -542,6 +694,7 @@ en:
         unmasked:
           one: "%{count} sensitive field shown unmasked"
           other: "%{count} sensitive fields shown unmasked"
+        view: View field
         where: "%{resource} · Readable unmasked in “%{set}” · %{people}"
         where_turned_off: "%{resource} · Its setting in “%{set}” is turned off, so
           it passes through unmasked · %{people}"
@@ -565,6 +718,18 @@ en:
           the app uses find_by or permission_scoped. Other queries (where, all, associations)
           return every record.
         title: Record rules not applied everywhere
+      secret_rules_card:
+        column_html: Compares %{column}
+        description: These record rules compare a column that holds a secret. They
+          still apply, but who can see which record gives the secret away. Compare
+          another column, or remove the rule.
+        fix: Fix rule
+        open: Open rules
+        people:
+          one: "%{count} person has this set."
+          other: "%{count} people have this set."
+        rule: "“%{rule}” on %{resource} in “%{set}”"
+        title: Rules on secret columns
       stale_card:
         assigned: Assigned %{date} by %{by}
         description: Not reviewed in over %{days} days. Confirm these people still
@@ -658,21 +823,20 @@ en:
           one: " and %{count} more"
           other: " and %{count} more"
         from: from %{set}
+        masked_by: Masked by %{set}
         muted_by: Hidden by %{set}
         none: No set shows it
-        unconfigured: Not configured · %{behaviour}
+        read_only_by: Limited to Read-only by %{set}
+        unconfigured: "%{state} · %{behaviour}"
         virtual: Virtual field, readable by default
       effective_tab:
         conditional: "%{sets} only count while their activation conditions are true.
           They're included here."
         fields_visible: "%{visible} of %{total} fields visible"
         grid_label: Effective access
-        hidden_by_muting: Hidden by muting
         intro: What %{name} can do right now, with all sets combined. Select any cell
           to see why.
         legend: Legend
-        legend_muted: Muted
-        legend_none: Not given
         why: Why
         why_empty: Select a cell, field or action to see which Permission Set caused
           it.
@@ -681,10 +845,16 @@ en:
         action_granted: "%{set} permits this action."
         action_muted: "%{set} blocks this action."
         action_none: No Permission Set permits this action.
+        action_title: "%{action} · %{resource}"
+        field_base_unreadable: 'Hidden: it inherits from %{resource}, which doesn''t
+          allow Read.'
         field_capped: Shown as Read-only because Edit isn't allowed on this resource.
-        field_from: "%{set} shows this field."
-        field_muted: "%{set} hides or masks this field."
+        field_decided_by: 'Decided by %{resource}, which this inherits from: the strictest
+          setting along the inheritance wins.'
+        field_hidden_on: Hidden on %{resource}, which this inherits from.
         field_none: No Permission Set shows this field.
+        field_own_unreadable: Hidden because Read isn't allowed on this resource.
+        field_title: "%{resource} › %{field}"
         field_unconfigured: 'No set configures this column: %{behaviour}.'
         field_variant: Follows the setting of %{base}.
         field_virtual: Virtual field from the model, readable unless a set configures
@@ -692,6 +862,7 @@ en:
         flag_granted: "%{set} gives %{flag}."
         flag_muted: "%{set} mutes %{flag}."
         flag_none: No Permission Set gives %{flag}.
+        flag_title: "%{flag} %{resource}"
         no_rules: No record rules, so every record is shown.
         note_add_up: 'Permission Sets add up: one grant is enough.'
         note_fields: If several sets show a field, the most open setting wins.
@@ -754,7 +925,10 @@ en:
               tenant and clears their name from the audit log.
             title: Data subject erasure…
           refresh:
-            desc: 'Rarely needed: changes already apply immediately.'
+            desc: 'Needed after a change from a console, runner or job when the cache
+              store is per process (an in-memory store): that process cleared only
+              its own entries, so this web process keeps serving the old permissions
+              until they expire.'
             title: Refresh cached permissions
           remove_all:
             desc: 'Offboarding: removes every assignment.'
@@ -827,10 +1001,12 @@ en:
           field: Pick the field to check.
           list: Add at least one value to the list.
           name_blank: Give the rule a name.
+          operator: Pick a condition from the list.
           range: Enter both ends of the range.
           value: Enter a value, or pick “the current user”.
         field: Field to check
         follow: Follow a relationship
+        ignored_field: no field row (ignored_fields)
         ignored_warning: View All is on for this resource, so record rules are ignored
           until it's turned off.
         include_nulls: Also show records where %{field} is empty
@@ -847,18 +1023,36 @@ en:
             desc: Records without the related record are kept.
             title: Also records without it
         message: Blocked message
-        message_placeholder: Shown when someone opens a record this rule hides.
+        message_help: Shown when someone opens a record this rule hides.
+        model_error: "%{field} %{message}"
         model_missing: This model or relationship no longer exists in the app.
         name: Rule name
         name_placeholder: e.g. Own customers
+        notes:
+          secret_column:
+            body_html: "%{column} holds a secret, so a new rule on it is refused.
+              This rule still applies, but who can see which record gives the secret
+              away: compare another column, or remove the rule."
+            title: This rule compares a column that holds a secret
         operator: Condition
         optional: optional
+        path_html: 'Relationship path: %{path}'
         pick_field: Pick a field…
+        pick_relationship: Pick a relationship…
         preview: Preview
         preview_empty: Pick a field to see the rule as a sentence.
+        preview_refused: Will not save
+        problem_fixes:
+          field: Pick the field again to correct it.
+          join: Choose how to combine again, under Advanced, to correct it.
+          operator: Pick the condition again to correct it.
+          path: Choose the relationship again to correct it.
+          value: Enter a value this field can hold to correct it.
+        problem_title: This rule matches nothing
         relationship: Relationship
         remove_step: Remove this relationship step
         save: Save rule
+        stored_field: "%{name} (as stored)"
         this_field: this field
         update_form: Update
       confirm_destroy:
@@ -869,6 +1063,9 @@ en:
         title: Edit rule for %{resource}
       new:
         title: New rule for %{resource}
+      preview:
+        back: Back to the rules
+        title: Preview of a rule on %{resource}
       value_input:
         from: From
         no_value: No value needed for this condition.
@@ -969,7 +1166,7 @@ en:
       copy_name: "%{name} (copy)"
       header:
         description: Description
-        description_placeholder: Add a description so others know when to use it
+        description_placeholder: 'Add a description: when to use this set'
         group: Group
         name: Name
       index:
@@ -1052,6 +1249,7 @@ en:
         body_nobody: Nobody has this set yet, so saving affects no one until you assign
           it.
         crumb: Review
+        not_applied: 'Not applied:'
         save: Save changes
         title:
           one: Review %{count} change
@@ -1133,9 +1331,17 @@ en:
         capped: It shows as Read-only because Edit isn't allowed on this resource.
         full_picture: See everything %{name} can access →
         granted: "%{name} sees it through %{sets}."
-        muted: "%{name} doesn't see it in full because %{sets} hides or masks it."
+        hidden_by:
+          one: "%{name} doesn't see it: %{sets} hides it."
+          other: "%{name} doesn't see it: %{sets} hide it."
+        masked_by:
+          one: "%{name} sees it masked: %{sets} masks it."
+          other: "%{name} sees it masked: %{sets} mask it."
         no_access: "%{name} can't read %{resources}."
         none: No set shows this field to %{name}.
+        read_only_by:
+          one: "%{name} can't edit it: %{sets} takes editing away."
+          other: "%{name} can't edit it: %{sets} take editing away."
         unconfigured: No set configures this column, so the unconfigured-field setting
           decides for %{name}.
         virtual_default: "%{name} gets this virtual field by default, readable and
@@ -1156,6 +1362,7 @@ en:
         flags_muting_note: In muting sets these flags mean “remove”.
         impact: Saving applies to %{people} immediately.
         label: Label
+        locked_impact: Locked, so nothing here can be saved.
         mask_strategy: Mask strategy
         muting_note: This is a Muting Permission Set. Choices here take access away.
         no_rules: No rules in this set filter on this field.
@@ -1164,14 +1371,20 @@ en:
         not_configured_implicit: 'No setting for this field in “%{set}”. It follows
           “Virtual fields without a setting”: with the current configuration it is
           readable and editable by default.'
+        not_configured_muting: No setting for this column in “%{set}”, so this Muting
+          Permission Set takes nothing away from it.
         pick_person: Pick a person…
         save: Save
-        sensitive: 'Matches privacy pattern “%{pattern}”. Recommended: Masked (%{strategy}).'
+        sensitive: 'Matches privacy pattern “%{pattern}”, so it may be personal data.
+          Recommended: Masked (%{strategy}).'
         turned_off: 'The setting for this field in “%{set}” is turned off, so it does
           not apply. With the current configuration the field is: %{behaviour}.'
         turned_off_implicit: 'The setting for this field in “%{set}” is turned off,
           so it does not apply. The field follows “Virtual fields without a setting”:
           with the current configuration it is readable and editable by default.'
+        turned_off_muting: The setting for this field in “%{set}” is turned off, so
+          this Muting Permission Set takes nothing away from it.
+        unknown_strategy: "(unknown — masked fully until you pick one)"
         used_by_rules: Used by rules
         variants: 'Also applies to:'
         variants_muting: 'Muting this also mutes:'
@@ -1219,20 +1432,12 @@ en:
         filter_label: Filter fields
         filters:
           all: All
-          edit: Editable
-          hidden: Hidden
-          hide: Hidden
-          leave: Unchanged
-          mask: Force mask
-          masked: Masked
-          read: Read-only
-          sensitive: Sensitive
-          unconfigured: Not configured
         implicit_grant: Editable by default
         level: Access level
         level_aria: Access level for %{field}
+        mutes_nothing: Mutes nothing
         no_match: No fields match.
-        not_configured: Not configured · %{behaviour}
+        not_configured: "%{state} · %{behaviour}"
         read_off: Turn on Read for %{resource} to choose which fields people see.
         search: Search fields
         select_all: Select all shown fields
@@ -1253,14 +1458,15 @@ en:
         models: Models
         no_models: No models match.
         note: Fields will be created from the model's columns and virtual fields.
-        note_gdpr: Fields will be created from the model's columns and virtual fields.
-          Privacy defaults are on, so sensitive columns start Masked.
+        note_gdpr: 'Fields will be created from the model''s columns and virtual fields.
+          Privacy defaults are on, so sensitive columns start Masked, except with
+          Full access: then they are only flagged Sensitive, for you to mask.'
         presets:
           block_changes:
             desc: Mutes Create, Edit, Delete and every action.
             title: Block all changes
           full:
-            desc: Read, create, edit and delete. All fields editable.
+            desc: Read, create, edit and delete. All fields editable, none masked.
             title: Full access
           hide_sensitive:
             desc: Hides every column that looks like personal data.
@@ -1286,7 +1492,7 @@ en:
         all_queries: applies to all queries
         blocked_message: 'Blocked message: “%{message}”'
         empty: 'No rules yet, so records aren''t limited: people with this set see
-          every %{resources} they can read.'
+          every %{resource} record they can read.'
         empty_muting: Muting Permission Sets don't add record rules.
         empty_view_all: No rules. View All is on, so every record is included anyway.
         filter_rule: Filter rule · %{applies}
@@ -1319,7 +1525,7 @@ en:
         modify_all_needs: Needs View All and Edit.
         muting_hint: Muted actions are removed from people with this set, whatever
           their other sets allow.
-        muting_note: Settings here take access away from %{set}'s people.
+        muting_note: Settings here take access away from everyone who has “%{set}”.
         needs_read_hint: Edit and Delete need Read.
         record_scope: Record scope
         remove: Remove %{resource} from this set…
@@ -1338,7 +1544,8 @@ en:
           hide: Add all new as Hidden
           read: Add all new as Read-only
         gdpr_off: Privacy defaults are off.
-        gdpr_on: 'Privacy defaults are on: sensitive columns are added as Masked.'
+        gdpr_on: 'Privacy defaults are on: sensitive columns are added as Masked,
+          except with full access (then they are only flagged Sensitive).'
         ignored_count:
           one: "%{count} ignored"
           other: "%{count} ignored"
@@ -1351,6 +1558,9 @@ en:
         new_count:
           one: "%{count} new column not configured"
           other: "%{count} new columns not configured"
+        new_count_muting:
+          one: "%{count} column with no setting, so it mutes nothing"
+          other: "%{count} columns with no setting, so they mute nothing"
         new_title: New columns, not configured
         none: None
         remove_missing: Remove missing fields
@@ -1433,6 +1643,9 @@ en:
         api_serializer_overrides:
           desc: Overrides for how records are written in API responses.
           name: Custom serializers
+        api_stats_authorization:
+          desc: Decides who may read usage statistics through the API.
+          name: API stats check
         api_stats_require_admin:
           desc: Only admins can read usage statistics through the API.
           name: Stats only for admins
@@ -1549,7 +1762,8 @@ en:
             show them.
           name: Filter sensitive values from logs
         gdpr_defaults:
-          desc: Columns that look personal get masked by default when they're added.
+          desc: Columns that look personal get masked by default when they're added,
+            except when they're added with full access.
           name: Privacy defaults
         gdpr_field_patterns:
           desc: Column names matching a pattern are flagged sensitive and get this
@@ -1593,6 +1807,11 @@ en:
           desc: Whether rules are skipped, deny everything, or raise an error when
             there's no current user.
           name: Record rules with nobody signed in
+        no_read_access_strategy:
+          desc: 'What record lookups and queries return for a signed-in user whose
+            Permission Sets do not grant Read on the resource: the rows the record
+            rules allow (with no rule, every row), or none.'
+          name: Records without read access
         omit_hidden_in_attributes_hash:
           desc: Hidden fields are removed from attribute hashes instead of being set
             to empty.
@@ -1628,6 +1847,10 @@ en:
           desc: Name of the variable that tells the database who the current user
             is.
           name: Database session variable
+        rule_secret_column_patterns:
+          desc: Record rules may not compare columns matching these patterns (password
+            digests, tokens, encrypted_* columns). An empty list allows them.
+          name: Secret column patterns
         snapshot_transactions:
           desc: 'Whether a database transaction keeps seeing the data as it was when
             it began. Permissions computed inside such a transaction are not cached.
@@ -1704,6 +1927,8 @@ en:
           nobody is signed in (the user model stays readable for sign-in).
         masked_write_protection: Masked values are never written back.
         nil_user_strategy: Code without a signed-in user sees no records.
+        no_read_access_strategy: Signed-in users without Read on a resource see none
+          of its records.
         preset: The :strict preset closes the settings that fail open by default.
         unconfigured_action_strategy: Controller actions nobody configured are blocked.
       risks:
@@ -1715,6 +1940,8 @@ en:
           the audit table is missing). With audit_events = true and no table, every
           change fails (under the default :raise strategy).
         audit_trail_enabled: No one is recorded as creating or editing records.
+        auto_query_scoping: 'Record rules are in use, but they only apply to find_by
+          and permission_scoped lookups: other queries return every record.'
         conditional_sets_strict_mode: Conditional sets are treated as active when
           request info is missing (fail-open).
         http_basic_auth_enabled: These screens are either locked (password prompt
@@ -1725,8 +1952,8 @@ en:
           to anyone who can read the resource.
       row:
         changed: Changed
-        default: 'Default: %{value}'
-        docs: 'Configuration docs: %{key} ↗'
+        default_html: 'Default: %{value}'
+        docs_html: 'Configuration docs: %{key} ↗'
         how_to_change: How to change
         risk: Risk
         secure: Secure
@@ -1753,6 +1980,9 @@ en:
         record_rules: Record rules & query scoping
       show:
         api_disabled_html: API is disabled (%{key}).
+        attention:
+          one: Home lists %{count} item that needs attention.
+          other: Home lists %{count} items that need attention.
         changed_count:
           one: "%{count} changed"
           other: "%{count} changed"
@@ -1763,12 +1993,16 @@ en:
         intro_html: Settings are defined in %{file}. Changes require a deploy/restart.
           This page shows the current values and how to change them.
         no_match: No settings match.
+        open_home: Open Home
         read_only: Read-only
         search: Search settings
         section_meta: "%{settings} · %{changed}"
         secure_count:
           one: "%{count} security and privacy setting looks good."
           other: "%{count} security and privacy settings look good."
+        secure_count_set:
+          one: "%{count} security and privacy setting is set as recommended."
+          other: "%{count} security and privacy settings are set as recommended."
         settings_count:
           one: "%{count} setting"
           other: "%{count} settings"
@@ -1802,18 +2036,17 @@ en:
         set: Set
     shared:
       across_sets:
-        muted_hidden: 'Muted: hidden'
         none: No Permission Set includes this resource.
       active: Active
       audit_footer:
         created: Created by %{created_by} · %{created_at}
         disabled: Created-by and edited-by aren't being recorded.
         edited: Last edited by %{updated_by} · %{updated_at}
+        edited_at: Last edited %{updated_at}
         history: History
       crud_cell:
         allowed: Allowed
         muted: Muted
-        needs_read: Turn on Read first
         needs_read_short: Needs Read
         'no': 'No'
         unchanged: Unchanged
@@ -1875,8 +2108,6 @@ en:
         copied: Copied
         copy: Copy
         summary: Technical details
-      time_ago: "%{time} ago"
-      time_nil: "—"
       toasts:
         dismiss: Dismiss
         undo: Undo
@@ -1887,6 +2118,11 @@ en:
       user_select_prompt: Select a person...
       user_select_truncated: Showing only the first %{count} users. Configure user_list_resolver
         to narrow this list.
+    support:
+      array:
+        last_word_connector: ", and "
+        two_words_connector: " and "
+        words_connector: ", "
     ui:
       actions: Actions
       apply: Apply
@@ -1897,7 +2133,14 @@ en:
         reviewed_by: Reviewed by %{who} on %{date}
         reviewed_on: Reviewed on %{date}
       audit:
-        system: System
+        csv:
+          created_at: Created at
+          created_by: Created by
+          edited_at: Last edited at
+          edited_by: Last edited by
+          record: Record
+          type: Type
+          where: Where
         types:
           action: Action
           assignment: Assignment
@@ -1915,11 +2158,10 @@ en:
         fail_open: Fail-open
         fail_open_long: 'Fail-open: active when request info is missing'
         fail_open_title: conditional_sets_strict_mode is off
-        locked: Locked
         muting: Muting
-        not_configured: Not configured
         'off': 'Off'
         sensitive: Sensitive
+        unknown_mask_strategy: Unknown mask strategy — masked fully until fixed
         virtual: Virtual
       breadcrumb: Breadcrumb
       cancel: Cancel
@@ -1952,6 +2194,9 @@ en:
         flag_off_muting: "%{resource}: %{flag} no longer muted"
         flag_on: "%{resource}: %{flag} allowed"
         flag_on_muting: "%{resource}: %{flag} muted"
+        not_applied_read: "%{resource}: %{flag} not turned on, because Read is off"
+        not_applied_view_all_and_edit: "%{resource}: %{flag} not turned on, because
+          it needs View All and Edit"
         resource_text: "%{resource}: %{attribute} changed"
         set_group: Moved to the group “%{group}”
         set_no_group: Removed from its group
@@ -1961,6 +2206,9 @@ en:
       close: Close
       conditions:
         always: Always active. No activation conditions.
+        effect:
+          granting: It never passes, so it grants nothing.
+          muting: 'A Muting Permission Set: it applies to every request.'
         flag_generic: when %{flag} is set
         flags:
           marketing_consent: when marketing consent is given
@@ -1968,9 +2216,25 @@ en:
           sso_login: after company SSO sign-in
         from_ips: from %{ips}
         hours: between %{from} and %{to}
+        hours_broken: between %{from} and %{to} (a window nobody can judge — fix it
+          on the Conditions tab)
+        hours_broken_here: between %{from} and %{to} (a window nobody can judge)
         hours_overnight: between %{from} and %{to} (overnight)
+        ips_broken: from %{ips} (a list nobody can judge — fix it on the Conditions
+          tab)
+        ips_broken_here: from %{ips} (a list nobody can judge)
+        no_hour: no hour
         only_works: Only works %{parts}.
         or: " or "
+        problems:
+          flag_unusable_html: The session flag %{flag} holds a control character,
+            so no request can carry it.
+          hours_equal: The start and end hour are the same, so the window is empty.
+          hours_incomplete: Only one of the two hours is set.
+          hours_range: An hour is outside 00:00–23:00.
+          ip_empty: The IP list holds separators but no entry.
+          ip_entry_html: "%{entry} is not an IP address or CIDR range."
+        problems_title: These conditions cannot be judged
       dates:
         days_ago:
           one: "%{count} day ago"
@@ -2011,16 +2275,13 @@ en:
         read_access: Read
         view_all: View All
       keep: Keep
-      levels:
-        edit: Editable
-        hidden: Hidden
-        hide: Hide
-        leave: Unchanged
-        mask: Force mask
-        masked: Masked
-        muted: Muted
-        none: Not configured
-        read: Read-only
+      level_sentences:
+        edit: "%{set} shows this field and lets people edit it."
+        hide: "%{set} hides this field."
+        mask: "%{set} forces this field masked."
+        masked: "%{set} shows this field masked (%{strategy})."
+        no_edit: "%{set} stops people editing this field."
+        read: "%{set} shows this field read-only."
       locked:
         title: 'Locked: managed by the system/API'
       mask_strategies:
@@ -2041,6 +2302,7 @@ en:
         nov: Nov
         oct: Oct
         sep: Sep
+      needs_read_first: Turn on Read first
       next: Next
       no_group: Not in a group
       open_person: Open person
@@ -2068,48 +2330,182 @@ en:
       records: Records
       remove: Remove
       resource: Resource
+      resource_plural:
+        one: "%{name} record"
+        other: "%{name} records"
       rules:
         and: and
         current_user: the current user
+        matches_nothing: Matches nothing
+        notes:
+          secret_column: Secret column
         only_show: Only show
         or_empty: or %{field} is empty
+        problems:
+          empty_association: The relationship path has an empty step (two dots in
+            a row, or a dot at the start)
+          encrypted_column: "%{name} of %{model} is encrypted: the database holds
+            its ciphertext, so a rule can only check whether it is empty"
+          foreign_table_html: "%{name} is a table of another model: a filter rule
+            compares %{model}'s own columns"
+          missing_column_html: "%{name} is not a column of %{model}"
+          pattern_on_non_text: "%{name} of %{model} is not text: a pattern condition
+            (contains, starts with, ends with) cannot match it"
+          unjoinable_association: "%{name} is a relationship of %{model} that a rule
+            cannot follow"
+          unjoinable_class_not_loadable: "%{name} is a relationship of %{model} whose
+            model cannot be loaded"
+          unjoinable_invalid_definition: "%{name} is a relationship of %{model} whose
+            :through, :source or inverse_of names a relationship that is not there"
+          unjoinable_polymorphic: "%{name} is a polymorphic relationship of %{model}:
+            a rule cannot follow it"
+          unjoinable_record_dependent_scope: "%{name} is a relationship of %{model}
+            whose scope depends on the record: a rule cannot follow it"
+          unknown_association_html: "%{name} is not a relationship of %{model}"
+          unknown_join_type_html: "%{name} is not a way of joining this version knows"
+          unknown_operator_html: "%{name} is not a condition this version knows"
+          unknown_table_html: "%{name} is not a table of this database"
+          unusable_value_html: "%{value} is not a value %{name} of %{model} can hold"
         where: where
       rules_count:
         one: Rules (%{count})
         other: Rules (%{count})
       rules_tab: Rules
       search: Search
-      search_people: Search by name or email
+      search_people: Name or email
       setting: Setting
       states:
-        blocked: Blocked
-        granted: Allowed
-        none: 'No'
+        actor:
+          api: API client
+          basic_auth: Password prompt
+          system: System
+          unknown: Unknown
+          user: Person
+        effective:
+          blocked: Blocked
+          granted: Allowed
+          hidden_by_muting: Hidden by muting
+          none: 'No'
+        field_level:
+          edit: Editable
+          hidden: Hidden
+          hide: Hide
+          leave: Unchanged
+          mask: Force mask
+          masked: Masked
+          none: Not configured
+          read: Read-only
+        lock:
+          locked: Locked
       unconfigured:
         block: Blocked by default
         mask_all: Fully masked
         pass_through: Passes through unmasked
         warn: Passes through and is logged
+      untitled:
+        permission_set: Untitled Permission Set
+        permission_set_group: Untitled Permission Set Group
+        permission_set_rule: Untitled Rule
       view_all: View All
     validations:
+      attributes:
+        allowed_hours_end: End hour
+        allowed_hours_start: Start hour
+        allowed_ips: Allowed IPs
+        create_access: Create
+        delete_access: Delete
+        description: Description
+        edit_access: Edit
+        expires_at: End date
+        failure_message: Blocked message
+        field_accessor_path: Relationship
+        field_name: Field
+        field_value: Value
+        include_nulls: Include empty values
+        is_active: Active
+        is_editable: Editable
+        is_muting: Muting
+        is_permitted: Permitted
+        join_type: Join
+        label: Label
+        mask_access: Mask
+        mask_strategy: Mask strategy
+        modify_all: Modify All
+        name: Name
+        operator: Condition
+        permission_set_group: Permission Set Group
+        read_access: Read
+        requires_session_flag: Session flag
+        user_id: Person
+        uuid: UUID
+        view_all: View All
+      blank: can't be blank
+      full_message: "%{attribute} %{message}"
+      invalid: is invalid
       name_blank: can't be blank
+      nul_byte: must not contain a NUL byte
       permission_set:
+        flag_unusable: 'must not hold a control character (a newline, a tab): no request
+          can carry such a flag'
         group_missing: must be an existing Permission Set Group
+        hours_equal: must differ from the start hour (a window from an hour to the
+          same hour is empty; leave both blank for no window)
+        hours_incomplete: must be set together with the other hour (or both left blank)
+        hours_range: must be between 0 and 23
+        invalid_ip_entry: contains “%{entry}”, which is not an IP address or CIDR
+          range
+        name_taken: is already used by another Permission Set
+      permission_set_group_user:
+        taken: is already a member of this group
       permission_set_rule:
         between_requires_two_values: must contain exactly 2 comma-separated values
           for between operator
+        empty_association: has an empty association name (two dots in a row, or a
+          dot at the start)
+        encrypted_column: 'names %{name}, an encrypted attribute of %{model}: the
+          database holds its ciphertext, so a rule can only check whether it is empty
+          (is_null, is_not_null)'
         field_value_required: is required for this operator
+        foreign_table: 'names %{name}, a table that is not %{model}''s: a filter rule
+          compares its own table. For a column of another table, use a join rule (a
+          join type and the relationship path)'
         in_requires_values: must contain at least 1 comma-separated value
         invalid_field_name: must be a valid column name (letters, numbers, underscores,
           dots)
         invalid_join_type: is not a valid join type
         invalid_operator: is not a valid operator
+        nul_byte: must not contain a NUL byte
         numeric_or_date_required: must be a numeric or date value for comparison operators
+        pattern_on_non_text: 'matches text only, and %{model}.%{name} is a column
+          of type %{type}: use a condition that compares values'
+        secret_column: 'names a column that holds a secret (a password digest, a token,
+          an encrypted_* column): a record rule never compares one'
+        unjoinable_association: names %{association}, an association of %{model} that
+          a rule cannot join
+        unjoinable_class_not_loadable: names %{association}, an association of %{model}
+          whose class cannot be loaded
+        unjoinable_invalid_definition: names %{association}, an association of %{model}
+          whose :through, :source or inverse_of names an association that is not there
+        unjoinable_polymorphic: 'names %{association}, a polymorphic association of
+          %{model}: a rule cannot join it'
+        unjoinable_record_dependent_scope: 'names %{association}, an association of
+          %{model} whose scope (or one along its :through) takes the record: a rule
+          cannot join it'
+        unknown_association: names %{association}, which is not an association of
+          %{model}
+        unknown_column: names %{name}, which is not a column of %{model}
+        unknown_table: names %{name}, which is no table of this database
+        unusable_value: is not a value %{model}.%{name} can hold
         value_not_expected: does not require a value for this operator
         value_required: must not be blank for this operator
+      permission_set_user:
+        taken: already holds this Permission Set
+      requires: requires %{requires} to be enabled
       resource:
         invalid_name: must be a valid model class name (e.g. Customer or Admin::Report)
+        name_taken: already exists in this permission set
       resource_field:
         invalid_mask_strategy: is not a valid mask strategy
         mask_strategy_required: must be present when mask access is enabled
+      taken: has already been taken
       too_long: is too long (at most %{count} characters)

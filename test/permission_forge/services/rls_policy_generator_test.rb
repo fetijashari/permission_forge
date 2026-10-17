@@ -1,4 +1,5 @@
 require 'test_helper'
+require_relative '../sti_models'
 
 module PermissionForge
   module Services
@@ -59,16 +60,22 @@ module PermissionForge
         using = select_policy_sql
 
         assert_includes using, "psu.permission_set_id = #{@permission_set.id}"
-        assert_includes using, 'psu.expires_at IS NULL OR psu.expires_at > now()'
+        assert_includes using, 'psu.expires_at IS NULL OR psu.expires_at >= now()'
         assert_includes using, 'NOT EXISTS'
       end
 
+      # Review R1 #3: the app layer grants Modify All only with View All
+      # (PermissionHashBuilder.granted_flags), so a granting row's bypass is
+      # its View All; a muting row cancels the bypass with either flag (narrower).
       test 'view_all bypass branch checks granting and muting sets' do
         using = select_policy_sql
+        granting, muting = using.split('AND NOT EXISTS', 2)
 
-        assert_includes using, 'r.view_all = TRUE OR r.modify_all = TRUE'
-        assert_includes using, 'ps.is_muting = TRUE'
-        assert_includes using, 'ps.is_muting = FALSE'
+        assert_includes granting, 'ps.is_muting = FALSE'
+        assert_includes granting, 'r.view_all = TRUE )'
+        assert_not_includes granting, 'modify_all'
+        assert_includes muting, 'ps.is_muting = TRUE'
+        assert_includes muting, '(r.view_all = TRUE OR r.modify_all = TRUE)'
       end
 
       # Pre-release review core-security #6: the EXISTS ignored
@@ -125,7 +132,6 @@ module PermissionForge
       # is per table, so they hold at the application layer only — and are
       # reported, never silently left out.
       test 'rules on a Resource named after an STI subclass are reported as skipped' do
-        require_relative '../sti_models'
         subclass = create_resource(permission_set: @permission_set, name: 'PfStiBugTicket')
         create_permission_set_rule(permission_set: @permission_set, resource: subclass, name: 'Open only', field_name: 'status',
                                    operator: 'equal', field_value: 'open')
@@ -147,10 +153,28 @@ module PermissionForge
 
         # The granting EXISTS must require the set to have no activation
         # conditions — a consent/IP/hours-gated set granting view_all must
-        # never widen DB-level access while its condition is unmet.
-        assert_includes using, "ps.requires_session_flag IS NULL OR ps.requires_session_flag = ''"
-        assert_includes using, "ps.allowed_ips IS NULL OR ps.allowed_ips = ''"
-        assert_includes using, 'ps.allowed_hours_start IS NULL'
+        # never widen DB-level access while its condition is unmet. "No
+        # condition" has one definition, PermissionSet.unconditional's: a
+        # text of blanks is none, one hour of the two is one.
+        assert_includes using, "NOT #{PermissionSet.conditions_present_sql(table: 'ps')}"
+        assert_includes using, "ps.#{Customer.connection.quote_column_name('allowed_hours_end')} IS NOT NULL"
+        assert_includes using, 'TRIM('
+      end
+
+      test 'an assignment ending now still counts, as PermissionSetUser.active_assignments counts it' do
+        add_rule(operator: 'equal', field_value: 'current_user', include_nulls: false)
+
+        assert_includes select_policy_sql, 'psu.expires_at >= now()'
+        assert_not_includes select_policy_sql, 'psu.expires_at > now()'
+        travel_to(Time.current.change(usec: 0)) do
+          create_permission_set_user(user: create_user, permission_set: @permission_set, expires_at: Time.current)
+
+          assert_equal 2, PermissionSetUser.active_assignments.where(permission_set: @permission_set).count, 'inclusive in Ruby'
+        end
+      end
+
+      test 'the generator version names the policies of this release' do
+        assert_equal 7, RlsPolicyGenerator::GENERATOR_VERSION
       end
 
       test 'nil_user_strategy :bypass allows a missing session variable' do
@@ -227,6 +251,47 @@ module PermissionForge
 
         assert_equal RlsPolicyGenerator.call(model_class: Customer)[:digest],
                      RlsPolicyGenerator.call(model_class: Customer)[:digest]
+      end
+
+      # The read-access gate follows config.no_read_access_strategy, read when
+      # the policy is generated (parity on PostgreSQL:
+      # test/rls/rls_read_access_parity_test.rb).
+      test 'no_read_access_strategy :rules_only adds no read-access gate; :deny gates the signed-in branch on read' do
+        PermissionForge.configuration.no_read_access_strategy = :rules_only
+        rules_only = select_policy_sql
+
+        assert_not_includes rules_only, 'r.read_access'
+
+        PermissionForge.configuration.no_read_access_strategy = :deny
+        deny = select_policy_sql
+
+        assert_includes deny, "r.name IN ('Customer') AND r.is_active = TRUE"
+        assert_includes deny, 'r.read_access = TRUE'
+        assert_includes deny, 'ps.is_muting = TRUE'
+        assert_includes deny, "NOT #{PermissionSet.conditions_present_sql(table: 'ps')} AND r.read_access = TRUE",
+                        'only an unconditional set grants read'
+        assert_operator deny.length, :>, rules_only.length
+      end
+
+      test 'the digest follows no_read_access_strategy, so rls:status reports the policy stale after it changes' do
+        PermissionForge.configuration.no_read_access_strategy = :rules_only
+        rules_only = RlsPolicyGenerator.new(model_class: Customer).digest
+        PermissionForge.configuration.no_read_access_strategy = :deny
+
+        assert_not_equal rules_only, RlsPolicyGenerator.new(model_class: Customer).digest
+        assert_equal RlsPolicyGenerator.new(model_class: Customer).digest, RlsPolicyGenerator.call(model_class: Customer)[:digest]
+      end
+
+      test 'under :deny a row of an STI subclass also needs the subclass entries to grant read' do
+        PermissionForge.configuration.no_read_access_strategy = :deny
+        sql = RlsPolicyGenerator.call(model_class: PfStiTicket)[:statements].find { |s| s.include?('FOR SELECT') }
+        type = "#{Customer.connection.quote_table_name('pf_sti_tickets')}.#{Customer.connection.quote_column_name('type')}"
+
+        assert_includes sql, "#{type} IS DISTINCT FROM 'PfStiBugTicket'"
+        assert_includes sql, "#{type} IS DISTINCT FROM 'PfStiUrgentBugTicket'"
+        assert_not_includes sql, 'PfStiArchivedTicket', 'a table of its own'
+        assert_includes sql, "r.name IN ('PfStiUrgentBugTicket', 'PfStiBugTicket', 'PfStiTicket')", 'a muted ancestor reaches the subclass'
+        assert_not_includes RlsPolicyGenerator.call(model_class: Customer)[:statements].join, 'IS DISTINCT FROM', 'no STI, no type check'
       end
 
       private

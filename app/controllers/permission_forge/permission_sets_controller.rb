@@ -5,7 +5,10 @@ module PermissionForge
   # @api private
   class PermissionSetsController < ApplicationController
     include PermissionSetEditor
+    include PermissionForge::ChangeReview
     include PermissionForge::AuditLogGate
+    include PermissionForge::CopyRefusal
+    include PermissionForge::CacheConfirmation
 
     FILTERS = %w[all granting muting conditional off].freeze
     TABS = %w[resources assignments conditions audit].freeze
@@ -47,7 +50,10 @@ module PermissionForge
       return render(:new, status: :unprocessable_entity) if @error
 
       set = build_set
-      redirect_to permission_forge.permission_set_path(set), notice: t('permission_forge.flash.permission_sets.created', name: set.name)
+      redirect_to permission_forge.permission_set_path(set), notice: t('permission_forge.flash.permission_sets.created', name: pf_record_name(set))
+    rescue ActiveRecord::RecordInvalid => e
+      @error = pf_copy_refused_message(e, @name)
+      render :new, status: :unprocessable_entity
     end
 
     def show
@@ -72,7 +78,7 @@ module PermissionForge
       @change_set = change_set
       if @change_set.empty?
         return redirect_to(pf_back_or(permission_forge.permission_set_path(@permission_set)),
-                           notice: t('permission_forge.flash.permission_sets.no_changes'))
+                           pf_nothing_to_save_flash(@change_set))
       end
 
       load_editor
@@ -81,25 +87,22 @@ module PermissionForge
     end
 
     def apply
-      changes = change_set.apply!
-      redirect_to back_to_set, notice: t('permission_forge.flash.permission_sets.saved',
-                                         count: changes.size, people: helpers.pf_people_text(pf_people_count(@permission_set)))
+      applied = change_set
+      outcome = cache_outcome { applied.apply! }
+      redirect_to back_to_set, **pf_applied_flash(applied, outcome)
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to back_to_set, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end
 
     def duplicate
-      name = PermissionForge::Admin::PermissionSetFactory.unique_name(
-        t('permission_forge.permission_sets.copy_name', name: @permission_set.name)
-      )
-      copy = PermissionForge::Admin::PermissionSetFactory.duplicate(@permission_set, name: name)
+      copy = PermissionForge::Admin::PermissionSetFactory.duplicate(@permission_set)
       group = @permission_set.permission_set_group
-      notice = if group && copy.permission_set_group_id.nil?
-                 t('permission_forge.flash.permission_sets.duplicated_outside_group', name: @permission_set.name, group: group.name)
-               else
-                 t('permission_forge.flash.permission_sets.duplicated', name: @permission_set.name)
-               end
-      redirect_to permission_forge.permission_set_path(copy), notice: notice
+      key = group && copy.permission_set_group_id.nil? ? 'duplicated_outside_group' : 'duplicated'
+      redirect_to permission_forge.permission_set_path(copy),
+                  notice: t("permission_forge.flash.permission_sets.#{key}", name: pf_record_name(@permission_set),
+                                                                             group: (pf_record_name(group) if group))
+    rescue ActiveRecord::RecordInvalid => e
+      redirect_to permission_forge.permission_set_path(@permission_set), alert: pf_copy_refused_message(e, pf_record_name(@permission_set))
     end
 
     def confirm_destroy
@@ -107,7 +110,7 @@ module PermissionForge
     end
 
     def destroy
-      name = @permission_set.name
+      name = pf_record_name(@permission_set)
       @permission_set.destroy!
       redirect_to permission_forge.permission_sets_path, notice: t('permission_forge.flash.permission_sets.deleted', name: name)
     end
@@ -121,23 +124,19 @@ module PermissionForge
       @permission_set.update!(is_muting: !@permission_set.is_muting)
       key = @permission_set.is_muting ? 'switched_muting' : 'switched_granting'
       redirect_to permission_forge.permission_set_path(@permission_set),
-                  notice: t("permission_forge.flash.permission_sets.#{key}", name: @permission_set.name)
+                  notice: t("permission_forge.flash.permission_sets.#{key}", name: pf_record_name(@permission_set))
     end
 
     def conditions
       @conditions_form = PermissionForge::Admin::ConditionsForm.new(params) # the re-render reads it back
       attrs = @conditions_form.attributes
       @condition_errors = @conditions_form.errors
-      if @condition_errors.empty? && @permission_set.update(attrs)
+      if @condition_errors.empty? && pf_save_changed(@permission_set, attrs, &:save) # unchanged: not saved (SaveNotice)
         return redirect_to permission_forge.permission_set_path(@permission_set, tab: 'conditions'),
-                           notice: t('permission_forge.flash.permission_sets.conditions_saved')
+                           **pf_save_flash(@permission_set) { t('permission_forge.flash.permission_sets.conditions_saved') }
       end
 
-      @tab = 'conditions'
-      @ip_text = params[:allowed_ips].to_s
-      load_editor
-      load_conditions_tab
-      render :show, status: :unprocessable_entity
+      render_conditions_refused
     end
 
     private

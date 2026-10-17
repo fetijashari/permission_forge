@@ -61,6 +61,17 @@ module PermissionForge
         block: ->(_resource_name, _key, _value) { [false, nil] }
       }.freeze
 
+      # What happens to a field no set configures: the strategy
+      # config.unconfigured_field_strategy names, or :block (fail closed) for
+      # a key the registry does not have. The one lookup — this filter and
+      # AttributeAccessGuard both call it.
+      #
+      # @param configuration [Configuration]
+      # @return [#call] (resource_name, key, value) -> [include?, value]
+      def self.unconfigured_strategy(configuration = PermissionForge.configuration)
+        UNCONFIGURED_FIELD_STRATEGIES.fetch(configuration.unconfigured_field_strategy, UNCONFIGURED_FIELD_STRATEGIES[:block])
+      end
+
       private
 
       # When there is no current user we cannot evaluate permissions. The behavior
@@ -96,8 +107,11 @@ module PermissionForge
         @result
       end
 
+      # A key with no entry of its own that is a field's variant (a
+      # serializer's `owner_uuid` next to an `owner_id` row) follows that
+      # field (FieldVariants.base_entries).
       def process_field(key, value)
-        field = field_permissions[key.to_sym]
+        field = field_permissions[key.to_sym] || variant_entries[key.to_s]
 
         if field.nil?
           include_field, masked_value = handle_unconfigured_field(key, value)
@@ -128,10 +142,11 @@ module PermissionForge
       end
 
       def handle_unconfigured_field(key, value)
-        strategy_key = PermissionForge.configuration.unconfigured_field_strategy
-        # Unknown strategy keys fall back to :block (fail closed), never pass-through.
-        strategy = UNCONFIGURED_FIELD_STRATEGIES.fetch(strategy_key, UNCONFIGURED_FIELD_STRATEGIES[:block])
-        strategy.call(@resource_name, key, value)
+        self.class.unconfigured_strategy.call(@resource_name, key, value)
+      end
+
+      def variant_entries
+        @variant_entries ||= PermissionForge::FieldVariants.base_entries(field_permissions)
       end
 
       # The user's field entries for the resource: those of the model the

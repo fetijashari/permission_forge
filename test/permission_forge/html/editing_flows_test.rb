@@ -175,6 +175,19 @@ module PermissionForge
         assert_not PermissionForge::ResourceAction.exists?(action.id)
       end
 
+      # Field test round 8 (D#25): a blanked action label was stored as "" here
+      # while the field drawer stored a blanked label as the name.
+      test 'an action label an admin blanks is stored as the name, on create and on edit' do
+        base = "/permission_sets/#{@set.id}/resources/Customer/actions"
+        post pf(base), params: { resource_action: { name: 'export', label: '  ', is_permitted: '1', is_active: '1' } }
+        action = @resource.resource_actions.find_by!(name: 'export')
+        assert_equal 'export', action.label
+
+        action.update!(label: 'Export CSV')
+        patch pf("#{base}/#{action.id}"), params: { resource_action: { label: '' } }
+        assert_equal 'export', action.reload.label
+      end
+
       test 'rules: build, refresh, edit, toggle and remove' do
         base = "/permission_sets/#{@set.id}/resources/Customer/rules"
         post pf(base), params: { rule: { name: '', field_name: 'name', operator: 'equal', value: 'x' } }

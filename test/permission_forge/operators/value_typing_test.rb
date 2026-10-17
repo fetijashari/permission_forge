@@ -11,20 +11,44 @@ module PermissionForge
       include RuleValueTestSupport
 
       UNUSABLE = ValueTyping::UNUSABLE
-      ArrayColumn = Struct.new(:type) do
+      ArrayColumn = Struct.new(:type, :name) do
         def array? = true
       end
       # A column as PostgreSQL describes it, for the tests of what is typed
-      # differently there: they run on every database.
-      PostgresColumn = Struct.new(:type, :sql_type)
+      # differently there: they run on every database. No name: none of them
+      # is a column of PfRuleRecord.
+      PostgresColumn = Struct.new(:type, :sql_type, :name)
       REAL = PostgresColumn.new(:float, 'real')
+
+      # The PostgreSQL casters run here on any database; whether a type can be
+      # compared is a PostgreSQL catalog question (SchemaRead.ordered_type?),
+      # answered for the date and time types they read back elsewhere.
+      setup do
+        next if POSTGRES
+
+        @ordered_type = SchemaRead.method(:ordered_type?)
+        replace_singleton_method(SchemaRead, :ordered_type?) { |_model, sql_type| %w[date datetime time].include?(sql_type.to_s) }
+      end
+
+      teardown do
+        replace_singleton_method(SchemaRead, :ordered_type?, @ordered_type) if @ordered_type
+      end
 
       # Typed as on a database without casters of its own, whichever runs the
       # tests; `adapter:` names another.
       def typed(operator, value, column, adapter: 'SQLite')
         column = PfRuleRecord.columns_hash[column] if column.is_a?(String)
         enum = PfRuleRecord.defined_enums[column.name] if column.respond_to?(:name)
-        ValueTyping.call(operator, value, RuleColumn.new(column, enum, adapter))
+        ValueTyping.call(operator, value, RuleColumn.new(column, enum, adapter, column && PfRuleRecord))
+      end
+
+      # The labels the database has for every native enum type, for the block.
+      def with_enum_labels(labels)
+        read = SchemaRead.method(:enum_label?)
+        replace_singleton_method(SchemaRead, :enum_label?) { |_model, _type, label| labels.include?(label) }
+        yield
+      ensure
+        replace_singleton_method(SchemaRead, :enum_label?, read)
       end
 
       def assert_unusable(operator, value, column, adapter: 'SQLite')
@@ -131,16 +155,29 @@ module PermissionForge
         ['930', '25:00', '09:60', '09:30+02:00', 'noon', '', nil, 7].each { |text| assert_unusable('less_than', text, 'opens_at') }
       end
 
-      test 'what is not ISO 8601 is unusable on MySQL and SQLite and left to PostgreSQL as written' do
-        { 'born_on' => ['today', ' tomorrow ', '10.01.2026', 'Jan 10 2026', '2026-02-30', 'abc', '5', ''],
-          'seen_at' => ['now', 'infinity', '10.01.2026 10:00', '2026-01-10 25:00:00', 'abc', ''],
-          'opens_at' => ['noon', '09:30+02:00', '25:00', 'abc', ''] }.each do |column, values|
-          values.each do |value|
-            %w[SQLite Mysql2 Trilogy].each { |adapter| assert_unusable('less_than', value, column, adapter: adapter) }
-            %w[PostgreSQL PostGIS].each do |adapter|
-              assert_equal value, typed('less_than', value, column, adapter: adapter), "#{column} #{value.inspect} on #{adapter}"
-            end
+      # PostgreSQL reads date and time text itself and raises on what it
+      # cannot read: it is asked (ValueCasters::PostgresqlTypes::ReadBack).
+      # What it reads is handed over as written, the rest is UNUSABLE.
+      READ_BY_POSTGRESQL = { 'born_on' => ['today', ' tomorrow ', '10.01.2026', 'Jan 10 2026'],
+                             'seen_at' => ['now', 'infinity', '10.01.2026 10:00'],
+                             'opens_at' => ['allballs', '09:30+02:00'] }.freeze
+      NOT_READ_BY_POSTGRESQL = { 'born_on' => ['2026-02-30', 'abc', ''],
+                                 'seen_at' => ['2026-01-10 25:00:00', 'abc', ''],
+                                 'opens_at' => ['25:00', 'noon', 'abc', ''] }.freeze
+
+      test 'what is not ISO 8601 is unusable on MySQL and SQLite and asked of PostgreSQL' do
+        [READ_BY_POSTGRESQL, NOT_READ_BY_POSTGRESQL].each do |texts|
+          texts.each do |column, values|
+            values.each { |value| %w[SQLite Mysql2 Trilogy].each { |adapter| assert_unusable('less_than', value, column, adapter: adapter) } }
           end
+        end
+        next unless POSTGRES # the database is asked: only PostgreSQL answers as PostgreSQL
+
+        READ_BY_POSTGRESQL.each do |column, values|
+          values.each { |value| assert_equal value, typed('less_than', value, column, adapter: 'PostgreSQL'), "#{column} #{value.inspect}" }
+        end
+        NOT_READ_BY_POSTGRESQL.each do |column, values|
+          values.each { |value| assert_unusable('less_than', value, column, adapter: 'PostgreSQL') }
         end
       end
 
@@ -242,7 +279,7 @@ module PermissionForge
         assert_equal %w[high M M], ValueTyping.call('in', 'low, mid, M', crossed)
       end
 
-      test 'a LIKE operator on an enum column gets the text, not the stored value of a label' do
+      test 'a LIKE operator on a model enum column gets the text, not the stored value of a label' do
         assert_equal 'gold', typed('contains', 'gold', 'tier')
         assert_equal 'archived', typed('starts_with', 'archived', 'status')
       end
@@ -316,12 +353,110 @@ module PermissionForge
         assert_unusable('between', '5', 'no_such_column')
       end
 
-      test 'an array column is left alone' do
-        target = RuleColumn.new(ArrayColumn.new(:integer), nil, 'PostgreSQL')
+      # --- PostgreSQL types: uuid, inet / cidr, json / jsonb, arrays, native enums ---
 
-        assert_same ValueCasters::UNTYPED, target.caster
-        assert_equal '{1,2}', ValueTyping.call('equal', '{1,2}', target)
-        assert_equal ['{1', '2}'], ValueTyping.call('in', '{1,2}', target)
+      UUID = PostgresColumn.new(:uuid, 'uuid')
+      INET = PostgresColumn.new(:inet, 'inet')
+      CIDR = PostgresColumn.new(:cidr, 'cidr')
+      JSONB = PostgresColumn.new(:jsonb, 'jsonb')
+      JSON = PostgresColumn.new(:json, 'json')
+      MOOD = PostgresColumn.new(:enum, 'pf_rule_mood')
+      VALUED = Constants::OPERATORS - Validations::VALUELESS
+      LIKE = %w[contains not_contains starts_with ends_with].freeze
+
+      test 'a uuid column takes the text of a uuid, in any case and in each notation PostgreSQL reads, and nothing else' do
+        token = '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57'
+
+        assert_equal token, typed('equal', token, UUID, adapter: 'PostgreSQL')
+        assert_equal token, typed('equal', " #{token.upcase} ", UUID, adapter: 'PostgreSQL')
+        assert_equal '00000000-0000-0000-0000-000000000000', typed('equal', '00000000-0000-0000-0000-000000000000', UUID)
+        assert_equal [token, '00000000-0000-0000-0000-000000000000'],
+                     typed('in', "#{token}, 00000000-0000-0000-0000-000000000000", UUID, adapter: 'PostgreSQL')
+        ['7d1f0c0e6f0a4a579f0d0f3f6f0a4a57', "{#{token}}", "urn:uuid:#{token}", "URN:UUID:#{token.upcase}",
+         '{7d1f0c0e6f0a4a579f0d0f3f6f0a4a57}'].each do |notation|
+          assert_equal token, typed('equal', notation, UUID, adapter: 'PostgreSQL'), notation
+        end
+        ['banana', '', ' ', "{#{token}", "urn:uuid:{#{token}}", "#{token}0", token.tr('a', 'g'),
+         '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a5', nil, 7, "#{token},banana"].each do |value|
+          assert_unusable('equal', value, UUID, adapter: 'PostgreSQL')
+        end
+        assert_unusable('in', "#{token}, banana", UUID, adapter: 'PostgreSQL')
+      end
+
+      test 'an inet column takes an address, with or without a prefix length, as written' do
+        ['10.0.0.1', '10.0.0.5/24', '10.0.0.0/8', '::1', '2001:db8::/32', '::ffff:10.0.0.1', ' 192.168.1.1 '].each do |value|
+          assert_equal value.strip, typed('equal', value, INET, adapter: 'PostgreSQL'), value
+        end
+        ['banana', '', '10.0.0.256', '10.0.0', '10.0.0.1/33', '10.0.0.1/255.255.255.0', '10.0.0.1/-1', '::1/129', 'fe80::1%eth0',
+         '10.0.0.1 /24', nil, 7, '10.0.0.1,10.0.0.2'].each do |value|
+          assert_unusable('equal', value, INET, adapter: 'PostgreSQL')
+        end
+        assert_equal %w[10.0.0.1 10.0.0.2], typed('in', '10.0.0.1, 10.0.0.2', INET, adapter: 'PostgreSQL')
+      end
+
+      test 'a cidr column takes a network, never an address with bits right of its mask' do
+        ['10.0.0.0/24', '10.0.0.1', '10.0.0.1/32', '2001:db8::/32', '0.0.0.0/0'].each do |value|
+          assert_equal value, typed('equal', value, CIDR, adapter: 'PostgreSQL'), value
+        end
+        ['10.0.0.5/24', '2001:db8::1/32', 'banana', '10.0.0.0/33'].each do |value|
+          assert_unusable('equal', value, CIDR, adapter: 'PostgreSQL')
+        end
+      end
+
+      test 'a json, jsonb or array column takes no value under any built-in operator but the null checks' do
+        [JSON, JSONB, ArrayColumn.new(:integer), ArrayColumn.new(:string)].each do |column|
+          VALUED.each do |operator|
+            ['{1,2}', '{"a":1}', '1', 'abc', '1,2', 'current_user', 7].each do |value|
+              assert_unusable(operator, value, column, adapter: 'PostgreSQL')
+            end
+          end
+          %w[is_null is_not_null my_custom_operator].each do |operator|
+            assert_equal '{1,2}', typed(operator, '{1,2}', column, adapter: 'PostgreSQL'), "#{column} #{operator}"
+          end
+        end
+        assert_same ValueCasters::OPAQUE, RuleColumn.new(ArrayColumn.new(:integer), nil, 'PostgreSQL').caster
+        assert_same ValueCasters::OPAQUE, RuleColumn.new(JSON, nil, 'SQLite').caster, 'a json column on any database'
+      end
+
+      test 'a LIKE operator on a uuid, network, json, array or native enum column matches nothing' do
+        [UUID, INET, CIDR, JSON, JSONB, ArrayColumn.new(:string)].product(LIKE).each do |column, operator|
+          assert_unusable(operator, 'abc', column, adapter: 'PostgreSQL')
+        end
+        with_enum_labels(%w[calm angry]) do
+          LIKE.each { |operator| assert_unusable(operator, 'calm', MOOD, adapter: 'PostgreSQL') }
+        end
+      end
+
+      test 'a native enum column takes one of the type\'s labels, exactly as the database has it' do
+        with_enum_labels(%w[calm angry]) do
+          assert_equal 'calm', typed('equal', 'calm', MOOD, adapter: 'PostgreSQL')
+          assert_equal 'angry', typed('equal', ' angry ', MOOD, adapter: 'PostgreSQL')
+          assert_equal %w[calm angry], typed('in', 'calm, angry', MOOD, adapter: 'PostgreSQL')
+          assert_equal %w[calm angry], typed('between', 'calm,angry', MOOD, adapter: 'PostgreSQL')
+          ['banana', 'Calm', '', '0', nil, 7].each { |value| assert_unusable('equal', value, MOOD, adapter: 'PostgreSQL') }
+          assert_unusable('in', 'calm, banana', MOOD, adapter: 'PostgreSQL')
+        end
+      end
+
+      test 'a native enum column of a model declaring the enum takes the label the model maps to the database label' do
+        with_enum_labels(%w[calm angry]) do
+          target = RuleColumn.new(MOOD, { 'relaxed' => 'calm', 'cross' => 'angry' }, 'PostgreSQL', PfRuleRecord)
+
+          assert_equal 'calm', ValueTyping.call('equal', 'relaxed', target)
+          assert_equal 'angry', ValueTyping.call('equal', 'angry', target)
+          assert_same UNUSABLE, ValueTyping.call('equal', 'furious', target)
+        end
+      end
+
+      test 'a native enum column whose labels cannot be read takes no value' do
+        assert_same UNUSABLE, ValueTyping.call('equal', 'calm', RuleColumn.new(MOOD, nil, 'PostgreSQL'))
+      end
+
+      test 'the id of current_user is a uuid only where it is one, and never an address or a label' do
+        assert_equal '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', typed('equal', '7d1f0c0e-6f0a-4a57-9f0d-0f3f6f0a4a57', UUID)
+        assert_unusable('equal', 7, UUID)
+        assert_unusable('equal', 7, INET)
+        with_enum_labels(%w[7]) { assert_unusable('equal', 7, MOOD) }
       end
 
       # --- which column a field name names ---
@@ -369,6 +504,35 @@ module PermissionForge
         assert_equal :boolean, RuleColumn.find('flag', [PfRuleSlimRecord]).column.type
         assert_equal :integer, RuleColumn.find('pf_rule_records.status', [PfRuleSlimRecord]).column.type
         assert_same UNUSABLE, ValueTyping.call('equal', 'maybe', RuleColumn.find('flag', [PfRuleSlimRecord]))
+      end
+
+      test 'a column the table does not have is missing: no value is usable with it under a built-in operator' do
+        ['no_such_column', 'pf_rule_records.no_such_column', "#{table_qualifier}.pf_rule_records.nope"].each do |name|
+          target = RuleColumn.find(name, [PfRuleRecord])
+
+          assert_predicate target, :missing?, name
+          assert_not_predicate target, :malformed?, name
+          assert_equal PfRuleRecord, target.model, name
+          Constants::OPERATORS.each do |operator|
+            assert_same UNUSABLE, ValueTyping.call(operator, '5', target), "#{name} #{operator}"
+            assert ValueTyping.no_column?(operator, target), "#{name} #{operator}"
+          end
+          assert_equal '5', ValueTyping.call('my_custom_operator', '5', target), 'a custom operator decides itself'
+        end
+        assert_equal User, RuleColumn.find('nope', [Customer, Supplier, User]).model
+        assert_equal Supplier, RuleColumn.find('suppliers.nope', [Customer, Supplier, User]).model
+      end
+
+      test 'a column that is there, or a table that is none of the rule\'s, is not missing' do
+        found = RuleColumn.find('flag', [PfRuleRecord])
+
+        assert_not_predicate found, :missing?
+        assert_equal PfRuleRecord, found.model
+        [RuleColumn.find('elsewhere.flag', [PfRuleRecord]), RuleColumn.find('flag', []), RuleColumn.find('flag.', [PfRuleRecord])].each do |target|
+          assert_not_predicate target, :missing?
+          assert_nil target.model
+        end
+        assert_equal '5', ValueTyping.call('equal', '5', RuleColumn::UNKNOWN), 'nothing known: left to the database'
       end
 
       test 'a field name with an empty segment is not a name, and no value is usable with it' do

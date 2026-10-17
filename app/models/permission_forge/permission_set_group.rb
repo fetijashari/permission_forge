@@ -9,10 +9,16 @@ module PermissionForge
     include PermissionForge::Concerns::HasActiveScope
     include PermissionForge::Concerns::HasUuid
     include PermissionForge::Concerns::ValidatesColumnLengths
+    include PermissionForge::Concerns::RequiresName # name present, on create or rename
+    include PermissionForge::Concerns::ValidatesRequiredColumns
     include PermissionForge::Concerns::HasAuditTrail
     include PermissionForge::Concerns::HasTenantScoping
     include PermissionForge::Concerns::PermissionsRegenerator
     include PermissionForge::Concerns::RecordsAuditEvents
+
+    # Its name is configuration, not personal data: #inspect shows it even
+    # when filter_parameters (the GDPR patterns) hide a `name` (InspectionFilters).
+    PermissionForge::InspectionFilters.show_configuration_names(self)
 
     # Deleting a group detaches its sets (detach_permission_sets) — not
     # `dependent: :nullify`, whose UPDATE runs no callbacks and so leaves no
@@ -27,10 +33,10 @@ module PermissionForge
     # Destroys the membership rows, never a person.
     has_many :users, through: :permission_set_group_users, dependent: :destroy, extend: Concerns::AuditedCollection
 
-    # Checked for a new row and on a rename only: a row whose name was
-    # blank before 0.14 stays editable in its other attributes.
-    validates :name, presence: { message: ->(*) { I18n.t('permission_forge.validations.name_blank') } },
-                     if: -> { new_record? || will_save_change_to_name? }
+    # What an admin names it: no default, whatever the column of an install
+    # made before 0.15 says ('Untitled Permission Set Group'), so a group
+    # created without a name is refused (GeneratedText).
+    attribute :name, default: nil
 
     before_destroy :detach_permission_sets
 

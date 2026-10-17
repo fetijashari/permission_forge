@@ -21,6 +21,20 @@ module PermissionForge
         end
       end
 
+      # One record and the cache outcome of the change that made or removed
+      # it (Cache::Outcome, as a bulk assignment answers it):
+      # `{ "data": { ... }, "meta": { "cache": { ... } } }`, the record by
+      # the serializer of its type (`permission_set_user`).
+      def render_record_with_cache(record, outcome, status:)
+        serializer_class = serializer_for(record.model_name.element.to_sym)
+        meta = { cache: outcome.to_h }
+        if ams_serializer?(serializer_class)
+          render json: record, serializer: serializer_class, root: :data, meta: meta, status: status
+        else
+          render json: { data: serializer_class.new(record).as_json, meta: meta }, status: status
+        end
+      end
+
       def render_collection(scope, serializer_class)
         paginator = PermissionForge.configuration.api_pagination_handler
         records = paginator ? paginate_scope(scope, paginator) : default_paginate_scope(scope)
@@ -35,7 +49,29 @@ module PermissionForge
       end
 
       def render_validation_errors(record)
-        render json: { error: { status: 422, messages: record.errors.messages } }, status: :unprocessable_entity
+        render_unprocessable(record.errors.messages)
+      end
+
+      # The one 422 shape: `messages` maps a field (a parameter, an attribute,
+      # or "base" when the error names none) to its messages, for validation
+      # errors and unreadable input alike.
+      def render_unprocessable(messages)
+        render json: { error: { status: 422, messages: messages } }, status: :unprocessable_entity
+      end
+
+      # An input error (ParamShapes::InvalidParam, a missing or malformed
+      # body section, Rails' own BadRequest) as field-keyed messages.
+      def render_input_error(error)
+        render_unprocessable(input_error_messages(error))
+      end
+
+      def input_error_messages(error)
+        case error
+        when PermissionForge::ParamShapes::InvalidParam then error.messages
+        when ActionController::ParameterMissing
+          { error.param.to_s => [I18n.t('permission_forge.api.errors.section_missing')] }
+        else { 'base' => [error.message] }
+        end
       end
 
       # Saves a record and renders the created resource or its validation errors.

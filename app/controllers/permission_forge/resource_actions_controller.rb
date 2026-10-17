@@ -33,10 +33,14 @@ module PermissionForge
       @people_count = pf_people_count(@permission_set)
     end
 
+    # A blank label over a generated one, or a blank over nothing, is no
+    # change (Admin::Prefill.posted); an unchanged action is not saved, and
+    # says so (SaveNotice).
     def update
-      @action_record.assign_attributes(action_params.except(:name))
-      @action_record.save!
-      redirect_to pf_back_or(resource_path), notice: t('permission_forge.flash.actions.updated', action: @action_record.display_name)
+      attrs = PermissionForge::Admin::Prefill.posted_attributes(@action_record, action_params.except(:name), :label, :description)
+      pf_save_changed(@action_record, attrs, &:save!)
+      redirect_to pf_back_or(resource_path),
+                  **pf_save_flash(@action_record) { t('permission_forge.flash.actions.updated', action: @action_record.display_name) }
     end
 
     def confirm_destroy; end
@@ -58,9 +62,9 @@ module PermissionForge
       @action_record = @resource.resource_actions.find(params[:id])
     end
 
+    # The action's chain (action, Resource, Permission Set), or the Resource's for a new action.
     def reject_locked
-      locked = [@permission_set, @resource].find { |r| pf_locked?(r) }
-      pf_reject_locked!(locked, resource_path) if locked
+      pf_reject_locked!(@action_record || @resource, resource_path)
     end
 
     def resource_path
@@ -68,7 +72,8 @@ module PermissionForge
     end
 
     def action_params
-      pf_require_hash(:resource_action).permit(:name, :label, :description, :is_permitted, :is_active)
+      pf_boolean_attributes(pf_require_hash(:resource_action).permit(:name, :label, :description, :is_permitted, :is_active),
+                            :is_permitted, :is_active)
     end
 
     # "Export CSV " => "export_csv"

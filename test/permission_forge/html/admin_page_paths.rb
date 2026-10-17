@@ -1,82 +1,138 @@
 require_relative 'admin_test_case'
+require_relative 'admin_paths'
+require_relative '../secret_column_models'
 
 module PermissionForge
   module Html
-    # The admin screens a whole-UI test walks: every page, drawer, dialog and
-    # audit page of the sample data AdminTestCase sets up. Included by the
-    # tests that check every screen (rendering, CSP, accessibility).
+    # The admin screens a whole-UI test walks (AdminPaths, on the sample data
+    # AdminTestCase sets up plus a muting set, a group, an action, a locked set
+    # down to its field and rule, a rule whose column is misspelled, and a
+    # record for every Home card), with controller-action discovery on.
+    # Included by the tests that check every screen (rendering, CSP,
+    # accessibility, layout) and every error state; #extra_screens adds the
+    # POSTs answered with a page and the screens a setting changes (the audit
+    # log off, the audit log refused).
     module AdminPagePaths
       extend ActiveSupport::Concern
 
+      # [label, setting, verb, path, status]: screens drawn only under a
+      # setting (AdminPaths is the same for the browser probe, which cannot
+      # change one per request). `setting` names a method below.
+      STATE_SCREENS = [
+        %w[audit_off get / 200], %w[audit_off get /audit 200], %w[audit_off get /people/:ana?tab=audit 200],
+        %w[audit_refused get /audit 403], %w[audit_refused get /people/:ana?tab=audit 403],
+        %w[audit_refused get /permission_sets/:set?tab=audit 403],
+        # Review of the round-7 fixes (P2-1): the record lists drawn only with audit_trail_enabled.
+        %w[audit_trail get /permission_sets/:set?tab=audit 200], %w[audit_trail get /people/:ana?tab=audit 200]
+      ].map { |setting, verb, path, status| [setting.to_sym, verb.to_sym, path, status.to_i] }.freeze
+
       included do
         setup do
+          PermissionForge.configuration.controller_action_discovery = true
+          seed_home_cards
           @rule = create_permission_set_rule(permission_set: @set, resource: @resource)
           @action = create_resource_action(resource: @resource)
           @group = create_permission_set_group(name: 'Sales')
           @muting = create_permission_set(name: 'Contractors', is_muting: true)
           create_resource(permission_set: @muting, delete_access: true)
+          @locked = create_permission_set(name: 'Managed by API', is_editable: false)
+          locked_resource = create_resource(permission_set: @locked, is_editable: false)
+          create_resource_field(resource: locked_resource, is_editable: false)
+          create_permission_set_rule(permission_set: @locked, resource: locked_resource, is_editable: false)
+          @broken = create_permission_set_rule(permission_set: @set, resource: @resource, name: 'Typo rule',
+                                               field_name: 'name', field_value: 'active')
+          @broken.update_columns(field_name: 'stauts')
         end
       end
 
-      def paths
-        people_paths + permission_set_paths(@set.id) + resource_paths("/permission_sets/#{@set.id}/resources/Customer") +
-          other_paths + audit_paths
+      def paths = admin_paths.paths
+      def error_states = admin_paths.error_states
+      def flows = admin_paths.flows
+      def posted_pages = admin_paths.posted_pages
+
+      # ["POST /permission_sets/1/review", body] for every POST answered with
+      # a page, then ["audit_off GET /audit", body] for every STATE_SCREENS
+      # entry, each answered with its status (asserted), in `locale`.
+      def extra_screens(locale: nil) # rubocop:disable Metrics/AbcSize -- the posted pages, then the state screens
+        localized = locale ? { locale: locale } : {}
+        posted = posted_pages.map do |page|
+          post pf(page.path), params: page.params.merge(localized)
+          assert_response page.status, "POST #{page.path}"
+          ["POST #{page.path}", response.body]
+        end
+        posted + STATE_SCREENS.map { |setting, verb, path, status| state_screen(setting, verb, path, status, localized) }
       end
 
-      # The audit log, filtered, one event of each
-      # shape (an update's before/after, a destroy's snapshot), and page 2.
-      def audit_paths
-        @audit_paths ||= begin
-          @email.update!(mask_strategy: 'last4')
-          updated = PermissionForge::AuditEvent.where(event: 'resource_field.updated').last
-          create_permission_set_rule(permission_set: @set, resource: @resource, name: 'Gone').destroy!
-          destroyed = PermissionForge::AuditEvent.where(event: 'permission_set_rule.destroyed').last
-          audit_event_paths(updated, destroyed)
+      # ["POST /permission_sets", body] for every error state that renders a
+      # page: the refused forms, re-rendered, for the walks that lint markup.
+      def error_screens
+        error_states.select(&:renders?).map do |state|
+          send(state.verb, pf(state.path), params: state.params)
+          ["#{state.verb.upcase} #{state.path}", response.body]
         end
       end
 
-      def audit_event_paths(updated, destroyed)
-        [
-          '/audit', "/audit?event=assignment.granted&from=2020-01-01&permission_set=#{@set.id}", '/audit?page=2',
-          "/audit?actor_type=user&actor_id=#{@ana.id}&subject_user_id=#{@ana.id}&correlation_id=x&record_type=PermissionForge::PermissionSet&record_id=1",
-          "/audit/#{updated.uuid}", "/audit/#{destroyed.uuid}"
-        ]
+      # Built once per test: the audit fixtures (an update's before/after, a
+      # destroy's snapshot) are recorded on the first use.
+      def admin_paths
+        @admin_paths ||= begin
+          updated, destroyed = audit_fixtures
+          AdminPaths.new(ana: @ana.id, assignment: @assignment.id, set: @set.id, resource: @resource.id, email: @email.id,
+                         muting: @muting.id, locked: @locked.id,
+                         group: @group.id, action: @action.id, rule: @rule.id, broken: @broken.id,
+                         updated_event: updated.uuid, destroyed_event: destroyed.uuid, conditions: @hours.id)
+        end
       end
 
-      def people_paths
-        person = "/people/#{@ana.id}"
-        [
-          '/', '/?cleanup=1', '/?privacy=all', '/people', '/people?filter=ending', person,
-          "#{person}?tab=effective&why=Customer.read_access", "#{person}?tab=audit",
-          "#{person}/remove_all", "#{person}/consent", "#{person}/erasure",
-          '/assignments/new', "/assignments/new?user_id=#{@ana.id}", "/assignments/#{@assignment.id}/remove"
-        ]
+      private
+
+      def state_screen(setting, verb, path, status, params) # rubocop:disable Metrics/AbcSize -- set, request, restore
+        path = path.sub(':ana', @ana.id.to_s).sub(':set', @set.id.to_s)
+        config = PermissionForge.configuration
+        previous = [config.audit_events, config.audit_log_authorization, config.audit_trail_enabled]
+        send(:"configure_#{setting}")
+        send(verb, pf(path), params: params)
+        assert_response status, "#{setting} #{verb.upcase} #{path}"
+        ["#{setting} #{verb.upcase} #{path}", response.body]
+      ensure
+        config.audit_events, config.audit_log_authorization, config.audit_trail_enabled = previous
       end
 
-      def permission_set_paths(id)
-        [
-          '/permission_sets', '/permission_sets?filter=muting', '/permission_sets/new', "/permission_sets/#{id}",
-          "/permission_sets/#{id}?tab=assignments", "/permission_sets/#{id}?tab=conditions", "/permission_sets/#{id}?tab=audit",
-          "/permission_sets/#{id}/delete", "/permission_sets/#{id}/switch_mode", "/permission_sets/#{@muting.id}",
-          "/permission_sets/#{id}/bulk_assignment/new", "/permission_sets/#{id}/bulk_assignment/revoke?user_ids[]=#{@ana.id}",
-          "/permission_sets/#{id}/resources/new"
-        ]
+      def configure_audit_off = PermissionForge.configuration.audit_events = false
+      def configure_audit_refused = PermissionForge.configuration.audit_log_authorization = ->(_controller) { false }
+      def configure_audit_trail = PermissionForge.configuration.audit_trail_enabled = true
+
+      # A record for every Home card (Admin::AttentionItems::CARDS) but the
+      # audit log's, which a setting raises (STATE_SCREENS): an assignment
+      # ending soon, one expired, one due for review, a set whose condition
+      # nobody can judge, a field masked with an unknown strategy, a rule on
+      # a secret column.
+      def seed_home_cards # rubocop:disable Metrics/AbcSize -- one fixture per Home card, nothing to share
+        ending = create_permission_set(name: 'Temporary access')
+        create_permission_set_user(user: @bo, permission_set: ending, expires_at: 3.days.from_now)
+        expired = create_permission_set(name: 'Old project')
+        create_permission_set_user(user: @bo, permission_set: expired, expires_at: 1.day.from_now).update_columns(expires_at: 2.days.ago)
+        create_permission_set_user(user: @bo, permission_set: @set).update_columns(created_at: 400.days.ago)
+        hours = create_permission_set(name: 'Office hours', allowed_hours_start: 9, allowed_hours_end: 17)
+        # Round 7 (B#48a): an IP entry that is no address too, so the Conditions tab's banner has two problems.
+        hours.update_columns(allowed_hours_end: 9, allowed_ips: '10.0.0.0/8,office-network')
+        @hours = hours
+        create_permission_set_user(user: @bo, permission_set: hours)
+        create_resource_field(resource: @resource, name: 'name', read_access: true, mask_access: true, mask_strategy: 'email')
+          .update_columns(mask_strategy: 'rot13')
+        vault = create_permission_set(name: 'Vault')
+        create_permission_set_user(user: @bo, permission_set: vault)
+        secrets = create_resource(permission_set: vault, name: 'PfSecretRecord', read_access: true)
+        create_permission_set_rule(permission_set: vault, resource: secrets, field_name: 'label', field_value: 'x')
+          .update_columns(field_name: 'password_digest')
       end
 
-      def resource_paths(base)
-        [
-          base, "#{base}?tab=actions", "#{base}?tab=rules", "#{base}/delete", "#{base}/fields/email",
-          "#{base}/fields/domain?explain_user_id=#{@ana.id}",
-          "#{base}/actions/new", "#{base}/actions/#{@action.id}", "#{base}/actions/#{@action.id}/delete",
-          "#{base}/rules/new", "#{base}/rules/#{@rule.id}/edit", "#{base}/rules/#{@rule.id}/delete"
-        ]
-      end
-
-      def other_paths
-        [
-          '/field_lookup', '/field_lookup?resource=Customer&field=email', '/groups', '/groups?new=1',
-          "/groups/#{@group.id}", "/groups/#{@group.id}/delete", '/settings', '/settings?q=cache&changed=1'
-        ]
+      def audit_fixtures
+        @email.update!(mask_strategy: 'last4')
+        updated = PermissionForge::AuditEvent.where(event: 'resource_field.updated').last
+        create_permission_set_rule(permission_set: @set, resource: @resource, name: 'Gone').destroy!
+        destroyed = PermissionForge::AuditEvent.where(event: 'permission_set_rule.destroyed').last
+        [updated, destroyed]
       end
     end
   end

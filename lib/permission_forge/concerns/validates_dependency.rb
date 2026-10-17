@@ -14,7 +14,7 @@ module PermissionForge
     #
     #   resource = Resource.new(edit_access: true, read_access: false)
     #   resource.valid? # => false
-    #   resource.errors[:edit_access] # => ["requires read_access to be enabled"]
+    #   resource.errors[:edit_access] # => ["requires Read to be enabled"]
     #
     # @api private
     module ValidatesDependency
@@ -44,7 +44,10 @@ module PermissionForge
           define_method(method_name) do
             return if belongs_to_muting_permission_set?
 
-            errors.add(field, "requires #{requires} to be enabled") if send(field) && !send(requires)
+            return unless send(field) && !send(requires)
+
+            label = I18n.t("permission_forge.validations.attributes.#{requires}", default: requires.to_s)
+            errors.add(field, :requires, message: I18n.t('permission_forge.validations.requires', requires: label))
           end
           private method_name
         end

@@ -9,7 +9,6 @@ module PermissionForge
     # (see PeopleCandidates).
     class PeopleDirectory
       FILTERS = %w[all ending expired muting no_access].freeze
-      ENDING_WINDOW_DAYS = 7
       DEFAULT_PER_PAGE = 25
       # Beyond this the offset overflows the database's integer; the page is
       # empty long before.
@@ -19,9 +18,7 @@ module PermissionForge
 
       # Assignments whose people a filter keeps ('no_access' keeps everyone else).
       FILTER_ASSIGNMENTS = {
-        'ending' => lambda {
-          PermissionForge::PermissionSetUser.where(expires_at: Time.current..ENDING_WINDOW_DAYS.days.from_now.end_of_day)
-        },
+        'ending' => -> { PermissionForge::PermissionSetUser.ending_within },
         'expired' => -> { PermissionForge::PermissionSetUser.expired },
         'muting' => lambda {
           PermissionForge::PermissionSetUser.active_assignments.where(permission_set_id: PermissionForge::PermissionSet.muting.select(:id))
@@ -55,7 +52,8 @@ module PermissionForge
       def search(query: nil, filter: 'all', **paging)
         filter = 'all' unless FILTERS.include?(filter.to_s)
         candidates = apply_query(apply_filter(base_candidates, filter.to_s), query)
-        paginate(candidates, paging[:page].to_s.to_i.clamp(1, MAX_PAGE), paging.fetch(:per_page, DEFAULT_PER_PAGE))
+        page = ParamShapes.integer(paging[:page], default: 1, range: 1..).clamp(1, MAX_PAGE) # the one reader: "2abc" is page 1
+        paginate(candidates, page, paging.fetch(:per_page, DEFAULT_PER_PAGE))
       end
 
       # Counts for the filter chips (respecting the search query).
@@ -107,6 +105,26 @@ module PermissionForge
           model = configuration.user_model
           type = model.type_for_attribute(model.primary_key)
           (ids.is_a?(Array) ? ids : [ids]).filter_map { |id| cast_one(id, type) }.uniq
+        end
+
+        # The request values that name none of `found` (cast ids, e.g. the
+        # people #find_all returned): each cast to the key type when it can
+        # be (99, not "99"), else as sent, trimmed and without NUL bytes.
+        # Blanks and values that are no id at all (an object, a list) are
+        # left out.
+        #
+        # @return [Array] distinct, in order
+        def self.unmatched(ids, found, configuration: PermissionForge.configuration)
+          model = configuration.user_model
+          type = model.type_for_attribute(model.primary_key)
+          (ids.is_a?(Array) ? ids : [ids]).filter_map do |id|
+            next unless id.is_a?(String) || id.is_a?(Integer)
+
+            cast = cast_one(id, type)
+            next id.to_s.delete("\0").strip.presence if cast.nil?
+
+            cast unless found.include?(cast)
+          end.uniq
         end
 
         def self.cast_one(id, type)

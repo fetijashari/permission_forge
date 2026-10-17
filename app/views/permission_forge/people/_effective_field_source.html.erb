@@ -1,11 +1,17 @@
-<% if field.blocked_by.any? %>
-  <%= t('.muted_by', set: field.blocked_by.map(&:name).to_sentence) %>
-<% elsif field.unconfigured %>
-  <%= t('.unconfigured', behaviour: t("permission_forge.ui.unconfigured.#{PermissionForge.configuration.unconfigured_field_strategy}", default: t('permission_forge.ui.unconfigured.block'))) %>
-<% elsif field.granted_by.any? %>
-  <%= t('.from', set: field.granted_by.first.name) %><%= t('.and_more', count: field.granted_by.size - 1) if field.granted_by.size > 1 %>
-<% elsif field.implicit %>
+<%# Locals: field (EffectiveAccess::FieldOutcome), res_name (the Resource the row is about).
+    The row words FieldOutcome#reason, the decision the Why panel and "Explain for" word too (B#39);
+    every set is named with the Resource whose row it credits (B#35, B#38). %>
+<% case field.reason %>
+<% when :muted %>
+  <%= pf_field_muted_by(field, res_name) %>
+<% when :unconfigured %>
+  <%= t('.unconfigured', state: pf_state(:field_level, :none).word, behaviour: t("permission_forge.ui.unconfigured.#{PermissionForge.configuration.unconfigured_field_strategy}", default: t('permission_forge.ui.unconfigured.block'))) %>
+<% when :granted %>
+  <%= pf_t_markup(set: pf_field_source_set_name(field.grants.first, res_name)) { |held| t('.from', **held) } %><%= t('.and_more', count: field.grants.size - 1) if field.grants.size > 1 %>
+<% when :implicit %>
   <%= t('.virtual') %>
+<% when :unreadable, :inherited %>
+  <%= pf_field_chain_reason(field).last %>
 <% else %>
   <%= t('.none') %>
 <% end %>

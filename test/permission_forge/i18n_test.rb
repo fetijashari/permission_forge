@@ -196,7 +196,172 @@ module PermissionForge
       assert_equal %i[en sq], config.available_locales
     end
 
-    # ── J. Locale switcher helper ──
+    # ── J. A translation is not the English text ──
+    #
+    # A sq/mk value identical to en, when the en value has three Latin
+    # letters or more outside its placeholders and one of them lower-case
+    # (a format of placeholders, an acronym or a code such as "API" or
+    # "UUID" is no English), is an English string left in the file — unless
+    # the allow-list names it with a reason (a word the language shares, the
+    # brand, a UI name kept verbatim, a sample value).
+
+    IDENTICAL_ALLOWLIST = File.expand_path('i18n_identical_allowlist.yml', __dir__)
+    LATIN_LETTERS = /[A-Za-z]/
+    PLACEHOLDER = /%\{\w+\}/
+
+    def english_prose?(value)
+      return false unless value.is_a?(String)
+
+      letters = value.gsub(PLACEHOLDER, '').scan(LATIN_LETTERS)
+      letters.size >= 3 && letters.any? { |letter| letter.match?(/[a-z]/) }
+    end
+
+    def raw_values(locale)
+      flat = {}
+      collect_values(load_locale_hash(locale)[locale.to_s]['permission_forge'], 'permission_forge', flat)
+      flat
+    end
+
+    SUPPORTED_LOCALES.reject { |l| l == :en }.each do |locale|
+      test "#{locale} values identical to en are allow-listed with a reason" do
+        allowed = YAML.load_file(IDENTICAL_ALLOWLIST).fetch(locale.to_s, {}) || {}
+        values = raw_values(locale)
+        identical = en_values.select { |key, en_value| english_prose?(en_value) && values[key] == en_value }.keys
+
+        assert_empty identical - allowed.keys,
+                     "#{locale}: English left in the locale file (translate it, or list it in i18n_identical_allowlist.yml " \
+                     "with a reason): #{(identical - allowed.keys).join(', ')}"
+        assert_empty allowed.keys - identical, "#{locale}: stale allow-list entries (remove them): #{(allowed.keys - identical).join(', ')}"
+        assert_empty allowed.select { |_, reason| reason.to_s.strip.empty? }.keys, "#{locale}: give every allow-list entry a reason"
+      end
+    end
+
+    test 'the identical-value lint bites' do
+      assert english_prose?(en_values.fetch('permission_forge.ui.cancel'))
+      assert english_prose?('Fail-open')
+      assert_not english_prose?('%{who} · %{when}'), 'a format of placeholders' # rubocop:disable Style/FormatStringToken
+      assert_not english_prose?('JSON API'), 'an acronym'
+      identical = en_values.select { |key, value| english_prose?(value) && raw_values(:en)[key] == value }
+      assert_includes identical.keys, 'permission_forge.ui.cancel'
+    end
+
+    # ── K. One pair of quotation marks per locale ──
+    #
+    # Each locale file quotes with one pair (sq “…”, mk „…“, en “…”); any
+    # other typographic quotation mark is a mixed style (R6 #93: sq had
+    # both „…“ and “…”). The right single quote is the Albanian apostrophe
+    # (t’u) and allowed there; › is the breadcrumb separator, not a quote.
+
+    QUOTATION_MARKS = %w[„ “ ” « » ‚ ‘ ’].freeze
+    QUOTES = { en: %w[“ ”], sq: %w[“ ” ’], mk: %w[„ “] }.freeze
+
+    QUOTES.each do |locale, allowed|
+      test "#{locale} quotes with one pair of quotation marks" do
+        foreign = QUOTATION_MARKS - allowed
+        offending = File.readlines(File.join(LOCALE_DIR, "permission_forge.#{locale}.yml")).each_with_index.filter_map do |line, index|
+          marks = foreign.select { |mark| line.include?(mark) }
+          "#{index + 1}: #{marks.join(' ')} #{line.strip}" if marks.any?
+        end
+
+        assert_empty offending, "#{locale}: quotation marks outside #{allowed.join(' ')}:\n#{offending.join("\n")}"
+      end
+    end
+
+    test 'every bundled locale has a quote style' do
+      assert_equal SUPPORTED_LOCALES.sort, QUOTES.keys.sort
+    end
+
+    # ── M. One state, one label (the label registry) ──
+    #
+    # The words of a state the admin shows (a field level, an effective
+    # outcome, a lock, an actor kind, a CRUD cell, an action state) live in
+    # the label namespaces: Admin::StateLabel's registry (ui.states.<kind>)
+    # and the namespaces it replaced. A second key with the same English
+    # value there is a second name for one state that can drift (R3 #38:
+    # "Unchanged 0 · Not configured 8" for one state). Two namespaces keep
+    # their own words until the 0.16 merge; the allow-list says why.
+    #
+    # Left out on purpose (review R4 P2-2), though a word of theirs equals a
+    # state's: the list filters (people.index.filters, permission_sets.index
+    # .filters: "Muting", "Expired" name a query whose rows carry the badge,
+    # not a second label of it), the audit log's boolean values (audit_log
+    # .boolean: "No" is a stored false, not an outcome), the new-Resource
+    # presets (resources.new.presets: "Read-only" names a preset, with its
+    # description) and column headings ("Person"). None renders a state.
+
+    LABEL_NAMESPACES = %w[ui.states ui.levels ui.badges shared.crud_cell resource_actions.states
+                          resources.fields_tab.filters audit_log.actor_types].freeze
+    LABEL_ALLOWLIST = {
+      'shared.crud_cell' => 'the CRUD toggle cell keeps its words (StateLabel kind :crud reads them) until the ' \
+                            '0.16 merge into ui.states.crud; its Allowed / No / Muted / Unchanged repeat other kinds',
+      'resource_actions.states' => 'the action states keep their words (StateLabel kind :action reads them) until ' \
+                                   'the 0.16 merge into ui.states.action; Blocked / Unchanged repeat other kinds'
+    }.freeze
+
+    def in_namespace?(key, namespaces)
+      namespaces.any? { |namespace| key.start_with?("permission_forge.#{namespace}.") }
+    end
+
+    # { normalised English value => [keys] } for every value that more than
+    # one key of the label namespaces (outside the allow-list) holds.
+    def label_duplicates(values)
+      labels = values.select { |key, _| in_namespace?(key, LABEL_NAMESPACES) && !in_namespace?(key, LABEL_ALLOWLIST.keys) }
+      labels.group_by { |_, value| value.to_s.strip.downcase }.select { |_, pairs| pairs.size > 1 }
+            .transform_values { |pairs| pairs.map(&:first) }
+    end
+
+    test 'one state, one label: no English label repeats within the label namespaces' do
+      duplicates = label_duplicates(en_values)
+
+      assert_empty duplicates, 'a state named under two keys (keep one, render it through Admin::StateLabel): ' \
+                               "#{duplicates.map { |value, keys| "#{value.inspect} #{keys.join(', ')}" }.join('; ')}"
+    end
+
+    test 'the label lint bites: a second key for Not configured fails it' do
+      values = en_values.merge('permission_forge.ui.levels.none2' => 'Not configured')
+
+      assert_includes label_duplicates(values).keys, 'not configured'
+    end
+
+    test 'every allow-listed label namespace is still in the locale and says why' do
+      LABEL_ALLOWLIST.each do |namespace, reason|
+        assert reason.to_s.strip.present?, "#{namespace}: give the allow-list entry a reason"
+        assert en_values.keys.any? { |key| key.start_with?("permission_forge.#{namespace}.") },
+               "stale allow-list entry #{namespace}: the namespace is gone (merged), remove it"
+      end
+    end
+
+    # ── N. Words left behind (review R4 P2-7) ──
+    #
+    # A translated value keeps no English term the file has its own word
+    # for (Permission Set is "Grup lejesh" / "сет на дозволи"; commit,
+    # deploy, fail-open), and no word typed twice ("кој кој"). Albanian
+    # doubles its particles on purpose ("të të kërkohet", "SSO-së së").
+
+    LEFT_BEHIND = /fail-open|\bcommit\b|\bdeploy\b|Permission Set(?! Group)/
+    DOUBLED = /(?<!\p{L})(\p{L}{2,}) \1(?!\p{L})/i
+    PARTICLES = %w[të së].freeze
+
+    def left_behind(values)
+      values.select do |_, value|
+        next false unless value.is_a?(String)
+
+        value.match?(LEFT_BEHIND) || value.scan(DOUBLED).flatten.any? { |word| !PARTICLES.include?(word.downcase) }
+      end.keys
+    end
+
+    SUPPORTED_LOCALES.reject { |l| l == :en }.each do |locale|
+      test "#{locale} keeps no English term and no doubled word" do
+        assert_empty left_behind(raw_values(locale))
+      end
+    end
+
+    test 'the left-behind lint bites' do
+      assert_equal %w[a b c], left_behind('a' => 'e ka tashmë këtë Permission Set', 'b' => 'но кој кој запис', 'c' => '(fail-open)',
+                                          'd' => 'të të kërkohet', 'e' => 'Grup lejesh')
+    end
+
+    # ── L. Locale switcher helper ──
 
     test 'pf_locale_label returns correct labels' do
       helper = Class.new { include PermissionForge::ApplicationHelper }.new

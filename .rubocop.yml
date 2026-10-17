@@ -11,6 +11,10 @@ AllCops:
     - ".github/scripts/**/*.rb"
   Exclude:
     - "test/dummy/**/*"
+    # The docs app's skeleton: the files `rails new`, `generate authentication` and
+    # `generate scaffold` write, kept as the generators write them.
+    - "test/support/docs_app/skeleton/**/*"
+    - "test/support/docs_app/skeleton_api/**/*"
     - "test/benchmarks/**/*"
     - "vendor/**/*"
     - "bin/**/*"

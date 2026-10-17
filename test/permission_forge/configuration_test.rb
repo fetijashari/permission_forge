@@ -24,9 +24,10 @@ module PermissionForge
 
     test 'has default ignored_fields' do
       assert_includes @config.ignored_fields, 'id'
-      assert_includes @config.ignored_fields, 'created_at'
-      assert_includes @config.ignored_fields, 'updated_at'
       assert_includes @config.ignored_fields, 'password'
+      # Since 0.15 the timestamps get a read-only row instead (ResourceFieldGenerator).
+      assert_not_includes @config.ignored_fields, 'created_at'
+      assert_not_includes @config.ignored_fields, 'updated_at'
     end
 
     test 'has default field_variant_mappings' do

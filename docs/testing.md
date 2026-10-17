@@ -6,7 +6,7 @@ Create the permission records with the model classes, as your app would. Permiss
 
 Example Minitest setup (for host apps):
 
-```ruby
+```ruby fragment
 class CustomerPermissionsTest < ActiveSupport::TestCase
   setup do
     @user = User.create!(name: 'Test User', email: 'test@example.com') # or a fixture / factory of your own
@@ -45,7 +45,7 @@ end
 
 For contributors, from a checkout of the gem:
 
-```bash
+```bash fragment
 bundle install
 bundle exec rake test
 ```
@@ -54,11 +54,11 @@ The suite runs on SQLite by default. It also runs on MySQL (`DB=mysql BUNDLE_GEM
 
 The SQLite suite runs in forked workers (`test/support/parallel_workers.rb`: 8 by default, about 30 seconds instead of about 2 minutes; `PARALLEL_WORKERS=1` runs one process). PostgreSQL, MySQL and Rails before 8.1 run serial. Each worker starts from a copy of the parent's in-memory database. A test that uses something every worker shares (the local Redis database 15, a fixed path) includes `ParallelWorkers::SharedResource` or uses a per-process path.
 
-**Configuration snapshot.** `test_helper.rb` configures the suite's base (memory cache, no table prefix, audit trail off, tenancy on) once, in its `configure` block. `ConfigurationSnapshot` (`test/support/configuration_snapshot.rb`) puts exactly that back before and after every test, also after `PermissionForge.reset!` or an in-place change (`custom_mask_strategies[:x] = 1`), so a test that raises in its teardown leaks nothing into the next. A new suite-wide setting goes in the `configure` block, never in a per-test reset. Other state (cache, owed invalidations, audit context, tenant, locale, `Current`, `Rails.logger`) is reset by name in `test_helper.rb`.
+**Configuration snapshot.** `test_helper.rb` configures the suite's base (memory cache, no table prefix, `audit_trail_enabled` off — the created-by / updated-by stamps, not the audit event log, which stays on —, tenancy on) once, in its `configure` block. `ConfigurationSnapshot` (`test/support/configuration_snapshot.rb`) puts exactly that back before and after every test, also after `PermissionForge.reset!` or an in-place change (`custom_mask_strategies[:x] = 1`), so a test that raises in its teardown leaks nothing into the next. A new suite-wide setting goes in the `configure` block, never in a per-test reset. Other state (cache, owed invalidations, audit context, tenant, locale, `Current`, `Rails.logger`) is reset by name in `test_helper.rb`.
 
 **Rails internals canary.** `test/permission_forge/rails_internals_canary_test.rb` has one test per private or undocumented Rails API the gem relies on, each naming the gem code that relies on it. Run it first after a Rails upgrade and on each `gemfiles/rails_*.gemfile`; CI runs it on Rails `main` in an allow-failure job. For example:
 
-```bash
+```bash fragment
 BUNDLE_GEMFILE=gemfiles/rails_main.gemfile bundle exec ruby -Itest -e 'require "test_helper"; SimpleCov.minimum_coverage(0); require "./test/permission_forge/rails_internals_canary_test.rb"'
 ```
 

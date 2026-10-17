@@ -1,3 +1,5 @@
+require_relative '../cache/report'
+
 module PermissionForge
   module Services
     # Removes expired PermissionSetUser records and invalidates the cached
@@ -5,10 +7,18 @@ module PermissionForge
     #
     # @example
     #   result = ExpiredAssignmentCleaner.call
-    #   # => { removed: 5, invalidated: 3 }
+    #   # => { removed: 5, invalidated: 3, affected_user_ids: [1, 2, 3], permission_sets: ["Temp"],
+    #   #      cache: { confirmed: true, process_local: false, unconfirmed: 0 } }
     #
     # `invalidated` counts the users whose invalidation the cache store
     # confirmed; a failure is reported through `config.on_cache_failure`.
+    # `cache` is the one Cache::Outcome every cache-touching operation
+    # answers (Cache::Report), and `cleanup.expired_assignments` records the
+    # same keys: a store that lives in this process only
+    # (Cache::Base#process_local?: an in-memory store) confirms for this
+    # process alone — a run from a rake task leaves the web and job
+    # processes' entries until they restart or expire (cache_ttl), and the
+    # event says `process_local: true`.
     #
     # @example Dry run (inspect without removing)
     #   result = ExpiredAssignmentCleaner.call(dry_run: true)
@@ -27,7 +37,8 @@ module PermissionForge
     # `assignment.revoked` names its own user). `actor:` (a user, an
     # Audit::Actor or a label String) and `reason:` say who ran it and why;
     # without a reason (none given, none in the context) the events carry
-    # DEFAULT_REASON. A dry run writes nothing.
+    # DEFAULT_REASON, a code (Audit::ReasonCodes) the admin renders in its
+    # language. A dry run writes nothing.
     #
     # Tenants: with a tenant ambient, that tenant's assignments. With none
     # (the rake task) every tenant's — also under acts_as_tenant's
@@ -40,7 +51,7 @@ module PermissionForge
       include Concerns::AuditedOperation
       include Concerns::AcrossTenants
 
-      DEFAULT_REASON = 'expired'.freeze
+      DEFAULT_REASON = PermissionForge::Audit::ReasonCodes::EXPIRED
 
       # The most user ids the summary event stores: the event's data must
       # stay well inside a MySQL TEXT column (64 KB) whatever the run's size.
@@ -58,7 +69,8 @@ module PermissionForge
         @invalidated_count = 0
       end
 
-      # @return [Hash] `{ removed:, invalidated: }` (plus `expired_count:` and `affected_user_ids:` for a dry run)
+      # @return [Hash] `{ removed:, invalidated:, affected_user_ids:, permission_sets:, cache: }`
+      #   (a dry run: `removed: 0, invalidated: 0, expired_count:, affected_user_ids:`)
       def call
         across_tenants do
           expired_records = PermissionForge::PermissionSetUser.expired
@@ -79,12 +91,19 @@ module PermissionForge
       def clean(candidate_ids)
         removed = candidate_ids.filter_map { |id| destroy_if_still_expired(id) }
         @removed_count = removed.size
+        sets = sets_of(removed)
+        report = invalidate_users(user_ids_of(removed))
+        record_summary(removed, sets, report) if @removed_count.positive?
+        result(removed, sets, report)
+      end
 
-        confirmed = invalidate_users(removed.map(&:user_id).uniq)
-        @invalidated_count = confirmed.size
-        record_summary(removed, confirmed) if @removed_count.positive?
-
-        { removed: @removed_count, invalidated: @invalidated_count }
+      # The run's counts, people, sets and cache outcome (see the class comment).
+      def result(removed, sets, report)
+        user_ids = user_ids_of(removed)
+        # not known inside a caller's transaction (Report#deferred?), as a bulk assignment's
+        @invalidated_count = report.deferred? ? nil : report.confirmed(user_ids).size
+        { removed: @removed_count, invalidated: @invalidated_count, affected_user_ids: user_ids,
+          permission_sets: sets.values.map(&:name).uniq, cache: report.outcome(user_ids: user_ids).to_h }
       end
 
       # The row as it is now, locked until it is gone; nil when it is no
@@ -96,27 +115,43 @@ module PermissionForge
         end
       end
 
+      # @return [Hash{Integer => PermissionSet}] the sets of the removed rows, by id
+      def sets_of(records)
+        PermissionForge::PermissionSet.where(id: records.map(&:permission_set_id).uniq).index_by(&:id)
+      end
+
       # One event, or one per tenant plus the totals (record_per_tenant),
-      # each with the counts of its own rows.
-      def record_summary(records, confirmed_user_ids)
-        sets = PermissionForge::PermissionSet.where(id: records.map(&:permission_set_id).uniq).index_by(&:id)
-        record_per_tenant('cleanup.expired_assignments', records) do |rows|
-          SummaryData.new(rows, sets, confirmed_user_ids).to_h
-        end
+      # each with the counts of its own rows and the run's cache outcome
+      # (the report of every affected user's invalidation).
+      def record_summary(records, sets, report)
+        user_ids = user_ids_of(records)
+        confirmed = report.confirmed(user_ids)
+        outcome = report.outcome(user_ids: user_ids)
+        record_per_tenant('cleanup.expired_assignments', records) { |rows| SummaryData.new(rows, sets, confirmed, outcome).to_h }
+      end
+
+      def user_ids_of(records)
+        records.map(&:user_id).uniq
       end
 
       # The data of one cleanup.expired_assignments event, for the removed
       # rows it covers.
       #
       # @api private
-      SummaryData = Struct.new(:rows, :sets_by_id, :confirmed_user_ids) do
+      SummaryData = Struct.new(:rows, :sets_by_id, :confirmed_user_ids, :outcome) do
         def to_h
           { 'operation' => 'cleanup_expired_assignments', 'removed' => rows.size,
-            'invalidated' => (user_ids & confirmed_user_ids).size, **bounded_user_ids,
-            'set_uuids' => sets.map(&:uuid).uniq, 'set_names' => sets.map(&:name).uniq, 'dry_run' => false }
+            'invalidated' => invalidated, **bounded_user_ids,
+            'set_uuids' => sets.map(&:uuid).uniq, 'set_names' => sets.map(&:name).uniq, 'dry_run' => false,
+            **outcome.event_data }
         end
 
         private
+
+        # Not known inside a caller's transaction (a pending outcome).
+        def invalidated
+          (user_ids & confirmed_user_ids).size unless outcome.confirmed.nil?
+        end
 
         def user_ids
           @user_ids ||= rows.map(&:user_id).uniq
@@ -135,17 +170,19 @@ module PermissionForge
       private_constant :SummaryData
 
       def dry_run_result(expired_count, affected_user_ids)
-        { removed: 0, invalidated: 0, expired_count: expired_count, affected_user_ids: affected_user_ids }
+        { removed: 0, invalidated: 0, expired_count: expired_count, affected_user_ids: affected_user_ids,
+          cache: PermissionForge::Cache::Report.none.to_h }
       end
 
-      # @return [Array] the ids of the users whose invalidation the store
-      #   confirmed — not what a host's override of the method returns
+      # Every affected user's invalidation, measured (Cache::Report): what
+      # the store confirmed, per user — not what a host's override of the
+      # method returns.
+      #
+      # @return [PermissionForge::Cache::Report]
       def invalidate_users(user_ids)
-        confirmed = []
-        PermissionForge.configuration.user_model.where(id: user_ids).find_each do |user|
-          confirmed << user.id if PermissionForge::Cache::Failure.none? { user.invalidate_permissions }
+        PermissionForge::Cache::Report.measure do
+          PermissionForge.configuration.user_model.where(id: user_ids).find_each(&:invalidate_permissions)
         end
-        confirmed
       end
     end
   end

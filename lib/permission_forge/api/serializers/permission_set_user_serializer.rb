@@ -4,7 +4,7 @@ module PermissionForge
   module Api
     module Serializers
       class PermissionSetUserSerializer < BaseSerializer
-        attributes :id, :uuid, :permission_set_id, :user_id, :expires_at, :created_at, :updated_at
+        attributes :id, :uuid, *reference(:permission_set), :user_id, :expires_at, :created_at, :updated_at
       end
     end
   end

@@ -54,12 +54,19 @@ detectors:
   FeatureEnvy:
     exclude:
       - PermissionForge::Api::BaseController
+      # Describes the record a copy refused, as the helpers describe theirs
+      - PermissionForge::CopyRefusal#pf_copy_refused_record
       - PermissionForge::ApplicationHelper
       - PermissionForge::AuditHelper
+      - PermissionForge::AuditRecordsHelper
+      - PermissionForge::AuditAttributionHelper
       - PermissionForge::BadgesHelper
       - PermissionForge::ChangesHelper
+      - PermissionForge::LabelsHelper
       - PermissionForge::PeopleHelper
+      - PermissionForge::RuleProblemsHelper
       - PermissionForge::SentencesHelper
+      - PermissionForge::ConditionsHelper
       - PermissionForge::SettingsHelper
       - PermissionForge::UiHelper
       - PermissionForge::Api::Pagination
@@ -93,6 +100,7 @@ detectors:
       - PermissionForge::Services::SecurityAuditChecks::PersonalDataCheck
       - PermissionForge::Services::SecurityAuditChecks::PrivilegeCheck
       - PermissionForge::Services::SecurityAuditChecks::RuleCheck
+      - PermissionForge::Services::SecurityAuditChecks::ConditionsCheck
       - PermissionForge::Services::SecurityAuditChecks::TextReport
       # Audit event log: value objects, read models and formatters that take
       # one record (event, assignment, decision, payload) and read its parts,
@@ -139,10 +147,14 @@ detectors:
       - PermissionForge::ApplicationHelper
       # Modules included into ApplicationHelper (same rationale)
       - PermissionForge::AuditHelper
+      - PermissionForge::AuditRecordsHelper
+      - PermissionForge::AuditAttributionHelper
       - PermissionForge::BadgesHelper
       - PermissionForge::ChangesHelper
+      - PermissionForge::LabelsHelper
       - PermissionForge::PeopleHelper
       - PermissionForge::SentencesHelper
+      - PermissionForge::ConditionsHelper
       - PermissionForge::SettingsHelper
       - PermissionForge::UiHelper
       # Sentence helpers: format a passed event, no state (same as the other helpers)
@@ -172,7 +184,7 @@ detectors:
 
   # Tuned: Config objects and dashboard controllers need many instance variables
   TooManyInstanceVariables:
-    max_instance_variables: 52
+    max_instance_variables: 53
 
   # Tuned: Configuration holds many config options with getters/setters/validators
   TooManyMethods:
@@ -206,6 +218,9 @@ detectors:
       - PermissionForge::ResourceChain
       # Rule sentence helpers called from the views with (rule, model_name)
       - PermissionForge::SentencesHelper
+      - PermissionForge::ConditionsHelper
+      # One function per operator shape (SHAPES, dispatched by name): (value, target)
+      - PermissionForge::Operators::ValueTyping
 
   # Tuned: Operator strategies require (query, col, rule, val) by design
   LongParameterList:
@@ -223,6 +238,8 @@ detectors:
       - PermissionForge::Admin::SettingsCatalog#self.d
       # Finding builder: severity, code, title, detail, items: — one per report field
       - PermissionForge::Services::SecurityAuditChecks::BaseCheck#finding
+      # Event registration: name, category:, runtime_group:, cache: — one per catalogue column
+      - PermissionForge::Audit::EventCatalog#register
       - PermissionForge::Concerns::MaskedAttributes
       - PermissionForge::Operators::Registry
       - PermissionForge::Services::AttributeAccessGuard
@@ -232,6 +249,12 @@ detectors:
       - PermissionForge::Services::PermissionRuleApplier
       # LIKE builder takes (col, rule, prefix:, suffix:) — mirrors the operator registry contract
       - PermissionForge::Services::RlsPolicyGenerator
+      # A warning: key, message, then the two keyword columns of the policy (severity:, audience:)
+      - PermissionForge::Warnings#emit
+      - PermissionForge::Warnings::Emitter#emit
+      # An attribute section: what to read (section or attrs, model, keys), plus the record an update changes (record:)
+      - PermissionForge::Api::InputShapes#call
+      - PermissionForge::Api::BaseController#pf_record_attributes
       - PermissionForge::Services::RlsOperatorSql
       # Audit event log: public keyword-argument APIs and value-object
       # constructors where each parameter is one field of the event (actor,

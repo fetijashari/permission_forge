@@ -15,14 +15,17 @@ module PermissionForge
         render_collection(scope, serializer_for(:permission_set_group_user))
       end
 
+      # A user_id that is missing, not an id, or names nobody
+      # config.user_list_resolver lists is a 422 keyed by user_id
+      # (BaseController#requested_user), after the authorization hooks.
       def create
         user_id = params[:user_id]
         authorize_assignment!(@group, [user_id])
         enforce_editable!(@group) unless performed?
         return if performed?
 
-        user = find_host_user(user_id)
-        return if performed? || pf_assignment_refused_api?(@group, user.id, :add_member)
+        user = requested_user
+        return if pf_assignment_refused_api?(@group, user.id, :add_member)
 
         gu = @group.permission_set_group_users.build(user: user)
         save_and_render(gu, :permission_set_group_user)

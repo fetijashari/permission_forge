@@ -1,17 +1,27 @@
 <% set = @permission_set %>
-<% content_for :pf_title, t('.title') %>
+<% content_for :pf_title, t('.title', count: @changes.size) %>
 <%= pf_dialog_frame({ title: t('.title', count: @changes.size), role: 'dialog', wide: true,
                      breadcrumb: pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
-                                               [set.name, permission_forge.permission_set_path(set)], t('.crumb')) }) do %>
+                                               [pf_record_name(set), permission_forge.permission_set_path(set)], t('.crumb')) }) do %>
   <p class="pf-text-2">
     <%= @people_count.positive? ? t('.body', people: pf_people_text(@people_count)) : t('.body_nobody') %>
   </p>
   <ul class="pf-confirm__list pf-change-list">
     <% @changes.each do |change| %><li><span><%= pf_change_description(change) %></span></li><% end %>
   </ul>
+  <% refused = @change_set.refused %>
+  <% if refused.any? %>
+    <div class="pf-banner pf-banner--warn">
+      <span class="pf-banner__glyph" aria-hidden="true">⚠</span>
+      <div class="pf-banner__body">
+        <b><%= t('.not_applied') %></b>
+        <ul class="pf-change-list"><% refused.each do |refusal| %><li><%= pf_refusal_description(refusal) %></li><% end %></ul>
+      </div>
+    </div>
+  <% end %>
   <% if @impact_people.any? %>
     <p class="pf-fs-13 pf-text-3">
-      <%= t('.affected', names: (@impact_people.map { |u| pf_person_name(u) } + (@people_count > 3 ? [t('permission_forge.permission_sets.show.and_more', count: @people_count - 3)] : [])).to_sentence) %>
+      <%= t('.affected', names: pf_to_sentence(@impact_people.map { |u| pf_person_name(u) } + (@people_count > 3 ? [t('permission_forge.permission_sets.show.and_more', count: @people_count - 3)] : []))) %>
     </p>
   <% end %>
   <%= form_with url: permission_forge.apply_permission_set_path(set), method: :patch, class: 'pf-confirm-form' do %>

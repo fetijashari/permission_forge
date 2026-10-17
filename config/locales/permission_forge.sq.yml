@@ -3,14 +3,51 @@ sq:
   permission_forge:
     api:
       errors:
+        action_authorization_missing: Ndryshimet përmes API-së kërkojnë config.api_action_authorization;
+          refuzohen sa kohë që nuk është vendosur dhe config.api_require_authorization
+          është aktiv
         action_not_authorized: Veprimi nuk është i autorizuar
+        assignment_authorization_missing: Caktimet përmes API-së kërkojnë config.api_assignment_authorization;
+          refuzohen sa kohë që nuk është vendosur dhe config.api_require_authorization
+          është aktiv
         assignment_not_authorized: Caktimi nuk është i autorizuar
+        body_unreadable: Përmbajtja e kërkesës nuk mund të lexohet. Dërgoni JSON të
+          vlefshëm me Content-Type application/json.
+        boolean_invalid: duhet të jetë true ose false
+        bulk_action_invalid: duhet të jetë assign ose revoke
+        expires_at_past: duhet të jetë në të ardhmen
         field_generation_failed: Fushat për këtë burim nuk mund të gjenerohen
+        field_value_shape: duhet të jetë varg, numër, true ose false; listë e tyre
+          (asnjë me presje) vetëm për in, not_in dhe between
+        flag_shape: duhet të jetë varg ose null
         forbidden: E ndaluar
+        hour_shape: duhet të jetë numër i plotë nga 0 deri në 23, ose null
+        integer_shape: duhet të jetë numër i plotë
+        ip_list_empty: nuk ka asnjë hyrje; dërgoni null për ta hequr kushtin
+        ip_list_shape: duhet të jetë varg ose listë vargjesh (adresa IP ose diapazone
+          CIDR), ose null
         not_editable: Ky regjistrim nuk mund të redaktohet
         not_found: Regjistrimi nuk u gjet
+        not_iso8601_time: nuk është datë ose kohë ISO 8601
+        not_null: Mungon një vlerë e detyrueshme. Asgjë nuk u ruajt.
+        record_not_unique: Një kërkesë tjetër e ruajti të njëjtin regjistrim një çast
+          më parë; ai ekziston tashmë
+        resource_names_no_model: nuk emërton asnjë model që ky aplikacion mund ta
+          ngarkojë
+        route_not_found: Asnjë pikë fundore e API-së nuk i përgjigjet këtij shtegu
+          dhe kësaj metode
+        section_missing: mungon, është bosh ose nuk është objekt
+        stats_authorization_missing: GET /api/stats kërkon config.api_stats_authorization,
+          ose config.api_stats_require_admin = false
         tenant_required: Kjo kërkesë nuk ka qiramarrës. API-ja e administrimit shërben
           një qiramarrës në një kohë.
+        text_shape: duhet të jetë varg
+        unauthorized: Nuk jeni i autentikuar
+        user_id_invalid: nuk është id përdoruesi
+        user_id_missing: mungon
+        user_ids_missing: duhet të emërtojë të paktën një përdorues
+        user_ids_not_list: duhet të jetë listë id-sh përdoruesish
+        user_not_found: nuk emërton askënd që mund të caktohet
     assignments:
       confirm_destroy:
         body: "%{name} do të humbasë qasjen në %{resources}, përveç nëse një Grup
@@ -32,6 +69,7 @@ sq:
         expires: Skadon
         filter_sets: Filtro Grupet e lejeve
         forever: pa datë përfundimi
+        locked_hint: 'Menaxhohet nga sistemi/API: këtu nuk mund të shtohen mbajtës.'
         muting_notice: "⊘ Heshtës. %{sets} i heq qasjen %{name}, pavarësisht çfarë
           lejojnë grupet e tjera."
         no_sets: Asnjë Grup lejesh nuk përputhet.
@@ -106,6 +144,7 @@ sq:
         all_for_record: Të gjitha ngjarjet e këtij regjistrimi
         all_for_set: Të gjitha ngjarjet e këtij Grupi lejesh
         all_in_action: Të gjitha ngjarjet e këtij veprimi
+        all_unknown_actor: Të gjitha ngjarjet pa aktor të njohur
         attribute: Atributi
         before: Para
         changes: Para dhe pas
@@ -130,23 +169,31 @@ sq:
         snapshot_destroyed: Regjistrimi siç ishte kur u hoq.
         source: Ku
         title: Ngjarje auditimi %{event}
+        unknown_actor_html: Për këtë ndryshim nuk u emërtua asnjë aktor (kod i ekzekutuar
+          jashtë një kërkese, si një runner ose një punë në sfond). Emërtojeni me
+          %{method}.
         uuid: Id e ngjarjes
         value: Vlera
         what: Çfarë
         who: Kush, ku dhe pse
     audit_log:
+      actor_codes:
+        api_client: Klient API
+        boot: Nisja e aplikacionit
       actor_named:
         api: "%{name} (API)"
         basic_auth: "%{name} (dritarja e fjalëkalimit)"
-      actor_types:
-        api: Klient API
-        basic_auth: Dritarja e fjalëkalimit
-        system: Sistemi
-        unknown: I panjohur
-        user: Person
       boolean:
         'false': Jo
         'true': Po
+      cache_scope:
+        own_process: 'Lejet e ruajtura në cache u pastruan vetëm në procesin që e
+          kreu (një ruajtje në memorie): çdo proces tjetër i mbajti të tyret.'
+        server_process: 'Lejet e ruajtura në cache u pastruan vetëm në këtë proces
+          të serverit (një ruajtje në memorie): punëtorët e tjerë të uebit dhe proceset
+          e punëve i mbajtën të tyret.'
+        unconfirmed: 'Ruajtja e cache-it jeton në secilin proces (një ruajtje në memorie):
+          proceset e tjera i mbajnë lejet e tyre të ruajtura sido që të jetë.'
       categories:
         access: Qasje
         admin: Administrim
@@ -175,6 +222,8 @@ sq:
       page_of: Faqja %{page} nga %{pages}
       pages_label: Faqet
       person_id: 'Personi #%{id}'
+      reason_codes:
+        expired: Data e mbarimit kishte kaluar
       reason_inline: 'Arsyeja: %{reason}'
       refused:
         body: Leximi i regjistrit të auditimit kufizohet nga cilësimi audit_log_authorization,
@@ -184,8 +233,17 @@ sq:
       sentence_variants:
         assignment_revoked_expired: "%{actor} i hoqi %{person} Grupin e lejeve %{set}
           pasi kishte skaduar më %{date}."
+        cache_cleared_unconfirmed: "%{actor} kërkoi të pastrohen lejet e ruajtura
+          në cache të çdo përdoruesi, por ruajtja e cache-it nuk e konfirmoi: lejet
+          e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it."
+        cache_settled_unconfirmed: 'Lejet e ruajtura në cache të %{person} duhej të
+          pastroheshin pas ndryshimit nga %{actor}, por ruajtja e cache-it nuk e konfirmoi:
+          të vjetrat mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.'
         field_access_limited: "%{actor} lexoi %{record} me këto fusha të fshehura
           ose të maskuara: %{fields}."
+        permissions_invalidated_unconfirmed: 'Lejet e ruajtura në cache të %{person}
+          duhej të pastroheshin, por ruajtja e cache-it nuk e konfirmoi: të vjetrat
+          mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.'
       sentences:
         access:
           denied: Qasja e %{actor} te %{record} u refuzua.
@@ -210,6 +268,8 @@ sq:
           viewed: "%{actor} pa të dhëna auditimi."
         cache:
           cleared: "%{actor} pastroi lejet e ruajtura në cache të të gjithë përdoruesve."
+          settled: Lejet e ruajtura në cache të %{person} u pastruan pas ndryshimit
+            nga %{actor}.
         cleanup:
           expired_assignments: "%{actor} hoqi caktimet e skaduara."
         consent:
@@ -318,6 +378,9 @@ sq:
         will_assign:
           one: "%{count} do të caktohet"
           other: "%{count} do të caktohen"
+    denials:
+      no_read_access: Nuk keni leje për të lexuar regjistrimet e %{resource}.
+      rule_default: Nuk keni leje për të kryer këtë veprim.
     errors:
       admin:
         action_format: Përdor shkronja të vogla, numra dhe nënviza, duke filluar me
@@ -328,6 +391,10 @@ sq:
         flag: Flamujt e sesionit mund të përmbajnë vetëm shkronja, numra, pika, dy
           pika, viza dhe nënviza.
         group_blank: Jepi një emër grupimit.
+        hours_equal: Ora e fillimit dhe e mbarimit duhet të ndryshojnë (një dritare
+          nga 9 në 9 është bosh).
+        hours_incomplete: Zgjidhni edhe orën e fillimit, edhe atë të mbarimit.
+        hours_range: Zgjidhni orë ndërmjet 00:00 dhe 23:00.
         ip: 'Rreshti %{line}: “%{ip}” nuk është adresë IP ose diapazon CIDR i vlefshëm.'
         person: Zgjidh së pari një person.
         resource_model: Zgjidh një model nga lista.
@@ -375,9 +442,40 @@ sq:
         assigned:
           one: "%{set} iu caktua %{count} personi."
           other: "%{set} iu caktua %{count} personave."
+        assigned_cache_kept:
+          one: "%{set} iu caktua %{count} personi, por ruajtja e cache-it nuk konfirmoi
+            që lejet e tij të ruajtura u pastruan. Lejet e vjetra mund të mbeten në
+            përdorim derisa të mbarojë jetëgjatësia e cache-it."
+          other: "%{set} iu caktua %{count} personave, por ruajtja e cache-it nuk
+            konfirmoi që lejet e tyre të ruajtura u pastruan. Lejet e vjetra mund
+            të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it."
         revoked:
           one: "%{set} iu hoq %{count} personi."
           other: "%{set} iu hoq %{count} personave."
+        revoked_cache_kept:
+          one: "%{set} iu hoq %{count} personi, por ruajtja e cache-it nuk konfirmoi
+            që lejet e tij të ruajtura u pastruan. Lejet e vjetra mund të mbeten në
+            përdorim derisa të mbarojë jetëgjatësia e cache-it."
+          other: "%{set} iu hoq %{count} personave, por ruajtja e cache-it nuk konfirmoi
+            që lejet e tyre të ruajtura u pastruan. Lejet e vjetra mund të mbeten
+            në përdorim derisa të mbarojë jetëgjatësia e cache-it."
+      cache_not_confirmed: 'Ruajtja e cache-it nuk konfirmoi që lejet e ruajtura u
+        pastruan: lejet e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia
+        e cache-it.'
+      cache_process_local: 'Ruajtja e cache-it jeton vetëm në këtë proces të serverit
+        (një ruajtje në memorie): punëtorët e tjerë të uebit dhe proceset e punëve
+        i mbajnë lejet e tyre të ruajtura derisa të rinisen ose derisa hyrjet të skadojnë.'
+      copy_refused:
+        kinds:
+          permission_set: Grupi i lejeve “%{name}”
+          permission_set_group: Permission Set Group “%{name}”
+          permission_set_rule: rregulli “%{name}”
+          record: një rresht
+          resource: Resource “%{name}”
+          resource_action: veprimi “%{name}”
+          resource_field: fusha “%{name}”
+        message: "“%{name}” nuk u kopjua: %{record} mban diçka që një rresht i ri
+          nuk mund ta mbajë (%{errors}). Korrigjojeni, pastaj kopjoni përsëri."
       fields:
         acknowledged: Në rregull. “%{field}” nuk do të shënohet më në auditimin e
           privatësisë.
@@ -391,6 +489,7 @@ sq:
         set_added: "“%{set}” u zhvendos në këtë grupim."
         set_removed: "“%{set}” u hoq nga ky grupim."
         updated: Grupimi u ruajt. Qasja e askujt nuk ndryshoi.
+      invalid_param: "%{param} %{detail}. Asgjë nuk u ndryshua."
       locked_widening: 'Ky grup lejesh është i kyçur: qasja mund të hiqet ose të shkurtohet,
         jo të jepet ose të zgjatet.'
       locked_widening_muting: 'Ky grup lejesh heshtës është i kyçur: mbajtësit mund
@@ -400,7 +499,17 @@ sq:
         cleaned:
           one: U hoq %{count} caktim i skaduar.
           other: U hoqën %{count} caktime të skaduara.
+        cleaned_cache_kept:
+          one: U hoq %{count} caktim i skaduar, por ruajtja e cache-it nuk konfirmoi
+            që lejet e ruajtura të personave të prekur u pastruan. Lejet e vjetra
+            mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.
+          other: U hoqën %{count} caktime të skaduara, por ruajtja e cache-it nuk
+            konfirmoi që lejet e ruajtura të personave të prekur u pastruan. Lejet
+            e vjetra mund të mbeten në përdorim derisa të mbarojë jetëgjatësia e cache-it.
+      no_changes: Nuk ka ndryshime për të ruajtur.
       not_editable: Ky regjistrim nuk mund të ndryshohet.
+      not_null: Mungonte një vlerë e detyrueshme. Asgjë nuk u ndryshua; faqja tregon
+        çfarë ka tani.
       people:
         cache_refresh_failed: Lejet e ruajtura të %{name} nuk mund të rifreskoheshin.
           Ruajtja e cache-it nuk e konfirmoi, prandaj lejet e vjetra mund të mbeten
@@ -443,23 +552,33 @@ sq:
         duplicated_outside_group: 'U dublikua “%{name}”: u kopjuan burimet, fushat,
           veprimet dhe rregullat. Caktimet nuk u kopjuan. Kopja nuk është në “%{group}”,
           që është i kyçur.'
-        no_changes: Nuk ka ndryshime për të ruajtur.
+        nothing_applied: 'Asgjë për të ruajtur: %{reasons}.'
         save_failed: 'Asgjë nuk u ruajt: %{errors}'
         saved:
           one: U ruajt %{count} ndryshim. Tani vlen për %{people}.
           other: U ruajtën %{count} ndryshime. Tani vlejnë për %{people}.
         switched_granting: "“%{name}” tani jep qasje."
         switched_muting: "“%{name}” tani është Grup lejesh heshtës."
+      record_not_unique: Një kërkesë tjetër e ruajti të njëjtën gjë një çast më parë.
+        Asgjë nuk u ndryshua; faqja tregon gjendjen e tanishme.
+      record_not_unique_detail: "%{detail} — një kërkesë tjetër e ruajti një çast
+        më parë. Asgjë nuk u ndryshua; faqja tregon gjendjen e tanishme."
       resources:
         added:
           one: U shtua %{resource} me %{count} fushë.
           other: U shtua %{resource} me %{count} fusha.
+        added_muting: U shtua %{resource}. Heq %{what}.
+        added_muting_nothing: 'U shtua %{resource}. Ende nuk heq asgjë: zgjidhni më
+          poshtë çfarë heq.'
         columns_added:
           one: U shtua %{count} kolonë.
           other: U shtuan %{count} kolona.
         missing_removed:
           one: U hoq %{count} fushë, kolona e së cilës nuk ekziston më.
           other: U hoqën %{count} fusha, kolonat e të cilave nuk ekzistojnë më.
+        muted_fields:
+          one: "%{count} fushë"
+          other: "%{count} fusha"
         removed: U hoq %{resource} nga “%{set}”.
       rules:
         created: U shtua rregulli “%{rule}”.
@@ -476,6 +595,29 @@ sq:
         'off': Regjistrimi është çaktivizuar në inicializues (audit_events = false).
           Asnjë ndryshim nuk regjistrohet.
         title: Regjistri i auditimit nuk po regjistron
+      broken_rules_card:
+        description: 'Këto rregulla regjistrimesh përmendin një fushë, tabelë, lidhje
+          ose kusht që nuk ekziston, ose një vlerë që fusha e tyre nuk mund ta mbajë.
+          Secili nuk përputhet me asgjë: kujtdo që i zbatohet i refuzohet çdo regjistrim
+          i burimit.'
+        fix: Rregullo rregullin
+        locked_fix_html: 'I kyçur (%{flag}): menaxhohet nga sistemi ose API që e krijoi,
+          prandaj rregullojeni rregullin atje (ose zhbllokojeni grupin në kod). Një
+          kopje e bërë këtu e lë këtë rregull siç është.'
+        open: Hap rregullat
+        people:
+          one: "%{count} person e ka këtë grup."
+          other: "%{count} persona e kanë këtë grup."
+        rule: "“%{rule}” te %{resource} në “%{set}”"
+        title: Rregulla që nuk përputhen me asgjë
+      conditions_card:
+        description: Këto grupe kanë një kusht që nuk mund të gjykohet (një IP që
+          nuk është adresë, asnjë hyrje, ose një dritare orësh e prishur).
+        open: Rregullo kushtet
+        people:
+          one: "%{count} person e ka këtë grup."
+          other: "%{count} persona e kanë këtë grup."
+        title: Kushte aktivizimi që askush nuk mund t’i gjykojë
       ending_card:
         description: Caktime që përfundojnë në 7 ditët e ardhshme.
         extend: Zgjat 30 ditë
@@ -521,8 +663,9 @@ sq:
         people:
           one: "%{count} person ka"
           other: "%{count} persona kanë"
-        search_placeholder: Kërkoni një person sipas emrit ose email-it për të parë
-          çfarë mund të shohë dhe pse
+        search_help: Kërkoni një person sipas emrit ose email-it për të parë çfarë
+          mund të shohë dhe pse
+        search_placeholder: Emër ose email
         sets:
           one: "%{count} Grup lejesh aktiv"
           other: "%{count} Grupe lejesh aktive"
@@ -531,10 +674,25 @@ sq:
           one: "%{count} gjë për t'u rishikuar"
           other: "%{count} gjëra për t'u rishikuar"
         title: Kërkon vëmendje
+      mask_strategies_card:
+        description: Asnjë strategji maskimi e integruar dhe asnjë strategji e personalizuar
+          nuk ka këto emra, ndaj vlerat e tyre maskohen plotësisht derisa të zgjidhni
+          një strategji ose të ktheni atë të personalizuarën.
+        field: "“%{field}” te %{resource} në “%{set}”"
+        fix: Rregullo fushën
+        people:
+          one: "%{count} person e ka këtë grup."
+          other: "%{count} persona e kanë këtë grup."
+        strategy_html: Strategjia %{strategy}
+        title: Fusha të maskuara me një strategji të panjohur
       privacy_card:
+        by_name_note: Fushat shënohen sipas emrit të kolonës, prandaj disa mund të
+          mos jenë të dhëna personale (p.sh. emri i një kompanie).
         description: "%{unmasked}, %{unconfigured}."
         fix: Rregullo
         intended: Kjo është e qëllimshme
+        intended_note: Nëse një fushë mund të shihet pa maskë, zgjidhni Kjo është
+          e qëllimshme.
         per_set_note: Çdo rresht shikon një Grup lejesh më vete. Një person që ka
           edhe një grup tjetër që e konfiguron fushën ndjek atë grup.
         show_all: Shfaq të %{count}
@@ -548,6 +706,7 @@ sq:
         unmasked:
           one: "%{count} fushë e ndjeshme shfaqet pa maskim"
           other: "%{count} fusha të ndjeshme shfaqen pa maskim"
+        view: Shiko fushën
         where: "%{resource} · Lexohet pa maskim në “%{set}” · %{people}"
         where_turned_off: "%{resource} · Cilësimi në “%{set}” është i çaktivizuar,
           prandaj fusha kalon pa maskim · %{people}"
@@ -573,6 +732,18 @@ sq:
           vlejnë vetëm aty ku aplikacioni përdor find_by ose permission_scoped. Kërkesat
           e tjera (where, all, lidhjet) kthejnë të gjitha regjistrimet.
         title: Rregulla regjistrimesh që nuk zbatohen kudo
+      secret_rules_card:
+        column_html: Krahason %{column}
+        description: Këto rregulla regjistrimesh krahasojnë një kolonë që mban një
+          sekret. Ato ende zbatohen, por kush sheh cilin regjistrim e zbulon sekretin.
+          Krahasoni një kolonë tjetër ose hiqni rregullin.
+        fix: Rregullo rregullin
+        open: Hap rregullat
+        people:
+          one: "%{count} person e ka këtë grup."
+          other: "%{count} persona e kanë këtë grup."
+        rule: "“%{rule}” te %{resource} në “%{set}”"
+        title: Rregulla mbi kolona sekrete
       stale_card:
         assigned: Caktuar më %{date} nga %{by}
         description: Nuk janë rishikuar prej më shumë se %{days} ditësh. Konfirmo
@@ -667,21 +838,20 @@ sq:
           one: " dhe %{count} tjetër"
           other: " dhe %{count} të tjera"
         from: nga %{set}
-        muted_by: I fshehur nga %{set}
+        masked_by: E maskuar nga %{set}
+        muted_by: E fshehur nga %{set}
         none: Asnjë grup nuk e shfaq
-        unconfigured: E pakonfiguruar · %{behaviour}
+        read_only_by: E kufizuar në Vetëm lexim nga %{set}
+        unconfigured: "%{state} · %{behaviour}"
         virtual: Fushë virtuale, e lexueshme si parazgjedhje
       effective_tab:
         conditional: "%{sets} vlejnë vetëm kur kushtet e tyre të aktivizimit plotësohen.
           Ato janë përfshirë këtu."
         fields_visible: "%{visible} nga %{total} fusha të dukshme"
         grid_label: Qasja efektive
-        hidden_by_muting: I fshehur nga heshtja
         intro: Çfarë mund të bëjë %{name} tani, me të gjitha grupet bashkë. Zgjidh
           çdo qelizë për të parë pse.
         legend: Legjenda
-        legend_muted: I heshtur
-        legend_none: Nuk jepet
         why: Pse
         why_empty: Zgjidh një qelizë, fushë ose veprim për të parë cili Grup lejesh
           e shkaktoi.
@@ -690,10 +860,16 @@ sq:
         action_granted: "%{set} e lejon këtë veprim."
         action_muted: "%{set} e bllokon këtë veprim."
         action_none: Asnjë Grup lejesh nuk e lejon këtë veprim.
+        action_title: "%{action} · %{resource}"
+        field_base_unreadable: 'E fshehur: trashëgon nga %{resource}, ku Lexo nuk
+          lejohet.'
         field_capped: Shfaqet si Vetëm lexim sepse Ndrysho nuk lejohet për këtë burim.
-        field_from: "%{set} e shfaq këtë fushë."
-        field_muted: "%{set} e fsheh ose e maskon këtë fushë."
+        field_decided_by: 'Vendoset nga %{resource}, nga i cili trashëgon: fiton cilësimi
+          më i rreptë përgjatë trashëgimisë.'
+        field_hidden_on: E fshehur te %{resource}, nga i cili trashëgon.
         field_none: Asnjë Grup lejesh nuk e shfaq këtë fushë.
+        field_own_unreadable: E fshehur sepse Lexo nuk lejohet për këtë burim.
+        field_title: "%{resource} › %{field}"
         field_unconfigured: 'Asnjë grup nuk e konfiguron këtë kolonë: %{behaviour}.'
         field_variant: Ndjek cilësimin e %{base}.
         field_virtual: Fushë virtuale nga modeli, e lexueshme përveç nëse një grup
@@ -701,6 +877,7 @@ sq:
         flag_granted: "%{set} jep %{flag}."
         flag_muted: "%{set} hesht %{flag}."
         flag_none: Asnjë Grup lejesh nuk jep %{flag}.
+        flag_title: "%{flag} %{resource}"
         no_rules: Nuk ka rregulla regjistrimesh, prandaj shfaqet çdo regjistrim.
         note_add_up: 'Grupet e lejeve mblidhen: mjafton një leje.'
         note_fields: Nëse disa grupe e shfaqin një fushë, fiton cilësimi më i hapur.
@@ -765,7 +942,10 @@ sq:
               dhe pastron emrin nga regjistri i auditimit.
             title: Fshirja e të dhënave të subjektit…
           refresh:
-            desc: 'Rrallë nevojitet: ndryshimet vlejnë tashmë menjëherë.'
+            desc: 'Nevojitet pas një ndryshimi nga konsola, një runner ose një punë
+              në sfond kur cache-i është për proces (memory store): ai proces pastroi
+              vetëm hyrjet e veta, kështu që ky proces web vazhdon të japë lejet e
+              vjetra derisa të skadojnë.'
             title: Rifresko lejet e ruajtura
           remove_all:
             desc: 'Largim nga puna: heq çdo caktim.'
@@ -838,10 +1018,12 @@ sq:
           field: Zgjidh fushën për t'u kontrolluar.
           list: Shto të paktën një vlerë në listë.
           name_blank: Jepi një emër rregullit.
+          operator: Zgjidhni një kusht nga lista.
           range: Plotëso të dy skajet e diapazonit.
           value: Shkruaj një vlerë, ose zgjidh “përdoruesi aktual”.
         field: Fusha për t'u kontrolluar
         follow: Ndiq një lidhje
+        ignored_field: pa rresht fushe (ignored_fields)
         ignored_warning: Shiko të gjitha është aktiv për këtë burim, prandaj rregullat
           e regjistrimeve injorohen derisa të çaktivizohet.
         include_nulls: Shfaq edhe regjistrimet ku %{field} është bosh
@@ -858,19 +1040,36 @@ sq:
             desc: Regjistrimet pa regjistrimin e lidhur mbahen.
             title: Edhe regjistrimet pa të
         message: Mesazhi i bllokimit
-        message_placeholder: Shfaqet kur dikush hap një regjistrim që ky rregull e
-          fsheh.
+        message_help: Shfaqet kur dikush hap një regjistrim që ky rregull e fsheh.
+        model_error: "%{field} %{message}"
         model_missing: Ky model ose lidhje nuk ekziston më në aplikacion.
         name: Emri i rregullit
         name_placeholder: p.sh. Klientët e mi
+        notes:
+          secret_column:
+            body_html: "%{column} mban një sekret, ndaj një rregull i ri mbi të refuzohet.
+              Ky rregull ende zbatohet, por kush sheh cilin regjistrim e zbulon sekretin:
+              krahasoni një kolonë tjetër ose hiqni rregullin."
+            title: Ky rregull krahason një kolonë që mban një sekret
         operator: Kushti
         optional: opsionale
+        path_html: 'Shtegu i lidhjeve: %{path}'
         pick_field: Zgjidh një fushë…
+        pick_relationship: Zgjidh një lidhje…
         preview: Pamja paraprake
         preview_empty: Zgjidh një fushë për ta parë rregullin si fjali.
+        preview_refused: Nuk do të ruhet
+        problem_fixes:
+          field: Zgjidhni sërish fushën për ta korrigjuar.
+          join: Zgjidhni sërish mënyrën e kombinimit, te Të avancuara, për ta korrigjuar.
+          operator: Zgjidhni sërish kushtin për ta korrigjuar.
+          path: Zgjidhni sërish lidhjen për ta korrigjuar.
+          value: Shkruani një vlerë që kjo fushë mund ta mbajë, për ta korrigjuar.
+        problem_title: Ky rregull nuk përputhet me asgjë
         relationship: Lidhja
         remove_step: Hiq këtë hap të lidhjes
         save: Ruaj rregullin
+        stored_field: "%{name} (siç është ruajtur)"
         this_field: kjo fushë
         update_form: Përditëso
       confirm_destroy:
@@ -881,6 +1080,9 @@ sq:
         title: Ndrysho rregullin për %{resource}
       new:
         title: Rregull i ri për %{resource}
+      preview:
+        back: Kthehu te rregullat
+        title: Pamje paraprake e një rregulli për %{resource}
       value_input:
         from: Nga
         no_value: Nuk nevojitet vlerë për këtë kusht.
@@ -982,7 +1184,7 @@ sq:
       copy_name: "%{name} (kopje)"
       header:
         description: Përshkrimi
-        description_placeholder: Shto një përshkrim që të tjerët ta dinë kur ta përdorin
+        description_placeholder: 'Shto një përshkrim: kur përdoret'
         group: Grupimi
         name: Emri
       index:
@@ -1067,6 +1269,7 @@ sq:
         body_nobody: Ende askush nuk e ka këtë grup, prandaj ruajtja nuk prek askënd
           derisa ta caktosh.
         crumb: Rishiko
+        not_applied: 'Nuk u zbatua:'
         save: Ruaj ndryshimet
         title:
           one: Rishiko %{count} ndryshim
@@ -1151,9 +1354,17 @@ sq:
         capped: Shfaqet si Vetëm lexim sepse Ndrysho nuk lejohet për këtë burim.
         full_picture: Shiko gjithçka që %{name} mund të shohë →
         granted: "%{name} e sheh përmes %{sets}."
-        muted: "%{name} nuk e sheh të plotë sepse %{sets} e fsheh ose e maskon."
+        hidden_by:
+          one: "%{name} nuk e sheh: %{sets} e fsheh."
+          other: "%{name} nuk e sheh: %{sets} e fshehin."
+        masked_by:
+          one: "%{name} e sheh të maskuar: %{sets} e maskon."
+          other: "%{name} e sheh të maskuar: %{sets} e maskojnë."
         no_access: "%{name} nuk mund të lexojë %{resources}."
         none: Asnjë grup nuk ia shfaq këtë fushë %{name}.
+        read_only_by:
+          one: "%{name} nuk mund ta ndryshojë: %{sets} heq mundësinë e ndryshimit."
+          other: "%{name} nuk mund ta ndryshojë: %{sets} heqin mundësinë e ndryshimit."
         unconfigured: Asnjë grup nuk e konfiguron këtë kolonë, prandaj për %{name}
           vendos cilësimi për fushat e pakonfiguruara.
         virtual_default: "%{name} e merr këtë fushë virtuale si parazgjedhje, të lexueshme
@@ -1175,6 +1386,7 @@ sq:
         flags_muting_note: Në grupet heshtëse këta flamuj do të thonë “hiq”.
         impact: Ruajtja vlen menjëherë për %{people}.
         label: Etiketa
+        locked_impact: E kyçur, kështu që asgjë këtu nuk mund të ruhet.
         mask_strategy: Strategjia e maskimit
         muting_note: Ky është Grup lejesh heshtës. Zgjedhjet këtu heqin qasje.
         no_rules: Asnjë rregull në këtë grup nuk filtron sipas kësaj fushe.
@@ -1183,15 +1395,20 @@ sq:
         not_configured_implicit: 'Nuk ka cilësim për këtë fushë në “%{set}”. Ndjek
           “Fushat virtuale pa cilësim”: me konfigurimin aktual është e lexueshme dhe
           e ndryshueshme si parazgjedhje.'
+        not_configured_muting: Asnjë cilësim për këtë kolonë në “%{set}”, prandaj
+          ky Grup lejesh heshtës nuk heq asgjë prej saj.
         pick_person: Zgjidh një person…
         save: Ruaj
-        sensitive: 'Përputhet me modelin e privatësisë “%{pattern}”. Rekomandohet:
-          I maskuar (%{strategy}).'
+        sensitive: 'Përputhet me modelin e privatësisë “%{pattern}”, prandaj mund
+          të jetë e dhënë personale. Rekomandohet: I maskuar (%{strategy}).'
         turned_off: 'Cilësimi për këtë fushë në “%{set}” është i çaktivizuar, prandaj
           nuk zbatohet. Me konfigurimin aktual fusha është: %{behaviour}.'
         turned_off_implicit: 'Cilësimi për këtë fushë në “%{set}” është i çaktivizuar,
           prandaj nuk zbatohet. Fusha ndjek “Fushat virtuale pa cilësim”: me konfigurimin
           aktual është e lexueshme dhe e ndryshueshme si parazgjedhje.'
+        turned_off_muting: Cilësimi për këtë fushë në “%{set}” është i fikur, prandaj
+          ky Grup lejesh heshtës nuk heq asgjë prej saj.
+        unknown_strategy: "(e panjohur — maskohet plotësisht derisa të zgjidhni një)"
         used_by_rules: Përdoret nga rregullat
         variants: 'Vlen edhe për:'
         variants_muting: 'Heshtja e kësaj hesht edhe:'
@@ -1241,20 +1458,12 @@ sq:
         filter_label: Filtro fushat
         filters:
           all: Të gjitha
-          edit: I ndryshueshëm
-          hidden: I fshehur
-          hide: I fshehur
-          leave: Pa ndryshim
-          mask: Maskim i detyruar
-          masked: I maskuar
-          read: Vetëm lexim
-          sensitive: E ndjeshme
-          unconfigured: E pakonfiguruar
         implicit_grant: E ndryshueshme si parazgjedhje
         level: Niveli i qasjes
         level_aria: Niveli i qasjes për %{field}
+        mutes_nothing: Nuk heq asgjë
         no_match: Asnjë fushë nuk përputhet.
-        not_configured: E pakonfiguruar · %{behaviour}
+        not_configured: "%{state} · %{behaviour}"
         read_off: Aktivizo Lexo për %{resource} për të zgjedhur cilat fusha shohin
           personat.
         search: Kërko fusha
@@ -1276,15 +1485,17 @@ sq:
         models: Modelet
         no_models: Asnjë model nuk përputhet.
         note: Fushat do të krijohen nga kolonat dhe fushat virtuale të modelit.
-        note_gdpr: Fushat do të krijohen nga kolonat dhe fushat virtuale të modelit.
+        note_gdpr: 'Fushat do të krijohen nga kolonat dhe fushat virtuale të modelit.
           Parazgjedhjet e privatësisë janë aktive, prandaj kolonat e ndjeshme fillojnë
-          si të maskuara.
+          si të maskuara, përveç me Qasje e plotë: atëherë vetëm shënohen si të ndjeshme,
+          që t''i maskoni ju.'
         presets:
           block_changes:
             desc: Hesht Krijo, Ndrysho, Fshi dhe çdo veprim.
             title: Blloko të gjitha ndryshimet
           full:
-            desc: Lexo, krijo, ndrysho dhe fshi. Të gjitha fushat të ndryshueshme.
+            desc: Lexo, krijo, ndrysho dhe fshi. Të gjitha fushat të ndryshueshme,
+              asnjë e maskuar.
             title: Qasje e plotë
           hide_sensitive:
             desc: Fsheh çdo kolonë që duket si e dhënë personale.
@@ -1310,7 +1521,7 @@ sq:
         all_queries: vlen për të gjitha kërkesat
         blocked_message: 'Mesazhi i bllokimit: “%{message}”'
         empty: 'Ende nuk ka rregulla, prandaj regjistrimet nuk kufizohen: kushdo me
-          këtë grup sheh çdo %{resources} që mund të lexojë.'
+          këtë grup sheh çdo regjistrim të %{resource} që mund të lexojë.'
         empty_muting: Grupet e lejeve heshtës nuk shtojnë rregulla regjistrimesh.
         empty_view_all: Pa rregulla. Shiko të gjitha është aktiv, prandaj çdo regjistrim
           përfshihet gjithsesi.
@@ -1346,7 +1557,7 @@ sq:
         modify_all_needs: Kërkon Shiko të gjitha dhe Ndrysho.
         muting_hint: Veprimet e heshtura u hiqen personave me këtë grup, pavarësisht
           çfarë lejojnë grupet e tjera.
-        muting_note: Cilësimet këtu u heqin qasje personave të %{set}.
+        muting_note: Cilësimet këtu u heqin qasje të gjithë atyre që kanë “%{set}”.
         needs_read_hint: Ndrysho dhe Fshi kërkojnë Lexo.
         record_scope: Shtrirja e regjistrimeve
         remove: Hiq %{resource} nga ky grup…
@@ -1368,7 +1579,7 @@ sq:
           read: Shto të gjitha të rejat si Vetëm lexim
         gdpr_off: Parazgjedhjet e privatësisë janë joaktive.
         gdpr_on: 'Parazgjedhjet e privatësisë janë aktive: kolonat e ndjeshme shtohen
-          si të maskuara.'
+          si të maskuara, përveç me qasje të plotë (atëherë vetëm shënohen si të ndjeshme).'
         ignored_count:
           one: "%{count} e injoruar"
           other: "%{count} të injoruara"
@@ -1382,6 +1593,9 @@ sq:
         new_count:
           one: "%{count} kolonë e re e pakonfiguruar"
           other: "%{count} kolona të reja të pakonfiguruara"
+        new_count_muting:
+          one: "%{count} kolonë pa cilësim, prandaj nuk heq asgjë"
+          other: "%{count} kolona pa cilësim, prandaj nuk heqin asgjë"
         new_title: Kolona të reja, të pakonfiguruara
         none: Asnjë
         remove_missing: Hiq fushat që mungojnë
@@ -1466,6 +1680,9 @@ sq:
         api_serializer_overrides:
           desc: Zëvendësime për mënyrën si shkruhen regjistrimet në përgjigjet e API-së.
           name: Serializues të personalizuar
+        api_stats_authorization:
+          desc: Vendos kush mund të lexojë statistikat e përdorimit përmes API-së.
+          name: Kontrolli i statistikave të API-së
         api_stats_require_admin:
           desc: Vetëm administratorët mund të lexojnë statistikat e përdorimit përmes
             API-së.
@@ -1586,7 +1803,8 @@ sq:
             të mos i shfaqin.
           name: Filtro vlerat e ndjeshme nga regjistrat
         gdpr_defaults:
-          desc: Kolonat që duken personale maskohen si parazgjedhje kur shtohen.
+          desc: Kolonat që duken personale maskohen si parazgjedhje kur shtohen, përveç
+            kur shtohen me qasje të plotë.
           name: Parazgjedhjet e privatësisë
         gdpr_field_patterns:
           desc: Emrat e kolonave që përputhen me një model shënohen si të ndjeshëm
@@ -1632,6 +1850,11 @@ sq:
           desc: Nëse rregullat anashkalohen, mohojnë gjithçka ose ngrenë gabim kur
             nuk ka përdorues aktual.
           name: Rregullat e regjistrimeve kur askush nuk ka hyrë
+        no_read_access_strategy:
+          desc: 'Çfarë kthejnë kërkimet e regjistrimeve për një përdorues të hyrë,
+            Grupet e lejeve të të cilit nuk japin Lexim mbi burimin: rreshtat që lejojnë
+            rregullat e regjistrimeve (pa asnjë rregull, çdo rresht), ose asnjë.'
+          name: Regjistrimet pa qasje leximi
         omit_hidden_in_attributes_hash:
           desc: Fushat e fshehura hiqen nga hash-et e atributeve në vend që të vendosen
             bosh.
@@ -1669,6 +1892,11 @@ sq:
           desc: Emri i variablit që i tregon bazës së të dhënave kush është përdoruesi
             aktual.
           name: Variabli i sesionit në bazën e të dhënave
+        rule_secret_column_patterns:
+          desc: Rregullat e regjistrimeve nuk mund të krahasojnë kolona që përputhen
+            me këto modele (përmbledhje fjalëkalimesh, tokene, kolona encrypted_*).
+            Një listë bosh i lejon.
+          name: Modele kolonash sekrete
         snapshot_transactions:
           desc: 'Nëse një transaksion i bazës së të dhënave vazhdon t''i shohë të
             dhënat siç ishin kur filloi. Lejet e llogaritura brenda një transaksioni
@@ -1747,6 +1975,8 @@ sq:
           askush nuk ka hyrë (modeli i përdoruesit mbetet i lexueshëm për hyrjen).
         masked_write_protection: Vlerat e maskuara nuk ruhen kurrë mbrapsht.
         nil_user_strategy: Kodi pa përdorues të hyrë nuk sheh asnjë regjistrim.
+        no_read_access_strategy: Përdoruesit e hyrë pa Lexim mbi një burim nuk shohin
+          asnjë nga regjistrimet e tij.
         preset: Paracaktimi :strict mbyll cilësimet që si parazgjedhje e lënë qasjen
           të hapur.
         unconfigured_action_strategy: Veprimet e kontrolluesve që askush nuk i ka
@@ -1760,8 +1990,11 @@ sq:
           çaktivizuar, ose tabela e auditimit mungon). Me audit_events = true dhe
           pa tabelë, çdo ndryshim dështon (me strategjinë e parazgjedhur :raise).
         audit_trail_enabled: Askush nuk regjistrohet si krijues ose redaktues i regjistrimeve.
+        auto_query_scoping: 'Rregullat e regjistrimeve janë në përdorim, por zbatohen
+          vetëm te kërkimet find_by dhe permission_scoped: pyetjet e tjera kthejnë
+          çdo regjistrim.'
         conditional_sets_strict_mode: Grupet me kushte trajtohen si aktive kur mungojnë
-          informacionet e kërkesës (fail-open).
+          informacionet e kërkesës (mungesa e tyre e lë aksesin të hapur).
         http_basic_auth_enabled: Këto ekrane janë ose të bllokuara (kërkesa për fjalëkalim
           aktive, por pa kredenciale) ose të pambrojtura (pa fjalëkalim dhe pa kontrollues
           admini të personalizuar).
@@ -1770,14 +2003,15 @@ sq:
           pa maskim kujtdo që mund ta lexojë burimin.
       row:
         changed: Ndryshuar
-        default: 'Parazgjedhje: %{value}'
-        docs: 'Dokumentacioni i konfigurimit: %{key} ↗'
+        default_html: 'Parazgjedhje: %{value}'
+        docs_html: 'Dokumentacioni i konfigurimit: %{key} ↗'
         how_to_change: Si ta ndryshosh
         risk: Rrezik
         secure: I sigurt
         snippet_current: Fragmenti tregon vlerën aktuale.
         snippet_recommended: Fragmenti tregon vlerën e rekomanduar.
-        step_deploy: Bëj commit dhe deploy (ose rinis serverin lokalisht).
+        step_deploy: Ruaj ndryshimin në kod dhe publiko aplikacionin (ose rinis serverin
+          lokalisht).
         step_edit: Ndrysho skedarin më lart.
         step_reload: Rifresko këtë faqe për ta konfirmuar.
       sections:
@@ -1798,6 +2032,9 @@ sq:
         record_rules: Rregullat e regjistrimeve dhe kufizimi i kërkesave
       show:
         api_disabled_html: API-ja është e çaktivizuar (%{key}).
+        attention:
+          one: Faqja kryesore tregon %{count} gjë që kërkon vëmendje.
+          other: Faqja kryesore tregon %{count} gjëra që kërkojnë vëmendje.
         changed_count:
           one: "%{count} i ndryshuar"
           other: "%{count} të ndryshuar"
@@ -1805,15 +2042,19 @@ sq:
         has_risk: Ka një cilësim të rrezikshëm
         health: Përmbledhja e gjendjes
         how_to_fix: Si ta rregullosh
-        intro_html: Cilësimet përcaktohen në %{file}. Ndryshimet kërkojnë deploy/rinisje.
-          Kjo faqe tregon vlerat aktuale dhe si t'i ndryshosh.
+        intro_html: Cilësimet përcaktohen në %{file}. Ndryshimet kërkojnë publikim
+          të ri ose rinisje. Kjo faqe tregon vlerat aktuale dhe si t'i ndryshosh.
         no_match: Asnjë cilësim nuk përputhet.
+        open_home: Hap faqen kryesore
         read_only: Vetëm lexim
         search: Kërko cilësime
         section_meta: "%{settings} · %{changed}"
         secure_count:
           one: "%{count} cilësim sigurie dhe privatësie duket në rregull."
           other: "%{count} cilësime sigurie dhe privatësie duken në rregull."
+        secure_count_set:
+          one: "%{count} cilësim sigurie dhe privatësie është vendosur siç rekomandohet."
+          other: "%{count} cilësime sigurie dhe privatësie janë vendosur siç rekomandohet."
         settings_count:
           one: "%{count} cilësim"
           other: "%{count} cilësime"
@@ -1847,18 +2088,17 @@ sq:
         set: I vendosur
     shared:
       across_sets:
-        muted_hidden: 'I heshtur: i fshehur'
         none: Asnjë Grup lejesh nuk e përfshin këtë burim.
       active: Aktiv
       audit_footer:
         created: Krijuar nga %{created_by} · %{created_at}
         disabled: Nuk regjistrohet kush krijoi dhe kush ndryshoi.
         edited: Ndryshuar së fundi nga %{updated_by} · %{updated_at}
+        edited_at: Ndryshuar së fundi %{updated_at}
         history: Historiku
       crud_cell:
         allowed: Lejohet
         muted: I heshtur
-        needs_read: Aktivizo së pari Lexo
         needs_read_short: Kërkon Lexo
         'no': Jo
         unchanged: Pa ndryshim
@@ -1920,8 +2160,6 @@ sq:
         copied: U kopjua
         copy: Kopjo
         summary: Detaje teknike
-      time_ago: "%{time} më parë"
-      time_nil: "—"
       toasts:
         dismiss: Mbyll
         undo: Zhbëj
@@ -1932,6 +2170,11 @@ sq:
       user_select_prompt: Zgjidh një person...
       user_select_truncated: Shfaqen vetëm %{count} përdoruesit e parë. Konfiguro
         user_list_resolver për ta ngushtuar listën.
+    support:
+      array:
+        last_word_connector: " dhe "
+        two_words_connector: " dhe "
+        words_connector: ", "
     ui:
       actions: Veprimet
       apply: Apliko
@@ -1942,7 +2185,14 @@ sq:
         reviewed_by: Rishikuar nga %{who} më %{date}
         reviewed_on: Rishikuar më %{date}
       audit:
-        system: Sistemi
+        csv:
+          created_at: Krijuar më
+          created_by: Krijuar nga
+          edited_at: Ndryshuar së fundi më
+          edited_by: Ndryshuar së fundi nga
+          record: Regjistrimi
+          type: Lloji
+          where: Ku
         types:
           action: Veprim
           assignment: Caktim
@@ -1957,14 +2207,15 @@ sq:
         column_missing: Kolona mungon
         conditional: Me kushte
         expired: Skaduar
-        fail_open: Fail-open
-        fail_open_long: 'Fail-open: aktiv kur mungojnë informacionet e kërkesës'
+        fail_open: Aktiv në mungesë
+        fail_open_long: 'Aktiv në mungesë: vlen edhe kur mungojnë informacionet e
+          kërkesës'
         fail_open_title: conditional_sets_strict_mode është joaktiv
-        locked: I kyçur
         muting: Heshtës
-        not_configured: E pakonfiguruar
         'off': Joaktiv
         sensitive: E ndjeshme
+        unknown_mask_strategy: Strategji maskimi e panjohur — maskohet plotësisht
+          derisa të rregullohet
         virtual: Virtuale
       breadcrumb: Navigimi
       cancel: Anulo
@@ -1998,6 +2249,10 @@ sq:
         flag_off_muting: "%{resource}: %{flag} nuk heshtet më"
         flag_on: "%{resource}: %{flag} u lejua"
         flag_on_muting: "%{resource}: %{flag} u hesht"
+        not_applied_read: "%{resource}: %{flag} nuk u aktivizua, sepse “Lexo” është
+          i fikur"
+        not_applied_view_all_and_edit: "%{resource}: %{flag} nuk u aktivizua, sepse
+          kërkon “Shiko të gjitha” dhe “Ndrysho”"
         resource_text: "%{resource}: %{attribute} ndryshoi"
         set_group: U zhvendos në grupimin “%{group}”
         set_no_group: U hoq nga grupimi i tij
@@ -2007,6 +2262,9 @@ sq:
       close: Mbyll
       conditions:
         always: Gjithmonë aktiv. Pa kushte aktivizimi.
+        effect:
+          granting: Nuk plotësohet kurrë, ndaj nuk jep asgjë.
+          muting: 'Grup lejesh heshtës: vlen për çdo kërkesë.'
         flag_generic: kur %{flag} është vendosur
         flags:
           marketing_consent: kur është dhënë pëlqimi për marketing
@@ -2014,9 +2272,27 @@ sq:
           sso_login: pas hyrjes me SSO të kompanisë
         from_ips: nga %{ips}
         hours: ndërmjet %{from} dhe %{to}
+        hours_broken: ndërmjet %{from} dhe %{to} (një dritare që askush s'mund ta
+          gjykojë — rregullojeni te skeda Kushtet)
+        hours_broken_here: ndërmjet %{from} dhe %{to} (një dritare që askush s'mund
+          ta gjykojë)
         hours_overnight: ndërmjet %{from} dhe %{to} (gjatë natës)
+        ips_broken: nga %{ips} (një listë që askush s'mund ta gjykojë — rregullojeni
+          te skeda Kushtet)
+        ips_broken_here: nga %{ips} (një listë që askush s'mund ta gjykojë)
+        no_hour: pa orë
         only_works: Funksionon vetëm %{parts}.
         or: " ose "
+        problems:
+          flag_unusable_html: Flamuri i sesionit %{flag} përmban një karakter kontrolli,
+            ndaj asnjë kërkesë nuk e mbart.
+          hours_equal: Ora e fillimit dhe e mbarimit janë të njëjta, ndaj dritarja
+            është bosh.
+          hours_incomplete: Është vendosur vetëm njëra nga dy orët.
+          hours_range: Një orë është jashtë 00:00–23:00.
+          ip_empty: Lista e IP-ve ka vetëm ndarës, asnjë hyrje.
+          ip_entry_html: "%{entry} nuk është adresë IP ose diapazon CIDR."
+        problems_title: Këto kushte nuk mund të gjykohen
       dates:
         days_ago:
           one: "%{count} ditë më parë"
@@ -2057,16 +2333,13 @@ sq:
         read_access: Lexo
         view_all: Shiko të gjitha
       keep: Mbaje
-      levels:
-        edit: I ndryshueshëm
-        hidden: I fshehur
-        hide: Fshih
-        leave: Pa ndryshim
-        mask: Maskim i detyruar
-        masked: I maskuar
-        muted: I heshtur
-        none: E pakonfiguruar
-        read: Vetëm lexim
+      level_sentences:
+        edit: "%{set} e shfaq këtë fushë dhe lejon ndryshimin e saj."
+        hide: "%{set} e fsheh këtë fushë."
+        mask: "%{set} e detyron maskimin e kësaj fushe."
+        masked: "%{set} e shfaq këtë fushë të maskuar (%{strategy})."
+        no_edit: "%{set} heq mundësinë e ndryshimit të kësaj fushe."
+        read: "%{set} e shfaq këtë fushë vetëm për lexim."
       locked:
         title: 'I kyçur: menaxhohet nga sistemi/API'
       mask_strategies:
@@ -2087,6 +2360,7 @@ sq:
         nov: Nën
         oct: Tet
         sep: Sht
+      needs_read_first: Aktivizo së pari Lexo
       next: Tjetër
       no_group: Jo në grupim
       open_person: Hap personin
@@ -2114,51 +2388,189 @@ sq:
       records: Regjistrimet
       remove: Hiq
       resource: Burim
+      resource_plural:
+        one: regjistrimi %{name}
+        other: regjistrimet %{name}
       rules:
         and: dhe
         current_user: përdoruesi aktual
+        matches_nothing: Nuk përputhet me asgjë
+        notes:
+          secret_column: Kolonë sekrete
         only_show: Shfaq vetëm
         or_empty: ose %{field} është bosh
+        problems:
+          empty_association: Shtegu i lidhjeve ka një hap bosh (dy pika njëra pas
+            tjetrës, ose një pikë në fillim)
+          encrypted_column: "%{name} e %{model} është e enkriptuar: baza e të dhënave
+            mban tekstin e saj të shifruar, ndaj një rregull mund të kontrollojë vetëm
+            nëse është bosh"
+          foreign_table_html: "%{name} është tabelë e një modeli tjetër: një rregull
+            filtri krahason vetëm kolonat e %{model}"
+          missing_column_html: "%{name} nuk është kolonë e %{model}"
+          pattern_on_non_text: "%{name} e %{model} nuk është tekst: një kusht modeli
+            (përmban, fillon me, mbaron me) nuk mund ta përputhë"
+          unjoinable_association: "%{name} është lidhje e %{model} që një rregull
+            nuk mund ta ndjekë"
+          unjoinable_class_not_loadable: "%{name} është lidhje e %{model}, modeli
+            i së cilës nuk mund të ngarkohet"
+          unjoinable_invalid_definition: "%{name} është lidhje e %{model}, :through,
+            :source ose inverse_of i së cilës përmend një lidhje që nuk ekziston"
+          unjoinable_polymorphic: "%{name} është lidhje polimorfike e %{model}: një
+            rregull nuk mund ta ndjekë"
+          unjoinable_record_dependent_scope: "%{name} është lidhje e %{model}, fusha
+            e së cilës varet nga regjistrimi: një rregull nuk mund ta ndjekë"
+          unknown_association_html: "%{name} nuk është lidhje e %{model}"
+          unknown_join_type_html: "%{name} nuk është mënyrë bashkimi që ky version
+            e njeh"
+          unknown_operator_html: "%{name} nuk është kusht që ky version e njeh"
+          unknown_table_html: "%{name} nuk është tabelë e kësaj baze të dhënash"
+          unusable_value_html: "%{value} nuk është vlerë që %{name} e %{model} mund
+            ta mbajë"
         where: ku
       rules_count:
         one: Rregullat (%{count})
         other: Rregullat (%{count})
       rules_tab: Rregullat
       search: Kërko
-      search_people: Kërko me emër ose email
+      search_people: Emër ose email
       setting: Cilësimi
       states:
-        blocked: I bllokuar
-        granted: Lejohet
-        none: Jo
+        actor:
+          api: Klient API
+          basic_auth: Dritarja e fjalëkalimit
+          system: Sistemi
+          unknown: I panjohur
+          user: Person
+        effective:
+          blocked: I bllokuar
+          granted: Lejohet
+          hidden_by_muting: I fshehur nga heshtja
+          none: Jo
+        field_level:
+          edit: I ndryshueshëm
+          hidden: I fshehur
+          hide: Fshih
+          leave: Pa ndryshim
+          mask: Maskim i detyruar
+          masked: I maskuar
+          none: E pakonfiguruar
+          read: Vetëm lexim
+        lock:
+          locked: I kyçur
       unconfigured:
         block: Bllokohet si parazgjedhje
         mask_all: I maskuar plotësisht
         pass_through: Kalon pa maskim
         warn: Kalon dhe regjistrohet
+      untitled:
+        permission_set: Grup lejesh pa emër
+        permission_set_group: Grupim grupesh lejesh pa emër
+        permission_set_rule: Rregull pa emër
       view_all: Shiko të gjitha
     validations:
+      attributes:
+        allowed_hours_end: Ora e mbarimit
+        allowed_hours_start: Ora e fillimit
+        allowed_ips: IP-të e lejuara
+        create_access: Krijim
+        delete_access: Fshirje
+        description: Përshkrimi
+        edit_access: Ndryshim
+        expires_at: Data e mbarimit
+        failure_message: Mesazhi i bllokimit
+        field_accessor_path: Lidhja
+        field_name: Fusha
+        field_value: Vlera
+        include_nulls: Përfshi vlerat bosh
+        is_active: Aktiv
+        is_editable: I ndryshueshëm
+        is_muting: Heshtës
+        is_permitted: I lejuar
+        join_type: Bashkimi
+        label: Etiketa
+        mask_access: Maskim
+        mask_strategy: Strategjia e maskimit
+        modify_all: Ndrysho të gjitha
+        name: Emri
+        operator: Kushti
+        permission_set_group: Permission Set Group
+        read_access: Lexim
+        requires_session_flag: Flamuri i sesionit
+        user_id: Personi
+        uuid: UUID
+        view_all: Shiko të gjitha
+      blank: nuk mund të jetë bosh
+      full_message: "%{attribute} %{message}"
+      invalid: nuk është e vlefshme
       name_blank: nuk mund të jetë bosh
+      nul_byte: nuk duhet të përmbajë bajt NUL
       permission_set:
+        flag_unusable: 'nuk duhet të përmbajë karakter kontrolli (rresht i ri, tabulator):
+          asnjë kërkesë nuk e mbart një flamur të tillë'
         group_missing: duhet të jetë një grupim ekzistues i grupeve të lejeve
+        hours_equal: duhet të ndryshojë nga ora e fillimit (një dritare nga një orë
+          në të njëjtën orë është bosh; lërini të dyja bosh për asnjë dritare)
+        hours_incomplete: duhet të vendoset bashkë me orën tjetër (ose të dyja të
+          lihen bosh)
+        hours_range: duhet të jetë midis 0 dhe 23
+        invalid_ip_entry: përmban “%{entry}”, që nuk është adresë IP ose diapazon
+          CIDR
+        name_taken: përdoret tashmë nga një Grup lejesh tjetër
+      permission_set_group_user:
+        taken: është tashmë anëtar i këtij grupi
       permission_set_rule:
         between_requires_two_values: duhet të përmbajë saktësisht 2 vlera të ndara
           me presje për operatorin between
+        empty_association: ka një emër bosh lidhjeje (dy pika njëra pas tjetrës, ose
+          një pikë në fillim)
+        encrypted_column: 'emërton %{name}, një atribut të enkriptuar të %{model}:
+          baza e të dhënave mban tekstin e tij të shifruar, ndaj një rregull mund
+          të kontrollojë vetëm nëse është bosh (is_null, is_not_null)'
         field_value_required: kërkohet për këtë operator
+        foreign_table: 'emërton %{name}, një tabelë që nuk është e %{model}: një rregull
+          filtri krahason tabelën e vet. Për një kolonë të një tabele tjetër, përdorni
+          një rregull bashkimi (një lloj bashkimi dhe shtegun e lidhjes)'
         in_requires_values: duhet të përmbajë të paktën 1 vlerë të ndarë me presje
         invalid_field_name: duhet të jetë emër i vlefshëm kolone (shkronja, numra,
           nënviza, pika)
         invalid_join_type: nuk është lloj i vlefshëm bashkimi
         invalid_operator: nuk është operator i vlefshëm
+        nul_byte: nuk duhet të përmbajë bajt NUL
         numeric_or_date_required: duhet të jetë vlerë numerike ose datë për operatorët
           e krahasimit
+        pattern_on_non_text: 'përputh vetëm tekst, dhe %{model}.%{name} është kolonë
+          e llojit %{type}: përdorni një kusht që krahason vlera'
+        secret_column: 'përmend një kolonë që mban një sekret (përmbledhje fjalëkalimi,
+          token, kolonë encrypted_*): një rregull regjistrimesh nuk krahason kurrë
+          një të tillë'
+        unjoinable_association: përmend %{association}, një lidhje e %{model} që një
+          rregull nuk mund ta bashkojë
+        unjoinable_class_not_loadable: përmend %{association}, një lidhje e %{model}
+          klasa e së cilës nuk mund të ngarkohet
+        unjoinable_invalid_definition: përmend %{association}, një lidhje e %{model}
+          :through, :source ose inverse_of i së cilës përmend një lidhje që nuk ekziston
+        unjoinable_polymorphic: 'përmend %{association}, një lidhje polimorfike e
+          %{model}: një rregull nuk mund ta bashkojë'
+        unjoinable_record_dependent_scope: 'përmend %{association}, një lidhje e %{model}
+          fusha e së cilës (ose një përgjatë :through) merr regjistrimin: një rregull
+          nuk mund ta bashkojë'
+        unknown_association: përmend %{association}, që nuk është lidhje e %{model}
+        unknown_column: përmend %{name}, që nuk është kolonë e %{model}
+        unknown_table: emërton %{name}, që nuk është tabelë e kësaj baze të dhënash
+        unusable_value: nuk është vlerë që %{model}.%{name} mund ta mbajë
         value_not_expected: nuk kërkon vlerë për këtë operator
         value_required: nuk duhet të jetë bosh për këtë operator
+      permission_set_user:
+        taken: e ka tashmë këtë Grup lejesh
+      requires: kërkon që %{requires} të jetë e aktivizuar
       resource:
         invalid_name: duhet të jetë emër i vlefshëm klase modeli (p.sh. Customer ose
           Admin::Report)
+        name_taken: ekziston tashmë në këtë Grup lejesh
       resource_field:
         invalid_mask_strategy: nuk është strategji e vlefshme maskimi
         mask_strategy_required: duhet të jetë e pranishme kur aksesi i maskimit është
           i aktivizuar
+      taken: është marrë tashmë
       too_long: është shumë i gjatë (të shumtën %{count} karaktere)

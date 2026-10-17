@@ -8,7 +8,11 @@ module PermissionForge
     # `find_by!` apply the user's cached permission set rules before returning a
     # record, and `permission_scoped` returns a rule-constrained relation you can
     # chain (`.where`, `.first`, `.find`, `.count`, …). If view_all or modify_all
-    # is enabled for the resource, rules are bypassed entirely.
+    # is enabled for the resource, rules are bypassed entirely. A signed-in
+    # user the model's Resource chain grants no read_access gets the rules
+    # alone under config.no_read_access_strategy :rules_only (the default:
+    # no rules, every row) and no rows under :deny (PermissionForge::
+    # RecordReadAccess, asked before the rules).
     #
     # Level 1 — ENFORCE (config.auto_query_scoping = :filter_only): a
     # default_scope applies the current user's FILTER-type rules to every
@@ -87,14 +91,17 @@ module PermissionForge
         class << self
           # `find_by` constrained by the current user's row-level rules.
           # @return [ActiveRecord::Base, nil] nil for a missing record
-          # @raise [NotAuthorizedError] when a rule denies an existing record
+          # @raise [NotAuthorizedError] when a rule (or, under
+          #   no_read_access_strategy :deny, the missing read access) denies an
+          #   existing record
           def find_by(*args)
             find_by_with_permission(*args)
           end
 
           # `find_by!` constrained by the current user's row-level rules.
           # @raise [ActiveRecord::RecordNotFound] for a missing record
-          # @raise [NotAuthorizedError] when a rule denies an existing record
+          # @raise [NotAuthorizedError] when a rule (or the missing read access)
+          #   denies an existing record
           def find_by!(*args)
             find_by_with_permission(*args) || raise(ActiveRecord::RecordNotFound)
           end
@@ -102,7 +109,9 @@ module PermissionForge
       end
 
       # Raised when a row-level rule denies an existing record (find_by /
-      # find_by!) or there is no user under nil_user_strategy :raise.
+      # find_by!), when the user has no read access to the model under
+      # no_read_access_strategy :deny, or there is no user under
+      # nil_user_strategy :raise.
       #
       # `user` is the user the rules were applied for, `record_id` the id of
       # the record that was denied. `record` is nil when the gem raises: the
@@ -118,8 +127,9 @@ module PermissionForge
       # messages joined, the :message of a Hash, or the class name.
       #
       # `failure_messages` is what the denying rules say on their own (each
-      # rule's `failure_message`, as an admin wrote it), for a friendly 403
-      # without parsing `message`.
+      # rule's `failure_message`, as an admin wrote it, or the gem's default
+      # sentence for a rule without one), for a friendly 403 without parsing
+      # `message`.
       #
       # Unless the host rescues it, Rails answers this error with 403
       # Forbidden (the engine registers it in
@@ -137,11 +147,16 @@ module PermissionForge
         attr_reader :details, :user, :record, :record_id
 
         # The `failure_message` of each rule that denied the record, in rule
-        # order, without blanks and repeats (two Permission Sets may carry the
-        # same rule). Empty when no rule denied: nobody signed in under
-        # `nil_user_strategy = :raise`, or an error the host raised without
-        # `failure_messages:`. Rule messages are written by admins: decide
-        # whether they belong in a response.
+        # order, without repeats (two Permission Sets may carry the same
+        # rule); a rule left without one says the gem's own sentence in the
+        # current locale (`permission_forge.denials.rule_default`:
+        # `Services::PermissionRuleApplier.failure_message_for`). A user
+        # without read access under no_read_access_strategy :deny gets one
+        # sentence, `permission_forge.denials.no_read_access`. Empty when
+        # no rule denied: nobody signed in under `nil_user_strategy = :raise`,
+        # or an error the host raised without `failure_messages:`. Rule
+        # messages are written by admins: decide whether they belong in a
+        # response.
         #
         # @return [Array<String>] frozen
         attr_reader :failure_messages
@@ -213,22 +228,15 @@ module PermissionForge
 
             next handle_nil_user(*args, host_suspended: host_suspended) unless current_user
 
-            rules = pf_applicable_rules(current_user, 'find_by')
-            next tenant_safe_find_by(*args) unless rules
-
-            query, failure_messages, denying_rules = PermissionForge::Services::PermissionRuleApplier.call(
-              model_class: self, rules: rules, args: args, current_user: current_user
-            )
-
-            next deny_or_missing([failure_messages, denying_rules], current_user, *args) if failure_messages.any?
-
-            query.where(*args).take
+            pf_find_by_as(current_user, *args)
           end
         end
 
         # Returns a relation constrained by the current user's row-level rules, so
         # any further chaining (`.where`, `.first`, `.find`, `.count`) stays scoped.
         # Honors nil_user_strategy: :bypass -> all, :deny -> none, :raise -> raises.
+        # A signed-in user the model's Resource chain grants no read_access gets
+        # none under no_read_access_strategy :deny (RecordReadAccess).
         # view_all/modify_all and the no-rules case return the unconstrained relation.
         #
         # Built with auto-scoping suspended (rules are applied here explicitly —
@@ -247,6 +255,22 @@ module PermissionForge
 
         private
 
+        # find_by for a signed-in user: the read access the model needs
+        # (RecordReadAccess), then the rules.
+        def pf_find_by_as(current_user, *args)
+          return deny_or_missing(pf_no_read_access_denial, current_user, *args) if pf_no_read_access?(current_user)
+
+          rules = pf_applicable_rules(current_user, 'find_by')
+          return tenant_safe_find_by(*args) unless rules
+
+          query, failure_messages, denying_rules = PermissionForge::Services::PermissionRuleApplier.call(
+            model_class: self, rules: rules, args: args, current_user: current_user
+          )
+          return deny_or_missing(pf_rule_denial(failure_messages, denying_rules), current_user, *args) if failure_messages.any?
+
+          query.where(*args).take
+        end
+
         # The gem's own suspension of Level 1 (the queries find_by and
         # permission_scoped make while they apply the rules themselves): not
         # reported as a scope_suspended bypass, which is about the host's
@@ -258,6 +282,7 @@ module PermissionForge
         def build_permission_scope(host_suspended)
           current_user = PermissionForge.current_user
           return permission_scoped_without_user(host_suspended) unless current_user
+          return pf_no_read_access_scope(current_user) if pf_no_read_access?(current_user)
 
           rules = pf_applicable_rules(current_user, 'permission_scoped')
           return all unless rules
@@ -267,25 +292,53 @@ module PermissionForge
           )
         end
 
-        # Distinguishes "denied by a rule" from "no such record". find_by must honor
-        # its nil contract for a genuinely missing record (matching stock Rails) and
-        # only raise NotAuthorizedError when the record exists but rules deny it.
+        # Distinguishes "denied" from "no such record". find_by must honor its
+        # nil contract for a genuinely missing record (matching stock Rails)
+        # and only raise NotAuthorizedError when the record exists but the
+        # rules (or the missing read access) deny it.
         #
-        # `denial` is what the applier answered: the failure messages and the
-        # rules that denied.
+        # `denial` is [reason, messages, failure_messages]: pf_rule_denial or
+        # pf_no_read_access_denial.
         def deny_or_missing(denial, current_user, *args)
           relation = tenant_safe_relation.where(*args)
           return nil unless relation.exists?
 
-          messages, denying_rules = denial
+          reason, messages, failure_messages = denial
           record_id = pf_denied_record_id(relation)
           PermissionForge::Audit::Runtime.denied(
-            PermissionForge::Audit::Runtime::DENIED, reason: :rule, model: self, via: 'find_by',
+            PermissionForge::Audit::Runtime::DENIED, reason: reason, model: self, via: 'find_by',
                                                      user: current_user, record_id: record_id,
                                                      data: { 'messages' => messages }
           )
-          raise NotAuthorizedError.new(messages, user: current_user, record_id: record_id,
-                                                 failure_messages: denying_rules.map { |rule| rule[:failure_message] })
+          raise NotAuthorizedError.new(messages, user: current_user, record_id: record_id, failure_messages: failure_messages)
+        end
+
+        # What the applier answered: the failure messages and what each
+        # denying rule says on its own.
+        def pf_rule_denial(messages, denying_rules)
+          [:rule, messages, denying_rules.map { |rule| PermissionForge::Services::PermissionRuleApplier.failure_message_for(rule) }]
+        end
+
+        # The user's entries along the chain do not grant read_access, under
+        # no_read_access_strategy :deny: one message, from the locale.
+        def pf_no_read_access_denial
+          message = PermissionForge::RecordReadAccess.failure_message(self)
+          [PermissionForge::RecordReadAccess::REASON, [message], [message]]
+        end
+
+        # RecordReadAccess, the one definition.
+        def pf_no_read_access?(current_user)
+          PermissionForge::RecordReadAccess.denied?(current_user, self)
+        end
+
+        # permission_scoped for a user denied by RecordReadAccess: no rows,
+        # published as access.denied (no_read_access).
+        def pf_no_read_access_scope(current_user)
+          PermissionForge::Audit::Runtime.denied(
+            PermissionForge::Audit::Runtime::DENIED,
+            reason: PermissionForge::RecordReadAccess::REASON, model: self, via: 'permission_scoped', user: current_user
+          )
+          none
         end
 
         # The id of the row the rules denied, for access.denied and the error:

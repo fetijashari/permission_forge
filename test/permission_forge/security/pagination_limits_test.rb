@@ -35,21 +35,35 @@ module PermissionForge
         PermissionForge.configuration.api_max_per_page = 100
       end
 
-      test 'per_page of 0 is clamped to 1' do
-        get '/permission_forge/api/permission_sets', params: { per_page: 0 }
+      # Field test: per_page=abc or 0 read as 1, a page of one row on a typo.
+      test 'a per_page of 0, a negative one or one that is not a number is the default page size' do
+        PermissionForge.configuration.api_default_per_page = 4
 
-        assert_response :ok
-        json = JSON.parse(response.body)
-        assert_equal 1, json['meta']['pagination']['per_page']
-        assert_equal 1, json['data'].size
+        [0, -5, '0', '-1', 'abc', '2abc', '1.5', ' ', ''].each do |value|
+          get '/permission_forge/api/permission_sets', params: { per_page: value }
+
+          assert_response :ok
+          json = JSON.parse(response.body)
+          assert_equal 4, json['meta']['pagination']['per_page'], value.inspect
+          assert_equal 4, json['data'].size, value.inspect
+        end
+      ensure
+        PermissionForge.configuration.api_default_per_page = 15
       end
 
-      test 'negative per_page is clamped to 1' do
-        get '/permission_forge/api/permission_sets', params: { per_page: -5 }
+      test 'a page that is not a positive whole number is the first page; the max clamp stays' do
+        PermissionForge.configuration.api_default_per_page = 3
 
-        assert_response :ok
-        json = JSON.parse(response.body)
-        assert_equal 1, json['meta']['pagination']['per_page']
+        [0, -1, 'abc', '2abc'].each do |value|
+          get '/permission_forge/api/permission_sets', params: { page: value, per_page: ' 3 ' }
+
+          json = JSON.parse(response.body)
+          assert_equal({ 'page' => 1, 'per_page' => 3, 'total_count' => 10 }, json['meta']['pagination'], value.inspect)
+        end
+        get '/permission_forge/api/permission_sets', params: { page: '9' * 40 }
+        assert_equal Api::Pagination::MAX_PAGE, JSON.parse(response.body)['meta']['pagination']['page']
+      ensure
+        PermissionForge.configuration.api_default_per_page = 15
       end
 
       test 'default per_page uses api_default_per_page config' do

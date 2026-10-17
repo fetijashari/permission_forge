@@ -27,7 +27,7 @@ An existing set can be switched between granting and muting under *Technical det
 
 ### Via API
 
-```bash
+```bash fragment
 POST /api/permission_sets
 {
   "permission_set": {
@@ -40,7 +40,7 @@ POST /api/permission_sets
 
 ### Via Code
 
-```ruby
+```ruby run
 muting_set = PermissionForge::PermissionSet.create!(
   name: 'Junior Restriction',
   is_muting: true,
@@ -119,7 +119,7 @@ For granting sets, `ValidatesDependency` enforces rules like "delete requires re
 
 ## Example: Group with Muting Carve-Out
 
-```ruby
+```ruby fragment
 group = PermissionForge::PermissionSetGroup.create!(name: 'Sales Team')
 
 # Broad access for the team
@@ -163,7 +163,7 @@ junior.can_read?(:Customer)   # => true (not muted)
 
 Muting sets are included in `source_permission_sets` with an `is_muting` flag:
 
-```ruby
+```ruby fragment
 {
   permissions: {
     resources: {
@@ -180,14 +180,14 @@ Muting sets are included in `source_permission_sets` with an `is_muting` flag:
 
 ## Scopes
 
-```ruby
+```ruby run
 PermissionForge::PermissionSet.muting    # Only muting sets
 PermissionForge::PermissionSet.granting  # Only granting sets
 ```
 
 ## Model Methods
 
-```ruby
+```ruby fragment
 permission_set.muting?   # true if is_muting
 permission_set.granting? # true if not is_muting
 ```

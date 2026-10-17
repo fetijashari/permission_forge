@@ -30,6 +30,11 @@ module PermissionForge
       AUDIT_SOURCE = 'api'
       # Largest id a bigint column holds; past it PostgreSQL raises instead of matching nothing.
       MAX_RECORD_ID = (2**63) - 1
+      # Body attributes that refer to another record (#with_reference_id),
+      # with the message of a reference that names none.
+      REFERENCES = {
+        permission_set_group_id: 'permission_forge.validations.permission_set.group_missing'
+      }.freeze
 
       before_action :set_api_locale
       before_action :pf_require_tenant
@@ -41,14 +46,67 @@ module PermissionForge
       end
 
       rescue_from ActiveRecord::RecordInvalid do |e|
-        render json: { error: { status: 422, messages: e.record.errors.messages } }, status: :unprocessable_entity
+        render_validation_errors(e.record)
       end
 
+      # The uniqueness race: two requests passed the uniqueness validation
+      # together and the unique index refused this one's INSERT. The
+      # validation's own 422, keyed by the attribute, from the index the
+      # error names (UniqueConflict); `base` when it names none. Through
+      # 0.14.1 a 500.
+      rescue_from ActiveRecord::RecordNotUnique do |e|
+        render_unprocessable(PermissionForge::UniqueConflict.messages(e) ||
+                             { 'base' => [I18n.t('permission_forge.api.errors.record_not_unique')] })
+      end
+
+      # A NOT NULL column no validation foresaw (ValidatesRequiredColumns
+      # refuses nil in the gem's own columns, keyed by the attribute): a
+      # host column, a trigger. The 422 envelope, never a 500.
+      rescue_from ActiveRecord::NotNullViolation do
+        render_unprocessable({ 'base' => [I18n.t('permission_forge.api.errors.not_null')] })
+      end
+
+      # Field-keyed like a validation error (ResponseRenderer#render_input_error).
       rescue_from ActionController::ParameterMissing, ActionController::BadRequest do |e|
-        render json: { error: { status: 422, messages: e.message } }, status: :unprocessable_entity
+        render_input_error(e)
+      end
+
+      # A body Rails cannot parse (invalid JSON sent as application/json)
+      # raises when params are first read — in the forgery check, before
+      # api_auth — so the 400 is answered in the API's envelope instead of
+      # Rails' own. A disabled API stays a 404. params[:locale] cannot be
+      # read: the header decides.
+      rescue_from ActionDispatch::Http::Parameters::ParseError do
+        render_body_unreadable
+      end
+
+      # A form or multipart body Rack cannot parse (`a[=1&%%%`, a multipart
+      # body without its end) raises ActionController::BadRequest while
+      # Rails reads the parameters for its instrumentation, before
+      # rescue_from applies: answered here like an unreadable JSON body, the
+      # 400 envelope (through 0.15.0-rc Rails' own 400 page).
+      # AbstractController documents process_action as the method to
+      # override around an action.
+      def process_action(...)
+        super
+      rescue ActionController::BadRequest => e
+        raise if performed? || e.is_a?(ParamShapes::InvalidParam)
+
+        render_body_unreadable
       end
 
       private
+
+      # The 400 envelope of a body that cannot be read; a disabled API stays
+      # a 404. params[:locale] cannot be read: the header decides.
+      def render_body_unreadable
+        verify_api_enabled!
+        return if performed?
+
+        assign_api_locale(extract_locale_from_accept_language)
+        render json: { error: { status: 400, messages: I18n.t('permission_forge.api.errors.body_unreadable') } },
+               status: :bad_request
+      end
 
       # Who acts (Audit::ActorResolver: audit_actor_resolver, the signed-in
       # user, else an anonymous API client), request id, IP, the `reason`
@@ -63,9 +121,12 @@ module PermissionForge
       end
 
       def set_api_locale
-        locale = params[:locale] || extract_locale_from_accept_language
-        # Always assign a locale (default when none/invalid) so a locale set by
-        # one request can never leak into the next on a reused thread.
+        assign_api_locale(params[:locale] || extract_locale_from_accept_language)
+      end
+
+      # Always assign a locale (default when none/invalid) so a locale set by
+      # one request can never leak into the next on a reused thread.
+      def assign_api_locale(locale)
         I18n.locale = if locale.present? && api_available_locale?(locale)
                         locale
                       else
@@ -104,6 +165,64 @@ module PermissionForge
         scope.find_by!(identifier => value)
       end
 
+      # The attributes of the body section `section` an endpoint writes to
+      # `model`: those of `keys` it has, each in its shape (Api::InputShapes,
+      # the one shape table). The other keys of the section go through
+      # strong parameters' own handling of keys an action does not take
+      # (logged, or raised under action_on_unpermitted_parameters = :raise).
+      #
+      # @param record [ActiveRecord::Base, nil] the record an update changes
+      # @return [ActiveSupport::HashWithIndifferentAccess]
+      # @raise [ActionController::ParameterMissing] the section is missing,
+      #   empty or not an object (a 422 keyed by it)
+      # @raise [InputShapes::Refused] a value of the wrong shape (a 422 keyed
+      #   by each such attribute)
+      def pf_record_attributes(section, model, *keys, record: nil)
+        attrs = pf_require_hash(section)
+        attrs.except(*keys.map(&:to_s)).permit
+        InputShapes.call(attrs, model, keys, record: record)
+      end
+
+      # The `name` of a copy: text without NUL bytes and surrounding white
+      # space, '' when absent or null (the caller's default name).
+      #
+      # @raise [InputShapes::Refused] for anything else (true, a number, a
+      #   list, an object), keyed by name: never silently the default name
+      def pf_copy_name
+        InputShapes.check!(:name, params[:name], :text)
+        pf_text_param(:name)
+      end
+
+      # `attrs` with the reference `key` (e.g. permission_set_group_id)
+      # replaced by the id of the record it names in `scope`, looked up like
+      # every identifier (tenant-scoped): its numeric id, or — under
+      # api_record_identifier = :uuid — its uuid, the identifier the API
+      # answers with. A blank value (null, "") is no reference (nil). Anything
+      # else that names no record of the scope is a 422 keyed by `key`; a
+      # uuid that starts with digits is never read as an id (the integer
+      # column would cast "12ab…" to 12).
+      #
+      # @raise [ParamShapes::InvalidParam]
+      def with_reference_id(attrs, key, scope)
+        return attrs unless attrs.key?(key)
+
+        value = attrs[key]
+        return attrs.merge(key => nil) if value.nil? || value == ''
+
+        attrs.merge(key => referenced_record(scope, value)&.id ||
+                           raise(ParamShapes::InvalidParam.new(key, I18n.t(REFERENCES.fetch(key)))))
+      end
+
+      def referenced_record(scope, value)
+        text = value.to_s if value.is_a?(String) || value.is_a?(Integer)
+        return unless text
+
+        if identifier_value?('id', text) then scope.find_by(id: text.to_i)
+        elsif PermissionForge.configuration.api_record_identifier.to_s == 'uuid' && identifier_value?('uuid', text)
+          scope.find_by(uuid: text)
+        end
+      end
+
       def identifier_value?(identifier, value)
         return false if value.empty? || value.include?("\0")
         return true unless identifier.to_s == 'id'
@@ -121,11 +240,43 @@ module PermissionForge
         user
       end
 
+      # The person params[key] names, for a new assignment or membership,
+      # within config.user_list_resolver (Admin::PeopleDirectory#find). Every
+      # refusal is a 422 keyed by the parameter, so it never reads as the
+      # Permission Set or the Group in the path being wrong (a 404):
+      #
+      # - missing, null or blank: "is missing";
+      # - not one id (a list, an object, a number with a fraction, text that
+      #   is not a key of the user model: "abc" for an integer key): "is not
+      #   a user id";
+      # - an id that names nobody the resolver lists: "names nobody who can
+      #   be assigned". An unknown id and someone the resolver leaves out read
+      #   the same, as in a bulk request's `skipped`.
+      #
+      # @raise [ParamShapes::InvalidParam]
+      def requested_user(key = :user_id)
+        value = params[key]
+        problem = user_id_problem(value)
+        user = PermissionForge::Admin::PeopleDirectory.new.find(value) unless problem
+        problem ||= I18n.t('permission_forge.api.errors.user_not_found') unless user
+        raise ParamShapes::InvalidParam.new(key, problem) if problem
+
+        user
+      end
+
+      # What is wrong with a user_id before anybody is looked up, nil when
+      # it is one id of the user model's key type.
+      def user_id_problem(value)
+        return I18n.t('permission_forge.api.errors.user_id_missing') if value.blank?
+        return if (value.is_a?(String) || value.is_a?(Integer)) && PermissionForge::Admin::PeopleDirectory::Ids.cast(value).any?
+
+        I18n.t('permission_forge.api.errors.user_id_invalid')
+      end
+
       def authorize_action!(action, record)
         authorizer = PermissionForge.configuration.api_action_authorization
-        message = I18n.t('permission_forge.api.errors.action_not_authorized')
         unless authorizer
-          return deny_when_authorization_required(message) do
+          return deny_when_authorization_required(I18n.t('permission_forge.api.errors.action_authorization_missing')) do
             audit_action_refused(action, record, hook: 'api_require_authorization')
           end
         end
@@ -133,7 +284,7 @@ module PermissionForge
         return if authorizer.call(self, action, record)
 
         audit_action_refused(action, record, hook: 'api_action_authorization')
-        render_not_authorized(message)
+        render_not_authorized(I18n.t('permission_forge.api.errors.action_not_authorized'))
       end
 
       # Runs the mutation authorization hook and the is_editable lock for a
@@ -174,9 +325,8 @@ module PermissionForge
       # A refusal records the ids as requested (bounded, Audit::Refusals).
       def authorize_assignment!(permission_set, user_ids)
         authorizer = PermissionForge.configuration.api_assignment_authorization
-        message = I18n.t('permission_forge.api.errors.assignment_not_authorized')
         unless authorizer
-          return deny_when_authorization_required(message) do
+          return deny_when_authorization_required(I18n.t('permission_forge.api.errors.assignment_authorization_missing')) do
             audit_assignment_refused(permission_set, user_ids, hook: 'api_require_authorization')
           end
         end
@@ -184,14 +334,15 @@ module PermissionForge
         return if authorizer.call(self, permission_set, PermissionForge::Admin::PeopleDirectory::Ids.cast(user_ids))
 
         audit_assignment_refused(permission_set, user_ids, hook: 'api_assignment_authorization')
-        render_not_authorized(message)
+        render_not_authorized(I18n.t('permission_forge.api.errors.assignment_not_authorized'))
       end
 
       # When config.api_require_authorization is on, a missing authorization lambda
       # means DENY (403) rather than the backward-compatible silent allow. This
       # prevents "authenticated == full admin" when the host wired api_auth but not
       # the per-action / assignment authorization hooks. The block records the
-      # refusal.
+      # refusal. The message names the missing option (the integrator's fix),
+      # unlike a lambda's denial; it carries nothing from the request.
       def deny_when_authorization_required(message)
         return unless PermissionForge.configuration.api_require_authorization
 

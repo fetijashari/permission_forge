@@ -2,18 +2,28 @@
 
 module PermissionForge
   module Admin
-    # Creates ResourceFields for model columns and virtual fields at one level,
-    # applying privacy defaults: sensitive names start Masked when gdpr_defaults
-    # is on, and the muting 'hide_sensitive' level hides only sensitive names.
+    # Creates ResourceFields for model columns and virtual fields at one
+    # level: the admin's presets ("Add resource"), "Add all new" and "Sync
+    # fields". The rows themselves come from the one row builder
+    # (Services::ResourceFieldGenerator::RowBuilder): privacy defaults,
+    # timestamps, the recommended strategy, the label. This class only turns
+    # a preset into a level per column — the muting 'hide_sensitive' preset
+    # hides the sensitive names and leaves the others alone — and skips the
+    # levels that are no row (Unchanged, a level the set's kind lacks).
+    #
+    # @api private
     class ColumnFields
+      # The muting preset that hides the sensitive names and leaves the others.
+      HIDE_SENSITIVE = 'hide_sensitive'
+
       def initialize(resource, muting:, sensitive: SensitiveColumns.new, configuration: PermissionForge.configuration)
         @resource = resource
         @muting = muting
         @sensitive = sensitive
-        @configuration = configuration
+        @rows = Services::ResourceFieldGenerator.rows(resource, muting: muting, configuration: configuration, sensitive: sensitive)
       end
 
-      # @return [Integer] number of fields created (columns whose level resolves to nil are skipped)
+      # @return [Integer] number of fields created (columns whose level resolves to nil, and blank names, are skipped)
       def create(columns, level)
         columns.filter_map { |column| create_field(column, level) }.size
       end
@@ -21,27 +31,18 @@ module PermissionForge
       private
 
       def create_field(column, level)
-        match = @sensitive.match(column)
-        column_level = @muting ? muting_level(level, match) : granting_level(level, match)
+        column_level = column_level(column, level)
         return unless column_level
 
-        attrs = FieldLevel.flags_for(column_level, muting: @muting)
-        @resource.resource_fields.create!(attrs.merge(name: column, label: column.humanize, is_active: true, is_editable: true,
-                                                      mask_strategy: match&.strategy || 'full'))
+        attrs = @rows.attrs(column, column_level)
+        @resource.resource_fields.create!(attrs) if attrs
       end
 
-      def muting_level(level, match)
-        return 'hide' if level == 'hide_sensitive' && match
-        return nil if %w[hide_sensitive leave].include?(level) || level.blank?
+      # @return [String, nil] the level the column's row gets, nil for no row
+      def column_level(column, level)
+        return level if FieldLevel.row?(level, muting: @muting)
 
-        FieldLevel.valid?(level, muting: true) ? level : nil
-      end
-
-      def granting_level(level, match)
-        return nil unless FieldLevel.valid?(level, muting: false)
-        return 'masked' if match && %w[read edit].include?(level) && @configuration.gdpr_defaults
-
-        level
+        'hide' if @muting && level == HIDE_SENSITIVE && @sensitive.sensitive?(column)
       end
     end
   end

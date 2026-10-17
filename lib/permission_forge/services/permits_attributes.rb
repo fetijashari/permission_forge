@@ -31,8 +31,16 @@ module PermissionForge
     # `lines_attributes.*` for an element that is no record — never their
     # values. Without a user every key is dropped (reason nil_user).
     #
+    # With `report: true` the call answers a {Result} instead: the same
+    # filtered hash plus the paths of the dropped keys, so a controller can
+    # tell the user what was not saved (the default return is unchanged).
+    #
     # @example
     #   filtered = PermitsAttributes.call(resource: customer, permitted_params: params)
+    # @example Telling the user what was not saved
+    #   result = PermitsAttributes.call(resource: customer, permitted_params: params, report: true)
+    #   customer.update(result.params)
+    #   flash[:alert] = "Not saved: #{result.dropped_fields.join(', ')}" if result.dropped?
     #
     # @api public
     class PermitsAttributes
@@ -46,47 +54,59 @@ module PermissionForge
       DESTROY_KEY = '_destroy'.freeze
 
       # Filters incoming params by the user's field-level edit access (does not mutate them).
-      # @param resource [String] the model name
+      # @param resource [ActiveRecord::Base, Class] the record or model class whose Resource rows decide
       # @param permitted_params [Hash]
-      # @return [Hash]
-      def self.call(resource:, permitted_params:)
-        new(resource: resource, permitted_params: permitted_params).call
+      # @param report [Boolean] answer a {Result} (filtered params and dropped paths)
+      # @return [Hash, Result] the filtered hash; a {Result} with `report: true`
+      def self.call(resource:, permitted_params:, report: false)
+        new(resource: resource, permitted_params: permitted_params, report: report).call
       end
 
-      def initialize(resource:, permitted_params:)
+      def initialize(resource:, permitted_params:, report: false)
         @user = PermissionForge.current_user
         @resource = resource
         @permitted_params = permitted_params
+        @report = report
       end
 
-      # @return [Hash] a new hash holding only the fields the user may edit
+      # @return [Hash, Result] a new hash holding only the fields the user may
+      #   edit; with `report: true`, a {Result} holding it and the dropped paths
       def call
-        if @user.blank?
-          report_dropped('nil_user') { each_pair(@permitted_params) { |key, _| dropped(key) } } if nil_user_report?
-          return {}
-        end
-        return {} if resource_class.nil?
+        filtered = filter
+        @report ? Result.new(params: filtered, dropped: (@dropped || []).uniq) : filtered
+      end
+
+      private
+
+      def filter
+        return drop_everything if resource_class.nil? || @user.blank?
         return {} if @permitted_params.blank?
 
         report_dropped('field_access') { filter_for(resource_class, @permitted_params) }
       end
 
-      private
+      # Every key is dropped: nobody is signed in (published as nil_user), or
+      # there is no model to filter for (reported only: params.filtered
+      # names the model).
+      def drop_everything
+        if @permitted_params.present? && (@report || PermissionForge::Audit.instrument?(EVENT))
+          report_dropped('nil_user') { @permitted_params.each_pair { |key, _| dropped(key) } }
+        end
+        {}
+      end
 
       # Runs the filter, collecting the dropped paths in @dropped only when
-      # params.filtered is stored or heard, and publishes them.
+      # the caller asked for a report or params.filtered is stored or heard,
+      # and publishes them to the latter.
       def report_dropped(reason)
-        return yield unless PermissionForge::Audit.instrument?(EVENT)
+        instrumented = !resource_class.nil? && PermissionForge::Audit.instrument?(EVENT)
+        return yield unless instrumented || @report
 
         @dropped = []
         @path = []
         result = yield
-        publish_dropped(reason) unless @dropped.empty?
+        publish_dropped(reason) if instrumented && !@dropped.empty?
         result
-      end
-
-      def nil_user_report?
-        !resource_class.nil? && @permitted_params.present? && PermissionForge::Audit.instrument?(EVENT)
       end
 
       def publish_dropped(reason)
@@ -130,7 +150,7 @@ module PermissionForge
         fields = editable_fields_for(klass)
         result = {}
 
-        each_pair(params) do |key, value|
+        params.each_pair do |key, value|
           if (association = nested_association(klass, key))
             filtered = within(key) { filter_nested(klass, association, value) }
             filtered.nil? ? dropped(key) : result[key] = filtered
@@ -230,7 +250,7 @@ module PermissionForge
 
       def filter_indexed(target, records)
         result = {}
-        each_pair(records) do |index, record|
+        records.each_pair do |index, record|
           filtered = within(EACH) { filter_record(target, record) }
           filtered.nil? ? dropped(EACH) : result[index] = filtered
         end
@@ -251,15 +271,16 @@ module PermissionForge
         @user.respond_to?(:permissions_hash) && PermissionForge::ResourceChain.entries(@user, resource_names(klass)).any?
       end
 
+      # A key is editable where the field is readable AND editable: the hash
+      # the builder writes says so already (FieldPermissionMerger counts edit
+      # only with read), but a hash another version cached may still say
+      # `edit_access: true, read_access: false` — a field nobody may read is
+      # not one they may write.
       def editable_fields_for(klass)
         return {} unless @user.respond_to?(:permissions_hash)
 
-        PermissionForge::ResourceChain.fields(@user, resource_names(klass)).select { |_, access| access[:edit_access] }
-      end
-
-      # Iterates key/value pairs of an ActionController::Parameters or a Hash.
-      def each_pair(params, &)
-        params.each_pair(&)
+        PermissionForge::ResourceChain.fields(@user, resource_names(klass))
+                                      .select { |_, access| access[:read_access] && access[:edit_access] }
       end
 
       def each_pair?(value)

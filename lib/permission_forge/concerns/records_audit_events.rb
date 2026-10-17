@@ -150,9 +150,17 @@ module PermissionForge
       end
 
       # saved_changes minus the bookkeeping columns, JSON-ready.
-      def audit_changes
-        saved_changes.except(*BOOKKEEPING_COLUMNS).as_json
-      end
+      def audit_changes = saved_changes.except(*BOOKKEEPING_COLUMNS).as_json
+
+      # Whether the last save wrote a change event: SaveNotice asks it.
+      def saved_audited_changes? = audit_changes.any?
+
+      # Whether saving now would write one (a new record always does): the
+      # admin saves a record only then (SaveNotice#pf_save_changed), so an
+      # unchanged submit runs no commit callback and invalidates nobody's
+      # cached permissions. Never asked by a callback: a second, unchanged
+      # save in a transaction must not drop the first one's invalidation.
+      def audited_changes_pending? = new_record? || changes_to_save.except(*BOOKKEEPING_COLUMNS).any?
 
       # The Permission Set an event about this record belongs to, if any.
       def audit_permission_set
@@ -226,10 +234,9 @@ module PermissionForge
       end
 
       def record_audit_event_for_update
-        changes = audit_changes
-        return if changes.empty?
+        return unless saved_audited_changes?
 
-        record_audit_event(:update, audit_update_details.merge('changes' => changes))
+        record_audit_event(:update, audit_update_details.merge('changes' => audit_changes))
       end
 
       # Event data a model adds to its update events (the computed 'changes' wins).

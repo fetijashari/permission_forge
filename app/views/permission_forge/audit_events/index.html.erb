@@ -92,7 +92,7 @@
       <select id="pf-audit-set" class="pf-select pf-select--sm" name="permission_set" <%= invalid.('permission_set') %>>
         <option value=""><%= t('.filters.any_set') %></option>
         <% sets.each do |id, name| %>
-          <option value="<%= id %>" <%= 'selected' if value.('permission_set') == id.to_s %>><%= name %></option>
+          <option value="<%= id %>" <%= 'selected' if value.('permission_set') == id.to_s %>><%= pf_record_name_text(name, :permission_set) %></option>
         <% end %>
         <% if value.('permission_set').present? && sets.none? { |id, _| id.to_s == value.('permission_set') } %>
           <option value="<%= value.('permission_set') %>" selected><%= t('.filters.deleted_set', id: value.('permission_set')) %></option>

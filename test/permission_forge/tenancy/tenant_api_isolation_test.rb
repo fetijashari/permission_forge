@@ -24,7 +24,7 @@ module PermissionForge
           @set_b = create_permission_set(name: 'Bravo set')
           @resource_b = create_resource(permission_set: @set_b, name: 'Supplier')
           @field_b = create_resource_field(resource: @resource_b, name: 'name')
-          @rule_b = create_permission_set_rule(permission_set: @set_b, resource: @resource_b)
+          @rule_b = create_permission_set_rule(permission_set: @set_b, resource: @resource_b, field_name: 'owner_id')
           @assignment_b = create_permission_set_user(user: @user, permission_set: @set_b)
           @group_b = create_permission_set_group(name: 'Bravo group')
         end
@@ -129,6 +129,16 @@ module PermissionForge
 
         post "#{BASE}/permission_set_groups/#{@group_b.uuid}/users", params: { user_id: @user.id }
         assert_response :not_found
+      end
+
+      test 'another tenant group is no permission_set_group_id, by uuid or by id' do
+        [@group_b.uuid, @group_b.id].each do |reference|
+          patch "#{BASE}/permission_sets/#{@set_a.uuid}", params: { permission_set: { permission_set_group_id: reference } }
+          assert_response :unprocessable_entity
+          assert_equal [I18n.t('permission_forge.validations.permission_set.group_missing')],
+                       json.dig('error', 'messages', 'permission_set_group_id')
+        end
+        assert_nil @set_a.reload.permission_set_group_id
       end
 
       private

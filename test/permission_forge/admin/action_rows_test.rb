@@ -27,7 +27,11 @@ module PermissionForge
 
         assert_not found.discovery?
         assert_equal %w[export sync], found.rows.map(&:name)
-        assert_equal ['Export CSV', 'Sync'], found.rows.map(&:label)
+        assert_equal ['Export CSV', 'Sync'], found.rows.map(&:label), 'English: Rails\' English for the key (FieldLabel.english)'
+        I18n.with_locale(:sq) do
+          labels = ActionRows.new(@resource.reload, catalog: Object.new, across: Object.new).rows.map(&:label)
+          assert_equal ['Export CSV', 'sync'], labels, 'a row without a label is named by its key as stored'
+        end
         assert_empty found.discovered_rows
         assert_empty found.suggestions
         assert(found.rows.all? { |row| row.endpoints.empty? && !row.unlinked })
@@ -47,7 +51,7 @@ module PermissionForge
         assert_equal %w[archive merge], found.suggestions
         assert_predicate found.row('export'), :configured?
         assert_not found.row(:archive).configured?
-        assert_equal 'Archive', found.row('archive').label
+        I18n.with_locale(:sq) { assert_equal 'archive', rows.row('archive').label, 'a discovered action is named by its key as stored' }
         assert_nil found.row('nope')
       end
 

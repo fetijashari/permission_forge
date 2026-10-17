@@ -21,9 +21,9 @@
                         title: t('permission_forge.audit_log.filter_actor') %>
             <span aria-hidden="true">·</span>
             <span><%= pf_audit_source_label(event.source) %></span>
-            <% if event.reason.present? %>
+            <% if (reason = pf_audit_reason(event)) %>
               <span aria-hidden="true">·</span>
-              <span class="pf-audit-event__reason"><%= t('permission_forge.audit_log.reason_inline', reason: event.reason) %></span>
+              <span class="pf-audit-event__reason"><%= t('permission_forge.audit_log.reason_inline', reason: reason) %></span>
             <% end %>
           </div>
         </div>

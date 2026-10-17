@@ -14,7 +14,7 @@ When no resolver is configured, the context is blank and every conditional set a
 
 ## Configuration
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.request_context_resolver = lambda {
     {
@@ -31,7 +31,7 @@ What the resolver must do:
 - **It is called on every permission read of a user who holds a conditional set** — every `permissions_hash` call, so every `can_*?` check and every `MaskedAttributes` getter, memoized or not. It is never called for a user without conditional sets. Keep it cheap: read values your app already holds (`Current` attributes), no queries.
 - **Where there is no request** (a job, the console, a rake task), return `{}` or a context without `:ip` and `:session_flags`. A resolver that raises there raises on every read of such a user. Return a Hash.
 - **It must not read the permissions of the user it resolves for** — a masked attribute of `Current.user`, a `can_*?` check. Such a read raises `PermissionForge::ConfigurationError` (it would otherwise be answered a hash from another context, or an empty one).
-- `:ip` is a String or an `IPAddr`. `:session_flags` is an Array of Strings; a set's `requires_session_flag` must be one of them exactly.
+- `:ip` is a String or an `IPAddr`. `:session_flags` is an Array of Strings; a set's `requires_session_flag` must be one of them exactly. A flag with a control character (a newline, a tab, a NUL byte) is refused on save; one stored before is a condition nobody can judge, like a broken IP list or hour window.
 - `:time` is optional (default `Time.current`). It is fixed once per read, and the conditions compare its hour.
 
 If it returns `{}` or isn't configured, every conditional set applies by default — enable `config.conditional_sets_strict_mode` to fail closed instead (see [Strict Mode](#strict-mode)).
@@ -40,7 +40,7 @@ If it returns `{}` or isn't configured, every conditional set applies by default
 
 Use `requires_session_flag` to restrict a set to users who have completed a specific step (e.g., MFA verification).
 
-```ruby
+```ruby run
 ps = PermissionForge::PermissionSet.create!(
   name: 'Admin After MFA',
   requires_session_flag: 'mfa_verified'
@@ -56,23 +56,23 @@ ps = PermissionForge::PermissionSet.create!(
 
 Use `allowed_ips` to restrict a set to specific IP ranges (CIDR notation, comma-separated).
 
-```ruby
+```ruby run
 ps = PermissionForge::PermissionSet.create!(
   name: 'Office Only',
   allowed_ips: '192.168.1.0/24, 10.0.0.0/8'
 )
 ```
 
-- Supports CIDR notation (`/24`, `/32`, etc.)
-- Multiple ranges separated by commas
-- Invalid CIDRs are silently skipped
-- When `ip` is missing from context, the condition fails (safe default)
+- Entries are IP addresses or CIDR ranges (`/24`, `/32`, IPv6 too), written with commas, newlines or spaces between them; the row stores them with commas (`PermissionSet#allowed_ip_list` reads them back as an Array).
+- Through the API, `allowed_ips` is a String as above or an Array of Strings (`["10.0.0.0/8", "192.168.0.0/16"]`); any other shape is a 422 keyed `allowed_ips`.
+- An entry that is not an address is refused when the row is new or the list changes (`contains "office", which is not an IP address or CIDR range`). A list stored before the check that holds one (or holds no entry at all) **cannot be judged**: a granting set never passes on it, a muting set applies to every request, in every mode and with or without a request context. `rake permission_forge:audit` lists such rows under `incomplete_conditions`.
+- When `ip` is missing from the context, the condition fails (a muting set applies in [strict mode](#strict-mode)).
 
 ## Login Hour Restrictions
 
 Use `allowed_hours_start` and `allowed_hours_end` to restrict a set to specific hours of the day.
 
-```ruby
+```ruby run
 ps = PermissionForge::PermissionSet.create!(
   name: 'Business Hours Only',
   allowed_hours_start: 9,   # 9:00 AM
@@ -80,17 +80,16 @@ ps = PermissionForge::PermissionSet.create!(
 )
 ```
 
-- Hours are 0-23 (24-hour format)
-- Start is inclusive, end is exclusive
-- **Supports midnight wrap**: `allowed_hours_start: 22, allowed_hours_end: 6` = 10 PM to 5:59 AM
-- Uses `Time.current` when no `:time` in context (respects `Time.zone`)
-- Both `start` and `end` must be set; if either is nil, the condition passes
+- Hours are 0–23 (24-hour format); start is inclusive, end exclusive.
+- **Supports midnight wrap**: `allowed_hours_start: 22, allowed_hours_end: 6` = 10 PM to 5:59 AM.
+- Uses `Time.current` when no `:time` is in the context (respects `Time.zone`).
+- Both hours or none. A new row (or a changed hour) with one hour of the two, or with `start == end` (an empty window), is refused. A window stored before the check in one of those shapes, or with an hour outside 0–23, **cannot be judged**: a granting set never passes on it (one hour of the two used to pass), a muting set applies to every request. `rake permission_forge:audit` lists such rows under `incomplete_conditions`; the admin's condition sentence names the window as one nobody can judge.
 
 ## Combined Conditions
 
 All conditions on a set must pass (AND logic). A nil/blank condition always passes.
 
-```ruby
+```ruby run
 ps = PermissionForge::PermissionSet.create!(
   name: 'Sensitive Access',
   requires_session_flag: 'mfa_verified',
@@ -105,7 +104,7 @@ ps = PermissionForge::PermissionSet.create!(
 
 The conditional sets that apply are selected on every read, so an IP change or an hour rollover takes effect on the next read without waiting for a TTL. The TTL is a backstop for the cached entries themselves (the base entry and its variants): when any of a user's sets is conditional, it is clamped to `conditional_set_cache_ttl`:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.cache_ttl = 3600                  # Baseline TTL in seconds (default: 3600 = 1 hour)
   config.conditional_set_cache_ttl = 300   # Clamp when conditional sets exist (default: 300 = 5 minutes)
@@ -133,7 +132,7 @@ The effective TTL is `min(cache_ttl, conditional_set_cache_ttl)`, and no later t
 
 By default, every conditional set is treated as **active** when `request_context_resolver` returns a blank context (`{}`, `nil`) — backward compatible, but an unwired resolver skips IP, hours and session-flag enforcement. A boot-time security warning is logged when conditional sets exist and the resolver returns an empty context at boot, and `rake permission_forge:audit` reports it (`conditional_sets_lenient`). Enable strict mode to fail closed:
 
-```ruby
+```ruby fragment
 config.conditional_sets_strict_mode = true   # default: false
 ```
 
@@ -142,7 +141,7 @@ How each context is treated:
 | Context | Strict mode on | Strict mode off (default) |
 |---|---|---|
 | An IP or session flags | Each set evaluated; a conditional muting set whose condition cannot be judged (no IP for an IP allowlist, no `:session_flags` key for a flag) applies | Each set evaluated |
-| No request context: blank, or neither an IP nor session flags (a job, the console; the time alone is not a request context) | Conditional **granting** sets dropped; conditional **muting** sets applied, whatever their conditions | Blank: every conditional set applies. Not blank (for example `{ ip: nil, session_flags: [], time: }`): each set evaluated |
+| No request context: blank, or neither an IP nor session flags (a job, the console; the time alone is not a request context) | Conditional **granting** sets dropped; conditional **muting** sets applied, whatever their conditions | Blank: every conditional set applies, except a granting set whose condition cannot be judged. Not blank (for example `{ ip: nil, session_flags: [], time: }`): each set evaluated |
 
 - With strict mode on and no request context, a lockdown still applies and nothing is granted on a condition: a job cannot pick up an MFA-, IP- or hours-gated grant, nor lose a conditional muting set.
 - A context with session flags but no IP is a request context: each set is evaluated, and an IP condition fails without an IP — except, in strict mode, a conditional **muting** set whose condition cannot be judged: an IP allowlist with no IP, or a session flag when the context has no `:session_flags` at all. That lockdown applies (a missing context must never lift one).
@@ -154,7 +153,7 @@ We recommend strict mode where conditional sets are used.
 
 Muting sets can also have conditions. A conditional muting set is evaluated per request like a granting one, and revokes permissions only for the requests whose context meets its conditions. In strict mode it also applies with no request context (see [Strict Mode](#strict-mode)):
 
-```ruby
+```ruby run
 muting = PermissionForge::PermissionSet.create!(
   name: 'Lockdown Mode',
   is_muting: true,
@@ -163,15 +162,24 @@ muting = PermissionForge::PermissionSet.create!(
 # Revokes in the sessions whose flags include 'lockdown' (and, in strict mode, in jobs and the console)
 ```
 
+A conditional muting set whose condition cannot be judged — an IP entry that is not an address, one hour of the two, the same hour twice — applies to every request, whether or not strict mode is on: a lockdown that never locked is the defect. A granting set with such a condition never applies, not even with a blank context. Fix the condition on the set's Conditions tab.
+
 ## Model Methods & Scopes
 
-```ruby
+```ruby run
 ps.conditional?    # true if any condition is set
 ps.unconditional?  # true if no conditions
 
 PermissionForge::PermissionSet.conditional    # Sets with any condition
 PermissionForge::PermissionSet.unconditional  # Sets with no conditions
+
+ps.allowed_ip_list    # => ["10.0.0.0/8"] — the entries as the engine reads them
+ps.hours_window       # the window as data: set?, wraps?, broken?, include?(hour)
+ps.condition_problems # => [] — or [[:ip_entry, "office"], [:hours_equal, window]] for a row the validation refuses
+ps.conditions_broken? # true when a condition cannot be judged (see above)
 ```
+
+`conditional?` and the `conditional` / `unconditional` scopes agree: a text of blanks is no condition; one hour of the two is one.
 
 ## Backward Compatibility
 
@@ -184,10 +192,12 @@ PermissionForge::PermissionSet.unconditional  # Sets with no conditions
 
 For advanced use cases, you can evaluate conditions directly:
 
-```ruby
+```ruby run
 PermissionForge::Services::PermissionSetConditionEvaluator.call(
   permission_set: ps,
   context: { ip: '192.168.1.5', session_flags: ['mfa_verified'], time: Time.current }
 )
 # => true or false   (:ip may also be an IPAddr)
 ```
+
+`PermissionSetConditionEvaluator.broken?(permission_set:)` says whether the set holds a condition nobody can judge (such a set never passes); `unjudgeable?(permission_set:, context:)` adds the conditions the context cannot answer.

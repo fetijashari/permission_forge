@@ -297,7 +297,7 @@ Inside a request two caches would answer the rebuild with what it already saw, s
 
 **A host app that derives its own cache entry** in an override of `regenerate_permissions` (after `super`) has the same race on its own write. It can use the same stamp:
 
-```ruby
+```ruby fragment
 def regenerate_permissions
   stamp = permission_invalidation_stamp
   super
@@ -341,7 +341,7 @@ Whether a transaction changes anything depends on what it reads. A transaction t
 
 **Asking for a rebuild inside a snapshot transaction settles at the commit** (`Cache::Settlement`). `regenerate_permissions` says that something changed — it is how to refresh after `update_all`, `insert_all` or `delete_all`, which run no callbacks. Inside such a transaction it can leave nothing in the cache, and by itself that would tell nobody: another request can cache the rows as they still are before the commit, and keep them until `cache_ttl`. So the user is invalidated once the **outermost** transaction has committed, with an ordinary `invalidate_permissions` (a new stamp, then the removal, which also catches a rebuild that straddles the commit):
 
-```ruby
+```ruby fragment
 ActiveRecord::Base.transaction do
   PermissionForge::PermissionSetUser.where(permission_set: set).delete_all # no callbacks
   user.regenerate_permissions   # builds for this request; the store is not touched
@@ -359,7 +359,7 @@ end                             # COMMIT, then: user.invalidate_permissions
 
 **A host app that writes a cache entry of its own** from an override of `regenerate_permissions` has to make the same decision for that entry: `PermissionForge::OpenTransaction.withholding` answers the open transaction when the hash just built must not be shared (nil otherwise).
 
-```ruby
+```ruby fragment
 def regenerate_permissions
   super
   Rails.cache.write(my_key, derive_from(permissions_hash)) unless PermissionForge::OpenTransaction.withholding
@@ -444,6 +444,8 @@ What it costs, in calls to the store:
 
 ## Multi-Set Merge Logic
 
+Two points of the granting phase, since 0.15: a field's `read_access` is OR-ed over the rows, and its `edit_access` is OR-ed over the rows that grant **read and edit** — a row with edit alone grants nothing. A resource's `edit_access` and `delete_access` count only with `read_access`, and `modify_all` only with `view_all` (`PermissionHashBuilder.granted_flags`); `PermitsAttributes` keeps a key only where the field is readable and editable.
+
 When a user belongs to multiple permission sets, permissions are merged:
 
 ```mermaid
@@ -473,9 +475,9 @@ graph LR
 - **mask_access**: decided only by the field rows that grant read — AND logic among them, so `false` wins (any read-granting set that unmasks = user sees full value), with the first such row's `mask_strategy`. A row that does not grant read (Hidden) never votes: Masked in one set and Hidden in another is masked.
 - **Rules**: accumulative and **intersecting** — the rules of every granting set apply together (AND), so adding a set with a rule can narrow the rows another set allowed. `view_all` / `modify_all` from any granting set bypasses them all on that resource.
 - **Extra (virtual) fields**: once every granting set is merged, a declared virtual field that no set has a row for gets an implicit entry that follows the merged resource: readable when it grants read, editable when it grants edit, unmasked (unless `extra_fields_default_access = :unconfigured`). A row in any set wins.
-- **Muting sets** (`is_muting: true`): applied after the granting merge — they revoke CRUD/field/action access, force `mask_access: true`, and also mute configured field variants (`_uuid`, `_cents` base name). A muting resource with `read_access: true` hides every field of the resource (read and edit), variants and implicit virtual fields included; muting its edit mutes the flag alone. They never add rules.
+- **Muting sets** (`is_muting: true`): applied after the granting merge — they revoke CRUD/field/action access, force `mask_access: true`, and also mute configured field variants (`_uuid`, `_cents` base name) — the variants the model has (`FieldVariants`), the ones the granting merge wrote. A muting resource with `read_access: true` hides every field of the resource (read and edit), variants and implicit virtual fields included; muting its edit mutes the flag alone. They never add rules.
 
-**Order.** Sets are merged in `created_at`, `id` order; within a set, resources and their fields, actions and rules in id order. Order only decides ties: the first read-granting row of a name sets `mask_strategy`, and rules and actions keep it in the hash. A known limit follows from it: when two rows map to one name — `customer_id` (whose variant is `customer_uuid`) and an explicit `customer_uuid` row — the older row wins the strategy, so a later explicit `customer_uuid` row cannot override the strategy that the `customer_id` variant brought.
+**Order.** Sets are merged in `created_at`, `id` order; within a set, resources and their fields, actions and rules in id order. Order only decides ties: the first read-granting row of a name sets `mask_strategy`, and rules and actions keep it in the hash. A known limit follows from it: when two rows map to one name — `customer_id` (whose variant is `customer_uuid`, on a model that has a `customer_uuid`) and an explicit `customer_uuid` row — the older row wins the strategy, so a later explicit `customer_uuid` row cannot override the strategy that the `customer_id` variant brought.
 
 ## Dependency Validations
 
@@ -622,7 +624,7 @@ Each concrete controller only defines 4 template methods: `collection_scope`, `c
 
 When `user.regenerate_permissions` is called — or `user.permissions_hash` misses the cache and rebuilds read-through — the following hash is computed and cached:
 
-```ruby
+```ruby fragment
 {
   profile: { id: 1, uuid: "...", name: "Alice", email: "alice@example.com" },
   preferences: {},
@@ -656,7 +658,7 @@ When `user.regenerate_permissions` is called — or `user.permissions_hash` miss
 | `v2:…_user_<id>_c_index` | The **index entry**: `true` — variants may be stored under this base key. Written after the variant's rebuild read the user's stamp and before the variant is stored; lives `cache_ttl` + 60 s, longer than any variant written after it. Read only by the enumerated `cache:clear` (`Cache::VariantRemoval`). A variant whose index entry cannot be written is not stored |
 | `v2:…_user_<id>_c_<1..63>` | A **variant**, in the slot of its sets (the bitmask of the passing sets among the user's conditional sets, sorted by id): the hash for that combination, plus `variant_of` (digest of the base's token and the set ids), checked on every read. Built read-through, verified against the user's stamp |
 | `user_<id>_invalidation` | The per-user invalidation stamp (one per user, whatever the tenant and version) |
-| `user_<id>`, `tenant_<t>_user_<id>` | 0.13's keys, removed by every invalidation until 0.15 |
+| `user_<id>`, `tenant_<t>_user_<id>` | 0.13's keys: 0.14 removed them on every invalidation; 0.15 no longer reads, writes or removes them (they expire with `cache_ttl`) |
 
 Every read of a user who holds conditional sets evaluates the request context against the conditions in the base entry (`ConditionalSets`, `PermissionsPerContext`) and serves the base when no conditional set passes, else the variant. `permissions_hash` always returns the three public keys. A user who holds more than 6 conditional sets (`ConditionalSets::MAX_CACHED_SETS`) gets the variant built per request and kept on the instance only. An invalidation removes the base entries only and reads nothing: a variant is served only when its `variant_of` matches the current base entry, so the variants it leaves are unreachable and expire with `conditional_set_cache_ttl`. `DataSubjectErasure` (every slot, nothing read) and `cache:clear` remove them (`Cache::VariantRemoval`; see [Activation Conditions](activation-conditions.md#what-is-cached)). See [Activation Conditions](activation-conditions.md).
 
@@ -710,6 +712,8 @@ Paths that skip callbacks (`update_all`, `delete_all`, `update_column(s)`, `touc
 | `PermissionCacheClearer` | `rake permission_forge:cache:clear`: removes every user's cached permissions in every tenant, by key pattern (`Cache::Base#clear_entries`, verified with canary keys) or by invalidating every user; records `cache.cleared`. |
 | `PermissionRuleApplier` | Service for row-level rule query building. Extracted from `PermissionScopedFindable`. Injectable dependencies. Happy path is a single existence check. |
 | `FieldPermissionMerger` | Service for field permission merging (read/edit OR; the mask decided by read-granting rows only; variants). `merge_row` is the one definition, shared with the admin's effective-access view. |
+| `FieldVariants` | The variants a field row applies to on one Resource: `field_variant_mappings`, kept to the names the model has. Shared by the granting and muting merge and the admin; `.base_entries` lets `FiltersResponseAttributes` read a serializer's variant key by its base field. |
+| `FieldNames` | Whether a field row's name is something its model has (column, attribute, alias, public method, virtual field, configured variant); read by `rake permission_forge:audit` (`unknown_fields`). Saving does not ask it: a key only a serializer computes is a valid row. |
 | `ExtraFieldDefaults` | Service giving declared virtual fields their implicit entry (following the merged resource's read and edit), once per resource after all granting sets. |
 | `Cache::HolderInvalidation`, `Cache::BulkInvalidation`, `Cache::UserKeys` | Invalidation of a set's holders by id in slices of 500, with multi-key store calls; `UserKeys` is the one definition of a user's cache keys. |
 | `VirtualFields` | The one reader of a model's virtual (non-column) field names: declared, discovered, and which of them get the implicit grant. |
@@ -723,8 +727,8 @@ Paths that skip callbacks (`update_all`, `delete_all`, `update_column(s)`, `touc
 | `DashboardStats` | Service for dashboard statistics aggregation. |
 | `Operators::Registry` | Strategy Pattern — frozen Hash mapping 15 operator names to callable query-building objects. |
 | `Operators::Validations` | Extensible operator-specific field value validation registry. |
-| `Operators::ValueTyping` | Gives a rule value the type of the column it is compared with (by operator shape: one value, list, pair, LIKE text); a value the column cannot hold is `UNUSABLE` and the rule matches nothing. Shared by `PermissionRuleApplier` and `RlsOperatorSql`. |
-| `Operators::ValueCasters` | One caster per ActiveRecord column type (number, boolean, text, date/time); column types without one are left to the database. PostgreSQL has two of its own (`POSTGRESQL`): date/time text that is not ISO 8601 is left for PostgreSQL to read, and a `real` column is compared in single precision. |
+| `Operators::ValueTyping` | Gives a rule value the type of the column it is compared with (by operator shape: one value, list, pair, LIKE text); a value the column cannot hold is `UNUSABLE`: the rule matches nothing, and the model refuses to save it (`Operators::RuleProblem.of_value`). Shared by `PermissionRuleApplier`, `RlsOperatorSql` and the validation. |
+| `Operators::ValueCasters` | One caster per ActiveRecord column type (number, boolean, text, date/time; `uuid`, `inet`, `cidr` and native enums on PostgreSQL; `json`, `jsonb` and arrays take no value); on MySQL and SQLite column types without one are left to the database. PostgreSQL has its own (`POSTGRESQL`): date/time text that is not ISO 8601 and column types without a caster are asked of PostgreSQL once per process (`PostgresqlTypes::ReadBack`), a LIKE operator matches text columns only, and a `real` column is compared in single precision. |
 | `Operators::RuleColumn` | Finds the model column (and enum mapping) a rule's `field_name` names, dotted names and association paths included. |
 | `HasPermissionSetUsers` | Concern replacing duplicated `users_on_permission_set` across 5 models with 3 strategies. |
 | `ValidatesDependency` | Concern providing declarative boolean dependency validation DSL for Resource and ResourceField. |

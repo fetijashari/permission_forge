@@ -2,7 +2,7 @@ class CreatePermissionForgeTables < ActiveRecord::Migration<%= migration_version
   def change
     create_table :<%= table_prefix %>permission_set_groups do |t|
       t.string  :uuid, null: false
-      t.string  :name, null: false, default: 'Untitled Permission Set Group'
+      t.string  :name, null: false
       t.string  :description
       t.boolean :is_active, null: false, default: true
       t.boolean :is_editable, null: false, default: true
@@ -18,7 +18,7 @@ class CreatePermissionForgeTables < ActiveRecord::Migration<%= migration_version
     create_table :<%= table_prefix %>permission_sets do |t|
       t.string     :uuid, null: false
       t.references :permission_set_group, foreign_key: { to_table: :<%= table_prefix %>permission_set_groups }, null: true
-      t.string     :name, null: false, default: 'Untitled Permission Set'
+      t.string     :name, null: false
       t.string     :description
       t.boolean    :is_active, null: false, default: true
       t.boolean    :is_editable, null: false, default: true
@@ -106,14 +106,14 @@ class CreatePermissionForgeTables < ActiveRecord::Migration<%= migration_version
       t.string     :uuid, null: false
       t.references :permission_set, foreign_key: { to_table: :<%= table_prefix %>permission_sets }, null: false
       t.references :resource, foreign_key: { to_table: :<%= table_prefix %>resources }, null: false
-      t.string     :name, null: false, default: 'Untitled Rule'
-      t.string     :failure_message, default: 'You do not have permission to perform this action.'
+      t.string     :name, null: false
+      t.string     :failure_message
       t.string     :join_type
       t.string     :field_name, null: false
       t.string     :field_value, null: false
       t.string     :field_accessor_path
       t.string     :operator, null: false, default: 'equal'
-      t.boolean    :include_nulls, null: false, default: true
+      t.boolean    :include_nulls, null: false, default: false
       t.boolean    :is_active, null: false, default: true
       t.boolean    :is_editable, null: false, default: true
 <% if tenant_column %>      t.<%= tenant_id_type %>     :<%= tenant_column %>

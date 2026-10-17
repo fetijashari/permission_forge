@@ -23,8 +23,16 @@ module PermissionForge
     # Only the built-in operators are typed, each by the shape of its value
     # ({SHAPES}). A custom operator's value is returned as it came, and a
     # column nothing is known about leaves the value to the database. A rule
-    # whose field_name is not a name (RuleColumn#malformed?) has no column to
-    # compare with: its value is UNUSABLE whatever the operator.
+    # with no column to compare with ({.no_column?}) is UNUSABLE: one whose
+    # field_name is not a name, whatever the operator, and one that names a
+    # column its table does not have, under a built-in operator. So is a
+    # value with a NUL byte, under any operator ({.unquotable?}): no SQL
+    # literal carries one — the database reads the statement cut short, and
+    # every holder's query failed instead of being denied. So is any value
+    # under a built-in operator that takes one, on a column that holds
+    # ciphertext ({.encrypted?}): the statement compares the stored
+    # ciphertext with the rule's text (Active Record's own query rewriting
+    # never runs on a raw comparison). Why a value is UNUSABLE is {.problem}.
     module ValueTyping
       UNUSABLE = ValueCasters::UNUSABLE
       CURRENT_USER = 'current_user'
@@ -50,10 +58,71 @@ module PermissionForge
       # @return [Object] what the operator's strategy binds: one value, an Array
       #   for `in` / `not_in` / `between`, or {UNUSABLE}
       def call(operator, value, target)
-        return UNUSABLE if target.malformed?
+        return UNUSABLE if no_column?(operator, target) || unquotable?(value) || encrypted?(operator, target)
 
         shape = SHAPES[operator]
         shape ? send(shape, value, target) : value
+      end
+
+      # Whether the value cannot be written into a statement as a literal: a
+      # String with a NUL byte (a row written past the model; ParamShapes
+      # drops NUL bytes from request parameters).
+      #
+      # @param value [Object] the rule's value
+      def unquotable?(value)
+        value.is_a?(String) && value.include?("\0")
+      end
+
+      # Whether the rule has no column to compare with: its field_name is not a
+      # name (RuleColumn#malformed?), or — under a built-in operator — it names
+      # a column its table does not have (RuleColumn#missing?), which the
+      # database would reject. A custom operator's strategy decides what it
+      # does with the name, so a missing column is left to it.
+      #
+      # @param operator [String] the rule's operator
+      # @param target [RuleColumn] the column the rule names
+      def no_column?(operator, target)
+        target.malformed? || (target.missing? && Constants::OPERATORS.include?(operator))
+      end
+
+      # Whether a built-in operator that takes a value ({SHAPES}) compares a
+      # column that holds ciphertext (RuleColumn#encrypted?). The null checks
+      # take no value and work: the ciphertext is NULL exactly when the value
+      # is. A custom operator's strategy decides for itself (a `where(attr:
+      # value)` of its own goes through the attribute's type).
+      #
+      # @param operator [String] the rule's operator
+      # @param target [RuleColumn] the column the rule names
+      def encrypted?(operator, target)
+        SHAPES.key?(operator) && target.encrypted?
+      end
+
+      # Why the value is {UNUSABLE} for the column it is compared with, nil
+      # when it is not: the operator and the column alone decide the first
+      # two — :encrypted_column ({.encrypted?}), :pattern_on_non_text (a LIKE
+      # operator on a column no pattern can be matched against,
+      # RuleColumn#pattern?) —, else :unusable_value (a value the column
+      # cannot hold). For a column that was found (RuleProblem judges a
+      # missing one first).
+      #
+      # @param operator [String] the rule's operator
+      # @param value [Object] the rule's value, as {.call} takes it
+      # @param target [RuleColumn] the column it is compared with
+      # @return [Symbol, nil]
+      def problem(operator, value, target)
+        operator_problem(operator, target) || (:unusable_value if call(operator, value, target).equal?(UNUSABLE))
+      end
+
+      # The reason the operator cannot be used on the column whatever the
+      # value (see {.problem}), or nil.
+      #
+      # @param operator [String] the rule's operator
+      # @param target [RuleColumn] the column it is compared with
+      # @return [Symbol, nil] :encrypted_column or :pattern_on_non_text
+      def operator_problem(operator, target)
+        return :encrypted_column if encrypted?(operator, target)
+
+        :pattern_on_non_text if SHAPES[operator] == :pattern && !target.column.nil? && !target.pattern?
       end
 
       # `current_user` stands for the user's id wherever one value is compared.
@@ -78,9 +147,10 @@ module PermissionForge
         caster(target).call(value)
       end
 
-      # A LIKE pattern is built from the text of the value, whatever the column.
-      def pattern(value, _target)
-        ValueCasters::TEXT.call(value)
+      # A LIKE pattern is built from the text of the value, on a column a
+      # pattern can be matched against (ValueCasters.pattern?).
+      def pattern(value, target)
+        target.pattern? ? ValueCasters::TEXT.call(value) : UNUSABLE
       end
 
       # Every element has to be a value of the column; a list of none is no list.
@@ -100,6 +170,12 @@ module PermissionForge
         together ? together.call(bounds) : all_typed(bounds, typed)
       end
 
+      # The elements of a list or a range as written: the text split at every
+      # comma, each stripped (a trailing comma adds none). The rule's
+      # sentence splits them the same way.
+      #
+      # @param value [Object]
+      # @return [Array<String>]
       def split(value)
         value.to_s.split(',').map(&:strip)
       end
@@ -109,7 +185,7 @@ module PermissionForge
         typed.include?(UNUSABLE) ? UNUSABLE : typed
       end
 
-      private_class_method :caster, :single, :pattern, :list, :pair, :split, :all_typed
+      private_class_method :caster, :single, :pattern, :list, :pair, :all_typed
     end
   end
 end

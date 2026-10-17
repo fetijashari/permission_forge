@@ -34,3 +34,12 @@ updates:
       actions:
         patterns:
           - '*'
+
+  # test/browser/package.json + package-lock.json: playwright-core for the
+  # non-required browser job (layout probe). Same cooldown as the actions.
+  - package-ecosystem: npm
+    directory: /test/browser
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14

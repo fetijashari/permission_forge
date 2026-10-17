@@ -1,7 +1,7 @@
 <% content_for :pf_title, t('.title') %>
 <% errors = @errors || {} %>
 <% title = if @person then t('.title_person', name: pf_person_name(@person))
-           elsif @preset_set then t('.title_set', set: @preset_set.name)
+           elsif @preset_set then t('.title_set', set: pf_record_name(@preset_set))
            else t('.title') end %>
 <% close_path = pf_back_or(@person ? permission_forge.person_path(@person) : permission_forge.people_path) %>
 <%= form_with url: permission_forge.assignments_path, method: :post, id: 'pf-assign-form' do %>
@@ -11,7 +11,7 @@
       <% if errors.any? %>
         <% errors.each_value do |msg| %><span class="pf-error" role="alert"><%= msg %></span> <% end %>
       <% elsif @person && @chosen_sets.any? %>
-        <%= t('.summary', name: pf_person_name(@person), sets: @chosen_sets.map(&:name).to_sentence,
+        <%= t('.summary', name: pf_person_name(@person), sets: pf_to_sentence(@chosen_sets.map(&:name)),
                           until: (@expiry == 'never' ? t('.forever') : t('.until', date: pf_expiry_preset_date(@expiry) || @custom_date))) %>
       <% else %>
         <%= t('.applies_now') %>
@@ -63,16 +63,20 @@
           <% end %>
           <% @sets.each do |set| %>
             <% has = @existing_ids.include?(set.id) %>
+            <%# A locked set that would widen access by taking a holder is shown, but cannot be picked. %>
+            <% locked = !has && @locked_ids.include?(set.id) %>
             <label class="pf-option">
-              <input type="checkbox" name="set_ids[]" value="<%= set.id %>" <%= 'checked' if @selected_ids.include?(set.id) && !has %> <%= 'disabled' if has %>>
+              <input type="checkbox" name="set_ids[]" value="<%= set.id %>" <%= 'checked' if @selected_ids.include?(set.id) && !has && !locked %> <%= 'disabled' if has || locked %>>
               <span class="pf-option__main">
                 <span class="pf-row pf-row--tight">
-                  <span class="pf-fw-600"><%= set.name %></span>
+                  <span class="pf-fw-600"><%= pf_record_name(set) %></span>
                   <% if has %><%= pf_badge(t('.already')) %><% end %>
+                  <% if locked %><%= pf_lock_badge %><% end %>
                   <% if set.is_muting %><%= pf_badge("⊘ #{t('permission_forge.ui.badges.muting')}", variant: :muting) %><% end %>
                   <% unless set.is_active %><%= pf_off_badge %><% end %>
                 </span>
-                <% if set.description.present? %><span class="pf-fs-12 pf-text-3"><%= set.description %></span><% end %>
+                <% if set.description.present? %><span class="pf-fs-12 pf-text-3" data-pf-host-data><%= set.description %></span><% end %>
+                <% if locked %><span class="pf-fs-12 pf-text-3"><%= t('.locked_hint') %></span><% end %>
               </span>
               <span class="pf-option__aside"><%= pf_people_text(@people_counts.fetch(set.id, 0)) %></span>
             </label>
@@ -83,7 +87,7 @@
       <% if muting.any? %>
         <div class="pf-banner pf-banner--muting">
           <span class="pf-banner__glyph" aria-hidden="true">⊘</span>
-          <div class="pf-banner__body"><span><%= t('.muting_notice', sets: muting.map(&:name).to_sentence, name: @person ? pf_person(@person).first_name : t('.this_person')) %></span></div>
+          <div class="pf-banner__body"><span><%= t('.muting_notice', sets: pf_to_sentence(muting.map(&:name)), name: @person ? pf_person(@person).first_name : t('.this_person')) %></span></div>
         </div>
       <% end %>
     </section>

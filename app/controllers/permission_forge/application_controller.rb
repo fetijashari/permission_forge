@@ -26,6 +26,7 @@ module PermissionForge
     include PermissionForge::TenantRequired
     include PermissionForge::ParamShapes
     include PermissionForge::HtmlFormat
+    include PermissionForge::SaveNotice
 
     THEMES = %w[auto light dark].freeze
     FRAGMENT_HEADER = 'X-PF-Fragment'.freeze
@@ -38,11 +39,48 @@ module PermissionForge
     # inside the scope suspension (an actor resolver may query).
     around_action :pf_audit_request
 
+    # The uniqueness race (two requests passed the uniqueness validation
+    # together; the unique index refused this one's INSERT): back to the
+    # page the form was on (the admin's home without a Referer, never
+    # another host) with the validation's message for the index the error
+    # names (UniqueConflict), or the generic one. 303: the browser follows
+    # with a GET whatever the form's method was. Through 0.14.1 a 500.
+    rescue_from ActiveRecord::RecordNotUnique do |error|
+      detail = PermissionForge::UniqueConflict.sentence(error)
+      alert = detail ? t('permission_forge.flash.record_not_unique_detail', detail: detail) : t('permission_forge.flash.record_not_unique')
+      redirect_back_or_to permission_forge.root_path, alert: alert, allow_other_host: false, status: :see_other
+    end
+
+    # A NOT NULL column no validation foresaw (ValidatesRequiredColumns
+    # covers the gem's own columns): back to the page like the uniqueness
+    # race, never a 500.
+    rescue_from ActiveRecord::NotNullViolation do
+      redirect_back_or_to permission_forge.root_path, alert: t('permission_forge.flash.not_null'), allow_other_host: false,
+                                                      status: :see_other
+    end
+
+    # A flag the admin cannot read (ParamShapes::InvalidFlag: not true or
+    # false, where the forms post "0" and "1"): back to the page like the
+    # uniqueness race, saying which flag, nothing changed. ActiveModel's
+    # cast read any other word as true; this is never that, nor a 500. (Any
+    # other InvalidParam, a date the admin cannot read, stays a 400.)
+    rescue_from PermissionForge::ParamShapes::InvalidFlag do |error|
+      redirect_back_or_to permission_forge.root_path,
+                          alert: t('permission_forge.flash.invalid_param', param: error.param, detail: error.detail),
+                          allow_other_host: false, status: :see_other
+    end
+
     helper PermissionForge::ApplicationHelper unless self < PermissionForge::ApplicationHelper
     helper_method :pf_fragment?, :pf_theme, :pf_help_visible?, :pf_current_admin,
                   :pf_attention, :pf_settings_catalog, :pf_back_or
 
     private
+
+    # A Permission Set's, group's or rule's name for a flash (Admin::RecordName:
+    # an install-default English name in the request's language).
+    def pf_record_name(record)
+      PermissionForge::Admin::RecordName.for(record)
+    end
 
     # Memoized per request: drives the Home badge and the home page.
     def pf_attention
@@ -50,7 +88,7 @@ module PermissionForge
     end
 
     def pf_settings_catalog
-      @pf_settings_catalog ||= PermissionForge::Admin::SettingsCatalog.new
+      @pf_settings_catalog ||= PermissionForge::Admin::SettingsCatalog.new(attention: pf_attention)
     end
 
     def set_locale
@@ -176,10 +214,6 @@ module PermissionForge
 
     def pf_not_found
       raise ActionController::RoutingError, 'Not Found'
-    end
-
-    def pf_locked?(record)
-      PermissionForge::Admin::EditableLock.locked?(record)
     end
 
     # Redirects with an alert when the record (or any of `records`), or what

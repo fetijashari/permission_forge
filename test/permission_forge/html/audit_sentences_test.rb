@@ -146,6 +146,61 @@ module PermissionForge
         assert_includes listed, 'Bo Berisha read Customer #42 with these fields hidden or masked: domain, email.'
         assert_includes listed, 'Bo Berisha read Customer #42.'
       end
+
+      test 'a cache clear that reached only its own in-memory store says so; one on a shared store reads as before' do
+        store = lambda do |process_local|
+          PermissionForge::AuditEvent.store!(uuid: SecureRandom.uuid, event: 'cache.cleared', category: 'system',
+                                             actor_type: 'system', actor_label: 'Ops on-call', source: 'rake',
+                                             occurred_at: Time.current,
+                                             data: { 'operation' => 'cache_clear', 'strategy' => 'pattern',
+                                                     'process_local' => process_local })
+        end
+        store.call(true)
+        store.call(false)
+
+        listed = sentences(event: 'cache.cleared')
+
+        # one cache-scope suffix for every cache-touching event (audit_log.cache_scope.own_process)
+        assert_includes listed, 'Ops on-call cleared the cached permissions of every user. The cached permissions were ' \
+                                'cleared only in the process that ran it (an in-memory store): every other process kept theirs.'
+        assert_includes listed, 'Ops on-call cleared the cached permissions of every user.'
+      end
+
+      # Round 6: the admin's erasure ran in the web process and the sentence
+      # said the web processes kept theirs. Where it ran (in_request) picks
+      # the suffix: a server process names the other workers and the jobs.
+      test 'a clear made from an admin request names the other workers, not the server itself' do
+        PermissionForge::AuditEvent.store!(uuid: SecureRandom.uuid, event: 'erasure.performed', category: 'system',
+                                           actor_type: 'user', actor_id: @admin.id.to_s, actor_label: 'Ada Admin', source: 'admin_ui',
+                                           occurred_at: Time.current, data: { 'process_local' => true, 'in_request' => true })
+
+        listed = sentences(event: 'erasure.performed')
+
+        assert(listed.any? { |text| text.end_with?(I18n.t('permission_forge.audit_log.cache_scope.server_process')) }, listed.inspect)
+        assert(listed.none? { |text| text.include?('the web and job processes kept theirs') })
+      end
+
+      test 'an erasure, a clean-up or a consent withdrawal that cleared only its own in-memory store says so' do
+        %w[erasure.performed cleanup.expired_assignments consent.withdrawn].each do |name|
+          [true, false].each do |process_local|
+            PermissionForge::AuditEvent.store!(uuid: SecureRandom.uuid, event: name, category: 'system', actor_type: 'system',
+                                               actor_label: 'DPO Dana', source: 'rake', occurred_at: Time.current,
+                                               data: { 'process_local' => process_local })
+          end
+        end
+        suffix = I18n.t('permission_forge.audit_log.cache_scope.own_process')
+
+        erasures = sentences(event: 'erasure.performed')
+        cleanups = sentences(event: 'cleanup.expired_assignments')
+        consents = sentences(event: 'consent.withdrawn')
+
+        assert(erasures.any? { |text| text.start_with?('DPO Dana erased the permission data of') && text.end_with?(suffix) })
+        assert(erasures.any? { |text| text.start_with?('DPO Dana erased the permission data of') && !text.include?('own process') })
+        assert_includes cleanups, "DPO Dana removed expired assignments. #{suffix}"
+        assert_includes cleanups, 'DPO Dana removed expired assignments.'
+        assert(consents.any? { |text| text.start_with?('DPO Dana recorded that') && text.end_with?(suffix) })
+        assert(consents.any? { |text| text.start_with?('DPO Dana recorded that') && !text.include?('own process') })
+      end
     end
   end
 end

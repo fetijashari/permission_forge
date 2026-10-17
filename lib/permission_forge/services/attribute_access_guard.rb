@@ -90,7 +90,7 @@ module PermissionForge
       # The model is the record's class, or else the one the first name of the
       # chain names (an anonymous subclass answers as its base).
       def without_user
-        model = @model || @resource_name.to_s.safe_constantize
+        model = @model || PermissionForge::ModelLookup.model_for(@resource_name)
         PermissionForge.configuration.hide_masked_attributes_without_user_for?(model) ? hidden : bypass
       end
 
@@ -116,13 +116,8 @@ module PermissionForge
       end
 
       def unconfigured
-        strategy_key = PermissionForge.configuration.unconfigured_field_strategy
-        # Unknown strategy keys fall back to :block (fail closed), never pass-through.
-        strategy = FiltersResponseAttributes::UNCONFIGURED_FIELD_STRATEGIES.fetch(
-          strategy_key,
-          FiltersResponseAttributes::UNCONFIGURED_FIELD_STRATEGIES[:block]
-        )
-        include_field, value = strategy.call(@resource_name.to_s, @attribute, @raw_value)
+        # FiltersResponseAttributes.unconfigured_strategy: the one lookup (an unknown key blocks).
+        include_field, value = FiltersResponseAttributes.unconfigured_strategy.call(@resource_name.to_s, @attribute, @raw_value)
         notify(:unconfigured)
         [include_field, value]
       end

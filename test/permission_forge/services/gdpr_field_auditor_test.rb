@@ -139,7 +139,7 @@ module PermissionForge
 
         assert_empty implicit_grants(report)
         assert_includes unmapped(report), { type: :unmapped_column, resource: 'Customer', column: 'full_address',
-                                            pattern_matched: 'full', virtual: true }
+                                            pattern_matched: 'full', pattern: 'address', virtual: true }
         assert_not(unmapped(report).any? { |r| r[:column] == 'contact_count' })
 
         create_resource_field(resource: @resource, name: 'full_address', read_access: false)
@@ -153,7 +153,7 @@ module PermissionForge
         assert_not(unmapped.any? { |r| r[:column] == 'email' })
 
         row.update!(is_active: false)
-        assert_includes unmapped, { type: :unmapped_column, resource: 'Customer', column: 'email', pattern_matched: 'email' }
+        assert_includes unmapped, { type: :unmapped_column, resource: 'Customer', column: 'email', pattern_matched: 'email', pattern: 'email' }
       end
 
       test 'a column with an active row in any Permission Set is mapped' do
@@ -169,7 +169,7 @@ module PermissionForge
         create_resource_field(resource: @resource, name: 'full_address', read_access: false, is_active: false)
 
         assert_includes unmapped, { type: :unmapped_column, resource: 'Customer', column: 'full_address',
-                                    pattern_matched: 'full', virtual: true }
+                                    pattern_matched: 'full', pattern: 'address', virtual: true }
       end
 
       # The engine skips a switched-off row, so it is "unmapped" — reporting it
@@ -211,10 +211,21 @@ module PermissionForge
         assert_equal(['Off set'], unmasking.map { |r| r[:permission_set] })
       end
 
+      test 'a cross-set finding names the sets that mask the field' do
+        create_resource_field(resource: @resource, name: 'email', read_access: true, mask_access: true, mask_strategy: 'email')
+        unmasking = create_resource(permission_set: create_permission_set(name: 'Managers'), name: 'Customer')
+        create_resource_field(resource: unmasking, name: 'email', read_access: true, mask_access: false)
+
+        finding = GdprFieldAuditor.call.find { |r| r[:type] == :cross_set_unmasking }
+
+        assert_equal 'Managers', finding[:permission_set]
+        assert_equal [@permission_set.name], finding[:masked_in]
+      end
+
       test 'unmapped columns carry no virtual key' do
         email = unmapped.find { |r| r[:column] == 'email' }
 
-        assert_equal({ type: :unmapped_column, resource: 'Customer', column: 'email', pattern_matched: 'email' }, email)
+        assert_equal({ type: :unmapped_column, resource: 'Customer', column: 'email', pattern_matched: 'email', pattern: 'email' }, email)
       end
 
       test 'takes an injected configuration' do

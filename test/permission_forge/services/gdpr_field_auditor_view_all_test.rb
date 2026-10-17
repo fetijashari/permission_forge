@@ -24,6 +24,20 @@ module PermissionForge
         assert_includes findings.first[:pii_fields], 'email'
       end
 
+      # The engine skips a switched-off row: it is not one of the resource's
+      # personal-data fields; a resource with no active one gives no finding.
+      test 'a switched-off field row is not among the personal-data fields of a bypassing resource' do
+        resource = create_resource(permission_set: @permission_set, name: 'Customer', view_all: true)
+        create_resource_field(resource: resource, name: 'email', mask_access: true, mask_strategy: 'email', is_active: false)
+        create_resource_field(resource: resource, name: 'name', mask_access: true, mask_strategy: 'first1_last4')
+
+        findings = GdprFieldAuditor.call.select { |r| r[:type] == :view_all_on_pii_resource }
+        assert_equal([%w[name]], findings.map { |finding| finding[:pii_fields] })
+
+        resource.resource_fields.find_by!(name: 'name').update!(is_active: false)
+        assert_empty(GdprFieldAuditor.call.select { |r| r[:type] == :view_all_on_pii_resource })
+      end
+
       test 'reports modify_all on resource with PII fields' do
         resource = create_resource(
           permission_set: @permission_set,

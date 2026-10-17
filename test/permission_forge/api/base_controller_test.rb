@@ -18,17 +18,67 @@ module PermissionForge
         PermissionForge.configuration.api_auth = original
       end
 
-      test 'returns 403 when api_auth returns false' do
+      test 'returns 401 when api_auth returns false' do
         original = PermissionForge.configuration.api_auth
         PermissionForge.configuration.api_auth = ->(_controller) { false }
 
         get '/permission_forge/api/stats'
 
-        assert_response :forbidden
+        assert_response :unauthorized
         json = JSON.parse(response.body)
-        assert_equal 403, json.dig('error', 'status')
+        assert_equal 401, json.dig('error', 'status')
       ensure
         PermissionForge.configuration.api_auth = original
+      end
+
+      test 'a WWW-Authenticate challenge set by api_auth is sent with the 401; none is invented' do
+        original = PermissionForge.configuration.api_auth
+        PermissionForge.configuration.api_auth = ->(_controller) { false }
+        get '/permission_forge/api/permission_sets'
+        assert_response :unauthorized
+        assert_nil response.headers['WWW-Authenticate']
+        assert_equal I18n.t('permission_forge.api.errors.unauthorized', locale: :en), response.parsed_body.dig('error', 'messages')
+
+        PermissionForge.configuration.api_auth = lambda { |controller|
+          controller.response.headers['WWW-Authenticate'] = 'Bearer realm="permissions"'
+          false
+        }
+        get '/permission_forge/api/permission_sets'
+        assert_response :unauthorized
+        assert_equal 'Bearer realm="permissions"', response.headers['WWW-Authenticate']
+      ensure
+        PermissionForge.configuration.api_auth = original
+      end
+
+      # 403 is for an authenticated caller: the message says whether a lambda
+      # refused or one is missing (the integrator's fix), never the same text.
+      test 'a mutation refused because an authorization lambda is unset says which option is missing' do
+        config = PermissionForge.configuration
+        previous = [config.api_action_authorization, config.api_assignment_authorization, config.api_require_authorization]
+        config.api_action_authorization = nil
+        config.api_assignment_authorization = nil
+        config.api_require_authorization = true
+        set = create_permission_set(name: 'Lambdas')
+
+        post '/permission_forge/api/permission_sets', params: { permission_set: { name: 'x' } }
+        assert_response :forbidden
+        assert_equal I18n.t('permission_forge.api.errors.action_authorization_missing', locale: :en),
+                     response.parsed_body.dig('error', 'messages')
+        assert_match 'config.api_action_authorization', response.parsed_body.dig('error', 'messages')
+
+        post "/permission_forge/api/permission_sets/#{set.uuid}/users", params: { user_id: create_user.id }
+        assert_response :forbidden
+        assert_match 'config.api_assignment_authorization', response.parsed_body.dig('error', 'messages')
+
+        config.api_action_authorization = ->(*) { false }
+        config.api_assignment_authorization = ->(*) { false }
+        post '/permission_forge/api/permission_sets', params: { permission_set: { name: 'x' } }
+        assert_equal I18n.t('permission_forge.api.errors.action_not_authorized', locale: :en), response.parsed_body.dig('error', 'messages')
+        post "/permission_forge/api/permission_sets/#{set.uuid}/users", params: { user_id: create_user.id }
+        assert_equal I18n.t('permission_forge.api.errors.assignment_not_authorized', locale: :en),
+                     response.parsed_body.dig('error', 'messages')
+      ensure
+        config.api_action_authorization, config.api_assignment_authorization, config.api_require_authorization = previous
       end
 
       test 'allows request when api_auth returns true' do
@@ -46,6 +96,37 @@ module PermissionForge
         json = JSON.parse(response.body)
         assert_equal 404, json.dig('error', 'status')
         assert_equal 'Record not found', json.dig('error', 'messages')
+      end
+
+      # Rails raises ParseError when params are first read (the forgery
+      # check) and answered {"status":400,"error":"Bad Request"} outside the
+      # envelope (or raised, where exceptions are not shown).
+      test 'a body that is not valid JSON is a 400 in the API envelope, in the Accept-Language locale' do
+        assert_no_difference -> { PermissionForge::PermissionSet.count } do
+          post '/permission_forge/api/permission_sets', params: '{"permission_set": {"name": "x"',
+                                                        headers: { 'CONTENT_TYPE' => 'application/json' }
+        end
+        assert_response :bad_request
+        assert_equal({ 'error' => { 'status' => 400, 'messages' => I18n.t('permission_forge.api.errors.body_unreadable', locale: :en) } },
+                     JSON.parse(response.body))
+
+        post '/permission_forge/api/permission_sets', params: '{', headers: { 'CONTENT_TYPE' => 'application/json',
+                                                                              'HTTP_ACCEPT_LANGUAGE' => 'sq' }
+        assert_response :bad_request
+        assert_equal I18n.t('permission_forge.api.errors.body_unreadable', locale: :sq), response.parsed_body.dig('error', 'messages')
+      ensure
+        I18n.locale = I18n.default_locale
+      end
+
+      test 'a body that is not valid JSON on a disabled API stays a bodiless 404' do
+        PermissionForge.configuration.api_enabled = false
+
+        patch '/permission_forge/api/permission_sets/x', params: 'nope', headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        assert_response :not_found
+        assert_empty response.body
+      ensure
+        PermissionForge.configuration.api_enabled = true
       end
     end
   end

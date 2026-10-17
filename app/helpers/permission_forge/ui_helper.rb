@@ -6,8 +6,6 @@ module PermissionForge
   #
   # @api private
   module UiHelper
-    STATE_GLYPHS = { granted: '✓', blocked: '⊘', none: '–' }.freeze
-
     # --- assets ---------------------------------------------------------------
 
     def pf_asset_url(file)
@@ -39,6 +37,40 @@ module PermissionForge
 
     def pf_ui(key, **)
       t("permission_forge.ui.#{key}", **)
+    end
+
+    # A translation whose interpolated values may be markup (a SafeBuffer:
+    # a name marked as host data) although its key does not end in `_html`:
+    # the block translates with a marker in place of each value, and the
+    # pieces are joined with safe_join — the translation's own text escaped,
+    # the markup kept, nothing marked safe by hand. The `t(...)` stays in the
+    # caller (i18n-tasks sees the key).
+    #
+    #   pf_t_markup(set: pf_host_data(name)) { |held| t('.flag_granted', **held, flag: word) }
+    #
+    # A marker no value was given for (text that happens to hold one, such
+    # as a stored value interpolated as text) is left as written, escaped.
+    #
+    # @yieldparam held [Hash{Symbol => String}] the markers, by value name
+    # @return [ActiveSupport::SafeBuffer]
+    def pf_t_markup(**values)
+      held = values.to_h { |name, _| [name, "\u0001#{name}\u0001"] }
+      by_name = values.transform_keys(&:to_s)
+      pieces = yield(held).to_s.split(/\u0001(\w+)\u0001/)
+      safe_join(pieces.each_with_index.map { |piece, index| index.odd? ? by_name.fetch(piece) { "\u0001#{piece}\u0001" } : piece })
+    end
+
+    # "Bob, Carol and Dan" in the page's language (Admin::ListSentence): never
+    # a bare to_sentence, whose connectors stay English without rails-i18n.
+    def pf_to_sentence(items, **)
+      PermissionForge::Admin::ListSentence.call(items, **)
+    end
+
+    # #pf_to_sentence for items that carry markup (a set named with its
+    # Resource as host data): each item is kept as it is (#pf_t_markup).
+    def pf_markup_sentence(items)
+      values = items.each_with_index.to_h { |item, index| [:"item#{index}", item] }
+      pf_t_markup(**values) { |held| pf_to_sentence(held.values) }
     end
 
     def pf_people_text(count)
@@ -79,11 +111,28 @@ module PermissionForge
       format('%02d:00', hour.to_i)
     end
 
+    # --- states (Admin::StateLabel: one registry of glyphs and words) -----------
+
+    # A state (Admin::StateLabel::Label): `.word`, `.glyph`, and `.to_s` for
+    # both — pf_state(:field_level, :none).word → "Not configured",
+    # pf_state(:effective, :blocked).to_s → "⊘ Blocked".
+    def pf_state(kind, state)
+      PermissionForge::Admin::StateLabel.for(kind, state)
+    end
+
+    # The glyph (hidden from assistive technology) and the word of a state
+    # (pf_state), for a cell (`<span class="pf-cell__glyph">`) or a legend
+    # (`glyph_tag: :b`, one space between) that styles the glyph itself.
+    def pf_state_parts(label, glyph_tag: :span, separator: '')
+      glyph = content_tag(glyph_tag, label.glyph, class: ('pf-cell__glyph' if glyph_tag == :span), 'aria-hidden': true)
+      safe_join([glyph, label.word], separator)
+    end
+
     # Read-only state cell (effective access grid, across-sets lists).
     def pf_state_cell(state, aria:, href: nil, why: nil, current: false)
       state = state.to_sym
-      label = pf_ui("states.#{state}")
-      content = safe_join([content_tag(:span, STATE_GLYPHS.fetch(state), class: 'pf-cell__glyph', 'aria-hidden': true),
+      label = pf_state(:effective, state).word
+      content = safe_join([content_tag(:span, pf_state(:effective, state).glyph, class: 'pf-cell__glyph', 'aria-hidden': true),
                            content_tag(:span, label)], ' ')
       opts = { class: "pf-state pf-state--#{state}", 'aria-label': "#{aria}: #{label}" }
       opts[:'aria-current'] = 'true' if current
@@ -133,6 +182,18 @@ module PermissionForge
     # is one level below that.
     def pf_section_heading(text, id: nil)
       content_tag(pf_fragment? ? :h3 : :h2, text, class: 'pf-h3', id: id)
+    end
+
+    # A frame that scrolls sideways when its content (a wide grid) is wider than the page: a
+    # tab stop with a name (aria-label, or aria-labelledby on a section), so the keyboard
+    # reaches the region and assistive technology says what scrolls; the stylesheet paints the
+    # cue at its edges and clips what it contains. Every grid 480px or wider goes in one
+    # (html/layout_lint_test.rb).
+    #   <%= pf_scroll_frame('aria-label': t('.label'), class: 'pf-card') do %> … <% end %>
+    #   <%= pf_scroll_frame(tag: :section, 'aria-labelledby': 'pf-changes', class: 'pf-card') do %> … <% end %>
+    def pf_scroll_frame(tag: :div, **options, &)
+      classes = ['pf-scroll-x', options.delete(:class)].compact.join(' ')
+      content_tag(tag, class: classes, role: (tag == :section ? nil : 'region'), tabindex: '0', **options, &)
     end
 
     # Breadcrumb from [[label, path], ..., label]

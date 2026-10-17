@@ -85,6 +85,7 @@ PermissionForge::Engine.routes.draw do
       resources :rules, controller: 'permission_set_rules', only: %i[new create edit update destroy] do
         collection do
           post :refresh
+          get :preview
         end
         member do
           patch :toggle
@@ -107,37 +108,51 @@ PermissionForge::Engine.routes.draw do
   # JSON Admin API — routes are always drawn; access is guarded at runtime
   # by BaseController checking api_enabled + api_auth configuration.
   namespace :api, defaults: { format: :json } do
-    resource :stats, only: [:show], controller: 'dashboard'
+    # JSON only: `.json` or no extension. Any other extension
+    # (`/permission_sets.xml`) matches no endpoint and reaches the catch-all
+    # below: the JSON 404 envelope, never a JSON 200 under another format.
+    constraints(format: /json/) do
+      resource :stats, only: [:show], controller: 'dashboard'
 
-    # The audit log is read-only over the API: no write route exists.
-    resources :audit_events, only: %i[index show], param: :identifier
+      # The audit log is read-only over the API: no write route exists.
+      resources :audit_events, only: %i[index show], param: :identifier
 
-    resources :permission_sets, param: :identifier do
-      member do
-        post :clone
-      end
-
-      resources :resources, param: :identifier do
+      # No new/edit: a JSON API has no forms. Without them `…/new` reads as
+      # an identifier (404 unknown record) and `…/:identifier/edit` reaches
+      # the catch-all (404), both in the envelope; through 0.14.1 they raised
+      # AbstractController::ActionNotFound (Rails' own 404 page).
+      resources :permission_sets, param: :identifier, except: %i[new edit] do
         member do
-          post :generate_fields
+          post :clone
         end
-        resources :fields, param: :identifier, controller: 'resource_fields'
-        resources :actions, param: :identifier, controller: 'resource_actions'
-        resources :rules, param: :identifier, controller: 'permission_set_rules'
+
+        resources :resources, param: :identifier, except: %i[new edit] do
+          member do
+            post :generate_fields
+          end
+          resources :fields, param: :identifier, controller: 'resource_fields', except: %i[new edit]
+          resources :actions, param: :identifier, controller: 'resource_actions', except: %i[new edit]
+          resources :rules, param: :identifier, controller: 'permission_set_rules', except: %i[new edit]
+        end
+
+        resources :users, param: :identifier, controller: 'permission_set_users', only: %i[index create destroy] do
+          collection do
+            post :bulk
+          end
+        end
       end
 
-      resources :users, param: :identifier, controller: 'permission_set_users', only: %i[index create destroy] do
-        collection do
-          post :bulk
+      resources :permission_set_groups, param: :identifier, except: %i[new edit] do
+        member do
+          post :clone
         end
+        resources :users, param: :identifier, controller: 'permission_set_group_users', only: %i[index create destroy]
       end
     end
 
-    resources :permission_set_groups, param: :identifier do
-      member do
-        post :clone
-      end
-      resources :users, param: :identifier, controller: 'permission_set_group_users', only: %i[index create destroy]
-    end
+    # Last: any other path or method under /api answers the JSON 404
+    # envelope, not Rails' HTML page (Api::UnmatchedRoutesController) —
+    # OPTIONS and TRACE included (through 0.15.0-rc a RoutingError).
+    match '(*path)', to: 'unmatched_routes#show', via: %i[get post put patch delete options trace], format: false
   end
 end

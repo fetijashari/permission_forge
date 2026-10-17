@@ -1,3 +1,5 @@
+require_relative '../cache/report'
+
 module PermissionForge
   module Services
     # Supports a GDPR Art. 17 (right to erasure) request for a host user.
@@ -26,7 +28,9 @@ module PermissionForge
     #
     # @example Full erasure
     #   result = DataSubjectErasure.call(user: user)
-    #   # => { assignments_removed: 3, group_assignments_removed: 1, cache_cleared: true, callback_invoked: true }
+    #   # => { assignments_removed: 3, group_assignments_removed: 1, permission_sets: ["Sales"], groups: [],
+    #   #      actor_labels_cleared: 2, record_labels_cleared: 6, events_scrubbed: 8, cache_cleared: true,
+    #   #      callback_invoked: true, cache: { confirmed: true, process_local: false, unconfirmed: 0 }, ... }
     #
     # `cache_cleared` is false when the cache store did not confirm the
     # removal (it is unreachable, say): the assignments are gone, but the
@@ -37,9 +41,22 @@ module PermissionForge
     # transaction has committed, and a failure then is reported through
     # `config.on_cache_failure` alone.
     #
+    # `cache` is the one Cache::Outcome every cache-touching operation
+    # answers (Cache::Report): `confirmed` (as `cache_cleared`),
+    # `process_local`, `unconfirmed`. `cache_cleared` speaks for the store
+    # this process reaches. When that store lives in this process only (an
+    # in-memory store, Cache::Base#process_local? — `cache_backend = :memory`,
+    # or `Rails.cache` a `:memory_store`), a run from a rake task or a console
+    # cleared nothing in the web and job processes: they keep the person's
+    # cached permissions until they restart or the entries expire
+    # (cache_ttl). `erasure.performed` then says `process_local: true`; its
+    # `cache_confirmed` is nil, because the event is written in the
+    # erasure's transaction and the cache work follows it.
+    #
     # @example Dry run (inspect without removing)
     #   result = DataSubjectErasure.call(user: user, dry_run: true)
-    #   # => { assignments_count: 3, group_assignments_count: 1, permission_sets: [...], dry_run: true }
+    #   # => { assignments_count: 3, group_assignments_count: 1, permission_sets: [...],
+    #   #      actor_labels_to_clear: 2, record_labels_to_clear: 4, dry_run: true }
     #
     # The audit log (docs/audit-log.md): the rows are destroyed through their
     # callbacks, so each assignment writes its own `assignment.revoked`
@@ -77,6 +94,10 @@ module PermissionForge
     class DataSubjectErasure
       include Concerns::AuditedOperation
       include Concerns::AcrossTenants
+      include Concerns::SettlesCache
+
+      # The name labels erasure clears, by the count they are reported under.
+      LABELS = { actor_labels: :actor_label, record_labels: :record_label }.freeze
 
       # Erases a user's permission data (GDPR Art. 17).
       # @return [Hash] see {#call}
@@ -104,22 +125,31 @@ module PermissionForge
       private
 
       def erase
+        @report = PermissionForge::Cache::Report.new
         removed = ActiveRecord::Base.transaction { remove_and_record }
-        cache_cleared = clear_cache
+        outcome = clear_cache
+        settle_cache('erasure', @user, @report) { remove_user_cache }
 
-        removed.merge(cache_cleared: cache_cleared, callback_invoked: run_callback)
+        removed.merge(cache_cleared: outcome.confirmed, callback_invoked: run_callback, cache: outcome.to_h)
       end
 
       def remove_and_record
         sets = permission_set_assignments.includes(:permission_set).filter_map(&:permission_set)
         groups = group_assignments.includes(:permission_set_group).filter_map(&:permission_set_group)
 
-        counts = { assignments_removed: remove_permission_set_assignments,
-                   group_assignments_removed: remove_group_assignments }
+        counts = { assignments_removed: remove_all(permission_set_assignments),
+                   group_assignments_removed: remove_all(group_assignments) }
         counts.merge!(remaining_elsewhere)
         scrubbed = scrub_labels
         record_summary(sets, groups, counts, scrubbed)
-        counts
+        counts.merge(result_details(sets, groups, scrubbed))
+      end
+
+      # The names removed and the labels cleared, as the result reports them.
+      def result_details(sets, groups, scrubbed)
+        { permission_sets: sets.map(&:name).uniq, groups: groups.map(&:name).uniq,
+          actor_labels_cleared: scrubbed[:actor_labels], record_labels_cleared: scrubbed[:record_labels],
+          events_scrubbed: scrubbed.values.sum }
       end
 
       # What the person still has in other tenants (nothing is removed there).
@@ -149,12 +179,22 @@ module PermissionForge
       # basic auth login that shares the id is somebody else), and recorded
       # in `erasure.performed`.
       def scrub_labels
-        events = scrubbed_events
-        id = @user.id.to_s
         {
-          actor_labels: events.where(actor_type: 'user', actor_id: id).where.not(actor_label: nil).update_all(actor_label: nil),
-          record_labels: events.where(subject_user_id: id).where.not(record_label: nil).update_all(record_label: nil)
+          actor_labels: labelled(:actor_labels).update_all(actor_label: nil),
+          record_labels: labelled(:record_labels).update_all(record_label: nil)
         }
+      end
+
+      # The events whose label names the person: as the actor (an actor of
+      # type 'user', in actor_label) or as the subject (in record_label).
+      def labelled(kind)
+        id = @user.id.to_s
+        events = if kind == :actor_labels
+                   scrubbed_events.where(actor_type: 'user', actor_id: id)
+                 else
+                   scrubbed_events.where(subject_user_id: id)
+                 end
+        events.where.not(LABELS.fetch(kind) => nil)
       end
 
       # With a tenant current (a tenant admin), that tenant's events only: a
@@ -172,12 +212,15 @@ module PermissionForge
                                                            data: summary_data(sets, groups, counts, scrubbed))
       end
 
+      # The cache outcome is pending here: the invalidation follows this
+      # transaction (@report.pending: the store's scope, nothing confirmed).
       def summary_data(sets, groups, counts, scrubbed)
         cleared = { 'events_scrubbed' => scrubbed.values.sum, 'actor_labels_cleared' => scrubbed[:actor_labels],
                     'record_labels_cleared' => scrubbed[:record_labels] }
         names(sets, 'set').merge(names(groups, 'group'), counts.transform_keys(&:to_s), cleared,
                                  'operation' => 'erasure', 'subject_user_id' => @user.id.to_s,
-                                 'callback_invoked' => !@on_erasure.nil?, 'dry_run' => false)
+                                 'callback_invoked' => !@on_erasure.nil?, 'dry_run' => false,
+                                 **@report.pending.event_data)
       end
 
       def names(records, kind)
@@ -196,42 +239,41 @@ module PermissionForge
         PermissionForge::PermissionSetGroupUser.where(user: @user)
       end
 
-      def remove_permission_set_assignments
-        records = permission_set_assignments
+      # Destroys the rows through their callbacks (one audit event each).
+      #
+      # @return [Integer] how many there were
+      def remove_all(records)
         count = records.count
         records.destroy_all
         count
       end
 
-      def remove_group_assignments
-        records = group_assignments
-        count = records.count
-        records.destroy_all
-        count
-      end
-
-      # Asks the gem's own failure bookkeeping, not the value of
-      # invalidate_permissions: a host app overrides that method.
+      # Measured by Cache::Report (the gem's own failure bookkeeping), not
+      # the value of invalidate_permissions: a host app overrides that method.
       #
       # An invalidation leaves the per-context variants of a user with
       # conditional sets to their TTL (unreachable). They hold the profile,
       # so they are removed as well (Cache::VariantRemoval) — inside the
-      # caller's transaction once it has committed, after the assignments'
-      # own invalidations: until then another request may still cache one
-      # from the rows as they were.
+      # caller's transaction once it has committed (SettlesCache runs the
+      # work again there, measured, and records cache.settled), after the
+      # assignments' own invalidations: until then another request may still
+      # cache one from the rows as they were.
       #
-      # @return [Boolean, nil] whether the store confirmed the removal; nil
-      #   inside an open transaction, where that is only known at its commit
+      # @return [PermissionForge::Cache::Outcome] confirmed nil inside an
+      #   open transaction, where that is only known at its commit
       def clear_cache
-        transaction = PermissionForge::OpenTransaction.current
-        cleared = PermissionForge::Cache::Failure.none? do
+        @report.measure do
           invalidate_user
-          PermissionForge::Cache::VariantRemoval.call(**variant_removal) unless transaction
+          PermissionForge::Cache::VariantRemoval.call(**variant_removal) unless @report.deferred?
         end
-        return cleared unless transaction
+        @report.outcome
+      end
 
-        remove_variants_after_commit(transaction)
-        nil
+      # The person's cache work after a caller's commit: the invalidation and
+      # every per-context variant.
+      def remove_user_cache
+        invalidate_user
+        PermissionForge::Cache::VariantRemoval.call(**variant_removal)
       end
 
       # The arguments of the person's Cache::VariantRemoval: the keys the
@@ -241,17 +283,6 @@ module PermissionForge
       def variant_removal
         named = @user.respond_to?(:permission_cache_key) ? { ambient_key: @user.permission_cache_key } : {}
         { user_ids: [@user.id], indexed_only: false, **named }
-      end
-
-      # Nothing raises out of the commit: a failure is reported, like every
-      # after-commit invalidation (Cache::Failure).
-      def remove_variants_after_commit(transaction)
-        removal = variant_removal
-        transaction.after_commit do
-          PermissionForge::Cache::VariantRemoval.call(**removal)
-        rescue StandardError => e
-          PermissionForge::Cache::Failure.report(operation: :invalidate, user_id: removal[:user_ids].first, error: e)
-        end
       end
 
       def invalidate_user
@@ -293,11 +324,18 @@ module PermissionForge
         Rails.error.report(e, handled: true, source: 'permission_forge.data_subject_erasure')
       end
 
+      # The label counts (actor_labels_to_clear, record_labels_to_clear) are of
+      # the events there now — none on an app whose audit table is not there
+      # yet; the events the erasure itself writes (assignment.revoked, ...) are
+      # cleared as well.
       def dry_run_result
+        table = PermissionForge::DatabaseReach.table_exists?(PermissionForge::AuditEvent)
         {
           assignments_count: permission_set_assignments.count,
           group_assignments_count: group_assignments.count,
           permission_sets: permission_set_assignments.includes(:permission_set).filter_map { |psu| psu.permission_set&.name },
+          **LABELS.keys.to_h { |kind| [:"#{kind}_to_clear", table ? labelled(kind).count : 0] },
+          cache: PermissionForge::Cache::Report.none.to_h,
           dry_run: true
         }
       end

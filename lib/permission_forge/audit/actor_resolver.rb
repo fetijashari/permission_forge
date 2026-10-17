@@ -25,7 +25,6 @@ module PermissionForge
       # username it has just verified. Not reachable from a header (those are
       # HTTP_*).
       BASIC_AUTH_ENV = 'permission_forge.audit.basic_auth_user'
-      API_CLIENT_LABEL = 'API client'
 
       # The steps tried, in order, per request source; the first that names
       # someone wins.
@@ -37,7 +36,7 @@ module PermissionForge
       # Who acts when no step names anyone.
       FALLBACKS = {
         'admin_ui' => -> { Actor.unknown },
-        'api' => -> { Actor.new(type: 'api', label: API_CLIENT_LABEL) }
+        'api' => -> { Actor.new(type: 'api', label: ActorCodes::API_CLIENT) }
       }.freeze
 
       # @param controller [ActionController::Metal]

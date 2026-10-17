@@ -67,7 +67,7 @@ module PermissionForge
       test 'SHIP-CSRF a forged POST with the admin session cookie is refused by a session-based api_auth' do
         assert_nil result['csrf_error']
         assert_equal 200, result['csrf_admin_session_established']
-        assert_equal 403, result['csrf_forged_post_status']
+        assert_equal 401, result['csrf_forged_post_status']
         assert_equal false, result['csrf_forged_post_created']
         assert_equal 201, result['csrf_post_with_token_status']
         assert_equal true, result['csrf_post_with_token_created']
@@ -91,6 +91,14 @@ module PermissionForge
         assert_equal true, result['filter_attributes_from_host'], 'a filter_parameter_logging entry filters #inspect'
         assert_equal %w[email name phone_number telephone zipcode], result['inspect_filtered_names'].sort
         assert_match(/name: \[FILTERED\], email: \[FILTERED\]/, result['customer_inspect'])
+      end
+
+      # Field test round 3: the GDPR pattern `\Aname\z` hid the gem's own
+      # configuration names (`name: [FILTERED]` on a Permission Set).
+      test 'SHIP-Q5b the gem models show their configuration names; audit labels naming people stay filtered' do
+        assert_match(/name: "Sales rep"/, result['set_inspect'])
+        assert_match(/name: "email", label: "Email"/, result['field_inspect'])
+        assert_match(/actor_label: \[FILTERED\], .*record_label: \[FILTERED\]/, result['audit_event_inspect'])
       end
 
       test 'SHIP-DEFAULTS the generated initializer closes the fail-open defaults for new installs' do

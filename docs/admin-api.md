@@ -8,7 +8,7 @@ The API runs alongside the HTML admin UI — you can use both, either, or neithe
 
 Add these settings to your initializer:
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   config.api_enabled = true
@@ -18,7 +18,7 @@ end
 
 Then mount the engine (if not already mounted):
 
-```ruby
+```ruby fragment
 # config/routes.rb
 mount PermissionForge::Engine, at: '/permissions'
 ```
@@ -33,7 +33,7 @@ The API supports three authentication strategies. Choose the one that fits your 
 
 Pass a lambda that receives the controller instance and returns `true`/`false`:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.api_enabled = true
   config.api_auth = lambda { |_controller|
@@ -42,13 +42,13 @@ PermissionForge.configure do |config|
 end
 ```
 
-`PermissionForge.current_user` (here and in the examples below) is what your `current_user_resolver` returns: `Current.user` with Rails 8's authentication generator, or whatever you wired it to with Devise. It names someone only when your app's sign-in runs in the request, that is behind an `api_base_controller_class` that authenticates (Option B). On the default `::ActionController::Base` nothing signs the caller in, so it is `nil` and the lambda refuses (403): check a header instead, as in the key and token examples below. Rails 8's generated `request_authentication` redirects to `new_session_path`, which inside the engine does not resolve: override it in that base controller as shown in [Admin UI](admin-ui.md#rails-8-authentication-generator), or answer 401 there for JSON.
+`PermissionForge.current_user` (here and in the examples below) is what your `current_user_resolver` returns: `Current.user` with Rails 8's authentication generator, or whatever you wired it to with Devise. It names someone only when your app's sign-in runs in the request, that is behind an `api_base_controller_class` that authenticates (Option B). On the default `::ActionController::Base` nothing signs the caller in, so it is `nil` and the lambda refuses (401): check a header instead, as in the key and token examples below. Rails 8's generated `request_authentication` redirects to `new_session_path`, which inside the engine does not resolve: override it in that base controller as shown in [Admin UI](admin-ui.md#rails-8-authentication-generator), or answer 401 there for JSON.
 
-The lambda has full access to the controller, so you can check headers, tokens, roles, etc. When it returns a falsy value, the request gets **403 Forbidden** (recorded as `api.auth_failed`).
+The lambda has full access to the controller, so you can check headers, tokens, roles, etc. When it returns a falsy value, the request gets **401 Unauthorized** with `{"error":{"status":401,"messages":"Not authenticated"}}` (recorded as `api.auth_failed`, reason `api_auth_denied`), so a client that refreshes its token on 401 does so. The gem sends no `WWW-Authenticate` challenge of its own, since only your app knows the scheme: set one in the lambda before refusing, e.g. `controller.response.headers['WWW-Authenticate'] = 'Bearer realm="permissions"'`, and it is kept. 403 is reserved for an authenticated caller that the authorization lambdas below refuse. Through 0.14.1 a refusing `api_auth` answered 403.
 
-`api_auth` only proves who the caller is. Changes and assignments also need `api_action_authorization` and `api_assignment_authorization` (see [Security Considerations](#security-considerations)): until both are set they are refused with 403.
+`api_auth` only proves who the caller is. Changes and assignments also need `api_action_authorization` and `api_assignment_authorization` (see [Security Considerations](#security-considerations)): until both are set they are refused with 403, and the message names the option that is missing.
 
-```ruby
+```ruby fragment
 # Example: API key authentication
 config.api_auth = lambda { |controller|
   api_key = controller.request.headers['X-API-Key']
@@ -66,7 +66,7 @@ config.api_auth = lambda { |controller|
 
 If your app already has an admin base controller with authentication built in (e.g., Devise + role checking), inherit from it:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.api_enabled = true
   config.api_base_controller_class = '::Api::V1::Admin::BaseController'
@@ -80,7 +80,7 @@ Your `Api::V1::Admin::BaseController` handles authentication and authorization �
 
 If `api_auth` is `nil` (the default), **all API requests return 401 Unauthorized** (no body). This is the safe default — the API is locked until you explicitly configure authentication.
 
-```ruby
+```ruby fragment
 # This is the default — API routes exist but return 401
 config.api_enabled = true
 # config.api_auth = nil  # <- default, all requests get 401
@@ -88,44 +88,95 @@ config.api_enabled = true
 
 #### Disabling the API entirely
 
-When `api_enabled = false` (the default), all API routes return **404 Not Found** with no body. The routes are defined but guarded at runtime — no route leakage.
+When `api_enabled = false` (the default), all API routes return **404 Not Found** with no body — and so does any other path under the API mount. The routes are defined but guarded at runtime — no route leakage.
+
+This 404 is deliberately not the JSON envelope the API answers once it is on: an empty 404 (`head :not_found`, with whatever content type Rails gives it, `text/html` for a plain `curl`) does not reveal that an API exists under the mount while it is off. A client that expects `{ "error": … }` on every answer reads an empty body here; check `api_enabled` first when an endpoint answers 404 to everything.
+
+#### API-only applications
+
+The API works in an application generated with `rails new --api` (`config.api_only = true`) without changes: its controllers answer JSON only, `api_auth` proves the caller, and the CSRF posture is `null_session`, so no cookie, session or flash middleware is needed. `api_base_controller_class` may then name your `ActionController::API` controller. The admin screens are another matter: they need the three middlewares an API-only app leaves out, and the boot says so — see [Admin UI: API-only applications](admin-ui.md#api-only-applications).
+
+#### Method override (`_method`, `X-HTTP-Method-Override`)
+
+The engine's own method override (`PermissionForge::AdminMethodOverride`, for the admin's forms) skips the API's paths. A full-stack application has Rails' `Rack::MethodOverride` in its own middleware stack, and it runs before the router for every path, the API's included, as it does for your own routes: a POST with a `_method` form field or an `X-HTTP-Method-Override` header becomes that verb there (`POST …/permission_sets/:uuid` with `X-HTTP-Method-Override: DELETE` deletes the set). Nothing about who may do it changes: `api_auth`, the forgery posture below and the authorization lambdas decide the overridden request as they decide the verb itself. An API-only application has no `Rack::MethodOverride`, so there the API sees the verb that was sent. Remove the middleware (`config.middleware.delete Rack::MethodOverride`) if your clients must not override verbs at all — it then stops for your own routes too.
+
+#### Who the audit log names for an API change
+
+Every change made through the API is an [audit event](audit-log.md#who-did-it-actor-resolution). Its actor is the first of: `config.audit_actor_resolver` (called with the controller), the current user (`config.current_user_resolver`), else an anonymous `api` actor labelled **"API client"**. `api_auth` answers only yes or no, so it cannot name anyone by itself.
+
+On the default `api_base_controller_class` (`::ActionController::Base`) your application's sign-in does not run in the API: the `Current.user` that the generated `current_user_resolver` reads is never set there, so even a request from a browser signed in to your app is recorded as "API client". Name the caller one of two ways:
+
+- **Inherit your sign-in (Option B).** Set `api_base_controller_class` to an application controller that resumes the session (Rails 8's `Authentication` concern, Devise's `authenticate_user!`). `current_user_resolver` then names the signed-in user, for the audit log and for your authorization lambdas.
+- **Resolve the actor from the credential `api_auth` verified.** For a token or key client, map that credential to who it belongs to:
+
+  ```ruby fragment
+  config.audit_actor_resolver = ->(controller) {
+    key = ApiKey.active.find_by(key: controller.request.headers['X-API-Key'])
+    key && { type: 'api', id: key.id, label: key.name }  # or key.user, to name a person
+  }
+  ```
+
+  Derive the actor from the same verified credential, never from a value the caller picks (an `X-User-Id` header, a `user_id` parameter): the gem itself never takes the actor from parameters or headers, and your resolver should not either. A resolver that answers `nil` falls back to the current user, then to "API client".
+
+Changes made from a console, a runner or a job are not API requests: wrap them in `PermissionForge.with_audit_actor(user: admin) { … }` ([audit log](audit-log.md#who-did-it-actor-resolution)).
 
 ## Response Format
 
-JSON responses use the envelope below. Some answers have no body: the 401 while `api_auth` is not set, the 404 while the API is disabled, the stats endpoint's 403 (`api_stats_require_admin`) and the 204 of a delete.
+JSON responses use the envelope below. Some answers have no body: the 401 while `api_auth` is not set, the 404 while the API is disabled and the 204 of a delete (removing an assignment answers 200 with the removed assignment and its `meta.cache`).
 
 **Success (single record):**
-```json
+```json sample=permission_set
 {
   "data": {
-    "id": 1,
-    "uuid": "abc-123",
+    "id": 12,
+    "uuid": "d2b4c7e1-5a3f-4b8e-9c6d-1f2a3b4c5d6e",
     "name": "Sales Team",
+    "description": "Read and edit customers",
     "is_active": true,
-    "created_at": "2026-03-10T12:00:00Z"
+    "is_editable": true,
+    "is_muting": false,
+    "requires_session_flag": null,
+    "allowed_ips": "203.0.113.0/24",
+    "allowed_ip_list": ["203.0.113.0/24"],
+    "allowed_hours_start": null,
+    "allowed_hours_end": null,
+    "permission_set_group_id": 3,
+    "permission_set_group_uuid": "8a6f2c1d-3e4b-4f5a-8b7c-9d0e1f2a3b4c",
+    "created_at": "2026-03-10T12:00:00.000Z",
+    "updated_at": "2026-03-12T09:30:00.000Z"
   }
 }
 ```
 
+**References to other records.** A key that names another PermissionForge record is answered twice: `<record>_id`, its numeric id (as through 0.14.1), then `<record>_uuid`, its uuid — `permission_set_group_id` / `permission_set_group_uuid` on a Permission Set, `permission_set_id` / `permission_set_uuid` on a Resource and an assignment, `resource_id` / `resource_uuid` on a field and an action, both pairs on a rule, `permission_set_group_id` / `permission_set_group_uuid` on a group member. Both are there under either `api_record_identifier`; under `:uuid` follow the `_uuid` key, the identifier the URLs take. The uuid is `null` where the id is, and where the id names no record visible in the current tenant. A page of records looks the uuids up in one query per reference. `user_id` is your user's key and has no companion. Through 0.15.0-rc only the numeric id was answered (field test round 8, D#29). The `_uuid` keys are **answer-only**: no endpoint takes them, and one sent back (a whole answer PATCHed back) is ignored like any key the endpoint does not take. To change a reference send its `_id` key, which takes the uuid under `api_record_identifier = :uuid` — so an answer sent back with its `_id` key edited moves the record, the same however often it is sent.
+
 **Success (collection):** every list endpoint is paginated and answers `meta.pagination` with its page:
-```json
+```json sample=permission_set_group_collection
 {
   "data": [
-    { "id": 1, "uuid": "abc-123", "name": "Sales Team" },
-    { "id": 2, "uuid": "def-456", "name": "Support Team" }
+    {
+      "id": 3,
+      "uuid": "8a6f2c1d-3e4b-4f5a-8b7c-9d0e1f2a3b4c",
+      "name": "Sales",
+      "description": null,
+      "is_active": true,
+      "is_editable": true,
+      "created_at": "2026-03-10T12:00:00.000Z",
+      "updated_at": "2026-03-10T12:00:00.000Z"
+    }
   ],
   "meta": {
     "pagination": {
       "page": 1,
       "per_page": 15,
-      "total_count": 42
+      "total_count": 1
     }
   }
 }
 ```
 
 **Error (validation):**
-```json
+```json sample=validation_error
 {
   "error": {
     "status": 422,
@@ -137,7 +188,7 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 ```
 
 **Error (not found):**
-```json
+```json sample=not_found
 {
   "error": {
     "status": 404,
@@ -146,17 +197,77 @@ JSON responses use the envelope below. Some answers have no body: the 401 while 
 }
 ```
 
+**A path or method no endpoint answers is a 404 in the same envelope.** Any other path under the API mount (`GET /permissions/api/unknown`, `GET …/permission_sets/:uuid/widgets`, `PUT /permissions/api/stats`, a `POST`, `PATCH` or `DELETE` on the read-only `audit_events`, any `OPTIONS` or `TRACE` request) answers:
+
+```json sample=route_not_found
+{ "error": { "status": 404, "messages": "No API endpoint answers this path and method" } }
+```
+
+It passes the same guards first: while the API is disabled it is the bodiless 404, a caller `api_auth` refuses gets the 401 and a request with no tenant the 403 (each recorded as `api.auth_failed`, as on any endpoint). It changes nothing and records nothing else. Paths outside the API mount keep the host's own 404. Through 0.14.1 these answered Rails' HTML 404 page.
+
+**The API speaks JSON only.** An endpoint answers with no extension or with `.json` (`GET /permissions/api/permission_sets.json`). Any other extension (`.xml`, `.html`, `.csv`) names no endpoint and gets the 404 above; through 0.14.1 `GET …/permission_sets.xml` answered the JSON list with a 200.
+
+**Every 422 has this shape.** `messages` is always an object mapping a field to a list of messages: the model's attribute for a failed validation, the request parameter for input the API cannot read, and `base` when the error names no field:
+
+```json sample=input_errors
+{ "error": { "status": 422, "messages": { "expires_at": ["is not an ISO 8601 date or time"] } } }
+{ "error": { "status": 422, "messages": { "permission_set": ["is missing, empty or not an object"] } } }
+{ "error": { "status": 422, "messages": { "bulk_action": ["must be assign or revoke"] } } }
+{ "error": { "status": 422, "messages": { "user_ids": ["must name at least one user"] } } }
+{ "error": { "status": 422, "messages": { "user_id": ["names nobody who can be assigned"] } } }
+{ "error": { "status": 422, "messages": { "grant_all": ["must be true or false"] } } }
+{ "error": { "status": 422, "messages": { "is_active": ["must be true or false"] } } }
+{ "error": { "status": 422, "messages": { "name": ["must be a string"] } } }
+{ "error": { "status": 422, "messages": { "field_value": ["must be a string, a number, true or false; a list of them (none with a comma) only for in, not_in and between"] } } }
+{ "error": { "status": 422, "messages": { "base": ["Could not generate fields for this resource"] } } }
+```
+
+The messages follow the request's locale. Through 0.14.1 an input error answered `messages` as one string (`"expires_at is not an ISO 8601 date or time"`, `"param is missing or the value is empty or invalid: permission_set"`). Other statuses (400, 401, 403, 404) keep a string.
+
+**A body that cannot be parsed is a 400.** A request sent as `application/json` whose body is not valid JSON (`{"permission_set": {"name": "x"`) answers, in the envelope:
+
+```json sample=body_unreadable
+{ "error": { "status": 400, "messages": "The request body could not be read. Send valid JSON with Content-Type application/json." } }
+```
+
+Nothing is changed. Rails parses the body before `api_auth` runs, so this 400 can come before a 401; while the API is disabled it stays a 404 without a body. The message follows the `Accept-Language` header (a `locale` parameter in the unreadable body cannot be read). Through 0.14.1 Rails answered its own `{"status":400,"error":"Bad Request"}`. A form or multipart body Rack cannot parse (`a[=1&%%%`, a multipart body without its end) answers the same 400 envelope; through 0.15.0-rc it was Rails' own 400 page (`text/html`).
+
 **What answers 422.** A failed validation (`messages` is the model's errors, as above), and input the API cannot read:
 
 - a body section that is not an object (`"permission_set": "x"`), or one that is missing or empty (see below);
 - an `expires_at` that is not one of the [ISO 8601 forms below](#expires_at-formats) (`"tuesday"`, `"2026-13-45"`, `"22/10/2026"`, a number);
+- an attribute of a body section sent in a shape it does not take, keyed by the attribute — every such attribute of the request is named, and nothing is changed (see [Attribute shapes](#attribute-shapes) below). Through 0.15.0-rc a list or an object sent for a scalar was dropped with only an "Unpermitted parameter" log line (`{"is_active": [false]}` answered 200 with the set still active), and the rest was cast: `"nope"` read as `true`, a JSON `true` for a name stored `"t"`;
+- a `grant_all` that is not a boolean (see [Attribute shapes](#attribute-shapes): `"yes"`, `""`, `2`): see [generate_fields](#resources-nested-under-permission-set);
+- a bulk assignment without `user_ids` (missing, `[]`, `""` or only blanks), or with `user_ids` that is not a list of ids (`"1,3"`, `3`, `[1, {"id": 2}]`, `[1, 1.5]`, `[1, ""]`; a `null` in the list is removed by Rails before the API reads it): see [Bulk User Assignment](#bulk-user-assignment);
+- a copy's `name` that is not text (`true`, `7`, a list, an object) on `…/clone`: `{"name": ["must be a string"]}`, and nothing is copied (through 0.15.0-rc the default copy name was used);
+- a single assignment or group membership whose `user_id` is missing, is not one user id (`"abc"` for an integer key, `[2]`, an object), or names nobody `user_list_resolver` lists: see [Permission Set Users](#permission-set-users-assign-users-to-sets);
 - a blank name for a Permission Set, Permission Set Group, field or action, when it is created or renamed (a row whose name is already blank stays editable in its other attributes);
+- `null` for an attribute whose column is NOT NULL (`"is_active": null`, `"mask_strategy": null`): `{"is_active": ["can't be blank"]}` (through 0.15.0-rc a 500). `""` for a boolean is no boolean: `{"is_active": ["must be true or false"]}`. A field's or action's `label` is not one of them: `null`, `""` and white space are "no label" and store the row's name (see [Resource Fields](#resource-fields-nested-under-resource));
 - a `permission_set_group_id` that names no group of the current tenant;
+- a record another request saved a moment ago: two requests creating the same assignment, group membership, Resource or field at once both pass the uniqueness validation and the database's unique index refuses the second — the answer is the validation's own message, keyed by its attribute: `{"user_id": ["already holds this Permission Set"]}` for an assignment, `{"user_id": ["is already a member of this group"]}` for a group membership, `{"name": ["already exists in this permission set"]}` for a Resource, `{"name": ["has already been taken"]}` for a field. Through 0.14.1 this was a 500 (`ActiveRecord::RecordNotUnique`). When the index the database names belongs to no validation of the gem's models (an index you added yourself), the message is on `base`;
+- a rule whose `field_name` is not a column of its model (`{"field_name": ["names onwer_id, which is not a column of Customer"]}`), or a join rule whose `field_accessor_path` names an association the model does not have or one no join can be built through (`{"field_accessor_path": ["names ownr, which is not an association of Customer"]}`): see [Using the wrong field name](row-level-rules.md#using-the-wrong-field-name);
+- a rule whose `field_value` its column cannot hold (`{"field_value": ["is not a value Customer.owner_id can hold"]}`: see [A value the column cannot hold](row-level-rules.md#a-value-the-column-cannot-hold)), or whose column holds a secret (`{"field_name": ["names a column that holds a secret …"]}`: see `config.rule_secret_column_patterns`), on a new rule and when what it compares changes;
 - a string longer than its column: `is too long (at most N characters)`. Only columns that declare a limit are checked — a `string` on MySQL is `varchar(255)` (counted in characters) and a `text` holds 65,535 bytes; on PostgreSQL and SQLite the install's `string` and `text` columns declare none, so nothing is checked there. A Permission Set name keeps its own 255-character rule on every database.
 
-**A flat JSON body is accepted where Rails wraps parameters.** With JSON parameter wrapping on, which `config.load_defaults 7.0` and later turn on for every controller (`wrap_parameters_by_default`), Rails copies the keys of a JSON body that are attributes of the endpoint's model under the section name before the API reads it: `POST /api/permission_sets` with `{"name":"Flat payload"}` reads as `{"permission_set":{"name":"Flat payload"}}` and creates the set (201). Only a body sent as `application/json` is wrapped, never one that already has the section. A flat body with none of the model's attributes then gives an empty section, and without wrapping (older defaults, a form-encoded body, `wrap_parameters false` in your `api_base_controller_class`) a missing section stays missing: both answer 422 `param is missing or the value is empty or invalid: permission_set`. Send the section explicitly to be independent of this setting.
+Every message of a 4xx envelope is a `permission_forge.*` translation in the request's locale (`locale` parameter, else `Accept-Language`): the gem reads no Rails-core `errors.messages.*` key, so a host without `rails-i18n` gets Albanian and Macedonian messages too.
+
+**A flat JSON body is accepted where Rails wraps parameters.** With JSON parameter wrapping on, which `config.load_defaults 7.0` and later turn on for every controller (`wrap_parameters_by_default`), Rails copies the keys of a JSON body that are attributes of the endpoint's model under the section name before the API reads it: `POST /api/permission_sets` with `{"name":"Flat payload"}` reads as `{"permission_set":{"name":"Flat payload"}}` and creates the set (201). Only a body sent as `application/json` is wrapped, never one that already has the section. A flat body with none of the model's attributes then gives an empty section, and without wrapping (older defaults, a form-encoded body, `wrap_parameters false` in your `api_base_controller_class`) a missing section stays missing: both answer 422 `{"permission_set": ["is missing, empty or not an object"]}`. Send the section explicitly to be independent of this setting.
 
 NUL bytes are dropped from every attribute hash and name the API reads. A rule with `is_null` / `is_not_null` needs no `field_value` (it is stored as empty).
+
+#### Attribute shapes
+
+Every attribute of a body section (`permission_set`, `resource`, `resource_field`, `resource_action`, `permission_set_rule`, `permission_set_group`) is taken in one shape, read from its column (`PermissionForge::Api::InputShapes`, the one table), and anything else is a 422 keyed by the attribute:
+
+| Attribute | Takes | Stored as |
+|-----------|-------|-----------|
+| a boolean (`is_active`, `read_access`, `is_muting`, `include_nulls`, …) | `true`, `false`, `1`, `0`, or one of the words `true`, `false`, `t`, `f`, `on`, `off`, `1`, `0` in any case (a form-encoded body sends words) | `true` / `false` |
+| text (`name`, `description`, `label`, `mask_strategy`, `field_name`, `operator`, …) | a String | as sent |
+| a rule's `field_value` | a String, a JSON number or a JSON boolean; a list of them, none containing a comma, under `in`, `not_in` and `between` (the operator of the request, else the stored rule's) | the text: `5` → `"5"`, `1.5` → `"1.5"`, `true` → `"true"`, `["active", "lead"]` → `"active,lead"` |
+| `allowed_ips`, the hours, `requires_session_flag` | see [Activation conditions](#permission-sets) | |
+| `permission_set_group_id` | the group's id, or its uuid under `api_record_identifier = :uuid`; `null` or `""` clears it | the group's id |
+
+`null` is passed on as a value: a nullable column is cleared, a NOT NULL one answers its own 422. A key the endpoint does not take is ignored, as strong parameters ignore it (logged, or raised under `action_on_unpermitted_parameters = :raise`).
 
 ## Endpoints Reference
 
@@ -164,16 +275,23 @@ All URLs below assume the engine is mounted at `/permissions`. Replace with your
 
 #### Dashboard Stats
 
-The stats endpoint requires admin access by default:
+The stats endpoint is closed to everyone `api_auth` admits until you say who may read it:
 
-```ruby
-# In your initializer — when true, the api_auth lambda must set @admin = true
-config.api_stats_require_admin = true  # default: true (secure default)
+```ruby fragment
+config.api_stats_require_admin = true  # default
+# Who may read GET /api/stats (called with the controller; truthy allows)
+config.api_stats_authorization = ->(controller) { PermissionForge.current_user&.admin? }
+# or, for a key-authenticated client:
+config.api_stats_authorization = ->(controller) {
+  ApiKey.active.exists?(key: controller.request.headers['X-API-Key'], scope: 'permissions:read')
+}
 ```
 
-Without `@admin`, the endpoint answers 403 with no body.
+While `api_stats_authorization` is not set the endpoint answers 403 with `"GET /api/stats needs config.api_stats_authorization, or config.api_stats_require_admin = false"`; a lambda that refuses answers 403 `"Forbidden"`. Both are recorded as `api.auth_failed` (reason `stats_not_authorized`, `hook` naming the option). `api_stats_require_admin = false` opens the stats to every caller `api_auth` admits.
 
-```bash
+Through 0.14.1 the only way in was an `api_auth` that set `@admin = true` on the controller (`controller.instance_variable_set(:@admin, true)`). That still works while `api_stats_authorization` is not set, with a deprecation warning, and is removed in 0.16.
+
+```bash fragment
 # Get overview counts
 GET /permissions/api/stats
 
@@ -194,7 +312,7 @@ curl http://localhost:3000/permissions/api/stats
 
 #### Permission Sets
 
-```bash
+```bash fragment
 # List all permission sets
 GET /permissions/api/permission_sets
 
@@ -231,6 +349,12 @@ curl -X PATCH http://localhost:3000/permissions/api/permission_sets/abc-123 \
     }
   }'
 # Response: 200 OK
+# Move the set into a group with "permission_set_group_id": the group's uuid (as
+# the answer's permission_set_group_uuid carries it) or its numeric id; null or ""
+# takes it out of its group. Under api_record_identifier = :id only the numeric id
+# is read. A value that names no group of the current tenant is a 422
+# {"permission_set_group_id": [...]}. "permission_set_group_uuid" is answer-only:
+# sent, it is ignored.
 
 # Delete a permission set
 DELETE /permissions/api/permission_sets/:uuid
@@ -243,16 +367,22 @@ POST /permissions/api/permission_sets/:uuid/clone
 
 curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/clone \
   -H "Content-Type: application/json" \
-  -d '{ "name": "Sales Team (Copy)" }'
+  -d '{ "name": "Sales Team (copy)" }'
 # Response: 201 Created — returns the cloned permission set
 # The copy and its rows are editable, like the admin's Duplicate. A copy of a
 # set in a locked group is created outside the group (permission_set_group_id: null).
-# Without "name" (or with one that is not text), the name is "<name> (Copy)".
+# Without "name" (or with "name": null), the copy is named as the admin's
+# Duplicate names it: "<name> (copy)" in the request's locale, numbered when
+# taken ("<name> (copy) 2"). Through 0.14.1: "<name> (Copy)". A name that is
+# not text (true, a number, a list, an object) is a 422 {"name": ["must be a
+# string"]} and nothing is copied (through 0.15.0-rc: the default name).
 ```
+
+**Activation conditions.** `allowed_ips` takes a String (commas, newlines or spaces between the entries) or an Array of Strings; the row stores the entries with commas and answers them as `allowed_ip_list` (an Array of Strings, beside `allowed_ips` in every permission set answer). `allowed_hours_start` / `allowed_hours_end` take an integer 0–23 (or a String of digits), both or neither; `requires_session_flag` a String; `null` (or `""`) clears a condition, and a list with no entry (`[]`, `[""]`) is a 422 saying so. Any other shape — an object, a boolean, a number for the list, an array for a flag or an hour — is a 422 keyed by the attribute (`{ "error": { "status": 422, "messages": { "allowed_ips": ["must be a string or an array of strings (IP addresses or CIDR ranges), or null"] } } }`). An entry that is not an address, one hour of the two, or `start == end` is a 422 from the model, keyed the same way. A condition named in the request is never dropped silently.
 
 #### Resources (nested under permission set)
 
-```bash
+```bash fragment
 # List resources for a permission set
 GET /permissions/api/permission_sets/:ps_uuid/resources
 
@@ -297,20 +427,34 @@ POST /permissions/api/permission_sets/:ps_uuid/resources/:uuid/generate_fields
 
 curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resources/def-456/generate_fields \
   -H "Content-Type: application/json" \
-  -d '{ "grant_all": "true" }'
+  -d '{ "grant_all": true }'
 # Response: 201 Created — returns array of generated fields
-# grant_all is read only as the string "true" or "1" (a JSON true, or a body
-# sent without the Content-Type header, generates read-only fields)
+# grant_all: true, "true", 1 or "1" grants; false, "false", 0, "0", null or no
+# grant_all does not. Anything else ("yes", "", 2) is a 422
+# {"grant_all": ["must be true or false"]} and creates nothing. Through 0.14.1
+# only "true" and "1" granted: a JSON true created fields without edit.
+# With grant_all every field is readable and editable, unmasked — also the
+# personal-data columns under gdpr_defaults (their recommended mask_strategy
+# is returned, mask_access is false); on a Resource without edit_access the
+# rows are read-only (field Edit needs the Resource's Edit, as in the admin).
+# Virtual fields get rows too. Without it every field comes back
+# without access (Hidden), the personal-data columns included; their
+# recommended mask_strategy is on the row. The rows are the ones the admin's
+# presets and Sync write for the same level (one row builder since 0.15.0).
+# On a Muting Permission Set grant_all takes every field away; without it
+# nothing is written (201 with an empty data array).
 # A mutation like any other: gated by api_action_authorization (action
 # :generate_fields) and refused with 403 when the resource or its permission
 # set is locked
 # On failure: 422 with a generic message — the underlying exception is logged
-# server-side, never returned to the client
+# server-side, never returned to the client. A Resource named after a constant
+# that is no ActiveRecord model with a table (Kernel, a model whose table is not
+# migrated) is 422 {"name": ["names no model this app can load"]}
 ```
 
 #### Resource Fields (nested under resource)
 
-```bash
+```bash fragment
 # List fields for a resource
 GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/fields
 
@@ -333,6 +477,14 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
     }
   }'
 # Response: 201 Created
+# "label" is what the admin shows; a missing, null, "" or white-space label is
+# "no label" and stores the field's name ("email"), on create and on update (as
+# the admin stores a label it blanks): the admin shows your translation of the
+# column, or the name. An action's "label" works the same way. A label the gem
+# would generate (the name, or its humanized form: "no label") follows a rename:
+# PATCH "name" alone relabels the row with the new name; a label you wrote stays. A save that does not send "label"
+# leaves a stored label as it is. Through 0.15.0-rc an update with
+# "label": null was a 422 and "" stored an empty label.
 # mask_strategy options: "full", "email", "last4", "first1_last4",
 #                        plus any keys from config.custom_mask_strategies
 # Duplicate field names within a resource return 422
@@ -348,7 +500,7 @@ DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/fields/:uuid
 
 Custom actions beyond CRUD (e.g., sync, export, approve):
 
-```bash
+```bash fragment
 # List actions for a resource
 GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/actions
 
@@ -374,7 +526,7 @@ DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/actions/:uuid
 
 **Action names.** `name` is the key your code and the [controller action guard](controller-actions.md) look the action up by, so it must be a valid action key: lowercase letters, digits and `_`, starting with a letter, at most 63 characters (`export`, `export_csv`). The name is not normalized for you. Creating an action under any other name (`Export`, `archive ` with a trailing space, `export-csv`), or renaming one to it, returns 422:
 
-```json
+```json sample=action_name_invalid
 { "error": { "status": 422, "messages": { "name": ["Use lowercase letters, numbers and underscores, starting with a letter (for example export)."] } } }
 ```
 
@@ -384,7 +536,7 @@ A row that already carries such a name (created before this rule) can still be r
 
 Row-level query rules:
 
-```bash
+```bash fragment
 # List rules for a resource
 GET /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules
 
@@ -408,21 +560,29 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/resou
 #                   "contains", "not_contains", "starts_with", "ends_with",
 #                   "between", "is_null", "is_not_null"
 # "is_null" / "is_not_null" take no field_value (it is stored as empty)
+# include_nulls is off unless you send it: a rule created without it keeps the
+# rows whose field is NULL out, for "equal", "not_equal", "in" and "not_in".
+# Send "include_nulls": true to let them through.
 
-# Update a rule
+# Update a rule. A rule written before the current checks (an operator, join
+# type, field name or path this version refuses) can still be switched off
+# ("is_active": false), renamed or given another failure_message: what a rule
+# names is validated only when it changes.
 PATCH /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
 
 # Delete a rule
 DELETE /permissions/api/permission_sets/:ps_uuid/resources/:r_uuid/rules/:uuid
 ```
 
-A `field_value` is compared in the type of the column the rule names; a value that column cannot hold (`"5_id"` on an integer column) is accepted and makes the rule match nothing. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
+**Rule attributes** (`permission_set_rule`): `name`, `field_name`, `field_value`, `operator`, `join_type`, `field_accessor_path`, `include_nulls` (default **`false`**: NULL rows pass an `equal`, `not_equal`, `in` or `not_in` rule only when you send `true`; see [The `include_nulls` Flag](row-level-rules.md#the-include_nulls-flag)), `is_active`, `is_editable`, `failure_message`.
+
+A `field_value` is text: a JSON number or boolean is stored as its text (`5` → `"5"`), and under `in`, `not_in` and `between` a list is stored joined with commas (`["active", "lead"]` → `"active,lead"`; an element with a comma, a list under another operator or an object is a 422 keyed by `field_value`: see [Attribute shapes](#attribute-shapes)). It is compared in the type of the column the rule names; a value that column cannot hold (`"5_id"` on an integer column) is refused with 422 (`{"field_value": ["is not a value Customer.owner_id can hold"]}`); a rule stored with one before 0.15 matches nothing and stays editable in its other attributes. See [How Values Are Compared](row-level-rules.md#how-values-are-compared).
 
 Rule `field_value`s can contain sensitive data (user IDs, account numbers, business logic values). Set `config.api_redact_rule_field_values = true` (default: `false`) to have API responses replace `field_value` with `"[REDACTED]"` — useful for GDPR/HIPAA environments.
 
 #### Permission Set Users (assign users to sets)
 
-```bash
+```bash fragment
 # List users in a permission set
 GET /permissions/api/permission_sets/:ps_uuid/users
 
@@ -433,13 +593,17 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
   -H "Content-Type: application/json" \
   -d '{ "user_id": 42, "expires_at": "2026-12-31T23:59:00Z" }'
 # Response: 201 Created — expires_at is optional (time-bound assignment)
+# { "data": { "id": 7, "uuid": "…", "permission_set_id": 1, "permission_set_uuid": "abc-123", "user_id": 42, … },
+#   "meta": { "cache": { "confirmed": true, "process_local": false, "in_request": true, "unconfirmed": 0 } } }
 # Assigning a user who is already in the set returns 422 (uniqueness validation)
-# A user_id outside config.user_list_resolver returns 404, as an unknown one does
-# An expires_at that is not ISO 8601 (see below) returns 422 and assigns nobody
+# An expires_at that is not ISO 8601 (see below), or not after now, returns 422 and assigns nobody
 
 # Remove a user from a permission set (:uuid is the assignment's identifier)
 DELETE /permissions/api/permission_sets/:ps_uuid/users/:uuid
+# Response: 200 OK — the removed assignment and "meta.cache" (through 0.14.x: 204 No Content)
 ```
+
+Both answer `meta.cache`, what the cache store confirmed about the person's cached permissions, as a [bulk assignment](#bulk-user-assignment) answers `cache`: `"confirmed": false` means the store did not confirm the removal and the old permissions may stay in use until `cache_ttl` ends. Group membership changes no permissions and answers no `cache`.
 
 ##### `expires_at` formats
 
@@ -447,7 +611,7 @@ DELETE /permissions/api/permission_sets/:ps_uuid/users/:uuid
 
 | Form | Example | Means |
 |------|---------|-------|
-| a date | `2026-10-22` | the **beginning** of that day (00:00) in the application's `Time.zone`: the assignment has ended when that day starts. To grant through the whole day, send `2026-10-22T23:59:59` or the next day |
+| a date | `2026-10-22` | the **end** of that day (23:59:59.999999) in the application's `Time.zone`: the assignment grants through that whole day, as an end date picked in the admin does. Through 0.14.1 a date meant the beginning of the day |
 | a date and a time of day | `2026-10-22T10:00`, `2026-10-22T10:00:00`, `2026-10-22T10:00:00.5` | that moment in `Time.zone` |
 | the same with an offset | `2026-10-22T10:00:00Z`, `2026-10-22T10:00+02:00` | that moment at that offset (`Z` = UTC) |
 
@@ -455,11 +619,25 @@ Hours and minutes are required once there is a time; seconds and a fraction (up 
 
 Anything else is a 422 and nothing is assigned: `"tuesday"`, `"next tuesday-ish"`, `"2026-13-45"`, `"22/10/2026"`, `"2026-10-22T10"` (no minutes), `"2026-10-22 10:00 +0200"` (an offset needs its colon and no space), week or ordinal dates (`2026-W43-4`), the basic format without separators (`20261022`) and numbers (epoch seconds). Through 0.14.1 any text with a recognisable fragment was read (`"tuesday"` became today 00:00, an assignment that had already ended).
 
+**The end must be after now.** An assignment whose end has passed grants nothing, so a readable `expires_at` that is not after the moment of the request (`"2020-01-01"`, yesterday's date, a time a minute ago) is refused too: `422 {"expires_at": ["must be in the future"]}`, on `POST …/users` and on a bulk `assign`, and nobody is assigned. Today's date is accepted (it means the end of today). A bulk `revoke` ignores `expires_at`. Through 0.14.1 such an assignment was created (201). The admin's Undo after a removal is not a new grant: it restores the assignment with the end it had, also one that has passed.
+
+##### `user_id`
+
+`user_id` (on `POST …/permission_sets/:uuid/users` and `POST …/permission_set_groups/:uuid/users`) is one id of the user model, as a JSON number or a string. Every refusal is a 422 keyed by `user_id`, answered after the authorization lambdas and the lock check, and nobody is assigned:
+
+| `user_id` | `messages` |
+|-----------|------------|
+| missing, `null`, `""` or blank | `{"user_id": ["is missing"]}` |
+| not one id: a list (`[2]`), an object, `1.5`, `true`, or text that is not a key of the user model (`"abc"`, `"2abc"`, `-1` for an integer key) | `{"user_id": ["is not a user id"]}` |
+| a well-formed id that names nobody `config.user_list_resolver` lists | `{"user_id": ["names nobody who can be assigned"]}` |
+
+**An unknown id and someone the resolver leaves out read the same** (another tenant's user, an account the host keeps out of the admin): the answer says no more than a bulk request's `skipped` does. A 404 means the Permission Set or the Group in the path is unknown, never the person. Through 0.14.1 all three cases answered 404 `"Record not found"`, which read as if the set were wrong. Removing an assignment or a membership (`DELETE …/users/:uuid`) of someone outside the resolver stays a 404.
+
 `GET …/users` lists every holder of the set (each row carries its `user_id`), including people outside `user_list_resolver`: the resolver bounds who can be reached by id, not who is listed.
 
 #### Bulk User Assignment
 
-```bash
+```bash fragment
 # Bulk assign users to a permission set
 POST /permissions/api/permission_sets/:ps_uuid/users/bulk
 
@@ -472,10 +650,31 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
   }'
 # Response: 200 OK — expires_at is optional (time-bound assignments; same formats
 # as above, an unreadable one is a 422 and changes nothing)
-# { "data": { "assigned": 3, "revoked": 0, "invalidated": 3 } }
-# Ids outside config.user_list_resolver (or naming nobody) are skipped.
+# { "data": { "assigned": 3, "revoked": 0, "invalidated": 3, "skipped": [99],
+#             "cache": { "confirmed": true, "process_local": false, "in_request": true, "unconfirmed": 0 } } }
+# "cache" says what the cache store confirmed, whether it lives in each process
+# (a per-process store: the other workers keep their entries), whether the run
+# was inside a request, and how many users the store did not confirm.
+# Ids outside config.user_list_resolver (or naming nobody) are skipped and listed
+# in "skipped" (cast to the user key type, else as sent; [] when none), on assign
+# and revoke alike: someone outside the resolver and an unknown id read the same.
 # "invalidated" counts the users whose assignment changed and whose cached
 # permissions were cleared; a user who already held the set is not counted.
+# A request that names nobody (no user_ids, [], "" or only blanks) is a 422
+# {"user_ids": ["must name at least one user"]} on assign and revoke, and
+# changes nothing (through 0.14.1: 200 with nothing done). Like the other
+# 422s it records no audit event.
+# user_ids must be a JSON list of ids (numbers or strings): one string
+# ("1,3"), a number, an object, or a list holding an object, a list, a
+# fraction or a boolean is a 422 {"user_ids": ["must be a list of user ids"]}
+# and changes nothing (through 0.14.1 "1,3" was read as one unknown id: 200,
+# nobody assigned; through 0.15.0-rc an element that was no id was left out
+# without a word). A blank string beside an id ([1, ""]) is ignored, as
+# Rails' own collection_singular_ids= ignores it: a Rails form built with
+# collection_check_boxes sends a hidden blank user_ids[] entry, and it is
+# never reported in "skipped". A JSON null in the list never reaches the
+# API: Rails' parameter parsing (deep_munge) removes it, so [1, null] reads
+# as [1].
 
 # Bulk revoke users from a permission set
 POST /permissions/api/permission_sets/:ps_uuid/users/bulk
@@ -487,11 +686,13 @@ curl -X POST http://localhost:3000/permissions/api/permission_sets/abc-123/users
     "bulk_action": "revoke"
   }'
 # Response: 200 OK
+# A revoke ignores expires_at, also one that is not ISO 8601: it removes the
+# assignments whatever their end.
 ```
 
 #### Permission Set Groups
 
-```bash
+```bash fragment
 # List all groups
 GET /permissions/api/permission_set_groups
 
@@ -511,27 +712,41 @@ curl -X POST http://localhost:3000/permissions/api/permission_set_groups \
 GET    /permissions/api/permission_set_groups/:uuid
 PATCH  /permissions/api/permission_set_groups/:uuid
 DELETE /permissions/api/permission_set_groups/:uuid
+# Response: 204 No Content. Deleting a group deletes neither its Permission Sets
+# nor anybody's access: each set stays, moved out of the group
+# (permission_set_group_id: null), and its assignments keep granting. The
+# group's memberships (organisational only) are removed. The audit log
+# records permission_set.updated for each set taken out of the group,
+# group_membership.removed for each member and permission_set_group.destroyed,
+# under one correlation id. To remove the sets too, delete each one
+# (DELETE /permissions/api/permission_sets/:uuid).
 
 # Clone a group (deep clone: permission sets, resources, fields, actions, rules)
 POST /permissions/api/permission_set_groups/:uuid/clone
 
 curl -X POST http://localhost:3000/permissions/api/permission_set_groups/abc-123/clone \
   -H "Content-Type: application/json" \
-  -d '{ "name": "Admin Groups (Copy)" }'
+  -d '{ "name": "Admin Groups (copy)" }'
 # Response: 201 Created — returns the cloned group
-# The copied group, its sets and their rows are editable.
+# The copied group, its sets and their rows are editable. Without "name", the
+# group is named "<name> (copy)" in the request's locale, as the admin's
+# Duplicate names it (through 0.14.1: "<name> (Copy)"). A name that is not
+# text is a 422 {"name": ["must be a string"]}, as for a set.
 ```
 
-#### Permission Set Group Users (assign users to groups)
+#### Permission Set Group Users (group membership — grants nothing)
 
-```bash
-# List users in a group
+**Membership is organisational: it grants no access.** Adding someone to a group does not give them the group's Permission Sets; permissions come only from assignments (`POST …/permission_sets/:uuid/users`, above). A 201 here means "now listed as a member", not "can now do what the group's sets allow". To give someone a group's access, assign each of its sets. See [Permission Set Groups](permission-set-groups.md).
+
+```bash fragment
+# List the members of a group
 GET /permissions/api/permission_set_groups/:group_uuid/users
 
-# Add a user to a group
+# Add a member (organisational only: assigns none of the group's sets)
 POST /permissions/api/permission_set_groups/:group_uuid/users
 # Body: { "user_id": 42 }
-# A user_id outside config.user_list_resolver returns 404
+# A user_id that is missing, not an id, or names nobody config.user_list_resolver
+# lists is a 422 keyed by user_id (see `user_id` above)
 
 # Remove a user from a group
 DELETE /permissions/api/permission_set_groups/:group_uuid/users/:uuid
@@ -541,7 +756,7 @@ DELETE /permissions/api/permission_set_groups/:group_uuid/users/:uuid
 
 The [audit log](audit-log.md) over the API. `GET` only: no route writes, updates or deletes an event. It needs `api_enabled`, passes `api_auth`, and then `config.audit_log_authorization`: when it is set, only an exact `true` allows (anything else, or an error, is **403** and an `api.auth_failed` event with reason `audit_log_not_authorized`); when it is not set (the default), anyone who passes `api_auth` can read the whole log. Each call that returns 2xx is recorded as `audit.viewed` (`scope: api`).
 
-```bash
+```bash fragment
 # A page of events, newest first
 GET /permissions/api/audit_events?event=assignment.revoked&from=2026-07-01&to=2026-09-30&page=1&per_page=100
 
@@ -549,21 +764,46 @@ GET /permissions/api/audit_events?event=assignment.revoked&from=2026-07-01&to=20
 GET /permissions/api/audit_events/:identifier
 ```
 
-```json
+```json sample=audit_event_collection
 {
   "data": [
     {
-      "id": 481, "uuid": "5c1e...", "occurred_at": "2026-09-14T08:12:44.120391Z",
-      "event": "assignment.revoked", "category": "change",
-      "actor_type": "user", "actor_id": "7", "actor_label": "Ada Admin", "source": "admin_ui",
-      "record_type": "PermissionForge::PermissionSetUser", "record_id": "93", "record_uuid": "a77f...", "record_label": "Bo Brandt",
-      "permission_set_id": 12, "permission_set_uuid": "d2b4...", "subject_user_id": "31",
-      "data": { "snapshot": { "user_id": 31, "expires_at": null } },
-      "reason": "left the team", "request_id": "6f1b...", "ip": "203.0.113.9", "correlation_id": "0b8c...",
+      "id": 481,
+      "uuid": "5c1e9a7b-2d4f-4e6a-9b8c-0d1e2f3a4b5c",
+      "occurred_at": "2026-09-14T08:12:44.120391Z",
+      "event": "assignment.revoked",
+      "category": "change",
+      "actor_type": "user",
+      "actor_id": "7",
+      "actor_label": "Ada Admin",
+      "source": "admin_ui",
+      "record_type": "PermissionForge::PermissionSetUser",
+      "record_id": "93",
+      "record_uuid": "a77f3b2c-1d4e-4f5a-8b6c-7d8e9f0a1b2c",
+      "record_label": "Bo Brandt",
+      "permission_set_id": 12,
+      "permission_set_uuid": "d2b4c7e1-5a3f-4b8e-9c6d-1f2a3b4c5d6e",
+      "subject_user_id": "31",
+      "data": {
+        "snapshot": {
+          "user_id": 31,
+          "expires_at": null
+        }
+      },
+      "reason": "left the team",
+      "request_id": "6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+      "ip": "203.0.113.9",
+      "correlation_id": "0b8c7d6e-5f4a-4b3c-9d2e-1f0a9b8c7d6e",
       "created_at": "2026-09-14T08:12:44.121002Z"
     }
   ],
-  "meta": { "pagination": { "page": 1, "per_page": 100, "total_count": 1 } }
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "per_page": 100,
+      "total_count": 1
+    }
+  }
 }
 ```
 
@@ -578,7 +818,7 @@ Every column is returned except the tenant column; `data` is an object. Filters 
 | `record_type` with `record_id` or `record_uuid` | `record_id` matches the `record_id` column only and `record_uuid` the `record_uuid` column only; either needs `record_type`, otherwise 422; `record_type` alone is also a filter. |
 | `permission_set` | A uuid, or a numeric id. |
 
-An invalid value answers `422 {"error":{"status":422,"messages":{"from":["is invalid"]}}}`; an array or hash for a scalar filter parameter, or a NUL byte in a value, is a 422 too (`page` and `per_page` are not filter parameters: an array or hash there reads as 1, the first page or a page size of 1). Unknown parameters are ignored. Order is `occurred_at desc, id desc`; page size follows `api_default_per_page` / `api_max_per_page`. **A `page` beyond 2,147,483,647 is clamped** (on every paginated endpoint) instead of failing in the database. With tenancy on, a request with no tenant set is refused (403, see [Tenancy](#tenancy)); under `admin_tenantless_access = :allow` it lists the events of every tenant, as the other endpoints do for their records.
+An invalid value answers `422 {"error":{"status":422,"messages":{"from":["is invalid"]}}}`; an array or hash for a scalar filter parameter, or a NUL byte in a value, is a 422 too (`page` and `per_page` are not filter parameters: anything there that is not a positive whole number reads as the first page or the default page size, see [Pagination](#pagination)). Unknown parameters are ignored. Order is `occurred_at desc, id desc`; page size follows `api_default_per_page` / `api_max_per_page`. **A `page` beyond 2,147,483,647 is clamped** (on every paginated endpoint) instead of failing in the database. With tenancy on, a request with no tenant set is refused (403, see [Tenancy](#tenancy)); under `admin_tenantless_access = :allow` it lists the events of every tenant, as the other endpoints do for their records.
 
 Writes through the API record their own events: the API sets the actor (`audit_actor_resolver`, else the current user, else an anonymous `api` actor), source `api`, the request id and IP, and reads an optional `reason` (a request parameter or JSON key, at most 255 characters) from any request that changes something.
 
@@ -586,7 +826,7 @@ Writes through the API record their own events: the API sets the actor (`audit_a
 
 The API ships with lightweight built-in serializers (no dependencies). If your app uses ActiveModel::Serializer (AMS), you can override any serializer:
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.api_serializer_overrides = {
     permission_set: MyApp::PermissionSetSerializer,
@@ -606,16 +846,18 @@ AMS 0.10's default adapter (`:attributes`) ignores `root:` and `meta:`: the resp
 
 All collection endpoints are paginated by default with a built-in LIMIT/OFFSET paginator. The `per_page` parameter is hard-capped at `api_max_per_page` (default: 100) to prevent DoS via large result sets.
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.api_max_per_page = 100     # Hard cap — clients cannot exceed this
   config.api_default_per_page = 15  # Default when per_page param is omitted
 end
 ```
 
+`page` and `per_page` are read when they are positive whole numbers (a JSON number or digits, e.g. `"3"`). Anything else is ignored rather than refused: a `per_page` of `0`, a negative number, a typo (`abc`, `2abc`, `1.5`), a list or an object is `api_default_per_page`, and such a `page` is the first page. A `per_page` above `api_max_per_page` is that maximum, and a `page` above 2,147,483,647 is that page. `meta.pagination` always says which page and page size were used. Through 0.14.1 a `per_page` of `0` or one that was not a number read as 1, a page of one row. `page` and `per_page` are read by the same rule as every whole-number parameter of the engine (`ParamShapes#pf_integer_param`): digits or a JSON number inside the allowed range, else the default — never 0, 1 or an error.
+
 To use a custom pagination handler (e.g., Kaminari, will_paginate):
 
-```ruby
+```ruby fragment
 # With Kaminari
 config.api_pagination_handler = ->(scope, page, per_page) { scope.page(page).per(per_page) }
 
@@ -625,7 +867,7 @@ config.api_pagination_handler = ->(scope, page, per_page) { scope.paginate(page:
 
 The pagination metadata reads `total_count` from what the handler returns (Kaminari answers it). will_paginate's collections answer `total_entries` instead, which is not read: `total_count` then falls back to the size of the page. Return an object that answers `total_count`, for example:
 
-```ruby
+```ruby fragment
 config.api_pagination_handler = lambda { |scope, page, per_page|
   records = scope.paginate(page: page, per_page: per_page)
   records.define_singleton_method(:total_count) { records.total_entries }
@@ -637,7 +879,7 @@ config.api_pagination_handler = lambda { |scope, page, per_page|
 
 Pass `page` and `per_page` query params:
 
-```bash
+```bash fragment
 curl "http://localhost:3000/permissions/api/permission_sets?page=2&per_page=10"
 ```
 
@@ -662,7 +904,7 @@ The response always includes pagination metadata:
 
 `api_base_controller_class` defaults to `ActionController::Base`. This means API controllers do **NOT** inherit your app's authentication chain (Devise, Warden, etc.) by default. You should override this to inherit your auth stack:
 
-```ruby
+```ruby fragment
 config.api_base_controller_class = '::Api::BaseController'
 ```
 
@@ -670,7 +912,7 @@ config.api_base_controller_class = '::Api::BaseController'
 
 `api_action_authorization` decides which creates, updates, destroys, clones and field generations a caller may make. Until it is set, every one of them is refused with 403 (`api_require_authorization`, below):
 
-```ruby
+```ruby fragment
 config.api_action_authorization = ->(controller, action, record) {
   PermissionForge.current_user&.admin?
 }
@@ -682,7 +924,7 @@ The lambda receives the controller instance, action name (`:create`, `:update`, 
 
 `api_assignment_authorization` decides who may change who holds a Permission Set or belongs to a group. Until it is set, every assignment endpoint is refused with 403:
 
-```ruby
+```ruby fragment
 config.api_assignment_authorization = ->(controller, target, user_ids) {
   PermissionForge.current_user&.admin?
 }
@@ -690,7 +932,7 @@ config.api_assignment_authorization = ->(controller, target, user_ids) {
 
 When nothing signs a user in (no authenticating base controller), decide from the authenticated client instead, for example a key with its own scope:
 
-```ruby
+```ruby fragment
 config.api_action_authorization = ->(controller, _action, _record) {
   ApiKey.active.exists?(key: controller.request.headers['X-API-Key'], scope: 'permissions:write')
 }
@@ -705,11 +947,13 @@ config.api_assignment_authorization = ->(controller, _target, _user_ids) {
 
 `api_auth` proves identity, not admin rights. So by default the API refuses changes until both lambdas are set:
 
-```ruby
+```ruby fragment
 config.api_require_authorization = true  # default
 ```
 
-While it is `true`, mutation and assignment endpoints return 403 (`api.auth_failed`) whenever the corresponding lambda (`api_action_authorization` / `api_assignment_authorization`) is unset. Setting it to `false` lets every caller that passes `api_auth` create permission sets and assign them to anyone; a boot warning is logged and `rake permission_forge:audit` reports `api_mutations_unguarded` (high) while a lambda is missing.
+While it is `true`, mutation and assignment endpoints return 403 (`api.auth_failed`, `hook: api_require_authorization`) whenever the corresponding lambda (`api_action_authorization` / `api_assignment_authorization`) is unset. The 403 says so (`"API changes need config.api_action_authorization; …"`), unlike a lambda's refusal (`"Action not authorized"`), so the missing configuration is visible from the response. Setting it to `false` lets every caller that passes `api_auth` create permission sets and assign them to anyone; a boot warning is logged and `rake permission_forge:audit` reports `api_mutations_unguarded` (high) while a lambda is missing.
+
+The refusal fails closed, and it is announced before the first request meets it: while the API is on, `api_auth` is set and a lambda the API needs is not — `api_action_authorization` or `api_assignment_authorization` under the default `api_require_authorization = true`, [`api_stats_authorization`](#dashboard-stats) under the default `api_stats_require_admin = true` — the server logs one boot note naming each missing lambda and what the API refuses without it (`The JSON API is on and api_auth admits callers, but these authorization lambdas are not set, ...`), and `rake permission_forge:audit` lists them under `api_authorization_unset` (info).
 
 ### Non-Editable Records
 
@@ -723,7 +967,7 @@ With `tenant_model` set, a request that has no current tenant is refused with 40
 
 ### CSRF Posture
 
-API controllers use `protect_from_forgery with: :null_session, prepend: true`: the forgery check is the first callback of the chain, before `api_auth` and before your `api_base_controller_class`'s own callbacks. A mutating request without a valid CSRF token gets an empty session (`request.session`) and an empty cookie jar (`cookies` / `request.cookie_jar`) — and so does everything that reads them during the request, such as a Warden/Devise `current_user` loaded inside the controller. A cross-site form post from a signed-in admin's browser therefore reaches `api_auth` with no session, and an `api_auth` that derives identity from the session or the cookie jar refuses it (403, `api.auth_failed`).
+API controllers use `protect_from_forgery with: :null_session, prepend: true`: the forgery check is the first callback of the chain, before `api_auth` and before your `api_base_controller_class`'s own callbacks. A mutating request without a valid CSRF token gets an empty session (`request.session`) and an empty cookie jar (`cookies` / `request.cookie_jar`) — and so does everything that reads them during the request, such as a Warden/Devise `current_user` loaded inside the controller. A cross-site form post from a signed-in admin's browser therefore reaches `api_auth` with no session, and an `api_auth` that derives identity from the session or the cookie jar refuses it (401, `api.auth_failed`).
 
 On Rails 8.2 and later, Rails can verify a request by the browser's `Sec-Fetch-Site` header instead of the token, and `config.load_defaults 8.2` selects `:header_only`, under which a plain-HTTP request without that header is not checked at all. The admin screens and the API always use `:header_or_legacy_token`, whatever your application sets: a same-origin or same-site request passes on the header without a token (same-site includes your other subdomains: a page on one can post to the admin on another), a cross-site one is refused, and a request without the header needs the CSRF token, as on earlier Rails versions.
 
@@ -733,7 +977,7 @@ If your base controller declares `protect_from_forgery with: :exception`, the AP
 
 ## Full Configuration Example
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   # Core settings
@@ -777,7 +1021,7 @@ PermissionForge invalidates affected users' cached permissions whenever a permis
 
 **Example:** Disabling a resource via the API immediately revokes access for all affected users:
 
-```bash
+```bash fragment
 # Before: user can read Customer
 curl -X PATCH /permissions/api/permission_sets/abc/resources/def \
   -d '{ "resource": { "is_active": false } }'

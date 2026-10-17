@@ -70,6 +70,17 @@ module PermissionForge
                      %w[name email domain].map { |n| FieldLevel.level_of(@res.resource_fields.find_by(name: n), muting: false) })
       end
 
+      test 'a crafted post adds no row for a name the model does not manage (id, an ignored field, no such name)' do
+        ignored = Array(PermissionForge.configuration.ignored_fields).map(&:to_s)
+        assert_includes ignored, 'id'
+        crafted = { 'id' => { level: 'edit' }, 'xyz' => { level: 'read' }, 'domain' => { level: 'read' } }
+        change_set(new_fields: { @res.id.to_s => crafted },
+                   bulk: { resource_id: @res.id.to_s, keys: %w[id xyz uuid supplier_id], level: 'hidden' }).apply!
+
+        added = @res.resource_fields.reload.map(&:name) - %w[name email]
+        assert_equal %w[domain supplier_id], added.sort
+      end
+
       test 'locked resources and fields are never changed' do
         @res.update_columns(is_editable: false)
         assert_predicate change_set(resources: { @res.id.to_s => { read_access: '0' } }), :empty?
@@ -100,6 +111,37 @@ module PermissionForge
         assert_not @set.is_active
         assert action.reload.is_permitted
         assert_equal %i[set_attr set_attr action], changes.map(&:kind)
+      end
+
+      # b-admin-ui #104: a flag turned on that its dependencies keep off is no
+      # change, and was dropped without a word.
+      test 'a flag turned on that a dependency keeps off is refused, with what it needs' do
+        @res.update!(read_access: false, edit_access: false, delete_access: false, view_all: false, modify_all: false)
+        set = change_set(resources: { @res.id.to_s => { read_access: '0', edit_access: '1' } })
+
+        assert_not_includes set.changes.map(&:attribute), 'edit_access'
+        assert_equal([['edit_access', :read]], set.refused.map { |refusal| [refusal.attribute, refusal.needs] })
+      end
+
+      test 'Modify All without View All and Edit is refused as needing them' do
+        @res.update!(edit_access: false, view_all: false, modify_all: false)
+        set = change_set(resources: { @res.id.to_s => { modify_all: '1' } })
+
+        assert_equal([['modify_all', :view_all_and_edit]], set.refused.map { |refusal| [refusal.attribute, refusal.needs] })
+      end
+
+      test 'a cascade that switches off a flag that was on is a change, not a refusal' do
+        set = change_set(resources: { @res.id.to_s => { read_access: '0', edit_access: '1' } })
+
+        assert_includes set.changes.map(&:attribute), 'edit_access'
+        assert_empty set.refused
+      end
+
+      test 'a muting set has no dependencies, so nothing is refused' do
+        muting = create_permission_set(name: 'Mute', is_muting: true)
+        resource = create_resource(permission_set: muting, read_access: false, edit_access: false)
+
+        assert_empty change_set({ resources: { resource.id.to_s => { edit_access: '1' } } }, muting).refused
       end
 
       test 'invalid records raise and nothing is saved' do

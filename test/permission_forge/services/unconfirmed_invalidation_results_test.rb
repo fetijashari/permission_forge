@@ -84,7 +84,8 @@ module PermissionForge
 
           assert_equal 2, ExpiredAssignmentCleaner.call[:invalidated]
           assert_equal 2, BulkPermissionSetAssignment.call(permission_set: @set, user_ids: ids, action: :assign)[:invalidated]
-          assert_equal({ revoked_sets: 1, invalidated: true }, ConsentWithdrawalHandler.call(user: @users.last, consent_flag: 'marketing_consent'))
+          withdrawn = ConsentWithdrawalHandler.call(user: @users.last, consent_flag: 'marketing_consent')
+          assert_equal({ revoked_sets: 1, invalidated: true }, withdrawn.slice(:revoked_sets, :invalidated))
           assert_equal true, DataSubjectErasure.call(user: @users.first)[:cache_cleared]
         end
       end
@@ -98,7 +99,8 @@ module PermissionForge
 
           assert_equal 0, ExpiredAssignmentCleaner.call[:invalidated]
           assert_equal 0, BulkPermissionSetAssignment.call(permission_set: @set, user_ids: ids, action: :assign)[:invalidated]
-          assert_equal({ revoked_sets: 1, invalidated: false }, ConsentWithdrawalHandler.call(user: @users.last, consent_flag: 'marketing_consent'))
+          withdrawn = ConsentWithdrawalHandler.call(user: @users.last, consent_flag: 'marketing_consent')
+          assert_equal({ revoked_sets: 1, invalidated: false }, withdrawn.slice(:revoked_sets, :invalidated))
           assert_equal false, DataSubjectErasure.call(user: @users.first)[:cache_cleared]
         end
       end
@@ -139,9 +141,9 @@ module PermissionForge
         confirmed = ConsentWithdrawalHandler.call(user: @users.last, consent_flag: 'marketing_consent')
         nothing = ConsentWithdrawalHandler.call(user: @users.last, consent_flag: 'marketing_consent')
 
-        assert_equal({ revoked_sets: 1, invalidated: false }, failed)
-        assert_equal({ revoked_sets: 1, invalidated: true }, confirmed)
-        assert_equal({ revoked_sets: 0, invalidated: false }, nothing)
+        assert_equal({ revoked_sets: 1, invalidated: false }, failed.slice(:revoked_sets, :invalidated))
+        assert_equal({ revoked_sets: 1, invalidated: true }, confirmed.slice(:revoked_sets, :invalidated))
+        assert_equal({ revoked_sets: 0, invalidated: false }, nothing.slice(:revoked_sets, :invalidated))
       end
 
       private

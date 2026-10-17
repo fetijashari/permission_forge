@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
+require_relative 'rake_output'
+
 module PermissionForge
   # What every rake task of the gem does about the audit log: names who ran it
   # (ACTOR=, stored as actor_label with actor_type 'system' and source 'rake'),
   # records `report.generated` for the read-only ones, and logs through
-  # Rails.logger. The tasks' own output is untouched.
+  # Rails.logger. What the tasks print is RakeOutput's.
   #
   #   PermissionForge::RakeAudit.changing('permission_forge:erasure') { ... }   # warns without ACTOR
   #   PermissionForge::RakeAudit.reporting('permission_forge:audit', counts: ->(r) { r.counts }) { report }

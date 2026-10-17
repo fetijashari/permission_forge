@@ -19,7 +19,7 @@ Users can belong to multiple permission sets. When granting permission sets have
 
 Muting sets (`is_muting: true`) are applied **after** this granting merge and subtract access (they never add rules) — see [Muting Permission Sets](muting-permission-sets.md). Sets are merged in a deterministic order (`created_at`, then `id`), so "first mask_strategy wins" is stable across requests.
 
-```ruby
+```ruby fragment
 # Example: User with two permission sets
 # "Sales Team" — read + create customers, mask email
 # "Admin" — full CRUD, unmask email, can export
@@ -33,7 +33,7 @@ user.can?(:export, :Customer)         # => true  (from Admin)
 
 ## Setting Up Permissions
 
-```ruby
+```ruby fragment
 # Create a permission set
 pset = PermissionForge::PermissionSet.create!(name: 'Admin', is_active: true)
 
@@ -45,10 +45,11 @@ resource = PermissionForge::Resource.create!(
   edit_access: true, delete_access: true
 )
 
-# Auto-generate field permissions from model columns
+# Auto-generate field permissions from model columns: grant_all gives read and
+# edit on every field, unmasked (personal-data columns included)
 PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: true)
 
-# Or grant full access in one call (creates resource + fields)
+# Or grant full access in one call (creates resource + fields, no masks)
 PermissionForge::Resource.grant_full_access!(permission_set: pset, resource_name: 'Customer')
 
 # Assign a user — takes effect at the user's next permission read
@@ -61,7 +62,7 @@ No refresh call is needed: creating, changing or removing permission records and
 
 ViewAll and ModifyAll are resource-level permissions that bypass all row-level rules on that resource (either flag bypasses them for `find_by` and `permission_scoped` alike). When enabled, the user sees all records regardless of ownership rules.
 
-```ruby
+```ruby fragment
 resource = PermissionForge::Resource.create!(
   permission_set: pset,
   name: 'Customer',
@@ -95,7 +96,7 @@ These validations are enforced on save. Attempting to create a resource with `ed
 
 Assign or revoke multiple users at once — each user whose assignment changed has their cached permissions invalidated once, after the commit, and rebuilt read-through on their next permission read:
 
-```ruby
+```ruby fragment
 PermissionForge::Services::BulkPermissionSetAssignment.call(
   permission_set: pset,
   user_ids: [1, 2, 3, 4, 5],
@@ -105,7 +106,7 @@ PermissionForge::Services::BulkPermissionSetAssignment.call(
 
 ## Checking Permissions
 
-```ruby
+```ruby fragment
 # Resource-level checks
 user.can_read?('Customer')    # => true
 user.can_create?('Customer')  # => true
@@ -136,7 +137,7 @@ Beyond CRUD, admins can define custom actions per resource. These are fully conf
 
 To have controller actions checked automatically instead of calling `can?` by hand, and to list your app's controller actions in the admin, see [Controller Actions](controller-actions.md).
 
-```ruby
+```ruby fragment
 # Admin creates custom actions for a resource
 PermissionForge::ResourceAction.create!(
   resource: resource,
@@ -165,7 +166,7 @@ user.can?(:update, :Customer)  # => true  (delegates to can_edit?; the set above
 
 ## Field-Level Permissions
 
-```ruby
+```ruby fragment
 # Get field permissions from the cached hash (here with a `name` row and the masked,
 # read-only `email` row created under "Masked Attributes" below)
 entry = user.permissions_hash_for(:Customer)
@@ -201,7 +202,7 @@ Field masking provides a middle ground between fully visible and fully hidden. W
 | `last4` | `+1234567890` | `*******7890` |
 | `first1_last4` | `John Smith` | `J*****mith` |
 
-```ruby
+```ruby fragment
 # Configure masking on a resource field
 PermissionForge::ResourceField.create!(
   resource: resource,
@@ -235,29 +236,38 @@ end
 
 ## Privacy Defaults
 
-When `config.gdpr_defaults = true` (the default since v0.5.0), the `ResourceFieldGenerator` automatically applies masking to fields matching known privacy-sensitive patterns. This only applies at field **creation** time — it never overwrites admin changes.
+When `config.gdpr_defaults = true` (the default since v0.5.0), a field that looks like personal data (`PermissionForge::SensitiveColumns`: `gdpr_field_patterns`, plus the columns your `filter_parameters` name while `filter_parameters_integration` is on) is created **Masked when it is granted Read-only** — by the admin's Read-only preset, "Add all new as Read-only", the Fields tab's bulk add and the field drawer — and its recommended mask strategy is recorded on every generated row. A row created Hidden stays Hidden (a privacy default never grants); full access masks nothing (next paragraph). This only applies at field **creation** time — it never overwrites admin changes.
+
+Full access is the exception (since 0.15.0): `ResourceFieldGenerator.call(grant_all: true)`, `Resource.grant_full_access!`, `ResourceWithFieldsBuilder`, the API's `generate_fields` with `grant_all` and the admin's "Full access" preset apply no mask. The fields are still flagged as personal data — `GdprFieldAuditor` / `rake permission_forge:audit_masks` report them as `unmasked_field`, and the admin's Home lists them under "Privacy audit" — so you decide, field by field, which to mask (or confirm "This is intended"). The recommended strategy is stored on the row (`mask_strategy`), so masking it later uses the right one.
 
 > **Important:** Masking provides display-level obfuscation only — it does NOT constitute GDPR-compliant anonymization or pseudonymization. See [GDPR Masking Disclaimer](gdpr_masking_disclaimer.md) for details.
 
-```ruby
+```ruby fragment
 # gdpr_defaults is true by default since v0.5.0
 # To opt out:
 PermissionForge.configure do |config|
   config.gdpr_defaults = false
 end
 
-# With gdpr_defaults enabled (the default), auto-generated fields get masks applied
+# With gdpr_defaults enabled (the default), ResourceFieldGenerator.call(resource:)
+# creates every field Hidden with the recommended strategy on the personal-data
+# ones; open them Read-only in the admin and they start Masked
+PermissionForge::Services::ResourceFieldGenerator.call(resource: resource)
+# email field → read_access: false, mask_access: false, mask_strategy: 'email'
+# phone field → read_access: false, mask_access: false, mask_strategy: 'last4'
+# name field  → read_access: false, mask_access: false, mask_strategy: 'first1_last4'
+# (other fields: no access, mask_strategy: 'full')
+
+# Full access applies no mask; the recommended strategy is kept for later
 PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant_all: true)
-# email field → mask_access: true, mask_strategy: 'email'
-# phone field → mask_access: true, mask_strategy: 'last4'
-# name field  → mask_access: true, mask_strategy: 'first1_last4'
+# email field → read_access: true, edit_access: true, mask_access: false, mask_strategy: 'email'
 ```
 
 **Built-in privacy patterns** (`DEFAULT_GDPR_FIELD_PATTERNS`):
 
 | Pattern | Fields Matched | Strategy |
 |---------|---------------|----------|
-| `email`, `*_email` | email, work_email, billing_email | `email` |
+| `email`, `*_email`, `email_address`, `*_email_address` | email, work_email, email_address (Rails 8 authentication), billing_email_address | `email` |
 | `*phone*`, `*telefon*`; `tel`, `fax`, `mobile` as a name segment | phone, mobile_phone, home_tel, fax_number, telNumber | `last4` |
 | `ssn`, `social_security*`, `national_id` | ssn, social_security_number | `last4` |
 | `*iban*`, `*bank_account*`, `*credit_card*` | iban, bank_account_number | `last4` |
@@ -269,9 +279,11 @@ PermissionForge::Services::ResourceFieldGenerator.call(resource: resource, grant
 
 A name segment is delimited by `_`, the ends of the name, a digit or a camelCase capital: `hotel_id`, `capacity` and `telemetry_enabled` do not match, nor does a stem glued to another word (`homecity`, `telno`); add a pattern for such names.
 
+Detection reads the column name only, the same way for every model (the same patterns are Rails' `filter_parameters`, which know no model). So a flag means "may be personal data": `name` on a company model is flagged like a person's name — and a company's name can itself be personal data (a sole trader's). When a flagged field may be read unmasked, confirm it with **This is intended** on the admin's Home (Privacy audit): it keeps its **Sensitive** badge but leaves the list, and the confirmation is an audit event (`field.sensitive_acknowledged`). `GdprFieldAuditor` and `rake permission_forge:audit_masks` do not read the confirmation and keep reporting the field.
+
 **Extend or override patterns:**
 
-```ruby
+```ruby fragment
 PermissionForge.configure do |config|
   config.gdpr_defaults = true
   config.gdpr_field_patterns = PermissionForge::Configuration::DEFAULT_GDPR_FIELD_PATTERNS.merge(
@@ -282,7 +294,7 @@ end
 
 **Audit existing fields for privacy gaps:**
 
-```ruby
+```ruby run
 # Returns both unmasked fields AND unmapped model columns matching GDPR patterns.
 # Only rows in effect count (active row, active resource, active granting set):
 # a switched-off row is reported as unmapped, not as unmasked.
@@ -301,16 +313,18 @@ report = PermissionForge::Services::GdprFieldAuditor.call
 
 **Run the audit from the command line (CI-friendly):**
 
-```bash
+```bash fragment
 bundle exec rake permission_forge:audit_masks
 # Exits with status 1 if issues found — integrate into your CI pipeline
+ACTOR="CI" REASON="nightly privacy check" bundle exec rake permission_forge:audit_masks
+# ACTOR= and REASON= name who ran it and why on the report.generated event the run records
 ```
 
-The auditor is read-only — it reports gaps for admin review without auto-fixing, preserving intentional admin overrides.
+The auditor is read-only — it reports gaps for admin review without auto-fixing, preserving intentional admin overrides. Each line of the report names why the column counts as personal data: `matches 'email'` (the GDPR pattern that matched) or `named by filter_parameters`.
 
 **Detect GDPR pattern drift:**
 
-```ruby
+```ruby run
 # After changing gdpr_field_patterns, check if re-generation is needed
 PermissionForge.configuration.gdpr_patterns_changed_since_generation?
 # => true (patterns changed since last ResourceFieldGenerator run)
@@ -320,7 +334,7 @@ PermissionForge.configuration.gdpr_patterns_changed_since_generation?
 
 PermissionForge can automatically redact GDPR-sensitive fields from Rails logs and error reporters by appending its patterns to `Rails.application.config.filter_parameters`.
 
-```ruby
+```ruby fragment
 # Automatic (enabled by default — set to false to opt out)
 PermissionForge.configure do |config|
   config.gdpr_defaults = true
@@ -337,7 +351,7 @@ This uses the same `gdpr_field_patterns` as masking — single source of truth. 
 
 Row-level rules are applied when a model includes `PermissionScopedFindable` and you go through the class-level `Model.find_by` / `Model.find_by!` or `Model.permission_scoped` (or turn on `auto_query_scoping`; see [Query scoping](query-scoping.md)). A user with no rules for a model sees every row.
 
-```ruby
+```ruby fragment
 # Create a rule: users can only see their own records
 PermissionForge::PermissionSetRule.create!(
   permission_set: pset,
@@ -347,7 +361,7 @@ PermissionForge::PermissionSetRule.create!(
   field_name: 'owner_id',
   field_value: 'current_user',     # Substituted with the current user's id at runtime;
                                    # any other value is compared in the column's type, and
-                                   # one the column cannot hold makes the rule match nothing
+                                   # one the column cannot hold is refused on save
   operator: 'equal',
   include_nulls: true              # Also match NULL values
 )
@@ -372,7 +386,7 @@ Customer.permission_scoped.where(active: true).count
 
 **Join types for nested associations:**
 
-```ruby
+```ruby fragment
 PermissionForge::PermissionSetRule.create!(
   # ...
   join_type: 'left_joins',              # or 'joins', 'left_outer_joins'
@@ -388,7 +402,7 @@ PermissionForge::PermissionSetRule.create!(
 
 Strip fields the user cannot edit (used in commands/controllers on incoming params):
 
-```ruby
+```ruby fragment
 params = { name: 'New Name', email: 'new@mail.com', secret: 'hidden' }
 filtered = PermissionForge::Services::PermitsAttributes.call(
   resource: customer,          # An instance of the model
@@ -403,7 +417,7 @@ filtered = PermissionForge::Services::PermitsAttributes.call(
 
 Strip fields the user cannot read and mask sensitive fields (used in serializers/views on outgoing data):
 
-```ruby
+```ruby fragment
 attributes = { name: 'Acme', email: 'john@example.com', secret: 'classified', domain: 'acme.com' }
 filtered = PermissionForge::Services::FiltersResponseAttributes.call(
   attributes: attributes,
@@ -425,7 +439,7 @@ filtered = PermissionForge::Services::FiltersResponseAttributes.call(
 
 **Serializer integration example:**
 
-```ruby
+```ruby fragment
 class BaseSerializer < ActiveModel::Serializer
   def filter_attributes(hash, model_name)
     PermissionForge::Services::FiltersResponseAttributes.call(

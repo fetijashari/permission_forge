@@ -36,7 +36,7 @@ module PermissionForge
         get pf(@base)
 
         assert_response :success
-        badge = t('resources.fields_tab.not_configured', behaviour: t('resources.fields_tab.implicit_grant'))
+        badge = t('resources.fields_tab.not_configured', state: t('ui.states.field_level.none'), behaviour: t('resources.fields_tab.implicit_grant'))
         assert_select "a.pf-badge--unconfigured[href='#{setting_href('extra_fields_default_access')}']", text: badge, count: 2
         assert_select '.pf-fields__row', text: /full_address/ do
           assert_select '.pf-badge', text: t('ui.badges.virtual')
@@ -53,7 +53,7 @@ module PermissionForge
         assert_no_match t('resources.fields_tab.implicit_grant'), response.body
         assert_select '.pf-fields__row', text: /full_address/ do
           assert_select "a.pf-badge--unconfigured[href='#{setting_href('unconfigured_field_strategy')}']",
-                        text: t('resources.fields_tab.not_configured', behaviour: t('ui.unconfigured.block'))
+                        text: t('resources.fields_tab.not_configured', state: t('ui.states.field_level.none'), behaviour: t('ui.unconfigured.block'))
         end
       end
 
@@ -109,11 +109,11 @@ module PermissionForge
         assert_equal [true, false], entry.values_at(:read_access, :edit_access)
       end
 
-      test 'the Full access preset makes virtual fields editable, and privacy defaults mask sensitive ones' do
+      test 'the Full access preset makes virtual fields editable, sensitive ones too (no privacy-default mask)' do
         @config.gdpr_defaults = true
         account = add_account('full')
 
-        assert_equal 'masked', level_of(account, 'full_address')
+        assert_equal 'edit', level_of(account, 'full_address')
         assert_equal 'edit', level_of(account, 'supplier_id')
         assert_nil level_of(account, 'theme'), 'discovery is off'
       end

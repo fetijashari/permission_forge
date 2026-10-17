@@ -80,7 +80,7 @@ module PermissionForge
         end
 
         def build_new_action(resource, key, permitted)
-          action = resource.resource_actions.build(name: key, label: key.humanize, is_active: true,
+          action = resource.resource_actions.build(name: key, label: key, is_active: true,
                                                    is_permitted: truthy?(permitted))
           change(kind: :new_action, record: action, attribute: 'is_permitted', from: nil, to: action.is_permitted,
                  resource: resource)

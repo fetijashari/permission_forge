@@ -4,7 +4,8 @@ module PermissionForge
   module Services
     module SecurityAuditChecks
       # Personal data shown unmasked, from GdprFieldAuditor. Fields an admin
-      # marked "This is intended" in the privacy audit are left out.
+      # marked "This is intended" in the privacy audit are left out by the
+      # auditor itself (ResourceField.exposing_unacknowledged).
       class PersonalDataCheck < BaseCheck
         def call
           report = GdprFieldAuditor.call(configuration: configuration)
@@ -14,7 +15,7 @@ module PermissionForge
         private
 
         def unmasked(report)
-          rows = report.select { |row| row[:type] == :unmasked_field && acknowledged_ids.exclude?(row[:resource_field_id]) }
+          rows = report.select { |row| row[:type] == :unmasked_field }
           return if rows.empty?
 
           finding(:medium, :unmasked_personal_data, 'Personal data readable unmasked',
@@ -47,7 +48,10 @@ module PermissionForge
 
           finding(:medium, :cross_set_unmasking, 'One set unmasks what another masks',
                   'Masks combine with AND: anyone holding both sets sees the full value.',
-                  items: rows.map { |row| "#{row[:permission_set]} › #{row[:resource_name]}.#{row[:field_name]}" })
+                  items: rows.map do |row|
+                    "#{row[:permission_set]} › #{row[:resource_name]}.#{row[:field_name]} " \
+                      "(masked in #{Array(row[:masked_in]).join(', ').presence || 'another set'})"
+                  end)
         end
 
         def unmapped(report)
@@ -64,14 +68,6 @@ module PermissionForge
                    end
           finding(passes ? :high : :low, :unmapped_personal_data, 'Personal-data columns with no active field row', detail,
                   items: rows.map { |row| "#{row[:resource]}.#{row[:column]}" })
-        end
-
-        def acknowledged_ids
-          @acknowledged_ids ||= if PermissionForge::Admin::AttentionItems.acknowledgement_supported?
-                                  PermissionForge::ResourceField.where.not(sensitive_acknowledged_at: nil).pluck(:id).to_set
-                                else
-                                  Set.new
-                                end
         end
       end
     end

@@ -65,8 +65,63 @@ module PermissionForge
         assert_equal '', MaskValue.call('', strategy: 'full')
       end
 
-      test 'unknown strategy raises ArgumentError' do
-        assert_raises(ArgumentError) { MaskValue.call('test', strategy: 'unknown') }
+      # --- A strategy this app does not know (written past the model, or a
+      # custom one since removed from the configuration) ---
+
+      test 'call masks fully with a strategy it does not know, blank included, and never raises' do
+        ['unknown', '', nil, 'gone', :nope].each do |strategy|
+          assert_equal '********', MaskValue.call('a@b.com', strategy: strategy), strategy.inspect
+        end
+      end
+
+      test 'call reports a strategy it does not know once per process per name: a warning and a notification' do
+        MaskValue.reset_reports!
+        notified = []
+        subscriber = ActiveSupport::Notifications.subscribe(MaskValue::UNKNOWN_STRATEGY_EVENT) { |*, payload| notified << payload }
+        logger = ActiveSupport::Logger.new(output = StringIO.new)
+        old_logger = Rails.logger
+        Rails.logger = logger
+
+        3.times { MaskValue.call('secret', strategy: 'gone') }
+        MaskValue.call('secret', strategy: 'other')
+
+        assert_equal [{ strategy: 'gone', fallback: 'full' }, { strategy: 'other', fallback: 'full' }], notified
+        assert_equal 1, output.string.scan('"gone"').size, output.string
+        assert_match(/masked fully/, output.string)
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+        Rails.logger = old_logger if old_logger
+        MaskValue.reset_reports!
+      end
+
+      test 'call! raises for a strategy it does not know, for the admin preview and the validation' do
+        error = assert_raises(ArgumentError) { MaskValue.call!('test', strategy: 'unknown') }
+
+        assert_match(/Unknown mask strategy: "unknown"/, error.message)
+        assert_equal 'j***@b.com', MaskValue.call!('john@b.com', strategy: 'email')
+      end
+
+      test 'known? is the one answer to "is this a strategy"' do
+        assert MaskValue.known?('full')
+        assert MaskValue.known?(:email)
+        assert_not MaskValue.known?('gone')
+        assert_not MaskValue.known?('')
+        assert_not MaskValue.known?(nil)
+
+        PermissionForge.configuration.custom_mask_strategies = { 'initials' => ->(value) { value[0] } }
+
+        assert MaskValue.known?('initials')
+        assert_equal 's', MaskValue.call('secret', strategy: 'initials')
+      end
+
+      test 'a custom strategy removed from the configuration masks fully from then on' do
+        PermissionForge.configuration.custom_mask_strategies = { 'initials' => ->(value) { value[0] } }
+
+        assert_equal 's', MaskValue.call('secret', strategy: 'initials')
+
+        PermissionForge.configuration.custom_mask_strategies = {}
+
+        assert_equal '********', MaskValue.call('secret', strategy: 'initials')
       end
 
       test 'converts non-string values to string' do

@@ -55,15 +55,15 @@ module PermissionForge
       return if pf_assignment_refused?(sets, @person.id, :revoke, path)
 
       count = @removable.size
-      confirmed = cache_confirmed? { PermissionForge::Audit.correlate { @removable.each(&:destroy!) } }
+      outcome = cache_outcome { PermissionForge::Audit.correlate { @removable.each(&:destroy!) } }
       redirect_to permission_forge.person_path(@person),
-                  **cache_flash(confirmed, { notice: :removed_all, alert: :removed_all_cache_kept }, count: count, name: person_name)
+                  **cache_flash(outcome, { notice: :removed_all, alert: :removed_all_cache_kept }, count: count, name: person_name)
     end
 
     def refresh_cache
-      confirmed = cache_confirmed? { @person.invalidate_permissions if @person.respond_to?(:invalidate_permissions) }
+      outcome = cache_outcome { @person.invalidate_permissions if @person.respond_to?(:invalidate_permissions) }
       redirect_to permission_forge.person_path(@person, tab: pf_tab_param(TABS)),
-                  **cache_flash(confirmed, { notice: :cache_refreshed, alert: :cache_refresh_failed }, name: person_name)
+                  **cache_flash(outcome, { notice: :cache_refreshed, alert: :cache_refresh_failed }, name: person_name)
     end
 
     # --- consent withdrawal -------------------------------------------------------
@@ -78,11 +78,11 @@ module PermissionForge
       flag = params[:flag].to_s
       return redirect_to(permission_forge.person_path(@person)) unless consent_flags.include?(flag)
 
-      count, invalidated = consent_service(flag, dry_run: false).values_at(:revoked_sets, :invalidated)
-      # nothing revoked means nothing to clear: that is not a failure
+      result = consent_service(flag, dry_run: false)
+      # the service's one cache outcome (nothing revoked: nothing to clear, confirmed)
       redirect_to permission_forge.person_path(@person),
-                  **cache_flash(count.zero? || invalidated, { notice: :consent_withdrawn, alert: :consent_withdrawn_cache_kept },
-                                count: count, flag: flag)
+                  **cache_flash(result[:cache], { notice: :consent_withdrawn, alert: :consent_withdrawn_cache_kept },
+                                count: result[:revoked_sets], flag: flag)
     end
 
     # --- erasure ----------------------------------------------------------------------
@@ -99,10 +99,9 @@ module PermissionForge
       end
 
       result = erasure_service(dry_run: false)
-      # nil: erased inside a transaction of the host's, the cache follows at its commit
-      confirmed = result[:cache_cleared] != false
+      # the service's one cache outcome (confirmed nil: erased inside a transaction of the host's, the cache follows at its commit)
       redirect_to permission_forge.people_path,
-                  **cache_flash(confirmed, { notice: :erased, alert: :erased_cache_kept }, name: person_name)
+                  **cache_flash(result[:cache], { notice: :erased, alert: :erased_cache_kept }, name: person_name)
     end
 
     private
@@ -151,7 +150,8 @@ module PermissionForge
     def load_audit_tab
       @changes = audit.changes_by(@person.id, limit: CHANGES_SHOWN)
       @changes_capped = audit.capped?
-      @timeline_log = PermissionForge::Admin::AuditLog.new({ views: params[:views] },
+      @views = pf_text_param(:views).presence # a Hash or a list is no toggle (it would reach url_for)
+      @timeline_log = PermissionForge::Admin::AuditLog.new({ views: @views },
                                                            scope: PermissionForge::Admin::AuditLog.for_person(@person.id))
       @timeline = @timeline_log.page(params[:page], per_page: TIMELINE_PER_PAGE)
       @timeline_lookups = PermissionForge::Admin::AuditLookups.new(@timeline.events)
@@ -163,14 +163,14 @@ module PermissionForge
 
     def send_changes_csv
       entries = audit.changes_by(@person.id).values.flatten
-      csv = audit.to_csv(entries, describe: helpers.method(:pf_audit_describe), person: helpers.method(:pf_audit_people))
+      csv = audit.to_csv(entries, describe: helpers.method(:pf_audit_csv_describe), person: helpers.method(:pf_audit_people))
       response.headers['Cache-Control'] = 'no-store' # names of people, like the log's exports
       send_data csv, filename: "permission-forge-changes-#{@person.id}.csv", type: 'text/csv'
     end
 
     def lost_resource_labels(assignments)
       assignments.map(&:permission_set).reject(&:is_muting)
-                 .flat_map { |ps| ps.resources.select(&:is_active).map { |r| helpers.pf_resource_plural(r.name) } }.uniq
+                 .flat_map { |ps| ps.resources.in_effect.map { |r| helpers.pf_resource_plural(r.name) } }.uniq
     end
 
     # Flags gating sets this person has, plus configured flags.

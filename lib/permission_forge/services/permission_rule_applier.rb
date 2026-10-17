@@ -8,12 +8,22 @@ module PermissionForge
     # a malformed field_name can never reach SQL as a literal even if a rule was
     # created through a path that bypasses model validation.
     #
+    # A stored rule never raises here. A value of a rule row the applier
+    # cannot interpret — a join type or operator this version does not know,
+    # a path that cannot be followed, a field name that is not a name or
+    # names a column its table does not have or a table that is not there, a
+    # value the column cannot hold — makes the rule match nothing: every
+    # holder is denied every record of the resource, never handed an error
+    # (a 500 for every holder, on every query under auto_query_scoping). The
+    # same reading describes such a rule to the admin and the audit
+    # (Operators::RuleProblem).
+    #
     # @api private
     class PermissionRuleApplier
       # join_type => the relation method that makes the join. The model
       # validates join_type, but a rule row can be written past the model (the
       # tables are shared with other applications): the value is looked up
-      # here, never sent to the relation, and anything else raises.
+      # here, never sent to the relation, and anything else matches nothing.
       JOIN_METHODS = {
         PermissionForge::Operators::Constants::JOINS => :joins,
         PermissionForge::Operators::Constants::LEFT_JOINS => :left_joins,
@@ -54,6 +64,24 @@ module PermissionForge
       # rules (the rule hashes themselves, in the same order); both empty when
       # nothing denied.
       #
+      # What a rule says when it denies: its `failure_message` as an admin
+      # wrote it, or — for a rule left without one, or holding the install
+      # migration's English default (PermissionForge::GeneratedText: a rule
+      # created before 0.15 without a message) — the gem's own sentence in
+      # the current locale (permission_forge.denials.rule_default). The one
+      # definition: NotAuthorizedError#failure_messages reads it too. The
+      # permission hash keeps the stored text (it is cached per user, not per
+      # locale): the reading happens here, at denial time.
+      #
+      # @param rule [Hash] a rule hash of the permission hash
+      # @return [String]
+      def self.failure_message_for(rule)
+        message = rule[:failure_message].to_s.strip
+        return message unless message.empty? || PermissionForge::GeneratedText.failure_message?(message)
+
+        I18n.t('permission_forge.denials.rule_default')
+      end
+
       # @return [Array(ActiveRecord::Relation, Array<String>, Array<Hash>)]
       def call
         report_no_rules if @rules.empty?
@@ -62,10 +90,10 @@ module PermissionForge
         # Happy path is a single existence check: rule constraints are monotonic
         # (each only removes rows), so if the fully-constrained query still matches
         # the target, no individual rule denied it.
-        return [query, [], []] if @rules.empty? || query.where(*@args).exists?
+        return [query, [], []] if @rules.empty? || matches?(query)
 
-        # Denial path only: attribute the denial to specific rules for the error
-        # message. The extra per-rule queries here run solely when access is denied.
+        # Denial path only: attribute the denial to the rules that deny the
+        # record (one query per rule, solely when access is denied).
         denying = denying_rules
         [query, denying.map { |rule| rule_failure_message(rule) }, denying]
       end
@@ -79,89 +107,96 @@ module PermissionForge
       end
 
       def rule_failure_message(rule)
-        "[Forbidden by Rule: #{rule[:name]}] with message: #{rule[:failure_message]}"
+        "[Forbidden by Rule: #{rule[:name]}] with message: #{self.class.failure_message_for(rule)}"
       end
 
-      # Rebuilds the query rule-by-rule, blaming each rule whose addition removes
-      # the target from the result set (the first denying rule and every rule
-      # after it, matching the original cumulative semantics).
+      # The rules that deny the record each on its own: the model's relation,
+      # that one rule and the args — rules combine with AND, so a rule that
+      # keeps the record on its own did not deny it, whatever the others do.
+      # In rule order. Should no single rule deny (an interplay with a default
+      # scope, say), the cumulative attribution — the first rule whose
+      # addition removes the record, and every rule after it — so a denial
+      # never names no rule.
       def denying_rules
+        denying = @rules.reject { |rule| matches?(build_rule_query(@model_class.where(nil), rule)) }
+        denying.empty? ? cumulatively_denying_rules : denying
+      end
+
+      def cumulatively_denying_rules
         denying = []
         @rules.reduce(@model_class.where(nil)) do |q, rule|
           next_query = build_rule_query(q, rule)
-          denying << rule unless next_query.where(*@args).exists?
+          denying << rule if denying.any? || !matches?(next_query)
           next_query
         end
         denying
       end
 
+      def matches?(query)
+        query.where(*@args).exists?
+      end
+
+      # A join type that is none of JOIN_METHODS (written past the model, or
+      # by a newer version) matches nothing: it is never sent to the relation.
+      # Neither is a field_name that is not a name (RuleColumn.name?): quoting
+      # one with a NUL byte raises on PostgreSQL.
       def build_rule_query(query, rule)
+        return query.none unless PermissionForge::Operators::RuleColumn.name?(rule[:field_name])
+
         join_type = rule[:join_type].to_s
         return apply_filter(query, rule) if PermissionForge::PermissionSetRule.filter_join_type?(join_type)
 
-        apply_join(query, rule, join_method(join_type))
+        join_method = JOIN_METHODS[join_type]
+        join_method ? apply_join(query, rule, join_method) : query.none
       end
 
-      # @raise [PermissionForge::ConfigurationError] for a join_type that is not one
-      def join_method(join_type)
-        JOIN_METHODS.fetch(join_type) do
-          raise PermissionForge::ConfigurationError,
-                "Rule join_type #{join_type.inspect} is not a join type. Allowed: #{JOIN_METHODS.keys.join(', ')}"
-        end
-      end
-
+      # A filter rule compares its model's own table: a field_name
+      # qualified with another table (RuleColumn::FOREIGN) matches nothing,
+      # whatever the query joins (RuleProblem :foreign_table).
       def apply_filter(query, rule)
-        column = quoted_column(@model_class.table_name, rule[:field_name])
-        build_query(query, column, rule, [@model_class])
+        field_name = rule[:field_name]
+        target = PermissionForge::Operators::RuleColumn.find(field_name, [@model_class])
+        build_query(query, quoted_column(@model_class.table_name, field_name), rule, target)
       end
 
-      # A path that cannot be followed leaves no model to type by: the value
-      # goes as it is, and ActiveRecord raises for the join when the query is built.
+      # A path that cannot be followed (Operators::RulePath#broken?: no such
+      # association, a polymorphic one, a class that cannot be loaded...)
+      # matches nothing: ActiveRecord would raise for the join when the query
+      # runs, and every holder would get an error instead of a denial. A
+      # qualifier is compared with the names the joined query gives its
+      # tables (Operators::RuleSources: the aliases ActiveRecord assigns,
+      # the default scope's and the host's joins included); one it does not
+      # give matches nothing (RuleColumn::FOREIGN / UNRESOLVABLE).
       def apply_join(query, rule, join_method)
-        query, models = resolve_join(query, rule, join_method)
-        column = quoted_column((models.last || @model_class).table_name, rule[:field_name])
-        build_query(query, column, rule, models)
+        association_chain = PermissionForge::Operators::RuleColumn.path_segments(rule[:field_accessor_path])
+        models = joinable_models(association_chain)
+        return query.none unless models
+
+        query = PermissionForge::Operators::RulePath.join(query, join_method, association_chain)
+        field_name = rule[:field_name]
+        joined = field_name.to_s.include?('.') ? PermissionForge::Operators::RuleSources.tables(query) : {}
+        target = PermissionForge::Operators::RuleColumn.find(field_name, models, joined: joined)
+        build_query(query, quoted_column(models.last.table_name, field_name), rule, target)
+      end
+
+      # The models along a path ActiveRecord can join, or nil (RulePath#broken?).
+      def joinable_models(association_chain)
+        path = PermissionForge::Operators::RulePath.follow(@model_class, association_chain)
+        path.models unless path.broken?
       end
 
       # Quotes a column reference with the connection's identifier quoting.
       # A dotted field_name is treated as already-qualified path segments and
-      # each segment is quoted independently.
+      # each segment is quoted independently. Through the pool, never the
+      # model's `connection` (it raises under Rails 7.2+
+      # `permanent_connection_checkout = :disallowed`).
       def quoted_column(table, field_name)
-        conn = @model_class.connection
         name = field_name.to_s
-        return name.split('.').map { |seg| conn.quote_column_name(seg) }.join('.') if name.include?('.')
+        @model_class.connection_pool.with_connection do |conn|
+          next name.split('.').map { |seg| conn.quote_column_name(seg) }.join('.') if name.include?('.')
 
-        "#{conn.quote_table_name(table)}.#{conn.quote_column_name(name)}"
-      end
-
-      def resolve_join(query, rule, join_method)
-        return [query, [@model_class]] if rule[:field_accessor_path].blank?
-
-        association_chain = rule[:field_accessor_path].split('.')
-        query = apply_join_to_query(query, join_method, association_chain)
-
-        [query, PermissionForge::Operators::RuleColumn.models_along(@model_class, association_chain)]
-      end
-
-      # @param join_method [Symbol] one of JOIN_METHODS — never a rule's own text
-      def apply_join_to_query(query, join_method, association_chain)
-        if association_chain.size > 1
-          query.public_send(join_method, build_nested_joins_structure(association_chain))
-        else
-          query.public_send(join_method, association_chain.first.to_sym)
+          "#{conn.quote_table_name(table)}.#{conn.quote_column_name(name)}"
         end
-      end
-
-      def build_nested_joins_structure(association_chain)
-        structure = {}
-        current = structure
-
-        association_chain.each_with_index do |assoc, index|
-          current[assoc.to_sym] = {}
-          current = current[assoc.to_sym] unless index == association_chain.length - 1
-        end
-
-        structure
       end
 
       # A built-in operator gets its value in the type of the column it is
@@ -169,15 +204,37 @@ module PermissionForge
       # of that column makes the rule match nothing, whatever the database
       # would have made of the comparison. A custom operator's value is passed
       # as it is and its strategy runs. A field_name that is not a name
-      # (Operators::RuleColumn.name?) matches nothing under any operator.
-      def build_query(query, quoted_column, rule, models)
+      # (Operators::RuleColumn.name?) matches nothing under any operator, and
+      # one naming a column its table does not have matches nothing under a
+      # built-in operator (Operators::ValueTyping.no_column?) — the database
+      # would reject the query, and every holder would get an error instead
+      # of a denial. So does one qualified with a table that is not there
+      # (RuleColumn#unresolvable?) or that is none of the rule's query
+      # (RuleColumn#foreign?), and a rule whose operator the registry
+      # does not have (written past the model, or by a newer version).
+      def build_query(query, quoted_column, rule, target)
         operator = rule[:operator]
-        strategy = @operator_registry.fetch(operator)
-        target = PermissionForge::Operators::RuleColumn.find(rule[:field_name], models)
+        strategy = strategy_for(operator)
+        return query.none if strategy.nil? || target.unresolvable? || target.foreign?
+
         value = PermissionForge::Operators::ValueTyping.call(operator, formatted_field_value(rule), target)
         return query.none if value.equal?(PermissionForge::Operators::ValueTyping::UNUSABLE)
 
         strategy.call(query, quoted_column, rule, value)
+      end
+
+      # The operator's strategy from the registry — Operators::Registry, or an
+      # injected one: anything answering `strategies` (a Hash of them) or
+      # `fetch(name)` (a Hash, an object of the host's) — and nil for an
+      # operator it does not have, whether it answers nil or raises for one
+      # (ArgumentError as Registry.fetch does, KeyError as a Hash does).
+      def strategy_for(operator)
+        registry = @operator_registry
+        return registry.strategies[operator] if registry.respond_to?(:strategies)
+
+        registry.fetch(operator)
+      rescue ArgumentError, KeyError
+        nil
       end
 
       # The only magic value is 'current_user', substituted with the current

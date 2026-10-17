@@ -5,6 +5,15 @@ module PermissionForge
     # Read-only reflection over the host app's ActiveRecord models, so the
     # admin UI only ever offers real models, columns and associations (no
     # free-text names that silently do nothing when misspelled).
+    #
+    # Columns are read through PermissionForge::SchemaRead: a model's column
+    # list is compared with the database once per catalog (a column a
+    # migration added while the process was up is offered, a removed one
+    # flagged), and a name that is not a column is asked again once before
+    # it is called virtual. Associations are the ones a rule's path can
+    # follow (Operators::RulePath.unjoinable_cause): the builder never offers
+    # one the applier refuses to join. Labels are Admin::FieldLabel's and
+    # Admin::ModelLabel's.
     class ModelCatalog
       Column = Struct.new(:name, :label, :type, :enum_values, :user_reference, :virtual, keyword_init: true) do
         def user_reference? = user_reference
@@ -16,8 +25,8 @@ module PermissionForge
         # @param target [Class] the reflection's resolved class
         # @param owner [Class] the model declaring the association
         def self.from(reflection, target, owner)
-          name = reflection.name
-          new(name: name.to_s, label: owner.human_attribute_name(name), class_name: target.name,
+          name = reflection.name.to_s
+          new(name: name, label: FieldLabel.for(owner, name).text, class_name: target.name,
               foreign_key: reflection.foreign_key.to_s, macro: reflection.macro)
         end
       end
@@ -31,27 +40,35 @@ module PermissionForge
         # read + edit entry from ExtraFieldDefaults right now.
         delegate :implicit_grant?, to: :virtual_fields
 
-        def initialize(klass, configuration)
+        # @param verify [Boolean] compare the column list with the database
+        #   (one metadata query per model and catalog); false for the
+        #   catalogs that only count (Home and the navigation's attention
+        #   items)
+        def initialize(klass, configuration, verify: true)
           @klass = klass
           @configuration = configuration
+          @verify = verify
         end
 
         def name = @klass.name
-        def label = @klass.model_name.human
-        def plural_label = @klass.model_name.human(count: 2)
+        def label = ModelLabel.for(@klass).text
+        def plural_label = ModelLabel.plural(@klass)
 
-        def column_names
-          @column_names ||= @klass.column_names
+        # The model's columns (ignored_columns excluded), compared with the
+        # database once for this catalog unless it only counts
+        # (PermissionForge::SchemaRead).
+        def column_names = managed_fields.column_names
+
+        # Whether `name` is a column of the model, asked again once after the
+        # schema is read again before "no" (PermissionForge::SchemaRead).
+        def column?(name)
+          PermissionForge::SchemaRead.column?(@klass, name.to_s, ignored: false)
         end
 
         # Columns PermissionForge manages (ignored_fields removed).
-        def managed_column_names
-          column_names - ignored_column_names
-        end
+        def managed_column_names = managed_fields.managed_column_names
 
-        def ignored_column_names
-          column_names & Array(@configuration.ignored_fields).map(&:to_s)
-        end
+        def ignored_column_names = managed_fields.ignored_column_names
 
         # Virtual fields the model declares through extra_fields_method.
         def declared_virtual_field_names
@@ -64,10 +81,10 @@ module PermissionForge
           virtual_fields.names
         end
 
-        # Every field the admin configures: managed columns, then virtual fields.
-        def managed_field_names
-          managed_column_names + virtual_field_names
-        end
+        # Every field the admin configures: managed columns, then virtual
+        # fields (PermissionForge::ManagedFields, the names every path that
+        # creates rows writes rows for).
+        def managed_field_names = managed_fields.names
 
         def virtual_field?(name)
           virtual_fields.include?(name)
@@ -87,9 +104,9 @@ module PermissionForge
 
         def column(name)
           name = name.to_s
-          return virtual_column(name) unless column_names.include?(name)
+          return virtual_column(name) unless column?(name)
 
-          Column.new(name: name, label: @klass.human_attribute_name(name), type: column_type(name),
+          Column.new(name: name, label: FieldLabel.for(@klass, name).text, type: column_type(name),
                      enum_values: enum_values(name), user_reference: user_reference?(name), virtual: false)
         end
 
@@ -103,18 +120,26 @@ module PermissionForge
 
         private
 
-        def virtual_fields
-          @virtual_fields ||= PermissionForge::VirtualFields.new(@klass, @configuration)
+        def virtual_fields = managed_fields.virtual_fields
+
+        def managed_fields
+          @managed_fields ||= PermissionForge::ManagedFields.new(@klass, configuration: @configuration, verify: @verify)
         end
 
-        # nil for polymorphic or unresolvable associations.
+        # nil for an association a rule's path cannot follow
+        # (Operators::RulePath.unjoinable_cause: polymorphic, a
+        # record-dependent scope, a broken :through or inverse_of, a class
+        # that cannot be loaded): the applier refuses to join it.
         def build_association(ref)
-          target = safe_klass(ref) unless ref.polymorphic?
-          Association.from(ref, target, @klass) if target
+          return if PermissionForge::Operators::RulePath.unjoinable_cause(ref)
+
+          Association.from(ref, ref.klass, @klass)
+        rescue *PermissionForge::Operators::RuleColumn::UNTELLABLE
+          nil
         end
 
         def virtual_column(name)
-          Column.new(name: name, label: @klass.human_attribute_name(name), type: :string,
+          Column.new(name: name, label: FieldLabel.for(@klass, name).text, type: :string,
                      enum_values: nil, user_reference: false, virtual: true)
         end
 
@@ -144,13 +169,16 @@ module PermissionForge
         end
       end
 
-      def initialize(configuration: PermissionForge.configuration)
+      # @param verify [Boolean] whether the column lists are compared with
+      #   the database (ModelInfo); false for a catalog that only counts
+      def initialize(configuration: PermissionForge.configuration, verify: true)
         @configuration = configuration
+        @verify = verify
       end
 
       # @return [Array<ModelInfo>] sorted by label
       def models
-        @models ||= model_classes.map { |k| ModelInfo.new(k, @configuration) }.sort_by(&:label)
+        @models ||= model_classes.map { |k| ModelInfo.new(k, @configuration, verify: @verify) }.sort_by(&:label)
       end
 
       # @return [ModelInfo, nil] for a model name, whether or not it is listed.
@@ -165,8 +193,8 @@ module PermissionForge
       private
 
       def build_info(name)
-        klass = name.safe_constantize
-        ModelInfo.new(klass, @configuration) if usable?(klass)
+        klass = PermissionForge::ModelLookup.model_for(name)
+        ModelInfo.new(klass, @configuration, verify: @verify) if klass && usable?(klass)
       end
 
       def model_classes
@@ -185,7 +213,7 @@ module PermissionForge
 
       def usable?(klass)
         klass.is_a?(Class) && klass < ActiveRecord::Base && !klass.abstract_class? &&
-          !klass.name.to_s.start_with?('PermissionForge::') && klass.table_exists?
+          !klass.name.to_s.start_with?('PermissionForge::') && PermissionForge::SchemaRead.table?(klass, klass.table_name)
       rescue StandardError
         false
       end
@@ -200,16 +228,32 @@ module PermissionForge
         true
       end
 
-      def eager_load_app_models
-        return unless defined?(Rails) && Rails.root && Rails.respond_to?(:autoloaders)
+      def eager_load_app_models = self.class.eager_load_app_models
 
-        eager_load_dir(Rails.autoloaders.main, Rails.root.join('app', 'models').to_s)
-      rescue StandardError => e
-        Rails.logger&.debug("[PermissionForge] model eager load skipped: #{e.class}")
-      end
+      class << self
+        # Loads the application's models (`app/models`, through its main
+        # autoloader), so `ActiveRecord::Base.descendants` lists them: the
+        # one definition for whatever must see every model in a process that
+        # does not eager-load — the admin's model list, and
+        # `rake permission_forge:audit` (a single-table subclass's `encrypts`
+        # or a model on a table a rule joins is seen only once loaded:
+        # PermissionForge::EncryptedAttributes). A failure is logged at debug
+        # and skipped: the caller sees the models already loaded.
+        #
+        # @return [void]
+        def eager_load_app_models
+          return unless defined?(Rails) && Rails.root && Rails.respond_to?(:autoloaders)
 
-      def eager_load_dir(loader, dir)
-        loader.eager_load_dir(dir) if File.directory?(dir) && loader.respond_to?(:eager_load_dir)
+          eager_load_dir(Rails.autoloaders.main, Rails.root.join('app', 'models').to_s)
+        rescue StandardError => e
+          Rails.logger&.debug("[PermissionForge] model eager load skipped: #{e.class}")
+        end
+
+        private
+
+        def eager_load_dir(loader, dir)
+          loader.eager_load_dir(dir) if File.directory?(dir) && loader.respond_to?(:eager_load_dir)
+        end
       end
     end
   end

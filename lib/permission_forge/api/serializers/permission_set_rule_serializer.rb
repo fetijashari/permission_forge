@@ -6,7 +6,7 @@ module PermissionForge
       class PermissionSetRuleSerializer < BaseSerializer
         REDACTED_PLACEHOLDER = '[REDACTED]'
 
-        attributes :id, :uuid, :permission_set_id, :resource_id,
+        attributes :id, :uuid, *reference(:permission_set), *reference(:resource),
                    :name, :failure_message, :join_type,
                    :field_name, :field_value, :field_accessor_path,
                    :operator, :include_nulls, :is_active, :is_editable,

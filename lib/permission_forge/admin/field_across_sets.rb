@@ -2,9 +2,11 @@
 
 module PermissionForge
   module Admin
-    # Every Permission Set containing a resource, with one field's row there
-    # (granting sets first, then by name) and the set's people count. Backs
-    # the field drawer's "In other sets" list and "Who can see …?".
+    # Every Permission Set containing a resource — or, for a
+    # single-table-inheritance subclass, one of the bases its records answer
+    # to (ResourceChain: a base's field row reaches the subclass) — with one
+    # field's row there (granting sets first, then by name) and the set's
+    # people count. Backs the field drawer's "In other sets" list and "Who can see …?".
     class FieldAcrossSets
       # @return [Array<Hash>] { resource:, set:, field: (ResourceField or nil), people:, in_effect: }
       #   in_effect is whether the row (or, without a row, the resource) counts
@@ -27,7 +29,8 @@ module PermissionForge
       private
 
       def resources
-        PermissionForge::Resource.where(name: @resource_name).includes(:permission_set, :resource_fields)
+        names = PermissionForge::ResourceChain.names_for(@resource_name).map(&:to_s)
+        PermissionForge::Resource.where(name: names).includes(:resource_fields, permission_set: :resources)
                                  .sort_by { |resource| sort_key(resource.permission_set) }
       end
 

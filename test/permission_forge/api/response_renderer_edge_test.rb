@@ -13,8 +13,15 @@ module PermissionForge
         @user = create_user
       end
 
-      test 'POST create returns a 404 envelope when the host user does not exist' do
-        post "/permission_forge/api/permission_set_groups/#{@group.uuid}/users", params: { user_id: -1 }
+      # A new membership for nobody is a 422 keyed by user_id
+      # (BaseController#requested_user); removing the membership of someone
+      # user_list_resolver leaves out is still a 404.
+      test 'DELETE destroy returns a 404 envelope when the member is outside user_list_resolver' do
+        membership = PermissionForge::PermissionSetGroupUser.create!(permission_set_group: @group, user: @user)
+        config = PermissionForge.configuration
+        config.user_list_resolver = -> { config.user_model.where.not(id: @user.id) }
+
+        delete "/permission_forge/api/permission_set_groups/#{@group.uuid}/users/#{membership.uuid}"
 
         assert_response :not_found
         json = JSON.parse(response.body)

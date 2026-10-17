@@ -19,13 +19,16 @@ module PermissionForge
         render_collection(scope, serializer_for(:permission_set_user))
       end
 
+      # A user_id that is missing, not an id, or names nobody
+      # config.user_list_resolver lists is a 422 keyed by user_id
+      # (BaseController#requested_user), after the authorization hooks.
       def create
         authorize_assignment!(@permission_set, [params[:user_id]])
         reject_widening!(:grant) unless performed?
         return if performed?
 
-        user = find_host_user(params[:user_id])
-        return if performed? || pf_assignment_refused_api?(@permission_set, user.id, :grant)
+        user = requested_user
+        return if pf_assignment_refused_api?(@permission_set, user.id, :grant)
 
         create_assignment(user)
       end
@@ -41,20 +44,20 @@ module PermissionForge
         reject_widening!(:revoke) unless performed?
         return if performed? || pf_assignment_refused_api?(@permission_set, psu.user_id, :revoke)
 
-        psu.destroy!
-        head :no_content
+        # The revoked assignment and what the cache store confirmed
+        # (meta.cache, as the bulk endpoint answers it); through 0.14.x a 204.
+        outcome = PermissionForge::Cache::Report.of { psu.destroy! }
+        render_record_with_cache(psu, outcome, status: :ok)
       end
 
       def bulk
         authorize_assignment!(@permission_set, params[:user_ids])
         # On a locked set only what narrows access passes (an unknown
         # bulk_action is judged as a grant, then refused as a 422).
-        reject_widening!(BULK_ACTIONS.fetch(params[:bulk_action].to_s, :grant)) unless performed?
+        reject_widening!(BULK_ACTIONS.fetch(bulk_action_param, :grant)) unless performed?
         return if performed? || bulk_refused?
 
         render json: { data: bulk_assignment }, status: :ok
-      rescue ArgumentError => e
-        render json: { error: { status: 422, messages: e.message } }, status: :unprocessable_entity
       end
 
       private
@@ -65,34 +68,92 @@ module PermissionForge
         reject_locked!(pf_widening_lock(@permission_set, change))
       end
 
+      # The new assignment and what the cache store confirmed (meta.cache).
       def create_assignment(user)
-        psu = @permission_set.permission_set_users.build(user: user, expires_at: pf_time_param(:expires_at))
-        psu.save ? render_created(psu, serializer_for(:permission_set_user)) : render_validation_errors(psu)
+        psu = @permission_set.permission_set_users.build(user: user, expires_at: future_expires_at)
+        saved = false
+        outcome = PermissionForge::Cache::Report.of { saved = psu.save }
+        return render_validation_errors(psu) unless saved
+
+        render_record_with_cache(psu, outcome, status: :created)
       end
 
-      # An unknown bulk_action raises ArgumentError (422, rescued in #bulk)
-      # before anything is authorized or changed.
+      # params[:expires_at] (ParamShapes#pf_time_param) for a new
+      # assignment. An end that is not after now would create an assignment
+      # that grants nothing: refused (422) before anybody is assigned. The
+      # admin's Undo restores a removed assignment with the end it had, also
+      # one that has passed, and does not come through here.
+      def future_expires_at
+        expires_at = pf_time_param(:expires_at)
+        return expires_at if expires_at.nil? || expires_at > Time.current
+
+        raise ParamShapes::InvalidParam.new(:expires_at, I18n.t('permission_forge.api.errors.expires_at_past'))
+      end
+
+      # An unknown bulk_action, and a request that names nobody, are a 422
+      # ({ "bulk_action": [...] }, { "user_ids": [...] }) before anything is
+      # changed: a 200 that did nothing would hide a broken payload.
       def bulk_refused?
-        action = BULK_ACTIONS.fetch(params[:bulk_action].to_s) do |name|
-          PermissionForge::Services::BulkPermissionSetAssignment.validate_action!(name)
-          raise ArgumentError, "Invalid action: #{name}" # a service action this controller does not map
+        action = BULK_ACTIONS.fetch(bulk_action_param) do
+          raise ParamShapes::InvalidParam.new(:bulk_action, I18n.t('permission_forge.api.errors.bulk_action_invalid'))
         end
+        require_user_ids!
         pf_assignment_refused_api?(@permission_set, params[:user_ids], action)
       end
 
+      # params[:bulk_action] when it is text ('' otherwise: a list or an
+      # object is no action, never its #to_s).
+      def bulk_action_param
+        action = params[:bulk_action]
+        action.is_a?(String) ? action : ''
+      end
+
+      # user_ids missing, [], "" or only blanks: "must name at least one
+      # user". Anything else that is not a list of ids — one string such as
+      # "1,3", a number, an object, a list holding an object, a list, a
+      # fraction or a boolean —: "must be a list" — through 0.14.1 "1,3" was
+      # read as one id and answered 200 with nobody assigned, and an element
+      # that was no id was left out without a word. A blank string beside an
+      # id is ignored, as Rails' own `collection_singular_ids=` ignores it
+      # (`collection_check_boxes` sends one with every form); Ids.cast leaves
+      # it out. Ids that name nobody are not refused: they are reported as
+      # `skipped`. (A JSON null among them never gets here: Rails' deep_munge
+      # removes it from the parameters.)
+      def require_user_ids!
+        user_ids = params[:user_ids]
+        message = if Array.wrap(user_ids).all?(&:blank?) then I18n.t('permission_forge.api.errors.user_ids_missing')
+                  elsif !user_id_list?(user_ids) then I18n.t('permission_forge.api.errors.user_ids_not_list')
+                  end
+        raise ParamShapes::InvalidParam.new(:user_ids, message) if message
+      end
+
+      def user_id_list?(user_ids)
+        user_ids.is_a?(Array) && user_ids.all? { |id| id.is_a?(String) || id.is_a?(Integer) }
+      end
+
+      # The service's counts and its cache outcome (`cache`: `confirmed`,
+      # `process_local`, `unconfirmed` — Cache::Outcome, as every
+      # cache-touching operation answers it) plus `skipped`: the ids of the
+      # request that name nobody config.user_list_resolver lists. A revoke
+      # ignores expires_at (it removes the assignments whatever their end),
+      # also one that cannot be read.
       def bulk_assignment
-        PermissionForge::Services::BulkPermissionSetAssignment.call(
+        user_ids = bulk_user_ids
+        result = PermissionForge::Services::BulkPermissionSetAssignment.call(
           permission_set: @permission_set,
-          user_ids: bulk_user_ids,
-          action: params[:bulk_action],
+          user_ids: user_ids,
+          action: bulk_action_param,
           created_by: PermissionForge.current_user,
-          expires_at: pf_time_param(:expires_at)
+          expires_at: (future_expires_at if bulk_action_param == 'assign')
         )
+        # Someone outside user_list_resolver and an id that names no user
+        # read the same: the answer says nothing about who exists.
+        result.merge(skipped: PermissionForge::Admin::PeopleDirectory::Ids.unmatched(params[:user_ids], user_ids))
       end
 
       # The people of the request within config.user_list_resolver
       # (Admin::PeopleDirectory#find_all); an id naming nobody there is
-      # skipped, as an unknown id always was.
+      # skipped (and reported).
       def bulk_user_ids
         PermissionForge::Admin::PeopleDirectory.new.find_all(params[:user_ids]).map(&:id)
       end

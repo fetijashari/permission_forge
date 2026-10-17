@@ -280,22 +280,35 @@ module PermissionForge
         end
       end
 
+      # A database that does not answer or does not exist
+      # (DatabaseReach::UNREACHABLE_ERRORS) is "unchecked": nothing is
+      # recorded until it answers. Any other error of the check — a
+      # configuration error included — raises out of Audit.record, so the
+      # change it records rolls back.
       def check_table(name)
-        if PermissionForge::AuditEvent.table_exists?
-          @table_checks[name] = true
-        else
-          @table_checks[name] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          warn_missing_table(name) unless @warned_tables[name]
-          @warned_tables[name] = true
-          false
+        cause = nil
+        exists = PermissionForge::DatabaseReach.table_exists?(PermissionForge::AuditEvent,
+                                                              errors: PermissionForge::DatabaseReach::UNREACHABLE_ERRORS) { |e| cause = e }
+        if cause
+          warn_unchecked_table(name, cause)
+          return false
         end
-      rescue ActiveRecord::NoDatabaseError, ActiveRecord::ConnectionNotEstablished => e
-        Rails.logger&.warn("[PermissionForge] cannot check for the audit table '#{name}': #{e.class}") if defined?(Rails)
+        return @table_checks[name] = true if exists
+
+        @table_checks[name] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        warn_missing_table(name) unless @warned_tables[name]
+        @warned_tables[name] = true
         false
       end
 
+      def warn_unchecked_table(name, cause)
+        PermissionForge::Warnings.emit(:audit_table_unchecked, "cannot check for the audit table '#{name}' (#{cause.class}): " \
+                                                               'no audit events are recorded until the database answers.',
+                                       severity: :security)
+      end
+
       def warn_missing_table(name)
-        Rails.logger.warn(BootWarnings.missing_table(name)) if defined?(Rails) && Rails.logger
+        PermissionForge::Warnings.emit(:audit_table_missing, BootWarnings.missing_table(name), severity: :security)
       end
     end
   end

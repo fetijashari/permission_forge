@@ -13,7 +13,7 @@
   <% items.each do |item| %>
     <div class="pf-card__row">
       <div class="pf-stack pf-stack--tight pf-grow">
-        <strong><%= t('.rules', count: item.rule_count, resource: pf_resource_label(item.resource), name: item.permission_set.name) %></strong>
+        <strong><%= t('.rules', count: item.rule_count, resource: pf_resource_label(item.resource), name: pf_record_name(item.permission_set)) %></strong>
         <span class="pf-fs-13 pf-text-2"><%= t('.people', count: item.people_count) %></span>
       </div>
       <%= link_to t('.open'), permission_forge.permission_set_resource_path(item.permission_set, item.resource.name, tab: 'rules'),

@@ -29,9 +29,7 @@ module PermissionForge
         def table?
           return @table if defined?(@table)
 
-          @table = audit_events.table_exists?
-        rescue ActiveRecord::ConnectionNotEstablished, ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
-          @table = nil
+          @table = PermissionForge::DatabaseReach.table_exists?(audit_events) { return @table = nil }
         end
 
         def table_missing

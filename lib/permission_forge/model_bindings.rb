@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'warnings'
+
 module PermissionForge
   # What a model took from the configuration as it loaded — the user class of
   # an assignment (PermissionSetUser#user, PermissionSetGroupUser#user), the
@@ -8,16 +10,21 @@ module PermissionForge
   # changed after the class loaded (a PermissionForge.configure or a setter
   # in after_initialize, a console) changes nothing in the class: a
   # development reload picks it up, an eager-loaded production process never
-  # does. The engine logs each difference once the host's after_initialize
-  # blocks have run, and PermissionForge.configure logs it too. Nothing here
-  # loads a model. (table_name_prefix is not compared: table_name is a
-  # method that reads it on every call.)
+  # does. The engine warns about each difference (Warnings.emit) once the
+  # host's after_initialize blocks have run, and PermissionForge.configure
+  # does too. Nothing here loads a model. (table_name_prefix is not
+  # compared: table_name is a method that reads it on every call.)
   #
   # @api private
   module ModelBindings
     # The settings a model declares as it loads, each with the association
     # that carries it (the tenant is read from HasTenantScoping).
     ASSOCIATIONS = { user_class: :user, audit_user_class: :created_by }.freeze
+    # The severity of a mismatch, by setting (Warnings): a model loaded with
+    # another tenant model (or none) is not isolated as configured, access
+    # across tenants; another user class only points an association
+    # elsewhere.
+    SEVERITY = { tenant_model: :security }.freeze
 
     class << self
       # One sentence per setting that loaded models declared differently.
@@ -25,22 +32,18 @@ module PermissionForge
       # @param config [Configuration]
       # @return [Array<String>]
       def mismatches(config = PermissionForge.configuration)
-        found = Hash.new { |hash, key| hash[key] = [] }
-        loaded_models.each do |model|
-          declared_otherwise(model, config).each do |setting, declared|
-            found[[setting, config.public_send(setting), declared]] << model.name
-          end
-        end
-        found.map { |difference, models| sentence(difference, models) }
+        differences(config).map { |difference, models| sentence(difference, models) }
       end
 
-      # Logs every mismatch.
+      # Warns about every mismatch, one key per setting.
       #
       # @param config [Configuration]
-      # @param logger [Logger, nil]
       # @return [void]
-      def warn!(config = PermissionForge.configuration, logger: default_logger)
-        mismatches(config).each { |sentence| logger&.warn("[PermissionForge] #{sentence}") }
+      def warn!(config = PermissionForge.configuration)
+        differences(config).each do |difference, models|
+          setting = difference.first
+          Warnings.emit("model_bindings.#{setting}", sentence(difference, models), severity: SEVERITY.fetch(setting, :config))
+        end
       end
 
       # The model classes already loaded, without loading one.
@@ -52,6 +55,18 @@ module PermissionForge
       end
 
       private
+
+      # { [setting, what the configuration says, what the models declared] =>
+      # the model names } for every difference.
+      def differences(config)
+        found = Hash.new { |hash, key| hash[key] = [] }
+        loaded_models.each do |model|
+          declared_otherwise(model, config).each do |setting, declared|
+            found[[setting, config.public_send(setting), declared]] << model.name
+          end
+        end
+        found
+      end
 
       # [setting, what the model declared] for each setting the model
       # declared and the configuration now says differently. A model without
@@ -80,10 +95,6 @@ module PermissionForge
           "#{declared.inspect}: a loaded class keeps what it declared until it is loaded again (a code reload in " \
           'development; never in an eager-loaded production process). Configure PermissionForge in ' \
           'config/initializers.'
-      end
-
-      def default_logger
-        Rails.logger if defined?(Rails) && Rails.respond_to?(:logger)
       end
     end
   end

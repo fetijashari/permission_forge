@@ -32,12 +32,12 @@
     <% @groups.each do |group| %>
       <%= link_to permission_forge.group_path(group), class: 'pf-group-card' do %>
         <span class="pf-row">
-          <b><%= group.name %></b>
+          <b><%= pf_record_name(group) %></b>
           <span class="pf-fs-13 pf-text-3"><%= t('.sets_count', count: group.permission_sets.size) %></span>
           <%= pf_off_badge unless group.is_active %>
-          <%= pf_lock_badge if pf_locked_record?(group) %>
+          <%= pf_lock_badge(group) %>
         </span>
-        <% if group.description.present? %><span class="pf-fs-13 pf-text-2"><%= group.description %></span><% end %>
+        <% if group.description.present? %><span class="pf-fs-13 pf-text-2" data-pf-host-data><%= group.description %></span><% end %>
         <span class="pf-chips"><% group.permission_sets.sort_by(&:name).each do |ps| %><%= pf_set_chip(ps, href: nil) %><% end %></span>
         <% if group.permission_set_group_users.any? %>
           <span class="pf-fs-12 pf-text-warn">⚠ <%= t('.members_warning', count: group.permission_set_group_users.size) %></span>

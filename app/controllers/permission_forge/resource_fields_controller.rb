@@ -5,6 +5,8 @@ module PermissionForge
   # @api private
   class ResourceFieldsController < ApplicationController
     include PermissionForge::ActingAdmin
+    include PermissionForge::CacheConfirmation
+    include PermissionForge::ChangeReview
 
     before_action :load_field
     before_action :reject_locked, only: %i[update acknowledge apply_recommendation]
@@ -21,10 +23,14 @@ module PermissionForge
     end
 
     def update
-      attrs = pf_require_hash(:field).permit(:level, :mask_strategy, :label, :description, :is_active).to_h
-      changes = apply_field_changes(attrs)
-      finish_new_field(attrs) unless @field
-      redirect_to pf_back_or(resource_path), notice: saved_notice(changes)
+      attrs = pf_boolean_attributes(pf_require_hash(:field).permit(:level, :mask_strategy, :label, :description, :is_active).to_h,
+                                    :is_active)
+      applied = nil
+      outcome = cache_outcome do
+        applied = apply_field_changes(attrs)
+        finish_new_field(attrs) unless @field
+      end
+      redirect_to pf_back_or(resource_path), **pf_applied_flash(applied, outcome)
     rescue PermissionForge::Admin::ChangeSet::Invalid => e
       redirect_to field_path, alert: t('permission_forge.flash.permission_sets.save_failed', errors: e.message)
     end
@@ -43,12 +49,13 @@ module PermissionForge
 
     # Applies the recommended mask for a sensitive column.
     def apply_recommendation
-      match = PermissionForge::Admin::SensitiveColumns.new.match(@key)
+      match = PermissionForge::SensitiveColumns.new.match(@key)
       return redirect_to(field_path) unless match
 
       level = @permission_set.is_muting ? 'mask' : 'masked'
-      apply_field_changes('level' => level, 'mask_strategy' => match.strategy)
-      redirect_to pf_back_or(field_path), notice: t('permission_forge.flash.fields.recommendation_applied', field: @key)
+      applied = apply_field_changes('level' => level, 'mask_strategy' => match.strategy)
+      redirect_to pf_back_or(field_path),
+                  **pf_save_flash(applied.changes.any?) { t('permission_forge.flash.fields.recommendation_applied', field: @key) }
     end
 
     private
@@ -68,13 +75,15 @@ module PermissionForge
 
     # Applies `attrs` to this field through a ChangeSet; an unconfigured column
     # is created at attrs['level'].
+    #
+    # @return [PermissionForge::Admin::ChangeSet] the applied change set
     def apply_field_changes(attrs)
       change_params = if @field
                         { fields: { @field.id.to_s => attrs } }
                       else
                         { new_fields: { @resource.id.to_s => { @key => { 'level' => attrs['level'] } } } }
                       end
-      PermissionForge::Admin::ChangeSet.new(permission_set: @permission_set, params: change_params).apply!
+      PermissionForge::Admin::ChangeSet.new(permission_set: @permission_set, params: change_params).tap(&:apply!)
     end
 
     # Filter rules (no relationship) on this field.
@@ -82,9 +91,9 @@ module PermissionForge
       @resource.permission_set_rules.select { |rule| rule.field_name == @key && rule.field_accessor_path.blank? }
     end
 
+    # The field's chain (field, Resource, Permission Set), or the Resource's for a column with no row.
     def reject_locked
-      locked = [@permission_set, @resource, @field].compact.find { |r| pf_locked?(r) }
-      pf_reject_locked!(locked, field_path) if locked
+      pf_reject_locked!(@field || @resource, field_path)
     end
 
     def resource_path
@@ -104,15 +113,10 @@ module PermissionForge
       field.update!(extra) if extra.any?
     end
 
-    def saved_notice(changes)
-      return t('permission_forge.flash.permission_sets.no_changes') if changes.empty?
-
-      t('permission_forge.flash.permission_sets.saved', count: changes.size,
-                                                        people: helpers.pf_people_text(pf_people_count(@permission_set)))
-    end
-
+    # People holding a set with this Resource, or one of the STI bases its
+    # records answer to (ResourceChain: a base's rows reach the subclass).
     def explain_candidates
-      set_ids = PermissionForge::Resource.where(name: @resource.name).select(:permission_set_id)
+      set_ids = PermissionForge::Resource.where(name: chain_names).select(:permission_set_id)
       user_ids = PermissionForge::PermissionSetUser.active_assignments.where(permission_set_id: set_ids)
                                                    .distinct.limit(200).pluck(:user_id)
       PermissionForge::Admin::PeopleDirectory.new.find_all(user_ids)
@@ -122,8 +126,22 @@ module PermissionForge
       user = PermissionForge::Admin::PeopleDirectory.new.find(user_id)
       return nil unless user
 
-      outcome = PermissionForge::Admin::EffectiveAccess.call(user: user).find { |r| r.name == @resource.name }
+      outcome = nearest_outcome(PermissionForge::Admin::EffectiveAccess.call(user: user))
       { user: user, field: outcome&.fields&.find { |field| field.name == @key } }
+    end
+
+    def chain_names
+      PermissionForge::ResourceChain.names_for(@resource.name).map(&:to_s)
+    end
+
+    # The person's outcome for this model: its own entry, else the nearest
+    # base's (a subclass without an entry of its own is its base).
+    def nearest_outcome(outcomes)
+      chain_names.each do |name|
+        outcome = outcomes.find { |r| r.name == name }
+        return outcome if outcome
+      end
+      nil
     end
   end
 end

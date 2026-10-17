@@ -4,10 +4,10 @@
   <div class="pf-row pf-row--between">
     <p class="pf-text-2"><%= t('.intro', name: first_name) %></p>
     <div class="pf-legend" aria-label="<%= t('.legend') %>">
-      <span><b>✓</b> <%= t('permission_forge.ui.states.granted') %></span>
-      <span><b>⊘</b> <%= t('.legend_muted') %></span>
-      <span><b>–</b> <%= t('.legend_none') %></span>
-      <span><b>••</b> <%= t('permission_forge.ui.levels.masked') %></span>
+      <%# The legend words each state as the cells do (Admin::StateLabel). %>
+      <% [%i[effective granted], %i[effective blocked], %i[effective none], %i[field_level masked]].each do |kind, state| %>
+        <span><%= pf_state_parts(pf_state(kind, state), glyph_tag: :b, separator: ' ') %></span>
+      <% end %>
     </div>
   </div>
 
@@ -15,7 +15,7 @@
     <div class="pf-banner">
       <span class="pf-banner__glyph" aria-hidden="true">◷</span>
       <div class="pf-banner__body">
-        <span><%= t('.conditional', sets: @conditional_sets.map(&:name).to_sentence) %></span>
+        <span><%= t('.conditional', sets: pf_to_sentence(@conditional_sets.map(&:name))) %></span>
       </div>
     </div>
   <% end %>
@@ -24,7 +24,7 @@
     <div class="pf-card"><p class="pf-empty"><%= t('permission_forge.people.access_tab.empty', name: first_name) %></p></div>
   <% else %>
     <div class="pf-split">
-      <div class="pf-split__main pf-card pf-scroll-x">
+      <%= pf_scroll_frame('aria-label': t('.grid_label'), class: 'pf-split__main pf-card') do %>
         <div class="pf-effective" role="table" aria-label="<%= t('.grid_label') %>">
           <div class="pf-matrix__head" role="row">
             <span role="columnheader"><%= t('permission_forge.ui.resource') %></span>
@@ -63,7 +63,7 @@
                     <% if res.records == :all %><span class="pf-text-2"><%= t('permission_forge.ui.view_all') %></span>
                     <% elsif res.records == :rules %>
                       <span class="pf-text-2"><%= t('permission_forge.ui.rules_count', count: res.rules.size) %></span>
-                      <% if res.rules.first %><span class="pf-fs-12 pf-text-3 pf-ellipsis"><%= pf_rule_summary(res.rules.first.rule, res.name) %></span><% end %>
+                      <% if (headline = pf_rule_headline(res.rules.map(&:rule))) %><span class="pf-fs-12 <%= pf_rule_problem(headline) ? 'pf-text-block' : 'pf-text-3' %> pf-state__summary"><%= pf_rule_summary(headline, res.name) %></span><% end %>
                     <% else %><span>–</span>
                     <% end %>
                   <% end %>
@@ -75,15 +75,14 @@
                   <%= link_to permission_forge.person_path(@person, tab: 'effective', why: key, open: (@open + [res.name]).uniq),
                               class: 'pf-effective__field', data: { pf_why: key }, 'aria-current': (@why == key ? 'true' : nil) do %>
                     <span class="pf-row pf-row--tight pf-grow">
-                      <span><%= res.name.safe_constantize&.human_attribute_name(field.name) || field.name.humanize %></span>
+                      <% field_label = pf_field_label_for(res.name, field.name) %>
+                      <% unless field_label.verbatim? %><span data-pf-host-data><%= field_label.text %></span><% end %>
                       <code class="pf-mono-key"><%= field.name %></code>
                       <% if field.virtual %><%= pf_badge(t('permission_forge.ui.badges.virtual')) %><% end %>
                     </span>
-                    <%= pf_level_badge(field.blocked_by.any? && field.level == 'hidden' ? 'muted' : field.level,
-                                       strategy: field.level == 'masked' ? field.mask_strategy : nil,
-                                       label: (t('.hidden_by_muting') if field.blocked_by.any? && field.level == 'hidden')) %>
-                    <span class="pf-fs-12 <%= field.blocked_by.any? ? 'pf-text-block' : (field.unconfigured ? 'pf-text-warn' : 'pf-text-3') %>">
-                      <%= render 'effective_field_source', field: field %>
+                    <%= pf_effective_field_badge(field) %>
+                    <span class="pf-fs-12 <%= { muted: 'pf-text-block', unconfigured: 'pf-text-warn' }.fetch(field.reason, 'pf-text-3') %>">
+                      <%= render 'effective_field_source', field: field, res_name: res.name %>
                     </span>
                   <% end %>
                 <% end %>
@@ -95,7 +94,9 @@
                       <%= link_to permission_forge.person_path(@person, tab: 'effective', why: key, open: (@open + [res.name]).uniq),
                                   class: "pf-state pf-state--#{outcome.state} pf-action-pill", data: { pf_why: key },
                                   'aria-current': (@why == key ? 'true' : nil) do %>
-                        <span aria-hidden="true"><%= PermissionForge::UiHelper::STATE_GLYPHS[outcome.state] %></span> <%= name.humanize %>
+                        <% state = pf_state(:effective, outcome.state) %>
+                        <span aria-hidden="true"><%= state.glyph %></span> <%= pf_action_label_text(nil, name) %>
+                        <span class="pf-fs-12">· <%= state.word %></span>
                       <% end %>
                     <% end %>
                   </div>
@@ -104,7 +105,7 @@
             </div>
           <% end %>
         </div>
-      </div>
+      <% end %>
 
       <aside class="pf-split__side pf-card" aria-live="polite" aria-label="<%= t('.why_label') %>">
         <div class="pf-why" data-pf-why-empty <%= 'hidden' if @why.present? %>>

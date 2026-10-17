@@ -24,6 +24,7 @@ module PermissionForge
       }.freeze
 
       included do
+        before_validation :refuse_nul_bytes
         validate :validate_column_lengths
       end
 
@@ -37,6 +38,29 @@ module PermissionForge
       end
 
       private
+
+      # A NUL byte in a string or text attribute being written: PostgreSQL
+      # cannot store one (its driver raises on any statement carrying it, a
+      # uniqueness check's included) and SQLite reads the statement cut
+      # short. Refused before the other validators run — they may query
+      # with the value — so a save is a validation error, never a raise. A
+      # value a copy keeps from its original (KeepsCopiedValues) is the
+      # original's, as stored.
+      def refuse_nul_bytes
+        names = self.class.columns.filter_map do |column|
+          name = column.name
+          name if MEASURES.key?(column.type) && will_save_change_to_attribute?(name) && nul_byte?(name)
+        end
+        return if names.empty?
+
+        names.each { |name| errors.add(name, :nul_byte, message: ->(*) { I18n.t('permission_forge.validations.nul_byte') }) }
+        throw :abort
+      end
+
+      def nul_byte?(name)
+        value = read_attribute(name)
+        value.is_a?(String) && value.include?("\0") && !(respond_to?(:copied_unchanged?, true) && copied_unchanged?(name))
+      end
 
       def validate_column_lengths
         self.class.columns.each do |column|

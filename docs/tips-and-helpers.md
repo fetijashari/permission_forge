@@ -8,7 +8,7 @@ Useful patterns, debugging techniques, and things to watch out for when using Pe
 
 The fastest way to debug is to look at what's actually cached:
 
-```ruby
+```ruby fragment
 pp user.permissions_hash   # read-through: a cache miss rebuilds it
 ```
 
@@ -16,7 +16,7 @@ This shows you the exact data structure that all permission checks use. If somet
 
 ### Check if Cache is Populated
 
-```ruby
+```ruby fragment
 # Read the raw entry (permission_cache_key is tenant-aware: "v2:user_42",
 # "v2:tenant_1_user_42"; the store adds cache_key_prefix in front)
 PermissionForge.cache.read(user.permission_cache_key)
@@ -29,7 +29,7 @@ For a user who holds conditional Permission Sets this entry is the **base**: the
 
 ### Verify Permission Set Assignment
 
-```ruby
+```ruby fragment
 # Is the user assigned to any permission sets?
 user.permission_sets.count
 # => 0 means no permissions at all!
@@ -41,7 +41,7 @@ user.permission_sets.map { |ps| [ps.name, ps.is_active] }
 
 ### Check Resource Configuration
 
-```ruby
+```ruby fragment
 pset = user.permission_sets.first
 pset.resources.map { |r| [r.name, r.is_active, r.read_access] }
 # => [["Customer", true, true], ["Article", true, false]]
@@ -53,7 +53,7 @@ pset.resources.map { |r| [r.name, r.is_active, r.read_access] }
 
 For admin users who should skip all permission checks:
 
-```ruby
+```ruby fragment
 class User < ApplicationRecord
   include PermissionForge::Concerns::PermissionedUser
 
@@ -75,7 +75,7 @@ end
 
 Filter your API responses based on field-level read access. (Since v0.9.0, models with `MaskedAttributes` auto-applied already filter and mask `attributes` / `as_json` output — this manual pattern is mainly for when auto-apply is disabled.)
 
-```ruby
+```ruby fragment
 def serialize(record, user)
   entry = user.permissions_hash_for(record.class.name.to_sym)
   fields = entry&.dig(:fields) || {}
@@ -91,7 +91,7 @@ end
 
 Changes made through ActiveRecord (saving a permission set, resource, field, action, rule, or assignment) invalidate affected users' caches automatically (v0.10.0+) — the hash rebuilds lazily on each user's next read. You only need a manual pass when you bulk-modify permission data in ways that skip callbacks (`update_all`, `insert_all`, raw SQL):
 
-```ruby
+```ruby fragment
 pset = PermissionForge::PermissionSet.find_by(uuid: uuid)
 pset.permission_set_users.includes(:user).find_each do |psu|
   psu.user&.invalidate_permissions
@@ -104,7 +104,7 @@ end
 
 Create a rake task or seed file for your default permission sets. `is_editable = false` locks the set in the admin and the admin API. Locking freezes what the set gives; changes to who holds it pass only when they narrow access: holders of a granting set can still be removed and their end dates shortened (for a Muting Permission Set it is the other way round: holders can be added and kept longer).
 
-```ruby
+```ruby fragment
 # db/seeds/permissions.rb
 admin_pset = PermissionForge::PermissionSet.find_or_create_by!(name: 'Admin') do |ps|
   ps.is_active = true
@@ -123,7 +123,7 @@ end
 
 Create a shared helper module for your tests:
 
-```ruby
+```ruby fragment
 # test/support/permission_helpers.rb
 module PermissionHelpers
   def grant_permissions(user, resource_name, read: true, create: false, edit: false, delete: false)
@@ -147,7 +147,7 @@ module PermissionHelpers
         uuid: SecureRandom.uuid,
         resource: resource,
         name: col,
-        label: col.humanize,
+        label: col,
         read_access: true,
         edit_access: true
       )
@@ -181,7 +181,7 @@ Permission checks read a cached hash. Since v0.10.0 the cache manages itself for
 - Saving any permission record (permission set, resource, field, action, rule, assignment) through ActiveRecord **invalidates** the affected users' cached hashes automatically.
 - Reads are **read-through**: a cache miss (invalidation, TTL expiry, eviction) rebuilds the hash on the next `permissions_hash` access — it no longer silently returns `{}`.
 
-```ruby
+```ruby fragment
 resource.update!(read_access: true)
 user.can_read?('Customer')  # => true — the update invalidated the cache,
                             #    and the check rebuilt it read-through
@@ -189,7 +189,7 @@ user.can_read?('Customer')  # => true — the update invalidated the cache,
 
 You still must invalidate manually when a change **bypasses ActiveRecord callbacks**:
 
-```ruby
+```ruby fragment
 # BAD — update_all skips callbacks, so caches are NOT invalidated
 PermissionForge::Resource.where(name: 'Customer').update_all(read_access: true)
 user.can_read?('Customer')  # May still return the old value!
@@ -204,7 +204,7 @@ user.can_read?('Customer')    # Now returns true
 
 The resource `name` must exactly match your Ruby class name:
 
-```ruby
+```ruby fragment
 # GOOD
 PermissionForge::Resource.create!(name: 'Customer', ...)
 user.can_read?('Customer')  # Works
@@ -218,7 +218,7 @@ user.can_read?('customer')  # false: names are case-sensitive, the entry is :Cus
 
 `PermissionScopedFindable` overrides the class methods `find_by` and `find_by!` (v0.10.0+). With the default `auto_query_scoping = :off`, everything else is NOT scoped: bare collection queries (`where`, `all`, `find` by primary key, scopes, association traversal), and `find_by` called on a relation or an association:
 
-```ruby
+```ruby fragment
 Customer.find_by(uuid: 'abc')   # Rules applied — nil when the record is missing,
                                 # NotAuthorizedError only when it exists but a rule denies it
 Customer.find_by!(uuid: 'abc')  # Same, but raises ActiveRecord::RecordNotFound when missing
@@ -238,9 +238,9 @@ With `auto_query_scoping = :filter_only` the scope is decided when the relation 
 
 When `PermissionForge.current_user` returns nil (e.g., in background jobs, seeds, console), row-level rules are bypassed by default:
 
-```ruby
-Current.user = nil
-Customer.find_by(uuid: 'abc')  # Returns the record, no rules applied
+```ruby fragment
+Current.reset             # Rails 8's Current: no session, so Current.user is nil
+Customer.find_by(id: 1)   # Returns the record, no rules applied
 ```
 
 This is intentional — system-level code shouldn't be blocked by user permissions. It's also configurable via `config.nil_user_strategy`: `:bypass` (default), `:deny` (returns nil), or `:raise` (raises `NotAuthorizedError`). The read-path equivalent for `FiltersResponseAttributes` is `config.response_filter_nil_user_strategy` (`:bypass` default / `:block`). Model masking follows `config.masked_attributes_nil_user_strategy` (`:bypass` default / `:hide`).
@@ -261,7 +261,7 @@ The first `true` wins for each flag. This means you can't use a **granting** per
 
 PermissionForge enforces logical dependencies between permission flags. If you try to enable a flag without its prerequisite, validation will fail:
 
-```ruby
+```ruby fragment
 # BAD — will raise ActiveRecord::RecordInvalid
 PermissionForge::Resource.create!(
   name: 'Customer', read_access: false, edit_access: true  # edit requires read!
@@ -280,7 +280,7 @@ PermissionForge::Resource.create!(
 - `mask_access` requires `read_access` (ResourceField)
 
 When disabling `read_access`, also disable dependent flags in the same update:
-```ruby
+```ruby fragment
 resource.update!(read_access: false, edit_access: false, delete_access: false)
 ```
 
@@ -296,7 +296,7 @@ If you do create both, the row merged first wins the mask strategy of the varian
 
 ### Check All Permissions at Once
 
-```ruby
+```ruby fragment
 def permission_summary(user)
   hash = user.permissions_hash
   resources = hash.dig(:permissions, :resources) || {}
@@ -330,7 +330,7 @@ pp permission_summary(user)
 
 ### Clear All Cached Permissions
 
-```bash
+```bash run
 ACTOR="ops: TCK-12" REASON="revoke everything cached" bin/rails permission_forge:cache:clear
 ```
 
@@ -338,7 +338,7 @@ Every user's cached permissions go, in every tenant, and each user rebuilds on t
 
 ### Find Users Without Permissions
 
-```ruby
+```ruby run
 User.where.missing(:permission_set_users)
 # Returns users who aren't assigned to any permission set (whatever the table prefix)
 ```

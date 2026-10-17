@@ -26,6 +26,22 @@ module PermissionForge
         next unless ended
 
         t('permission_forge.audit_log.sentence_variants.assignment_revoked_expired', **parts, date: pf_date(ended))
+      },
+      # A clear the cache store did not confirm is not told as cleared.
+      'cache.cleared' => lambda { |event, parts|
+        next unless pf_audit_cache_unconfirmed?(event)
+
+        t('permission_forge.audit_log.sentence_variants.cache_cleared_unconfirmed', **parts)
+      },
+      'permissions.invalidated' => lambda { |event, parts|
+        next unless pf_audit_cache_unconfirmed?(event)
+
+        t('permission_forge.audit_log.sentence_variants.permissions_invalidated_unconfirmed', **parts)
+      },
+      'cache.settled' => lambda { |event, parts|
+        next unless pf_audit_cache_unconfirmed?(event)
+
+        t('permission_forge.audit_log.sentence_variants.cache_settled_unconfirmed', **parts)
       }
     }.freeze
 
@@ -33,13 +49,51 @@ module PermissionForge
     # (permission_forge.audit_log.sentences.<event>): a new event needs one
     # key in each locale, and an event without one (a host's own) still reads
     # as "<actor>: <event name>". Interpolations: actor, record, set, person,
-    # group, event, model (a runtime event's model).
+    # group, event, model (a runtime event's model). An event whose cache
+    # work reached a per-process store (its Cache::Outcome:
+    # data['process_local']) ends with the one cache-scope suffix, whatever
+    # the event: which processes kept their entries depends on where it ran
+    # (data['in_request']).
     def pf_audit_sentence(event, lookups)
       parts = pf_audit_sentence_parts(event, lookups)
       variant = AUDIT_SENTENCE_VARIANTS[event.event]
       variant &&= instance_exec(event, parts, &variant)
-      return variant if variant
+      sentence = variant || pf_audit_plain_sentence(event, parts)
+      suffix = pf_audit_cache_scope_suffix(event)
+      suffix ? "#{sentence} #{suffix}" : sentence
+    end
 
+    # Whether the event's cache work reached a per-process in-memory store
+    # (data['process_local'], Cache::Base#process_local?).
+    def pf_audit_process_local?(event)
+      event.data.is_a?(Hash) && event.data['process_local'] == true
+    end
+
+    # Whether the store said no to the event's cache work: its Cache::Outcome
+    # (`cache_confirmed`), or a permissions.invalidated event's `confirmed`.
+    def pf_audit_cache_unconfirmed?(event)
+      data = event.data
+      data.is_a?(Hash) && (data['cache_confirmed'] == false || data['confirmed'] == false)
+    end
+
+    # The suffix for a per-process store, from where the work ran
+    # (Cache::Outcome#kept_by) and what the store said together: cleared in
+    # a server process (the other web workers and the job processes kept
+    # theirs), cleared in the process that ran it (every other process kept
+    # theirs — also what an event recorded without `in_request` reads as:
+    # it never names the web processes), or not confirmed (nothing is said
+    # to be cleared anywhere).
+    def pf_audit_cache_scope_suffix(event)
+      return unless pf_audit_process_local?(event)
+
+      scope = if pf_audit_cache_unconfirmed?(event) then 'unconfirmed'
+              elsif event.data['in_request'] == true then 'server_process'
+              else 'own_process'
+              end
+      t("permission_forge.audit_log.cache_scope.#{scope}")
+    end
+
+    def pf_audit_plain_sentence(event, parts)
       fallback = t("#{AUDIT_SENTENCES}.fallback", **parts)
       sentence = t("#{AUDIT_SENTENCES}.#{event.event}", **parts, default: fallback)
       sentence.is_a?(String) ? sentence : fallback

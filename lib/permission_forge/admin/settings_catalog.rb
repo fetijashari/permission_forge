@@ -75,12 +75,14 @@ module PermissionForge
         d(:mask_virtual_attributes, 'masked_attributes', :enum, options: %i[off auto list]),
 
         d(:nil_user_strategy, 'record_rules', :enum, options: %i[bypass deny raise]),
+        d(:no_read_access_strategy, 'record_rules', :enum, options: Configuration::StrategyValues::ALLOWED[:no_read_access_strategy]),
         d(:on_rule_bypass, 'record_rules', :hook, example: '->(user:, resource:, reason:) { Rails.logger.info(...) }'),
         d(:auto_query_scoping, 'record_rules', :enum, options: %i[off filter_only], ladder: 'enforce'),
         d(:unscoped_query_detection, 'record_rules', :enum, options: %i[off log raise], ladder: 'detect'),
         d(:unscoped_query_detection_environments, 'record_rules', :list),
         d(:database_row_level_security, 'record_rules', :bool, ladder: 'database'),
         d(:rls_session_variable, 'record_rules', :str),
+        d(:rule_secret_column_patterns, 'record_rules', :list),
 
         d(:controller_action_discovery, 'controller_actions', :bool),
         d(:controller_action_resolver, 'controller_actions', :hook,
@@ -136,6 +138,7 @@ module PermissionForge
           example: '->(controller, permission_set, user_ids) { PermissionForge.current_user&.admin? }'),
         d(:api_require_authorization, 'admin_api', :bool),
         d(:api_stats_require_admin, 'admin_api', :bool),
+        d(:api_stats_authorization, 'admin_api', :hook, example: '->(controller) { PermissionForge.current_user&.admin? }'),
         d(:api_record_identifier, 'admin_api', :enum, options: %i[uuid id]),
         d(:api_default_per_page, 'admin_api', :num, unit: :records),
         d(:api_max_per_page, 'admin_api', :num, unit: :records),
@@ -180,20 +183,37 @@ module PermissionForge
 
           :warn
         },
-        'unconfigured_field_strategy' => ->(config) { config.unconfigured_field_strategy.to_s == 'pass_through' ? :warn : nil },
+        # :warn lets an unconfigured field through as :pass_through does (it only logs it): the audit's
+        # unconfigured_fields_pass and Home's privacy card count both.
+        'unconfigured_field_strategy' => ->(config) { %w[pass_through warn].include?(config.unconfigured_field_strategy.to_s) ? :warn : nil },
         'masked_write_protection' => ->(config) { config.masked_write_protection.to_s == 'off' ? :warn : :ok },
         'audit_trail_enabled' => ->(config) { config.audit_trail_enabled ? :ok : :warn },
         'audit_events' => ->(config) { AuditLog.recording_problem(config) ? :warn : :ok },
         'gdpr_defaults' => ->(config) { config.gdpr_defaults ? :ok : nil },
         'nil_user_strategy' => ->(config) { config.nil_user_strategy.to_s == 'bypass' ? nil : :ok },
+        'no_read_access_strategy' => ->(config) { config.deny_record_reads_without_read_access? ? :ok : nil },
         'masked_attributes_nil_user_strategy' => ->(config) { config.hide_masked_attributes_without_user? ? :ok : nil },
         'extra_fields_default_access' => ->(config) { config.grant_extra_fields_by_default? ? nil : :ok },
         'unconfigured_action_strategy' => ->(config) { config.allow_unconfigured_actions? ? nil : :ok },
         'action_guard_nil_user_strategy' => ->(config) { config.action_guard_nil_user_bypass? ? nil : :ok }
       }.freeze
 
+      # Risk rules that also read the data: key => ->(config, attention) { ... },
+      # `attention` being the page's AttentionItems. auto_query_scoping off is a
+      # risk only while record rules are in force that it leaves to find_by /
+      # permission_scoped: the rules the Home "Record rules" card lists
+      # (AttentionItems#unenforced_rules), so both pages warn together.
+      DATA_RISKS = {
+        'auto_query_scoping' => lambda { |config, attention|
+          next :ok if config.auto_query_scoping_enabled?
+
+          attention.unenforced_rules.any? ? :warn : nil
+        }
+      }.freeze
+
       RECOMMENDED = {
         'conditional_sets_strict_mode' => 'true',
+        'auto_query_scoping' => ':filter_only',
         'api_require_authorization' => 'true',
         'admin_tenantless_access' => ':deny',
         'unconfigured_field_strategy' => ':block',
@@ -207,10 +227,13 @@ module PermissionForge
         name.to_s.delete_prefix('::') == 'ActionController::Base'
       end
 
-      def initialize(configuration: PermissionForge.configuration, values: SettingsValues.new)
+      # @param attention [AttentionItems, nil] the page's attention items
+      #   (shared with the Home badge); built on first use when nil
+      def initialize(configuration: PermissionForge.configuration, values: SettingsValues.new, attention: nil)
         @configuration = configuration
         @defaults = Configuration.new
         @values = values
+        @attention = attention
       end
 
       def rows
@@ -234,6 +257,20 @@ module PermissionForge
         rows.count(&:ok?)
       end
 
+      # What Home lists as needing attention (AttentionItems#total, the
+      # page's own items): the health summary says it, so Settings never
+      # calls the setup good while Home warns (R1 #93).
+      #
+      # @return [Integer]
+      def attention_count
+        attention.total
+      end
+
+      # Nothing to fix: no risky setting and nothing on Home.
+      def healthy?
+        risky_rows.empty? && attention_count.zero?
+      end
+
       def recommended_value(key)
         row(key)&.recommended
       end
@@ -251,7 +288,18 @@ module PermissionForge
         key = definition.key
         value = @values.normalize(definition, read(@configuration, key))
         Row.new(definition: definition, value: value, default: @values.normalize(definition, read(@defaults, key)),
-                hook_state: (value if definition.type == :hook), risk: RISKS[key]&.call(@configuration))
+                hook_state: (value if definition.type == :hook), risk: risk_of(key))
+      end
+
+      def risk_of(key)
+        data_risk = DATA_RISKS[key]
+        return data_risk.call(@configuration, attention) if data_risk
+
+        RISKS[key]&.call(@configuration)
+      end
+
+      def attention
+        @attention ||= AttentionItems.new(configuration: @configuration)
       end
 
       def read(config, key)

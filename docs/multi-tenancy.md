@@ -8,14 +8,14 @@ PermissionForge integrates with the [acts_as_tenant](https://github.com/ErwinM/a
 
 ### 1. Install acts_as_tenant
 
-```ruby
+```ruby fragment
 # Gemfile
 gem 'acts_as_tenant'
 ```
 
 ### 2. Generate the initializer and migration with the tenant
 
-```bash
+```bash fragment
 rails generate permission_forge:install --tenant=Account
 ```
 
@@ -29,7 +29,7 @@ An integer tenant column holding UUID or string keys is refused at run time
 
 ### 3. Review the configuration
 
-```ruby
+```ruby fragment
 # config/initializers/permission_forge.rb
 PermissionForge.configure do |config|
   config.tenant_model = 'Account'       # Your tenant model class name (nil disables)
@@ -45,7 +45,7 @@ never run with cross-tenant visibility.
 
 ### 4. Set current tenant in your app
 
-```ruby
+```ruby fragment
 # app/controllers/application_controller.rb
 class ApplicationController < ActionController::Base
   set_current_tenant_through_filter
@@ -77,7 +77,7 @@ When `config.tenant_model` is set, all PermissionForge models get `acts_as_tenan
 
 Cache keys include the tenant ID to prevent cross-tenant cache collisions:
 
-```ruby
+```ruby fragment
 # Without tenant: "v2:user_42"
 # With tenant:    "v2:tenant_1_user_42"
 ```
@@ -98,7 +98,7 @@ The `find_by` override in `PermissionScopedFindable` preserves tenant scoping in
 
 An owner who manages multiple accounts can assign the same user to permission sets in different tenants:
 
-```ruby
+```ruby fragment
 # User 42 works in both Account A and Account B
 
 ActsAsTenant.current_tenant = account_a

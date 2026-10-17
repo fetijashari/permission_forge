@@ -23,7 +23,7 @@ module PermissionForge
     end
 
     def update
-      @form = PermissionForge::Admin::RuleForm.new(resource: @resource, params: rule_params)
+      @form = PermissionForge::Admin::RuleForm.new(resource: @resource, params: rule_params, rule: @rule)
       save_rule(:edit, 'updated')
     end
 
@@ -34,16 +34,26 @@ module PermissionForge
       render(@rule ? :edit : :new)
     end
 
+    # The rule being built as the save would answer it (Admin::RulePreview:
+    # the first error the save would show, else the sentence the Rules tab
+    # draws): the fragment pf_admin.js fetches as the value inputs change;
+    # without JS a page of its own. Changes nothing.
+    def preview
+      stored = @resource.permission_set_rules.find_by(id: params[:rule_id]) if params[:rule_id].present?
+      @form = PermissionForge::Admin::RuleForm.new(resource: @resource, params: rule_params, rule: stored)
+      @preview = PermissionForge::Admin::RulePreview.new(form: @form, resource: @resource, stored: stored)
+    end
+
     def toggle
       @rule.update!(is_active: !@rule.is_active)
       key = @rule.is_active ? 'turned_on' : 'turned_off'
-      redirect_to rules_path, notice: t("permission_forge.flash.rules.#{key}", rule: @rule.name)
+      redirect_to rules_path, notice: t("permission_forge.flash.rules.#{key}", rule: pf_record_name(@rule))
     end
 
     def confirm_destroy; end
 
     def destroy
-      name = @rule.name
+      name = pf_record_name(@rule)
       @rule.destroy!
       redirect_to rules_path, notice: t('permission_forge.flash.rules.deleted', rule: name)
     end
@@ -52,7 +62,8 @@ module PermissionForge
 
     # What the builder page draws: built here, read by the template.
     def rule_builder
-      @rule_builder ||= PermissionForge::Admin::RuleBuilder.new(form: @form, resource: @resource, model_errors: @model_errors)
+      @rule_builder ||= PermissionForge::Admin::RuleBuilder.new(form: @form, resource: @resource, model_errors: @model_errors,
+                                                                rule: @rule)
     end
 
     def set_resource
@@ -64,9 +75,9 @@ module PermissionForge
       @rule = @resource.permission_set_rules.find(params[:id])
     end
 
+    # The rule's chain (rule, Resource, Permission Set), or the Resource's for a new rule.
     def reject_locked
-      locked = [@permission_set, @resource, @rule].compact.find { |r| pf_locked?(r) }
-      pf_reject_locked!(locked, rules_path) if locked
+      pf_reject_locked!(@rule || @resource, rules_path)
     end
 
     def rules_path
@@ -85,11 +96,10 @@ module PermissionForge
         return render(template, status: :unprocessable_entity)
       end
 
-      @rule.assign_attributes(@form.attributes)
-      if @rule.save
-        redirect_to rules_path, notice: t("permission_forge.flash.rules.#{flash_key}", rule: @rule.name)
+      if pf_save_changed(@rule, @form.attributes, &:save) # an unchanged rule is not saved (SaveNotice)
+        redirect_to rules_path, **pf_save_flash(@rule) { t("permission_forge.flash.rules.#{flash_key}", rule: pf_record_name(@rule)) }
       else
-        @model_errors = @rule.errors.full_messages
+        @model_errors = @rule.errors
         render template, status: :unprocessable_entity
       end
     end

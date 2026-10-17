@@ -64,7 +64,9 @@ module PermissionForge
         assert last.previous?
         assert_equal 3, log(scope: scope).page('99', per_page: 3).number
         assert_equal 1, log(scope: scope).page('abc', per_page: 3).number
-        assert_equal 1, log(scope: scope).page('9' * 40, per_page: 3).number
+        # one reader (ParamShapes.integer): any whole number past the last page is the last page
+        assert_equal 3, log(scope: scope).page('9' * 40, per_page: 3).number
+        assert_equal 1, log(scope: scope).page('2abc', per_page: 3).number
         all = (1..3).flat_map { |n| log(scope: scope).page(n, per_page: 3).events.map { |e| e.data['n'] } }
         assert_equal [6, 5, 4, 3, 2, 1, 0], all
       end
@@ -191,13 +193,36 @@ module PermissionForge
         assert_equal 'holdings', meta['export']
         assert_equal rows.size.to_s, meta['row_count']
         granted = by_id[grant.id.to_s]
-        assert_equal ['basic_auth', 'ops', 'Bo Berisha', 'Sales', 'TCK-1', 'false'],
+        ops = I18n.t('permission_forge.audit_log.actor_named.basic_auth', name: 'ops')
+        assert_equal ['basic_auth', ops, 'Bo Berisha', 'Sales', 'TCK-1', 'false'],
                      granted.values_at('granted_by_type', 'granted_by', 'person', 'permission_set', 'reason', 'expired')
         assert_predicate granted['expires_at'], :present?
         assert_predicate granted['reviewed_at'], :blank?
         reviewed = by_id[kept.id.to_s]
         assert_equal [@bo.id.to_s, 'Bo Berisha'], reviewed.values_at('reviewed_by_id', 'reviewed_by')
         assert_predicate reviewed['reviewed_at'], :present?
+      end
+
+      # Review of round 7 (P2-9): "who holds what" is a document people read;
+      # its granted_by named an API client nobody named `api_client` (the
+      # stored code). It names the actor as the admin does
+      # (Admin::ActorLabel), in the export's language; the events export
+      # keeps the stored values.
+      test 'who holds what names an actor stored as a code in the language of the export' do
+        grant = PermissionForge.with_audit_actor(label: PermissionForge::Audit::ActorCodes::API_CLIENT, type: 'api') do
+          create_permission_set_user(user: @bo, permission_set: @set)
+        end
+
+        I18n.with_locale(:sq) do
+          _meta, header, rows = parse_csv(Exports::Holdings.call.render(:csv))
+          granted = header.zip(rows.find { |row| row[header.index('assignment_id')] == grant.id.to_s }).to_h
+
+          assert_equal ['api', I18n.t('permission_forge.audit_log.actor_codes.api_client')], granted.values_at('granted_by_type', 'granted_by')
+        end
+        _meta, header, rows = parse_csv(Exports::Events.call(log(event: 'assignment.granted').relation, filters: {}).render(:csv))
+        event = header.zip(rows.find { |row| row[header.index('event')] == 'assignment.granted' && row[header.index('actor_type')] == 'api' }).to_h
+
+        assert_equal PermissionForge::Audit::ActorCodes::API_CLIENT, event['actor_label'], 'the events export keeps the stored value'
       end
 
       test 'who holds what falls back to created_by without a grant event' do
