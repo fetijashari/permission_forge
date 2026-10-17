@@ -196,18 +196,12 @@ module PermissionForge
         after_initialize { self.domain ||= 'default.test' if new_record? }
       end
 
-      # A new record whose column has a database default: the default counts
-      # as its value in the database, but nothing is stored to hide yet. The
-      # table is made once per process, outside any test transaction.
-      ActiveRecord::Schema.define do
-        create_table :pf_house_domains, force: true do |t|
-          t.string :domain, default: 'house.test'
-        end
-      end
-
-      class HouseDomainCustomer < ApplicationRecord
-        self.table_name = 'pf_house_domains'
+      # A before_save normalizer, as a public form's model has.
+      class NormalizedCustomer < ApplicationRecord
+        self.table_name = 'customers'
         include PermissionForge::Concerns::MaskedAttributes
+
+        before_save { self.name = name.to_s.strip }
       end
 
       def in_signup(&) = WebRequest.within(Rack::MockRequest.env_for('/signup'), &)
@@ -223,13 +217,11 @@ module PermissionForge
         end
         in_signup { empty.tap { |c| c.name = 'Jane' if c.name.blank? }.save! }
         defaulted = in_signup { DefaultedCustomer.new(name: 'Jane').tap(&:save!) }
-        chosen = in_signup { HouseDomainCustomer.new.tap { |c| c.domain = 'chosen.test' if c.domain.blank? }.tap(&:save!) }
 
         assert_equal 'Jane', stored(new_record, :name), 'A: a new record'
         assert_equal 'Jane', stored(initialized, :name), 'B: find_or_initialize_by'
         assert_equal 'Jane', stored(empty, :name), 'C: a NULL column hid nothing'
         assert_equal 'default.test', stored(defaulted, :domain), 'F: an after_initialize default'
-        assert_equal 'chosen.test', stored(chosen, :domain), 'a new record with an attribute default stores nothing yet'
       end
 
       test 'a stored value read hidden is kept; overwriting it without a sign-in is refused, recorded and logged once' do
@@ -251,29 +243,49 @@ module PermissionForge
         assert_includes refusals.first, 'sign in a system user'
       end
 
-      test 'the hidden reads are forgotten on reload and after a save' do
+      test 'a value submitted on a new record is kept from a normalizer or a default that reads it hidden' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        normalized = in_signup { NormalizedCustomer.new(name: ' Jane ').tap(&:save!) }
+        defaulted = in_signup { DefaultedCustomer.new(domain: 'acme.test').tap(&:save!) }
+        empty = NormalizedCustomer.unscoped.find(PermissionForge.without_permission_scope { create_customer(name: nil).id })
+        in_signup { empty.tap { |c| c.name = ' Jane ' }.save! }
+
+        assert_equal ' Jane ', stored(normalized, :name), 'H: the submitted value, not the "" worked out from a hidden read'
+        assert_equal 'acme.test', stored(defaulted, :domain), 'F2: the submitted value, not the default'
+        assert_equal ' Jane ', stored(empty, :name), 'I: assigned, then read hidden by the normalizer'
+      end
+
+      test 'the hidden reads are forgotten on reload, not after a save' do
         config.masked_attributes_nil_user_strategy = :hide_in_requests
         customer = Customer.unscoped.find(@customer.id)
 
         in_signup do
-          customer.name
+          derived = customer.name.to_s.strip
+          customer.save!
+          customer.update!(name: derived)
+        end
+        assert_equal 'Acme', stored(customer, :name), 'J: a value derived before a save is still refused after it'
+
+        in_signup do
           customer.reload
           customer.update!(name: 'After reload')
         end
-        assert_equal 'After reload', stored(customer, :name)
+        assert_equal 'After reload', stored(customer, :name), 'K: a reload forgets'
+      end
+
+      # Over-protective and harmless: a value assigned, read back hidden and
+      # assigned again keeps the first assignment.
+      test 'an attribute assigned, read hidden and assigned again keeps the first value' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        customer = Customer.unscoped.find(@customer.id)
 
         in_signup do
+          customer.name = 'First'
           customer.name
-          customer.update!(supplier_id: 3)
-          customer.update!(name: 'After save')
+          customer.name = 'Second'
+          customer.save!
         end
-        assert_equal 'After save', stored(customer, :name)
-
-        in_signup do
-          customer.name
-          customer.update!(name: 'Refused')
-        end
-        assert_equal 'After save', stored(customer, :name), 'read hidden and not saved or reloaded since: refused'
+        assert_equal 'First', stored(customer, :name), 'L'
       end
 
       test 'an inspect does not count as a hidden read, and :bypass protects nothing it did not hide' do

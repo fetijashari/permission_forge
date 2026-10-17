@@ -28,6 +28,15 @@ module PermissionForge
       assert_operator executor, :>, 0, 'above ActionDispatch::Executor, so the request is marked before its run starts'
     end
 
+    test 'the slot is read through a read-only reader' do
+      reader = ExecutionState.reader(WebRequest::KEY)
+      env = env_for
+
+      assert_nil reader.call
+      WebRequest.within(env) { assert_same env, reader.call }
+      assert_kind_of Proc, reader
+    end
+
     test 'outside a request nothing is a web request' do
       assert_not WebRequest.active?
       assert_nil WebRequest.env

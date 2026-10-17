@@ -480,9 +480,10 @@ read a masked model before sign-in).
   the three values with what each does (en, sq, mk). A record that read an attribute as hidden because nobody was
   signed in refuses a later write to that attribute as a masked write-back (`masked_write_protection`: `:skip` keeps
   the stored value, `:raise` raises; `write.masked_skipped` `detected_by: hidden_without_user`), so a webhook that
-  normalizes `name` from its hidden value does not store `""`. Only a value of a persisted record counts (a new
-  record, an empty column, an `after_initialize` default or a fill-if-blank is written), and the attributes are
-  forgotten on `reload` and after a save. A deliberate overwrite of a value nobody could see (a change-email link
+  normalizes `name` from its hidden value does not store `""`. Only an attribute that held a value when it was read
+  counts (an empty column or an unfilled attribute of a new record takes a default or a fill-if-blank; a value
+  submitted on a new record is kept from a normalizer or a default that reads it), and the attributes are forgotten
+  on `reload`, not after a save. A deliberate overwrite of a value nobody could see (a change-email link
   with nobody signed in) is refused too, and logged once per attribute and process; a value derived for another
   attribute (`domain` from a hidden `email`) cannot be told apart: sign a system user in for such flows and for
   webhooks that normalize data.
@@ -490,7 +491,8 @@ read a masked model before sign-in).
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#under masked_write_protection :raise such a write raises, and an attribute never read is written -->
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#nothing real was hidden: a new record and an empty column take a default or a fill-if-blank -->
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#a stored value read hidden is kept; overwriting it without a sign-in is refused, recorded and logged once -->
-  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#the hidden reads are forgotten on reload and after a save -->
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#the hidden reads are forgotten on reload, not after a save -->
+  <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#a value submitted on a new record is kept from a normalizer or a default that reads it hidden -->
   <!-- pin: test/permission_forge/web_request_test.rb#the boot check warns while the strategy depends on the request, naming what runs above -->
   <!-- pin: test/permission_forge/services/security_audit_test.rb#middlewares inserted above the request marker are an info, unless the strategy is :hide -->
   <!-- pin: test/permission_forge/concerns/masked_attributes_in_requests_test.rb#:hide_in_requests hides every guarded attribute in a web request with nobody signed in, before_action included -->

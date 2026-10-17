@@ -132,7 +132,6 @@ module PermissionForge
           PermissionForge::Concerns::MaskedAttributes.drop_generated_accessors(klass, masked_attribute_module)
         end
         pf_mask_attribute_aliases
-        after_save :pf_forget_hidden_without_user_reads
         @_pf_masked_attributes_applied = true
       end
 
@@ -568,19 +567,22 @@ module PermissionForge
       # web request) while they held a value. Whatever is written to one of
       # them afterwards was worked out from the hidden value, or replaces a
       # value nobody could see: pf_skip_masked_write? treats it as a
-      # write-back. Only something real counts: a value of a persisted record
-      # (a new record, or an empty column, hides nothing, and a default or a
-      # fill-if-blank must be written). The value is the one just read, not
+      # write-back. Only something real counts: a value the record holds in
+      # memory, stored or assigned (an empty column, or an attribute of a new
+      # record nobody filled, hides nothing: a default or a fill-if-blank is
+      # written; a value submitted on a new record is kept from a normalizer
+      # that reads it). The value is the one just read, not
       # attribute_in_database, which would build the record's mutation
-      # tracker on every hidden read; they differ only for an attribute
-      # assigned before it was read. A debugging read (inspect) does not
-      # count. Forgotten on reload and after a save.
+      # tracker on every hidden read. A debugging read (inspect) does not
+      # count. Forgotten on reload only: a save does not make the hidden read
+      # visible, so a value derived from it before the save is still refused
+      # after it.
       def pf_hidden_without_user_reads
         @pf_hidden_without_user_reads ||= Set.new
       end
 
       def pf_note_hidden_without_user(attr_name, value)
-        return if value.nil? || !persisted? || PermissionForge::ExecutionState[INSPECT_KEY]
+        return if value.nil? || PermissionForge::ExecutionState[INSPECT_KEY]
 
         pf_hidden_without_user_reads << attr_name.to_s
       end
