@@ -57,7 +57,9 @@ GitHub Release.
    `lib/permission_forge/version.rb` and turns `## [Unreleased]` in `CHANGELOG.md` into `## [X.Y.Z] - YYYY-MM-DD`
    (with a new empty `## [Unreleased]` above it). Open the pull request against `main` and wait for CI: its `lint` job
    builds and checks the gem exactly as the release does (`.github/scripts/build_gem.sh`).
-2. **Squash-merge** it into `main`.
+2. **Squash-merge** it into `main` once another maintainer has approved it (every pull request needs one approval
+   after its last push, from someone other than its author; only the owner can merge without it, through the pull
+   request, and GitHub records the bypass).
 3. **Tag the squash commit** with an annotated tag, from a terminal, and push the tag:
 
    ```bash
@@ -70,8 +72,9 @@ GitHub Release.
    Never create the tag from the GitHub Releases page: it can create a lightweight tag, which the workflow refuses,
    and the tag cannot then be moved or deleted. Only a repository admin can create a `v*` tag.
 4. **Approve the deployment.** The `build` job checks the tag and builds the gem; the `publish` job then waits for a
-   reviewer of the `rubygems` environment. Open the run under **Actions → Release** and, before choosing
-   **Review deployments → Approve**, check:
+   reviewer of the `rubygems` environment other than the person who pushed the tag ("prevent self-review"), so a
+   release always takes two people. The reviewer opens the run under **Actions → Release** and, before choosing
+   **Review deployments → Approve**, checks:
 
    - the run's commit is the squash commit of the Release pull request on `main`;
    - the run used the workflow file from `main`: `git fetch origin && git diff vX.Y.Z origin/main -- .github/` shows
@@ -90,8 +93,8 @@ tagged commit, so a tag on another commit could carry a copy of the workflow wit
 matches the repository, the workflow file name and the environment. A release is protected by:
 
 - **who can create a `v*` tag:** repository admins only (ruleset "release tag creation");
-- **who can approve the `rubygems` environment:** its required reviewer, with no administrator bypass. That approval
-  is the last look at the commit and the workflow file before anything is pushed (the checklist above).
+- **who can approve the `rubygems` environment:** one of its required reviewers who did not push the tag, with no
+  administrator bypass. That approval is the last look at the commit and the workflow file before anything is pushed (the checklist above).
 
 ### What the workflow checks
 
@@ -157,13 +160,18 @@ The workflow never creates or pushes a tag or a branch.
 
 In place on GitHub:
 
-- **Environment `rubygems`** (Settings → Environments): required reviewer `fetijashari`; administrators cannot bypass
-  it; deployment branches and tags: tags matching `v*` only; no secrets. "Prevent self-review" is off while there is
-  a single maintainer: turn it on once there is a second.
+- **Environment `rubygems`** (Settings → Environments): required reviewers `fetijashari`, `abytyqi` and `robkurti`,
+  "prevent self-review" on (the person who pushed the tag cannot approve its deployment); administrators cannot bypass it;
+  deployment branches and tags: tags matching `v*` only; no secrets.
 - **Rulesets on `refs/tags/v*`:** "release tags" blocks deletion, update and force-push, with no bypass; "release tag
   creation" blocks creation, with the Repository admin role as the only bypass. They are separate because a bypass
   applies to every rule of its ruleset.
-- **Ruleset "main":** pull request required, linear history (squash or rebase), the CI checks required.
+- **Ruleset "main"**, bypassed only by the Repository admin role (the owner), for pull requests only: pull request with one approval (a code owner, `.github/CODEOWNERS`; given after
+  the last push; stale approvals dismissed; review threads resolved), squash merges only (linear history, signed
+  commits: GitHub signs the squash commit), the CI checks required, and no open CodeQL alert of severity error or
+  high security severity. Merge commits and rebase merges are off in the repository settings too.
+- **Actions:** every action pinned to a full commit SHA (enforced), default `GITHUB_TOKEN` read-only, workflows from
+  forks wait for an approval for every outside contributor.
 - **Releases** need no setting. `gh release create` uploads the files to a draft and publishes it afterwards, so it
   also works with "Immutable releases" turned on; a published immutable release's files cannot be replaced by a
   re-run, which is only needed when the release was not published.

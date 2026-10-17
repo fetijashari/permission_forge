@@ -167,6 +167,15 @@ PfAliasRedeclaredChild.new.mail
 # --- twins: the same code with the concern and without it -----------------------
 # A twin whose name starts with PfPlain never gets the concern: it is what
 # plain Rails does on the Rails version under test.
+
+# PfConcernThenAlias without the concern.
+class PfPlainAliases < ApplicationRecord
+  extend PfAliasDeclarations
+
+  self.table_name = 'customers'
+  pf_declare_aliases
+end
+
 module PfAliasCode
   # A module the model includes defines the reader and the writer under the
   # alias's name.
