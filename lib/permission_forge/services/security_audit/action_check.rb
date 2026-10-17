@@ -30,7 +30,8 @@ module PermissionForge
         end
 
         def call
-          [unmanaged_actions, ungranted_actions, unguarded_actions, invalid_keys, unlinked_actions, guard_missing].compact
+          [unmanaged_actions, actions_not_checked, ungranted_actions, unguarded_actions, invalid_keys, unlinked_actions,
+           guard_missing].compact
         end
 
         private
@@ -72,13 +73,13 @@ module PermissionForge
           "#{resource} › #{action}: #{unguarded}" unless unguarded.empty?
         end
 
-        # Mapped controller actions, in controllers that run the guard, that no
-        # Permission Set manages in any tenant: the guard hands them to
+        # Mapped controller actions, in controllers that run the guard, that
+        # some tenant's Permission Sets do not manage: the guard hands them to
         # unconfigured_action_strategy. Read from the routes whether or not
         # discovery is on, as the guard runs either way, so an app upgrading
         # past the :allow default sees what now answers 403 before it deploys.
         def unmanaged_actions
-          items = UnmanagedActions.new(entries: catalog.mapped_entries, managed: managed_actions).items
+          items = UnmanagedActions.build(entries: catalog.mapped_entries, configuration: configuration).items
           return if items.empty?
 
           if configuration.allow_unconfigured_actions?
@@ -90,23 +91,27 @@ module PermissionForge
           else
             finding(:low, :unmanaged_actions_refused, 'Guarded actions no Permission Set manages are refused',
                     'These controller actions map to a Resource and run the guard, but no Permission Set manages ' \
-                    'them, so the guard refuses them (403) to everyone whom action_guard_bypass does not let ' \
-                    'through (unconfigured_action_strategy :block, the default since 0.15). Give each one a row in ' \
-                    'the Permission Sets that should run it; an action whose name is not a valid action key needs a ' \
-                    'key first (permission_forge_actions actions: { ... }). Or set unconfigured_action_strategy = ' \
-                    ':allow to let every signed-in user run them, as before 0.15.', items: items)
+                    "them (with tenancy: in the tenants named), so the guard refuses them (403) #{UnmanagedActions.refused_to(configuration)} " \
+                    '(unconfigured_action_strategy :block, the default since 0.15) — unless the controller skips ' \
+                    'the guard for that action (skip_before_action :pf_authorize_action!, only: …), which the audit ' \
+                    'does not see. Give each one a row in the Permission Sets that should run it; an action whose ' \
+                    'name is not a valid action key needs a key first (permission_forge_actions actions: { ... }). ' \
+                    'Or set unconfigured_action_strategy = :allow to let every signed-in user run them, as before 0.15.',
+                    items: items)
           end
         end
 
-        # { 'Customer' => Set['export'] } for every resource in effect in some
-        # tenant: what ManagedIndex holds, for every tenant at once.
-        def managed_actions
-          @managed_actions ||= begin
-            index = PermissionForge::Resource.in_effect.distinct.pluck(column(PermissionForge::Resource, :name))
-                                             .index_with { Set.new }
-            live_rows.each { |row| (index[row.resource] ||= Set.new) << row.action }
-            index
-          end
+        # The routes the catalog could not judge: the lists above may miss them.
+        def actions_not_checked
+          skipped = catalog.skipped
+          count = skipped.size
+          return if count.zero?
+
+          finding(:low, :actions_not_checked, "#{count} #{'controller action'.pluralize(count)} could not be checked (see the log)",
+                  'A controller failed to load, or the controller_action_resolver or the mapping raised, so the ' \
+                  'audit could not tell whether these run the guard or what they map to. They are missing from ' \
+                  'unmanaged_actions_refused (and the other action findings); at run time the same error fails the ' \
+                  'request. Fix the error the log names and run the audit again.', items: skipped)
         end
 
         # Managed (a row is in effect) but permitted by no granting set: the

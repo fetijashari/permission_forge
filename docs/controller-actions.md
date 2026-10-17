@@ -51,7 +51,9 @@ in — see [Callback order](#callback-order).
 The guard never renders or redirects. A denied action raises
 `PermissionForge::ActionNotAuthorizedError` (`error.resource` is `"Customer"`, `error.action` `"export"`,
 `error.controller_path` `"customers"`, `error.reason` `:action_denied`, or `:nil_user_denied` when nobody is
-signed in); your app decides what the user sees. The handler is kept in one place, so that this page and that
+signed in). On a fresh setup the common reasons are `:resource_not_managed_blocked` (no Permission Set has the
+Resource yet) and `:action_not_managed_blocked` (none has a row for the action): the
+[default](#unconfigured_action_strategy) refuses what nobody configured. Your app decides what the user sees. The handler is kept in one place, so that this page and that
 one cannot drift: copy the `rescue_from` for this error from
 [Handling Denials → Rescuing them yourself](row-level-rules.md#rescuing-them-yourself), which also has the
 `errors/forbidden` template and the `SessionsController#new` line that goes with it.
@@ -269,7 +271,10 @@ end
 
 Any other value raises `ConfigurationError` when it is set. Under `:block`,
 `bin/rails permission_forge:audit` lists the guarded actions no Permission Set manages, the ones
-the guard refuses to everyone (`unmanaged_actions_refused`).
+the guard refuses (`unmanaged_actions_refused`; with tenancy, each with the tenants that do not
+manage it), and the controller actions it could not check (`actions_not_checked`). The audit judges
+the guard per controller: an action exempted with `skip_before_action :pf_authorize_action!, only: …`
+is listed although it runs (see [Limits](#limits)).
 
 **Upgrading from 0.14**, where `:allow` was the default: run the audit before you deploy. For
 each action in `unmanaged_actions_refused`, add its Resource or action to the Permission Sets
@@ -447,7 +452,9 @@ decision.target     # => resource "Customer", action "export", crud nil
 - **Other engines' routes.** The guard runs only in controllers that include it. Controllers
   that belong to other mounted engines are not covered.
 - **`skip_before_action :pf_authorize_action!, only: :index`** works, but nothing else knows
-  about it: the admin and `Authorizer.allowed?` still answer as if the action were checked.
+  about it: the admin, `Authorizer.allowed?` and `permission_forge:audit` (which lists the action
+  under `unmanaged_actions_refused` while no Permission Set manages it) still answer as if the action
+  were checked.
   Prefer `rest_actions: false`, `actions:` or the resolver returning `false`, which all go
   through the same mapping.
 - **Actions, not records.** The guard answers "may this user run `export` on Customers at

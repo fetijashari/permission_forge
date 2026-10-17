@@ -10,7 +10,7 @@ PermissionForge.configure do |config|
   # ---------------------------------------------------------------------------
   # A guarded controller action (ControllerActionGuard) with nobody signed in is refused.
   config.action_guard_nil_user_strategy = :deny
-  # One no Permission Set manages is refused too, by default (opt out: config.unconfigured_action_strategy = :allow).
+  # So, by default, is any guarded action no Permission Set manages (opt out: config.unconfigured_action_strategy = :allow).
   # Conditional Permission Sets fail closed without a request context (see below).
   config.conditional_sets_strict_mode = true
   # Rails.cache, shared by every process: Redis or Solid Cache in production, :file_store (not :memory_store) in development.

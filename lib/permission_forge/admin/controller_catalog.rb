@@ -88,6 +88,7 @@ module PermissionForge
         # controller_path => conventional resource, filled by Mapping: one
         # lookup per controller instead of one per route.
         @conventions = {}
+        @skipped = []
       end
 
       # @return [Array<Entry>] one per mapped (controller_path, action_name)
@@ -117,6 +118,17 @@ module PermissionForge
       # @return [Array<String>] unique custom action keys, sorted
       def keys_for(resource_name)
         for_resource(resource_name).map(&:key).uniq
+      end
+
+      # What reading the routes could not judge: a controller that fails to
+      # load (listed, but whether it runs the guard is unknown) and a
+      # controller action dropped because its controller, the resolver or the
+      # mapping raised. The log has the first error.
+      #
+      # @return [Array<String>] "customers#export: RuntimeError", "broken: NameError"
+      def skipped
+        mapped_entries
+        @skipped.dup.freeze
       end
 
       # @return [Boolean] whether any listed controller runs the guard (see
@@ -168,9 +180,10 @@ module PermissionForge
         nil
       end
 
-      # Logged once per catalog: a raising resolver would otherwise repeat the
-      # same line for every route.
+      # Kept for #skipped; logged once per catalog: a raising resolver would
+      # otherwise repeat the same line for every route.
       def log_skipped(what, error)
+        @skipped << "#{what}: #{error.class}"
         return if @logged
 
         @logged = true

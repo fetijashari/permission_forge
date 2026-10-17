@@ -266,9 +266,11 @@ and the preset as a commented line with what it costs. The rows that need your c
 
 Upgrading to 0.15: a controller action that maps to a Resource (in a controller that includes
 `ControllerActionGuard`) and that no Permission Set manages is now refused with 403; before 0.15 it ran.
-`bin/rails permission_forge:audit` lists those actions (`unmanaged_actions_refused`). Manage each one in a Permission
-Set, or opt out with `config.unconfigured_action_strategy = :allow`, which lets every signed-in user run them (the audit
-reports the opt-out as `unconfigured_actions_allowed`, medium). Actions that map to no Resource are never checked.
+`bin/rails permission_forge:audit` lists those actions (`unmanaged_actions_refused`; with tenancy, each with the
+tenants that do not manage it) and the controller actions it could not check (`actions_not_checked`). Manage each one
+in a Permission Set, or opt out with `config.unconfigured_action_strategy = :allow`, which lets every signed-in user
+run them (the audit reports the opt-out as `unconfigured_actions_allowed`, medium). Actions that map to no Resource are
+never checked.
 Run `bin/rails permission_forge:audit` before you deploy (see the
 [Migration Guide](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015)).
 From 0.13: follow [From 0.13](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#from-013) — a revocation made on 0.15 does not reach what 0.13 processes have cached.

@@ -249,7 +249,8 @@ module PermissionForge
       assert_equal :bypass, generated.nil_user_strategy, 'library default'
       assert_equal :bypass, generated.masked_attributes_nil_user_strategy, 'library default'
       assert_equal :block, generated.unconfigured_action_strategy, 'library default'
-      assert_match(/^  # .*refused.*\(opt out: config\.unconfigured_action_strategy = :allow\)\.$/, source)
+      assert_includes source.lines,
+                      "  # So, by default, is any guarded action no Permission Set manages (opt out: config.unconfigured_action_strategy = :allow).\n"
       assert_match(/^  # config\.preset = :strict$/, source)
       assert_match(/belongs_to presence check/, source)
       assert_match(/Never include PermissionScopedFindable in the user model/, source)

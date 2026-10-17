@@ -221,6 +221,17 @@ module PermissionForge
         assert_nil entry(catalog, 'reports#index')
       end
 
+      test 'what the catalog could not judge is kept in skipped' do
+        PermissionForge.configuration.controller_action_resolver = lambda do |_path, action|
+          action == 'export' ? raise(ArgumentError, 'boom') : nil
+        end
+        found = catalog
+
+        assert_equal ['customers#export: ArgumentError'], found.skipped
+        assert_not_includes found.mapped_entries.map(&:endpoint), 'customers#export'
+        assert_predicate found.skipped, :frozen?
+      end
+
       test 'a controller that fails to load is listed without its class' do
         Object.autoload(:PfStubBrokenController, File.join(Dir.tmpdir, 'pf_stub_missing_controller.rb'))
         PermissionForge.configuration.controller_action_resolver = lambda do |path, _action|
@@ -234,6 +245,8 @@ module PermissionForge
 
         assert_equal %w[broken poke], found.keys_for('Customer')
         assert_not entry(found, 'pf_stub_broken#index').guarded?
+        assert_equal 1, found.skipped.size
+        assert_match(/\Apf_stub_broken: /, found.skipped.first)
       ensure
         Object.send(:remove_const, :PfStubBrokenController) if Object.autoload?(:PfStubBrokenController)
       end

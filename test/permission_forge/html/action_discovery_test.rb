@@ -66,7 +66,7 @@ module PermissionForge
         assert_select '.pf-banner--warn', count: 0
         assert_no_match(/new_actions|bulk_actions/, response.body)
         assert_no_match I18n.t('permission_forge.resource_actions.effect.right_now'), response.body
-        assert_no_match I18n.t('permission_forge.resource_actions.managed_note.title'), response.body
+        assert_no_match I18n.t('permission_forge.resource_actions.managed_note.title_blocked'), response.body
         assert_no_match I18n.t('permission_forge.resources.actions_tab.unlinked'), response.body
       end
 
@@ -75,7 +75,7 @@ module PermissionForge
         assert_response :success
         assert_select 'datalist', count: 0
         assert_select 'input#pf-action-name[value=archive]'
-        assert_no_match I18n.t('permission_forge.resource_actions.managed_note.title'), response.body
+        assert_no_match I18n.t('permission_forge.resource_actions.managed_note.title_blocked'), response.body
 
         get pf("#{@base}/actions/#{@export.id}")
         assert_response :success
@@ -194,7 +194,8 @@ module PermissionForge
           assert_select '.pf-badge--grant', text: /✓ #{I18n.t('permission_forge.resource_actions.states.permitted')}/, count: 1
           assert_select '.pf-badge--block',
                         text: /⊘ #{I18n.t('permission_forge.resource_actions.effect.unmanaged_blocked')}/, count: 2
-          assert_match I18n.t('permission_forge.resource_actions.managed_note.title'), response.body
+          assert_match I18n.t('permission_forge.resource_actions.managed_note.title_blocked'), response.body
+          assert_match I18n.t('permission_forge.resource_actions.managed_note.body_blocked'), response.body
           assert_match I18n.t('permission_forge.resource_actions.managed_note.unmanaged_blocked'), response.body
           assert_select '.pf-banner--warn', count: 0
         end
@@ -223,7 +224,10 @@ module PermissionForge
 
           assert_select '.pf-badge--unconfigured',
                         text: /○ #{I18n.t('permission_forge.resource_actions.effect.unmanaged_allowed')}/, count: 2
+          assert_match I18n.t('permission_forge.resource_actions.managed_note.title_allowed'), response.body
+          assert_match I18n.t('permission_forge.resource_actions.managed_note.body_allowed'), response.body
           assert_match I18n.t('permission_forge.resource_actions.managed_note.unmanaged_allowed'), response.body
+          assert_no_match I18n.t('permission_forge.resource_actions.managed_note.title_blocked'), response.body
         end
       end
 
@@ -303,7 +307,7 @@ module PermissionForge
           assert_response :success
           assert_match I18n.t('permission_forge.ui.changes.action_new_on', resource: 'Customer', action: action_label('archive')),
                        response.body
-          assert_match I18n.t('permission_forge.ui.changes.action_managed_first'), response.body
+          assert_match I18n.t('permission_forge.ui.changes.action_managed_first_blocked'), response.body
           assert_select '.pf-change-list li', count: 1
           assert_select "input[type=hidden][name='pf[new_actions][#{@resource.id}][archive][is_permitted]'][value='1']"
           assert_not @resource.resource_actions.exists?(name: 'archive')
@@ -315,6 +319,16 @@ module PermissionForge
         assert archive.is_permitted
         assert_not @resource.resource_actions.exists?(name: 'merge')
         assert PermissionForge::ControllerActions::ManagedIndex.managed_action?('Customer', 'archive')
+      end
+
+      test 'under :allow, review warns that the first row restricts the action' do
+        PermissionForge.configuration.unconfigured_action_strategy = :allow
+        discovering do
+          post pf("#{@base}/review"), params: new_action_params('archive' => { is_permitted: '1' })
+
+          assert_match I18n.t('permission_forge.ui.changes.action_managed_first_allowed'), response.body
+          assert_no_match I18n.t('permission_forge.ui.changes.action_managed_first_blocked'), response.body
+        end
       end
 
       test 'review names the sets that already permit a managed action' do
@@ -337,7 +351,7 @@ module PermissionForge
           post pf("#{@base}/review"), params: new_action_params('archive' => { is_permitted: '1' })
 
           assert_match I18n.t('permission_forge.ui.changes.action_managed_later'), response.body
-          assert_no_match I18n.t('permission_forge.ui.changes.action_managed_first'), response.body
+          assert_no_match I18n.t('permission_forge.ui.changes.action_managed_first_blocked'), response.body
         end
       end
 
@@ -413,8 +427,8 @@ module PermissionForge
           assert_response :success
           assert_select 'input#pf-action-name[list=pf-action-keys]'
           assert_equal(%w[archive merge], css_select('datalist#pf-action-keys option').map { |option| option['value'] })
-          assert_match I18n.t('permission_forge.resource_actions.managed_note.title'), response.body
-          assert_match I18n.t('permission_forge.resource_actions.managed_note.body'), response.body
+          assert_match I18n.t('permission_forge.resource_actions.managed_note.title_blocked'), response.body
+          assert_match I18n.t('permission_forge.resource_actions.managed_note.body_blocked'), response.body
           assert_no_match(/pf_stub_guarded/, response.body)
         end
       end
