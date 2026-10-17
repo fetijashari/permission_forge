@@ -33,23 +33,57 @@ module PermissionForge
       EVENT = 'field.unmasked_without_user'
       GATE = Gate.for(EVENT)
 
-      # The names of the models warned about in this process.
-      WARNED = Concurrent::Map.new
       WARNED_LIMIT = 1_000
+      # The "Model#attribute" writes refused after a hidden read, logged once.
+      REFUSED = Concurrent::Map.new
+
+      # The names of the models warned about in this process: a frozen Hash
+      # replaced whole under WARNED_MUTEX, so the read on every guarded read
+      # takes no lock.
+      @warned = {}.freeze
+      WARNED_MUTEX = Mutex.new
 
       class << self
+        # @return [Hash{String => true}] the names of the models warned about
+        attr_reader :warned
+
         # @param model [Class, String, Symbol] the record's class (or the
         #   Resource name when no class is known)
         # @param attribute [Symbol, String]
         # @return [void]
         def note(model, attribute)
-          name = Runtime.model_name(model)
-          first = !WARNED.key?(name)
-          return unless first || GATE.open?
-          return if ExecutionState[Concerns::MaskedAttributes::INSPECT_KEY]
+          heard = GATE.open?
+          name = model.is_a?(Class) ? model.name : model.to_s
+          first = !@warned.key?(name)
+          return unless (first || heard) && !ExecutionState[Concerns::MaskedAttributes::INSPECT_KEY]
 
           warn_once(name, attribute) if first
-          publish(model, attribute) if Audit.instrument?(EVENT)
+          publish(model, attribute) if heard
+          nil
+        end
+
+        # A write refused because the record had read the attribute as hidden
+        # with nobody signed in (MaskedAttributes, write.masked_skipped
+        # `detected_by: hidden_without_user`): logged once per model and
+        # attribute and process, as the change may have been meant (a flow
+        # that changes a guarded attribute without a sign-in must sign in a
+        # system user).
+        #
+        # @param model [Class]
+        # @param attribute [Symbol, String]
+        # @param protection [Symbol] :skip or :raise
+        # @return [void]
+        def write_refused(model, attribute, protection)
+          key = "#{model.name}##{attribute}"
+          return if REFUSED.size >= WARNED_LIMIT || !REFUSED.put_if_absent(key, true).nil?
+
+          Warnings.emit("masked_attributes.write_refused_without_user.#{key}",
+                        "#{key} was not written (masked_write_protection :#{protection}): the record had read it as " \
+                        'hidden with nobody signed in, so the new value may come from the hidden one. A flow that ' \
+                        'changes a guarded attribute without a sign-in (a webhook, a token link) must sign in a system ' \
+                        'user. Logged once per attribute and process; write.masked_skipped records each refusal.',
+                        severity: :config)
+        rescue StandardError
           nil
         end
 
@@ -60,18 +94,21 @@ module PermissionForge
         # @param model [Class, String]
         # @return [Boolean]
         def pending?(model)
-          !WARNED.key?(Runtime.model_name(model)) || (GATE.open? && Audit.instrument?(EVENT))
+          !@warned.key?(Runtime.model_name(model)) || (GATE.open? && Audit.instrument?(EVENT))
         end
 
         # Forgets which models were warned about (tests; Audit.reset!).
         # @return [void]
         def reset!
-          WARNED.clear
+          WARNED_MUTEX.synchronize { @warned = {}.freeze }
+          REFUSED.clear
         end
 
         private
 
         def publish(model, attribute)
+          return unless Audit.instrument?(EVENT)
+
           name = Runtime.model_name(model)
           attribute = attribute.to_s
           return unless Runtime.once?(EVENT, name, attribute, nil)
@@ -99,12 +136,22 @@ module PermissionForge
         end
 
         def warn_once(name, attribute)
-          return if WARNED.size >= WARNED_LIMIT
-          return unless WARNED.put_if_absent(name, true).nil?
+          return unless remember(name)
 
           Warnings.emit("masked_attributes.unmasked_without_user.#{name}", warning(name, attribute), severity: :security)
         rescue StandardError
           nil
+        end
+
+        # Adds the model's name; false when it was there already or the
+        # limit is reached.
+        def remember(name)
+          WARNED_MUTEX.synchronize do
+            next false if @warned.key?(name) || @warned.size >= WARNED_LIMIT
+
+            @warned = @warned.merge(name => true).freeze
+            true
+          end
         end
 
         def warning(name, attribute)

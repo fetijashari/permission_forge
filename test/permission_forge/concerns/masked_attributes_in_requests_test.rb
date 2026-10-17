@@ -186,6 +186,96 @@ module PermissionForge
         config.masked_write_protection = :skip
       end
 
+      # A test-only model on the customers table with a default set as the
+      # record is built (no Resource row: with nobody signed in it is masked
+      # all the same).
+      class DefaultedCustomer < ApplicationRecord
+        self.table_name = 'customers'
+        include PermissionForge::Concerns::MaskedAttributes
+
+        after_initialize { self.domain ||= 'default.test' if new_record? }
+      end
+
+      # A new record whose column has a database default: the default counts
+      # as its value in the database, but nothing is stored to hide yet. The
+      # table is made once per process, outside any test transaction.
+      ActiveRecord::Schema.define do
+        create_table :pf_house_domains, force: true do |t|
+          t.string :domain, default: 'house.test'
+        end
+      end
+
+      class HouseDomainCustomer < ApplicationRecord
+        self.table_name = 'pf_house_domains'
+        include PermissionForge::Concerns::MaskedAttributes
+      end
+
+      def in_signup(&) = WebRequest.within(Rack::MockRequest.env_for('/signup'), &)
+      def stored(record, *columns) = record.class.unscoped.where(id: record.id).pick(*columns)
+
+      test 'nothing real was hidden: a new record and an empty column take a default or a fill-if-blank' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        empty = Customer.unscoped.find(PermissionForge.without_permission_scope { create_customer(name: nil).id })
+
+        new_record = in_signup { Customer.new(email: 'a@x.test').tap { |c| c.name ||= 'Jane' }.tap(&:save!) }
+        initialized = in_signup do
+          Customer.find_or_initialize_by(uuid: 'u-b').tap { |c| c.name = 'Jane' if c.name.blank? }.tap(&:save!)
+        end
+        in_signup { empty.tap { |c| c.name = 'Jane' if c.name.blank? }.save! }
+        defaulted = in_signup { DefaultedCustomer.new(name: 'Jane').tap(&:save!) }
+        chosen = in_signup { HouseDomainCustomer.new.tap { |c| c.domain = 'chosen.test' if c.domain.blank? }.tap(&:save!) }
+
+        assert_equal 'Jane', stored(new_record, :name), 'A: a new record'
+        assert_equal 'Jane', stored(initialized, :name), 'B: find_or_initialize_by'
+        assert_equal 'Jane', stored(empty, :name), 'C: a NULL column hid nothing'
+        assert_equal 'default.test', stored(defaulted, :domain), 'F: an after_initialize default'
+        assert_equal 'chosen.test', stored(chosen, :domain), 'a new record with an attribute default stores nothing yet'
+      end
+
+      test 'a stored value read hidden is kept; overwriting it without a sign-in is refused, recorded and logged once' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        config.audit_runtime_events = %i[denied params_filtered]
+        customer = Customer.unscoped.find(@customer.id)
+
+        in_signup { customer.tap { |c| c.name = 'Jane' if c.name.blank? }.save! }
+        assert_equal 'Acme', stored(customer, :name), 'D: the real name is kept'
+
+        2.times do
+          changing = Customer.unscoped.find(@customer.id)
+          in_signup { changing.tap { |c| c.email.inspect && (c.email = 'new@x.test') }.save! }
+        end
+        assert_equal 'sales@acme.test', stored(customer, :email), 'G: refused'
+        assert_audit_event('write.masked_skipped', data: { 'attribute' => 'email', 'detected_by' => 'hidden_without_user' })
+        refusals = @log.string.lines.grep(/Customer#email was not written/)
+        assert_equal 1, refusals.size, @log.string
+        assert_includes refusals.first, 'sign in a system user'
+      end
+
+      test 'the hidden reads are forgotten on reload and after a save' do
+        config.masked_attributes_nil_user_strategy = :hide_in_requests
+        customer = Customer.unscoped.find(@customer.id)
+
+        in_signup do
+          customer.name
+          customer.reload
+          customer.update!(name: 'After reload')
+        end
+        assert_equal 'After reload', stored(customer, :name)
+
+        in_signup do
+          customer.name
+          customer.update!(supplier_id: 3)
+          customer.update!(name: 'After save')
+        end
+        assert_equal 'After save', stored(customer, :name)
+
+        in_signup do
+          customer.name
+          customer.update!(name: 'Refused')
+        end
+        assert_equal 'After save', stored(customer, :name), 'read hidden and not saved or reloaded since: refused'
+      end
+
       test 'an inspect does not count as a hidden read, and :bypass protects nothing it did not hide' do
         config.masked_attributes_nil_user_strategy = :hide_in_requests
         customer = Customer.unscoped.find(@customer.id)
@@ -294,7 +384,7 @@ module PermissionForge
         WebRequest.within(Rack::MockRequest.env_for('/b')) { Audit::UnmaskedWithoutUser.note('Customer', :email) }
 
         assert_equal 1, warnings.size
-        assert Audit::UnmaskedWithoutUser::WARNED.key?('Customer')
+        assert Audit::UnmaskedWithoutUser.warned.key?('Customer')
       end
 
       test 'with nobody listening and the bypass group not stored, a read in a request builds nothing and allocates no more' do

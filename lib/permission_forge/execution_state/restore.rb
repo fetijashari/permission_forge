@@ -47,6 +47,14 @@ module PermissionForge
         restore
       end
 
+      # The store slot `name` is kept in (FiberStorage or the isolated
+      # execution state), for a reader on a hot path that asks one known slot
+      # without the lookup of #[] (WebRequest.active?).
+      #
+      # @param name [Symbol] a key of KEYS
+      # @return [#[]]
+      def store_of(name) = storage(name)
+
       # Puts `previous` back in the slot (nil empties it), as .with does when
       # its block ends.
       #

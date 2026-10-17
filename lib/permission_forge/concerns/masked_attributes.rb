@@ -132,6 +132,7 @@ module PermissionForge
           PermissionForge::Concerns::MaskedAttributes.drop_generated_accessors(klass, masked_attribute_module)
         end
         pf_mask_attribute_aliases
+        after_save :pf_forget_hidden_without_user_reads
         @_pf_masked_attributes_applied = true
       end
 
@@ -351,6 +352,13 @@ module PermissionForge
       end
       private_class_method :print_explain_table
 
+      # Forgets the attributes read as hidden with nobody signed in
+      # (pf_hidden_without_user_reads): the record holds fresh values.
+      def reload(*)
+        pf_forget_hidden_without_user_reads
+        super
+      end
+
       # Reads an attribute through the field permissions of the current user.
       # @param attr_name [String, Symbol]
       def read_attribute(attr_name, &)
@@ -366,7 +374,7 @@ module PermissionForge
         include_field, value = pf_guard(attr_name, raw, user)
         unless include_field
           value = PermissionForge.configuration.hidden_attribute_value
-          pf_note_hidden_without_user(name) unless user
+          pf_note_hidden_without_user(name, raw) unless user
         end
         # A returned value that differs from the raw column value was masked or
         # hidden; remember the exact sentinel so a write-back of it can be refused.
@@ -557,16 +565,28 @@ module PermissionForge
 
       # The attributes this instance read as hidden because nobody was signed
       # in (masked_attributes_nil_user_strategy :hide, or :hide_in_requests in a
-      # web request). Whatever is written to one of them afterwards was worked
-      # out from the hidden value, or replaces a value nobody could see:
-      # pf_skip_masked_write? treats it as a write-back. A debugging read
-      # (inspect) does not count.
+      # web request) while they held a value. Whatever is written to one of
+      # them afterwards was worked out from the hidden value, or replaces a
+      # value nobody could see: pf_skip_masked_write? treats it as a
+      # write-back. Only something real counts: a value of a persisted record
+      # (a new record, or an empty column, hides nothing, and a default or a
+      # fill-if-blank must be written). The value is the one just read, not
+      # attribute_in_database, which would build the record's mutation
+      # tracker on every hidden read; they differ only for an attribute
+      # assigned before it was read. A debugging read (inspect) does not
+      # count. Forgotten on reload and after a save.
       def pf_hidden_without_user_reads
         @pf_hidden_without_user_reads ||= Set.new
       end
 
-      def pf_note_hidden_without_user(attr_name)
-        pf_hidden_without_user_reads << attr_name.to_s unless PermissionForge::ExecutionState[INSPECT_KEY]
+      def pf_note_hidden_without_user(attr_name, value)
+        return if value.nil? || !persisted? || PermissionForge::ExecutionState[INSPECT_KEY]
+
+        pf_hidden_without_user_reads << attr_name.to_s
+      end
+
+      def pf_forget_hidden_without_user_reads
+        @pf_hidden_without_user_reads = nil
       end
 
       # True when the guard should suppress this write because `value` is a masked/
@@ -590,6 +610,7 @@ module PermissionForge
         return false unless detected_by
 
         pf_masked_write_refused(attr_name, protection, detected_by)
+        PermissionForge::Audit::UnmaskedWithoutUser.write_refused(self.class, attr_name, protection) if detected_by == 'hidden_without_user'
         raise MaskedWriteError, attr_name if protection == :raise
 
         true # :skip — preserve the stored value by not calling super
@@ -654,7 +675,7 @@ module PermissionForge
           include_field, masked = pf_guard(key, value, user)
           next [key, masked] if include_field
 
-          pf_note_hidden_without_user(key) unless user
+          pf_note_hidden_without_user(key, value) unless user
           next if omit_hidden
 
           [key, hidden_value]

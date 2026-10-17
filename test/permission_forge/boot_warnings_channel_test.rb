@@ -117,6 +117,8 @@ module PermissionForge
       'masking_sync_store_failed' => [:security], 'masking_sync_failed' => [:security],
       'cache_process_local' => [:security], 'cache_unannounced_masking' => [:security],
       'masked_attributes.unmasked_without_user.' => [:security],
+      'masked_attributes.write_refused_without_user.' => [:config, 'a write refused keeps the stored value: nothing is ' \
+                                                                   'opened, a change may have been lost'],
       'web_request_middleware_above_hide' => [:security],
       'web_request_middleware_above_record' => [:config, 'under :bypass a read above the middleware returns the stored value, ' \
                                                          'as it always did: only its recording is missed'],
@@ -159,6 +161,7 @@ module PermissionForge
       'boot_check_skipped.' => [:all], 'database_unreachable' => [:all], 'cache_stale_permissions' => [:all],
       'cache_development_masking' => [:all], 'unscoped_detection_raise_in_production' => [:all],
       'masked_attributes.unmasked_without_user.' => [:all],
+      'masked_attributes.write_refused_without_user.' => [:all],
       'web_request_middleware_above_hide' => [:server, 'about the requests a server process serves'],
       'web_request_middleware_above_record' => [:server, 'about the requests a server process serves']
     }.freeze

@@ -53,10 +53,15 @@ module PermissionForge
     # context's request id and IP are).
     VALUE_LIMIT = 255
 
+    # Where the slot is kept (ExecutionState.store_of).
+    STORE = ExecutionState.store_of(KEY)
+
     class << self
-      # @return [Boolean] whether this code runs inside a web request
+      # @return [Boolean] whether this code runs inside a web request (asked
+      #   on every guarded read with nobody signed in: the slot's store is
+      #   read directly)
       def active?
-        !ExecutionState[KEY].nil?
+        !STORE[KEY].nil?
       end
 
       # @return [Hash, nil] the Rack env of the request in progress
