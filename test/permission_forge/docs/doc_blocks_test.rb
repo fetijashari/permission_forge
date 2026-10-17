@@ -75,8 +75,9 @@ module PermissionForge
 
       test 'a run or file= ruby block must be valid Ruby; a fragment may elide' do
         assert_empty problems("```ruby fragment\ndef x\n  ...\nend\n```\n")
-        assert_equal ["fixture.md:1: a `run` ruby block must be valid Ruby (syntax error, unexpected 'end')"],
-                     problems("```ruby run\ndef x\n  ...\nend\n```\n")
+        # The parser's message quotes `end' before Ruby 3.4, 'end' since.
+        assert_match(/\Afixture\.md:1: a `run` ruby block must be valid Ruby \(syntax error, unexpected [`']end'\)\z/,
+                     problems("```ruby run\ndef x\n  ...\nend\n```\n").sole)
         assert_match(/a `file` ruby block must be valid Ruby/, problems("```ruby file=app/x.rb\nfoo(\n```\n").first)
       end
 

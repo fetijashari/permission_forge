@@ -235,7 +235,7 @@ module PermissionForge
       test 'an error body off the schema is reported; no body only where BODILESS says' do
         assert_empty Schema.error_problems(404, Schema.error_body(404, 'x'))
         assert_equal ['$.error.messages: expected field_messages, got "x"'], Schema.error_problems(422, Schema.error_body(422, 'x'))
-        assert_equal ['$.error.messages: expected string, got {"a" => ["b"]}'],
+        assert_equal ["$.error.messages: expected string, got #{{ 'a' => ['b'] }.inspect}"],
                      Schema.error_problems(403, Schema.error_body(403, { 'a' => ['b'] }))
         assert_equal ['$.error.status: expected 404, got 403'], Schema.error_problems(404, Schema.error_body(403, 'x'))
         assert_equal ['400: no body, and BODILESS does not declare one'], Schema.error_problems(400, nil)
