@@ -85,6 +85,8 @@ end
 # A public page of the host: nobody signed in, a masked model read in a web
 # request (the generated initializer's :hide_in_requests hides it there).
 class WalkInsController < ActionController::Base
+  protect_from_forgery with: :exception
+
   def show
     customer = Customer.find_by(id: params[:id])
     render json: [customer.name, customer.email]
