@@ -50,7 +50,8 @@ module PermissionForge
         assert_equal 201, result['api_create_with_key']
         # The symptom the docs describe: no flash (its request methods are never loaded), and no session to write to.
         without = result.fetch('admin_page_without_middlewares')
-        assert_includes %w[NameError ActionDispatch::Request::Session::DisabledSessionError], without['error'], without.inspect
+        # NameError, or its NoMethodError on a newer Rails main: the flash's request methods are not there.
+        assert_includes %w[NameError NoMethodError ActionDispatch::Request::Session::DisabledSessionError], without['error'], without.inspect
         assert_match(/flash|sessions disabled/, without['message'].to_s)
         assert_equal 200, result.dig('admin_page_with_middlewares', 'status'), result['admin_page_with_middlewares'].inspect
         assert_admin_form_posts(result)
