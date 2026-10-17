@@ -53,6 +53,9 @@ module PermissionForge
         'signed_out_saved' => %w[walk-in walk-in@example.test],
         'signed_out_save_find_read' => %w[walk-in walk-in@example.test],
         'signed_out_unscoped_read' => %w[walk-in walk-in@example.test],
+        # ... but in a web request (a host page nobody signed in to) the
+        # generated :hide_in_requests hides it
+        'signed_out_request_read' => [nil, nil],
         # an assignment made by a signed-in admin is stamped with the admin
         'granted_by_admin_stamped' => true,
         # a model first named in this process is masked in another one at its

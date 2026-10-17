@@ -435,7 +435,7 @@ filtered = PermissionForge::Services::FiltersResponseAttributes.call(
 - Fields with `read_access: true, mask_access: true` are masked using the configured strategy
 - Fields not in the permission hash follow `config.unconfigured_field_strategy` (default `:block` — removed from the response; unknown strategy values also fall back to `:block`)
 - Fails closed for authenticated users: a user with no configured access to the resource gets **every** field routed through `unconfigured_field_strategy` — never the raw attributes (v0.10.0+)
-- With no current user, behavior follows `config.response_filter_nil_user_strategy`: `:bypass` (default) returns the attributes unfiltered, `:block` returns `{}`. Model masking follows `config.masked_attributes_nil_user_strategy` (`:bypass` default / `:hide`)
+- With no current user, behavior follows `config.response_filter_nil_user_strategy`: `:bypass` (default) returns the attributes unfiltered, `:block` returns `{}`. Model masking follows `config.masked_attributes_nil_user_strategy` (`:bypass` default / `:hide_in_requests`, hidden in web requests only / `:hide`)
 
 **Serializer integration example:**
 

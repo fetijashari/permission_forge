@@ -18,7 +18,7 @@ module PermissionForge
         no_read_access_strategy: %i[rules_only deny],
         response_filter_nil_user_strategy: %i[bypass block],
         masked_write_protection: %i[skip raise off],
-        masked_attributes_nil_user_strategy: %i[bypass hide],
+        masked_attributes_nil_user_strategy: %i[bypass hide_in_requests hide],
         action_guard_nil_user_strategy: %i[bypass deny raise],
         admin_tenantless_access: %i[deny allow],
         unconfigured_action_strategy: %i[allow block],

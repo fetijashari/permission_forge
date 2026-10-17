@@ -6,6 +6,10 @@ module PermissionForge
     #
     # @api public
     module MaskedAttributesSettings
+      # The masked_attributes_nil_user_strategy values that hide inside web
+      # requests.
+      HIDING_NIL_USER_STRATEGIES = %i[hide_in_requests hide].freeze
+
       # Value returned by MaskedAttributes when read_access is denied. Default: nil.
       attr_accessor :hidden_attribute_value
 
@@ -36,36 +40,86 @@ module PermissionForge
       attr_accessor :masked_write_protection
 
       # What the attribute guard does when there is no current user (a job, a
-      # mailer, the console, a resolver that returns nil). Nothing else
-      # governs masking without a user: nil_user_strategy is about rows,
-      # response_filter_nil_user_strategy about FiltersResponseAttributes.
+      # mailer, the console, a public page, a resolver that returns nil).
+      # Nothing else governs masking without a user: nil_user_strategy is
+      # about rows, response_filter_nil_user_strategy about
+      # FiltersResponseAttributes.
       #
-      #   :bypass — every getter returns the stored value (default)
-      #   :hide   — every guarded attribute reads as hidden_attribute_value:
-      #             getters, read_attribute, `[]`, attributes, as_json and
-      #             the wrapped virtual readers and store accessors. The
-      #             primary key and the raw paths (read_attribute_before_type_cast,
-      #             pluck) are untouched, as for a signed-in user. Code that
-      #             reads masked models with no user then sees hidden values:
-      #             set the current user in those jobs and mailers. The user
-      #             model (user_class and its subclasses) is exempt: sign-in
-      #             reads it before anyone is signed in (encrypted_password,
-      #             confirmation_token, lockable counters).
+      #   :bypass           — every getter returns the stored value (the
+      #                       library default). Inside a web request each
+      #                       guarded attribute so returned is recorded:
+      #                       field.unmasked_without_user (runtime group
+      #                       :bypass, once per request per model and
+      #                       attribute) and one SECURITY warning per model
+      #                       and process in the log.
+      #   :hide_in_requests — inside a web request (PermissionForge::WebRequest:
+      #                       a public page, a webhook, a controller that
+      #                       forgot authentication, the before_actions and
+      #                       middlewares that run before sign-in) every
+      #                       guarded attribute is hidden as under :hide;
+      #                       everywhere else (jobs, rake, runner, the
+      #                       console) as :bypass. What the generated
+      #                       initializer and config.preset = :strict set.
+      #   :hide             — every guarded attribute reads as
+      #                       hidden_attribute_value everywhere: getters,
+      #                       read_attribute, `[]`, attributes, as_json and
+      #                       the wrapped virtual readers and store accessors.
+      #                       Code that reads masked models with no user then
+      #                       sees hidden values: set the current user in
+      #                       those jobs and mailers.
+      #
+      # Where it hides, the primary key and the raw paths
+      # (read_attribute_before_type_cast, pluck) are untouched, as for a
+      # signed-in user, and the user model (user_class and its subclasses) is
+      # exempt: sign-in reads it before anyone is signed in
+      # (encrypted_password, confirmation_token, lockable counters).
       attr_accessor :masked_attributes_nil_user_strategy
 
-      # @return [Boolean] whether the strategy is :hide (whatever the model)
+      # @return [Boolean] whether the strategy is :hide: hidden everywhere
+      #   (whatever the model; ask #hide_masked_attributes_without_user_for?
+      #   for a record)
       def hide_masked_attributes_without_user?
-        @masked_attributes_nil_user_strategy.to_s == 'hide'
+        @masked_attributes_nil_user_strategy == :hide
+      end
+
+      # @return [Boolean] whether the strategy hides guarded attributes at
+      #   least inside web requests (:hide_in_requests or :hide)
+      def hide_masked_attributes_without_user_in_requests?
+        HIDING_NIL_USER_STRATEGIES.include?(@masked_attributes_nil_user_strategy)
       end
 
       # The one decision of whether a record of klass hides its guarded
-      # attributes when nobody is signed in: under :hide, every model but the
-      # user model.
+      # attributes when nobody is signed in: under :hide, and under
+      # :hide_in_requests inside a web request, every model but the user
+      # model.
       #
       # @param klass [Class]
       # @return [Boolean]
       def hide_masked_attributes_without_user_for?(klass)
-        hide_masked_attributes_without_user? && !user_model_class?(klass)
+        masked_attributes_without_user_for(klass) == :hide
+      end
+
+      # What the attribute guard does with a read of klass when nobody is
+      # signed in, the one definition behind #hide_masked_attributes_without_user_for?:
+      #
+      #   :hide   — hidden (:hide; :hide_in_requests inside a web request)
+      #   :record — returned as stored and recorded (:bypass inside a web
+      #             request: field.unmasked_without_user), the reads
+      #             :hide_in_requests would hide
+      #   :bypass — returned as stored (outside a web request, and always
+      #             for the user model)
+      #
+      # Asked on every guarded read with no user: outside a web request
+      # under :bypass or :hide_in_requests it reads one execution-state slot.
+      #
+      # @param klass [Class]
+      # @return [Symbol] :hide, :record or :bypass
+      def masked_attributes_without_user_for(klass)
+        strategy = @masked_attributes_nil_user_strategy
+        return :bypass unless strategy == :hide || PermissionForge::WebRequest.active?
+        return :bypass if user_model_class?(klass)
+
+        strategy == :bypass ? :record : :hide
       end
 
       # Sets this group's defaults; called from Configuration#initialize.

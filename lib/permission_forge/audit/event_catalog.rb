@@ -110,7 +110,7 @@ module PermissionForge
 
       {
         'access.denied' => :denied, 'action.denied' => :denied,
-        'rule.bypassed' => :bypass, 'query.unscoped' => :bypass,
+        'rule.bypassed' => :bypass, 'query.unscoped' => :bypass, 'field.unmasked_without_user' => :bypass,
         'field.access' => :field_read,
         'params.filtered' => :params_filtered, 'write.masked_skipped' => :params_filtered,
         'permissions.rebuilt' => :cache, 'permissions.invalidated' => :cache

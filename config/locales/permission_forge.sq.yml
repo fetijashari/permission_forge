@@ -282,6 +282,8 @@ sq:
           access: "%{actor} lexoi %{record}."
           sensitive_acknowledged: "%{actor} konfirmoi që fusha %{record} te %{set}
             duhet të lexohet pa maskë."
+          unmasked_without_user: Një fushë e %{model} u lexua pa maskë në një kërkesë
+            web kur askush nuk kishte hyrë.
         group_membership:
           added: "%{actor} shtoi %{person} te %{group}."
           changed: "%{actor} ndryshoi anëtarësinë e %{person} te %{group}."
@@ -1842,10 +1844,13 @@ sq:
             kur kodi yt i lexon nga modeli.
           name: Masko fushat virtuale në modele
         masked_attributes_nil_user_strategy:
-          desc: 'Nëse modelet e maskuara kthejnë vlerat e ruajtura apo të fshehura
-            kur nuk ka përdorues aktual (punë në sfond, email-e, konsola). Modeli
-            i përdoruesit mbetet i lexueshëm: hyrja e lexon para se dikush të ketë
-            hyrë.'
+          desc: 'Çfarë kthejnë modelet e maskuara kur nuk ka përdorues aktual. bypass:
+            vlerat e ruajtura kudo (çdo lexim në një kërkesë web regjistrohet në log
+            dhe publikohet si ngjarje auditimi). hide_in_requests: vlera të fshehura
+            në kërkesat web (një faqe publike, një kontrollues që harroi hyrjen),
+            vlerat e ruajtura në punët në sfond, detyrat rake dhe konsolë. hide: vlera
+            të fshehura kudo. Modeli i përdoruesit mbetet i lexueshëm: hyrja e lexon
+            para se dikush të ketë hyrë.'
           name: Atributet e maskuara kur askush nuk ka hyrë
         masked_write_protection:
           desc: Ndalon që një vlerë e maskuar si “•••• 4821” të ruhet mbi vlerën e
@@ -1977,7 +1982,8 @@ sq:
         gdpr_defaults: Kolonat e reja të ndjeshme fillojnë të maskuara.
         http_basic_auth_enabled: Qasja në këto ekrane është e mbrojtur.
         masked_attributes_nil_user_strategy: Modelet e maskuara i fshehin vlerat kur
-          askush nuk ka hyrë (modeli i përdoruesit mbetet i lexueshëm për hyrjen).
+          askush nuk ka hyrë, të paktën në kërkesat web (modeli i përdoruesit mbetet
+          i lexueshëm për hyrjen).
         masked_write_protection: Vlerat e maskuara nuk ruhen kurrë mbrapsht.
         nil_user_strategy: Kodi pa përdorues të hyrë nuk sheh asnjë regjistrim.
         no_read_access_strategy: Përdoruesit e hyrë pa Lexim mbi një burim nuk shohin

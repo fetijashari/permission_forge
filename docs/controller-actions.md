@@ -328,7 +328,8 @@ skips it for signed-out visitors (`skip_before_action`, a public index), then se
 with every field as stored — notes, full emails — to a visitor who is not signed in. Close those
 two as well before production: see the
 [hardening checklist](../README.md#production-hardening-checklist) (`config.preset = :strict`
-closes the first; the second is a deliberate choice of its own).
+closes both: masking as `:hide_in_requests`, which new installs also get from the generator, so a
+signed-out visitor's request reads guarded fields as hidden while jobs keep the stored values).
 
 ### Callback order
 

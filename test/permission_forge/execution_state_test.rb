@@ -28,7 +28,8 @@ module PermissionForge
       'PermissionForge::Concerns::MaskedAttributes::ValidationReads::WINDOWS_KEY' => :pf_validator_windows,
       'PermissionForge::Audit::Context::KEY' => :pf_audit_context,
       'PermissionForge::Audit::Context::TRANSACTION_KEY' => :pf_audit_transaction_correlation,
-      'PermissionForge::Audit::Runtime::ONCE_KEY' => :pf_audit_runtime_once
+      'PermissionForge::Audit::Runtime::ONCE_KEY' => :pf_audit_runtime_once,
+      'PermissionForge::WebRequest::KEY' => :pf_web_request
     }.freeze
 
     # Where lib/ and app/ may keep per-thread, per-fiber or per-request state

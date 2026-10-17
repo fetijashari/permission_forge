@@ -237,11 +237,11 @@ where you call `can_*?`, or with `ControllerActionGuard`. Field access is decide
 Several defaults fail open so that installing the gem changes nothing until you configure it. Before production, go
 through this list. `bin/rails permission_forge:audit` reports most of these settings.
 
-`config.preset = :strict` closes every row below that a setting can close, except masking with nobody signed in (an
-explicit choice: see its row; `permission_forge:audit` keeps reporting it as `masked_nil_user_bypass`, medium, until
-you set it); a setting you make yourself always wins over the preset. New installs get the safe
-part (`action_guard_nil_user_strategy = :deny`, `conditional_sets_strict_mode = true`, `cache_backend = :rails_cache`)
-and the preset as a commented line with what it costs. The rows that need your code (`base_controller_class`,
+`config.preset = :strict` closes every row below that a setting can close (masking with nobody signed in as
+`:hide_in_requests`: hidden in web requests, stored values in jobs and the console); a setting you make yourself always
+wins over the preset. New installs get the safe part (`action_guard_nil_user_strategy = :deny`,
+`conditional_sets_strict_mode = true`, `cache_backend = :rails_cache`, `masked_attributes_nil_user_strategy =
+:hide_in_requests`) and the preset as a commented line with what it costs. The rows that need your code (`base_controller_class`,
 `admin_assignment_authorization`, `audit_log_authorization`, `user_active_check`) are not in a preset.
 `bin/rails permission_forge:audit` prints the preset and, under `:strict`, every option set looser. See
 [Presets](https://github.com/fetijashari/permission_forge/blob/main/docs/configuration.md#presets).
@@ -249,7 +249,7 @@ and the preset as a commented line with what it costs. The rows that need your c
 | Default | What it means | To close it |
 |---|---|---|
 | `nil_user_strategy = :bypass` | With no current user (jobs, console, a resolver that returns nil), `find_by`, `permission_scoped`, auto-scoping and the RLS policy apply no rules; so does the controller guard unless `action_guard_nil_user_strategy` is set | `:deny` (not found) or `:raise`. Do not include `PermissionScopedFindable` in the user model: under `:deny` sign-in lookups return nil (`permission_forge:audit` reports `user_model_scoped`) |
-| `masked_attributes_nil_user_strategy = :bypass` | Attribute readers, `attributes` and `as_json` of a masked model return the stored values when nobody is signed in, whatever `nil_user_strategy` says | `:hide` (every guarded attribute reads as hidden with no user; the primary key and the raw paths are untouched), and set the current user in the jobs and mailers that read masked models. Not part of `config.preset = :strict`. The user model (`user_class` and its subclasses) stays readable for sign-in; validations read stored values |
+| `masked_attributes_nil_user_strategy = :bypass` | Attribute readers, `attributes` and `as_json` of a masked model return the stored values when nobody is signed in, whatever `nil_user_strategy` says: in jobs and the console, and in a web request nobody is signed in to (a public page, a webhook, a controller that forgot authentication). Such a read in a web request is logged (once per model and process) and published as `field.unmasked_without_user` | `:hide_in_requests` (every guarded attribute reads as hidden in a web request with nobody signed in; jobs, rake and the console keep the stored values; new installs get it from the generator), or `:hide` (hidden everywhere: set the current user in the jobs and mailers that read masked models). The primary key and the raw paths are untouched; the user model (`user_class` and its subclasses) stays readable for sign-in; validations read stored values |
 | `response_filter_nil_user_strategy = :bypass` | `FiltersResponseAttributes` returns every attribute when there is no user | `:block` |
 | `auto_query_scoping = :off` | Only class-level `find_by` / `find_by!` and `permission_scoped` apply row rules | `:filter_only`, and use `permission_scoped` for join rules; consider RLS on PostgreSQL |
 | `no_read_access_strategy = :rules_only` | A signed-in user whose Permission Sets do not grant Read on a model (no `Resource` for it at all included) has no rules there: `find_by`, `permission_scoped` and auto-scoping return every row. Only `can_read?` (or the controller guard) refuses them | `:deny` (no rows; `find_by` raises `NotAuthorizedError` for an existing record) |

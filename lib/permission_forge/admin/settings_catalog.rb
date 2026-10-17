@@ -69,7 +69,8 @@ module PermissionForge
 
         d(:auto_apply_masked_attributes, 'masked_attributes', :enum, options: %i[auto list off]),
         d(:masked_write_protection, 'masked_attributes', :enum, options: %i[skip raise off]),
-        d(:masked_attributes_nil_user_strategy, 'masked_attributes', :enum, options: %i[bypass hide]),
+        d(:masked_attributes_nil_user_strategy, 'masked_attributes', :enum,
+          options: Configuration::StrategyValues::ALLOWED[:masked_attributes_nil_user_strategy]),
         d(:hidden_attribute_value, 'masked_attributes', :str, nil_label: :nil),
         d(:omit_hidden_in_attributes_hash, 'masked_attributes', :bool),
         d(:mask_virtual_attributes, 'masked_attributes', :enum, options: %i[off auto list]),
@@ -192,7 +193,7 @@ module PermissionForge
         'gdpr_defaults' => ->(config) { config.gdpr_defaults ? :ok : nil },
         'nil_user_strategy' => ->(config) { config.nil_user_strategy.to_s == 'bypass' ? nil : :ok },
         'no_read_access_strategy' => ->(config) { config.deny_record_reads_without_read_access? ? :ok : nil },
-        'masked_attributes_nil_user_strategy' => ->(config) { config.hide_masked_attributes_without_user? ? :ok : nil },
+        'masked_attributes_nil_user_strategy' => ->(config) { config.hide_masked_attributes_without_user_in_requests? ? :ok : nil },
         'extra_fields_default_access' => ->(config) { config.grant_extra_fields_by_default? ? nil : :ok },
         # :allow is the opt-out from the :block default: the audit's unconfigured_actions_allowed.
         'unconfigured_action_strategy' => ->(config) { config.allow_unconfigured_actions? ? :warn : :ok },

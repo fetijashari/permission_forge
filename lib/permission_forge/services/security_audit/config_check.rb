@@ -6,10 +6,13 @@ module PermissionForge
       # Configuration hardening: who can reach the admin, whether the cache is
       # shared, fail-closed flags, GDPR and audit settings, and the JSON API.
       class ConfigCheck < BaseCheck
+        include MaskingWithoutUser
+
         RULES = %i[
           admin_ui_exposed process_local_cache unconfigured_fields_pass write_protection_off nested_parent_fallback
           unconfigured_actions_allowed
-          nil_user_bypass masked_nil_user_bypass gdpr_defaults_off log_filtering_off audit_trail_off conditional_sets_lenient
+          nil_user_bypass masked_nil_user_bypass middleware_above_web_request gdpr_defaults_off log_filtering_off audit_trail_off
+          conditional_sets_lenient
           detection_raises_in_production api_without_auth api_mutations_unguarded api_authorization_unset
           api_sequential_ids api_rule_values_exposed tenantless_admin strict_overrides
         ].freeze
@@ -92,18 +95,6 @@ module PermissionForge
           finding(:low, :nil_user_bypass, 'No current user means no permission checks',
                   "#{bypassing.join(' and ')} #{bypassing.one? ? 'is' : 'are'} :bypass. Make sure every request " \
                   'that touches protected models is authenticated first, or use :deny / :raise.')
-        end
-
-        # The one nil-user setting that is about the getters themselves.
-        def masked_nil_user_bypass
-          return if configuration.hide_masked_attributes_without_user?
-
-          finding(:medium, :masked_nil_user_bypass, 'Masked attributes are readable with no current user',
-                  'masked_attributes_nil_user_strategy is :bypass: when nobody is signed in (a job, a mailer, the ' \
-                  'console, a resolver that returns nil) the getters, attributes and as_json of a masked model return ' \
-                  'the stored values, whatever nil_user_strategy says. Set it to :hide (the user model stays readable, as ' \
-                  'sign-in needs), and set the current user in ' \
-                  'the jobs and mailers that read masked data.')
         end
 
         def gdpr_defaults_off
