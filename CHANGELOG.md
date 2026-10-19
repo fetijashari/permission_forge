@@ -6,7 +6,7 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
-## [0.15.0] - 2026-10-16
+## [0.15.0] - 2026-10-19
 
 Upgrading from 0.14 is the three steps of the
 [migration guide's checklist](https://github.com/fetijashari/permission_forge/blob/main/docs/migration-guide.md#upgrading-to-015):
