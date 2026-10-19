@@ -2237,6 +2237,12 @@ read a masked model before sign-in).
   <!-- pin: test/permission_forge/api/blank_label_api_test.rb#a blank label is stored as the name on PATCH, for a field row and an action row alike -->
   <!-- pin: test/permission_forge/api/blank_label_api_test.rb#a blank label is stored as the name on POST, for a field row and an action row alike -->
   <!-- pin: test/permission_forge/html/editing_flows_test.rb#an action label an admin blanks is stored as the name, on create and on edit -->
+- **Rails 8.2: an alias of an attribute the query did not load raises `ActiveModel::MissingAttributeError`, as plain
+  Rails does.** Rails 8.2 reads an alias with `_read_attribute!`, and its `_read_attribute` no longer takes the block
+  that raised for an attribute not loaded (`select(:id)`), so the alias reader `MaskedAttributes` defines returned `nil`
+  there. It uses `_read_attribute!` where Rails has it, and the block form on 7.1–8.1 (the Rails-internals canary checks
+  both).
+  <!-- pin: test/permission_forge/concerns/masked_attribute_aliases_test.rb#that parent and its other subclasses answer as if the concern were nowhere -->
 ### Documentation
 
 - [Migration guide](docs/migration-guide.md#upgrading-to-015): "Upgrading to 0.15" — run `rake

@@ -63,11 +63,19 @@ module PermissionForge
             accessors.redefine_method(:"#{name}=", &writer(klass, name, declared))
           end
 
+          # The unmasked read is the one Rails' own alias reader makes: on
+          # Rails 8.2 `_read_attribute!` (it raises MissingAttributeError for
+          # an attribute the query did not load; `_read_attribute` takes no
+          # block there), before it `_read_attribute` with the block that
+          # raises. Which one is decided once, when the accessor is defined.
           def self.reader(klass, name, declared)
+            raising = klass.method_defined?(:_read_attribute!) || klass.private_method_defined?(:_read_attribute!)
             proc do
               target = klass.attribute_aliases.fetch(name, declared)
               if is_a?(MaskedAttributes) && pf_masked_reader?(target)
                 read_attribute(target) { |missing| missing_attribute(missing, caller) }
+              elsif raising
+                _read_attribute!(target)
               else
                 _read_attribute(target) { |missing| missing_attribute(missing, caller) }
               end

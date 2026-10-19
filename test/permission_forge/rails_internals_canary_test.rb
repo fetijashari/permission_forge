@@ -79,7 +79,7 @@ module PermissionForge
       generated_attribute_methods: 'send(:generated_attribute_methods)',
       attribute_methods_lock: 'owner.const_defined?(:LOCK)',
       subclass_attribute_methods: 'drop_generated_accessors(klass, masked_attribute_module)',
-      read_attribute_internal: /(?<!\w)_read_attribute\(/,
+      read_attribute_internal: Regexp.union(/(?<!\w)_read_attribute\(/, '_read_attribute!(target)'),
       write_attribute_internal: /(?<!\w)_write_attribute\(/,
       missing_attribute: /(?<!\w)missing_attribute\(/,
       dangerous_attribute_methods: 'AttributeMethods.dangerous_attribute_methods',
@@ -143,7 +143,7 @@ module PermissionForge
       generated_attribute_methods: 'adapt MaskedAttributes.drop_generated_accessors and AliasAccess.accessor_module',
       attribute_methods_lock: 'adapt MaskedAttributes.with_attribute_methods_lock',
       subclass_attribute_methods: 'adapt MaskedAttributes.drop_generated_accessors',
-      read_attribute_internal: 'adapt AliasAccess::AttributeAccessors.reader',
+      read_attribute_internal: 'adapt AliasAccess::AttributeAccessors.reader (it uses _read_attribute! where Rails has it, else the block form)',
       write_attribute_internal: 'adapt AliasAccess::AttributeAccessors.writer',
       missing_attribute: 'adapt the masked getters and alias readers (they call it as Rails\' generated getters do)',
       dangerous_attribute_methods: 'adapt AliasAccess::TargetMethodAccessors::OwnMethods',
@@ -685,20 +685,34 @@ module PermissionForge
       )
     end
 
+    # Rails 8.2 reads an alias with `_read_attribute!` (raising for an
+    # attribute not loaded) and `_read_attribute` takes no block there;
+    # before, `_read_attribute(name) { |missing| }`. The gem uses whichever
+    # the running Rails has (AliasAccess::AttributeAccessors.reader).
     canary_test :read_attribute_internal,
-                '_read_attribute(name) { |missing| }: the stored value past any reader, the block for an attribute not loaded' do
+                '_read_attribute! / _read_attribute(name) { |missing| }: the stored value past any reader, ' \
+                'MissingAttributeError for an attribute not loaded' do
       model = canary_model { def email = 'own reader' }
       record = model.new(email: 'stored')
+      partial = model.instantiate('id' => 1)
 
       assert_equal 'stored', record._read_attribute('email'), canary(
         :read_attribute_internal, '_read_attribute goes through the model\'s reader or is gone',
         'AliasAccess::AttributeAccessors reads an alias\'s target with it, as Rails\' own alias reader does: use what Rails uses now'
       )
-      partial = model.instantiate('id' => 1)
-      assert_equal 'missing email', partial._read_attribute('email') { |name| "missing #{name}" }, canary(
-        :read_attribute_internal, '_read_attribute does not yield the name of an attribute that was not loaded',
-        'the alias reader must raise MissingAttributeError for select(:id), as plain Rails does'
-      )
+      if model.method_defined?(:_read_attribute!) || model.private_method_defined?(:_read_attribute!)
+        assert_equal 'stored', record.send(:_read_attribute!, 'email'), canary(
+          :read_attribute_internal, '_read_attribute! goes through the model\'s reader', 'use what Rails\' alias reader uses now'
+        )
+        message = canary(:read_attribute_internal, '_read_attribute! does not raise for an attribute that was not loaded',
+                         'the alias reader must raise MissingAttributeError for select(:id), as plain Rails does')
+        assert_raises(ActiveModel::MissingAttributeError, message) { partial.send(:_read_attribute!, 'email') }
+      else
+        assert_equal 'missing email', partial._read_attribute('email') { |name| "missing #{name}" }, canary(
+          :read_attribute_internal, '_read_attribute does not yield the name of an attribute that was not loaded',
+          'the alias reader must raise MissingAttributeError for select(:id), as plain Rails does'
+        )
+      end
     end
 
     canary_test :write_attribute_internal, '_write_attribute(name, value): writes past any setter and marks the attribute changed' do
