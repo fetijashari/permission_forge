@@ -122,7 +122,11 @@ module PermissionForge
       Key.new(:pf_audit_transaction_correlation, :execution, :clean,
               '[transaction, id] of the correlation id minted for the outermost open transaction'),
       Key.new(:pf_audit_runtime_once, :execution, :clean,
-              'Hash of the runtime audit events published once per request (Audit::Runtime.once?)')
+              'Hash of the runtime audit events published once per request (Audit::Runtime.once?)'),
+      Key.new(:pf_web_request, :execution, :keep,
+              'the Rack env of the web request in progress (WebRequest::Middleware, until the response is finished). ' \
+              'Execution: under :thread isolation every fiber of the request sees it. Seen elsewhere it hides more (fails closed); emptied ' \
+              'inside the request by a run completed there it would hide nothing: kept, the middleware puts it back')
     ].to_h { |key| [key.name, key] }.freeze
 
     CLEANED = KEYS.values.select { |key| key.at_run_end == :clean }.map(&:name).freeze
@@ -226,6 +230,9 @@ module PermissionForge
           previous.nil? ? store.delete(name) : store[name] = previous
         end
       end
+
+      # Where slot `name` is kept now, the fiber or the execution context (Restore compares it).
+      def owner(name) = storage(name).equal?(FiberStorage) ? Fiber.current : ActiveSupport::IsolatedExecutionState.context
 
       # Empties every slot of this fiber and execution context: tests.
       #

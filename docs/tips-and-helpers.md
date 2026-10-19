@@ -243,7 +243,7 @@ Current.reset             # Rails 8's Current: no session, so Current.user is ni
 Customer.find_by(id: 1)   # Returns the record, no rules applied
 ```
 
-This is intentional — system-level code shouldn't be blocked by user permissions. It's also configurable via `config.nil_user_strategy`: `:bypass` (default), `:deny` (returns nil), or `:raise` (raises `NotAuthorizedError`). The read-path equivalent for `FiltersResponseAttributes` is `config.response_filter_nil_user_strategy` (`:bypass` default / `:block`). Model masking follows `config.masked_attributes_nil_user_strategy` (`:bypass` default / `:hide`).
+This is intentional — system-level code shouldn't be blocked by user permissions. It's also configurable via `config.nil_user_strategy`: `:bypass` (default), `:deny` (returns nil), or `:raise` (raises `NotAuthorizedError`). The read-path equivalent for `FiltersResponseAttributes` is `config.response_filter_nil_user_strategy` (`:bypass` default / `:block`). Model masking follows `config.masked_attributes_nil_user_strategy` (`:bypass` default / `:hide_in_requests`, hidden in web requests only / `:hide`).
 
 ### 5. Multiple Permission Sets Merge
 

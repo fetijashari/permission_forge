@@ -14,7 +14,7 @@ module PermissionForge
       ADMIN_EVENTS = %w[admin.effective_access_viewed audit.viewed audit.exported admin.auth_failed api.auth_failed
                         admin.lock_refused].freeze
       ACCESS_EVENTS = %w[access.denied action.denied rule.bypassed field.access params.filtered write.masked_skipped
-                         permissions.rebuilt permissions.invalidated query.unscoped].freeze
+                         permissions.rebuilt permissions.invalidated query.unscoped field.unmasked_without_user].freeze
 
       test 'every event of the first release is registered under its category' do
         { 'change' => CHANGE_EVENTS, 'system' => SYSTEM_EVENTS, 'admin' => ADMIN_EVENTS, 'access' => ACCESS_EVENTS }
@@ -40,6 +40,7 @@ module PermissionForge
         assert_equal :denied, EventCatalog.fetch('access.denied').runtime_group
         assert_equal :denied, EventCatalog.fetch('action.denied').runtime_group
         assert_equal :bypass, EventCatalog.fetch('rule.bypassed').runtime_group
+        assert_equal :bypass, EventCatalog.fetch('field.unmasked_without_user').runtime_group
         assert_equal :field_read, EventCatalog.fetch('field.access').runtime_group
         assert_equal :cache, EventCatalog.fetch('permissions.rebuilt').runtime_group
       end

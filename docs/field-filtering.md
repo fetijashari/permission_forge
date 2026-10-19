@@ -351,7 +351,7 @@ Related fail-closed behavior (v0.10.0+):
 
 - An authenticated user with **no configured access to the resource at all** no longer receives the raw attributes — every field is routed through `unconfigured_field_strategy`.
 - `user.masked_field?` reports unconfigured fields as **masked** under `:block` / `:mask_all` instead of defaulting to "not masked".
-- The no-current-user case is controlled separately by `config.response_filter_nil_user_strategy`: `:bypass` (default) returns attributes unfiltered for system/console contexts, `:block` returns `{}`. Model masking has its own setting, `config.masked_attributes_nil_user_strategy` (`:bypass` default / `:hide`; the user model is exempt).
+- The no-current-user case is controlled separately by `config.response_filter_nil_user_strategy`: `:bypass` (default) returns attributes unfiltered for system/console contexts, `:block` returns `{}`. Model masking has its own setting, `config.masked_attributes_nil_user_strategy` (`:bypass` default / `:hide_in_requests`, hidden in web requests only / `:hide`; the user model is exempt).
 
 ## Audit Logging Hook (v0.5.0+)
 

@@ -297,10 +297,14 @@ module PermissionForge
         assert_not_includes codes, :masked_nil_user_bypass
       end
 
-      test 'CS-4 the generated initializer offers :hide, commented, with the trade-off; the admin lists the setting' do
+      test 'CS-4 the generated initializer sets :hide_in_requests and names :hide with the trade-off; the admin lists the setting' do
         template = render_install_template('initializer.rb.tt')
-        assert_includes template, '# config.masked_attributes_nil_user_strategy = :hide'
-        assert_match(/jobs?.*mailers?|mailers?.*jobs?/i, template[template.index('masked_attributes_nil_user_strategy') - 900, 1200])
+        assert_match(/^  config\.masked_attributes_nil_user_strategy = :hide_in_requests$/, template)
+        section = template[template.index('# Masked attributes with nobody signed in'), 700]
+        assert_match(/:hide hides in jobs too/, section)
+        assert_match(/web request with nobody signed in/, section)
+        assert_match(/deliver_now/, section)
+        assert_match(/sign a system user in/, section)
 
         PermissionForge.configuration.masked_attributes_nil_user_strategy = :hide
         row = PermissionForge::Admin::SettingsCatalog.new.row(:masked_attributes_nil_user_strategy)
@@ -386,7 +390,7 @@ module PermissionForge
       # Q8: + read_attribute_for_validation and run_validations! (validators read stored values).
       RAILS_OVERRIDES = %w[read_attribute attributes serializable_hash attribute_names_for_serialization
                            read_attribute_for_serialization read_attribute_for_validation run_validations!
-                           attribute_for_inspect pretty_print read_store_attribute write_store_attribute].freeze
+                           attribute_for_inspect pretty_print read_store_attribute write_store_attribute reload].freeze
       RAILS_CLASS_OVERRIDES = %w[alias_attribute define_attribute_methods].freeze
 
       def masking_modules(ancestors)

@@ -119,9 +119,9 @@ module PermissionForge
       association_join_checks: Regexp.union('._reflect_on_association(', 'reflection.check_validity!', 'reflection.check_eager_loadable!',
                                             'reflection.chain.any?', 'link.through_reflection?', 'link.source_reflection'),
       preloader: 'ActiveRecord::Associations::Preloader.new(records:',
-      sandbox: 'application.sandbox?',
-      generator_commands: 'Rails::Command::GenerateCommand',
+      sandbox: 'application.sandbox?', generator_commands: 'Rails::Command::GenerateCommand',
       journey_route: Regexp.union('@route.path.spec', '@route.verb', '@route.defaults', '@route.internal'),
+      path_parameters_key: 'Http::Parameters::PARAMETERS_KEY',
       association_target: Regexp.union('association.target.sort_by!', 'association(:user).target', 'return association.target if'),
       host_translation_default: Regexp.union('human_attribute_name(name, default: MISSING)',
                                              'model_name.human(count: count, default: FieldLabel::MISSING)'),
@@ -190,7 +190,7 @@ module PermissionForge
       preloader: 'adapt PermissionHashBuilder#preload',
       sandbox: 'adapt OpenTransaction.sandbox?',
       generator_commands: 'adapt BootChecks.generator_running? (GENERATOR_COMMANDS: what `bin/rails generate` loads before it boots)',
-      journey_route: 'adapt Admin::ControllerCatalog::RoutedAction',
+      journey_route: 'adapt Admin::ControllerCatalog::RoutedAction', path_parameters_key: 'adapt WebRequest.endpoint',
       association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)',
       host_translation_default: 'adapt Admin::FieldLabel.host_translation and Admin::ModelLabel.host_translation (how a host ' \
                                 'translation is told from Rails\' English fallback: the `default:` option is answered when no key ' \
@@ -1565,6 +1565,28 @@ module PermissionForge
                       'Admin::ControllerCatalog::RoutedAction reads Journey::Route#verb ("GET|POST"), #path.spec ' \
                       '("…(.:format)"), #defaults and #internal (all :nodoc:): adapt it, or the admin lists no (or wrong) host actions'
                     )
+    end
+
+    canary_test :path_parameters_key,
+                'Http::Parameters::PARAMETERS_KEY: the env key the router fills with what it matched (path_parameters)' do
+      seen = nil
+      routes = ActionDispatch::Routing::RouteSet.new
+      routes.draw do
+        get 'pf_canary/:id', to: lambda { |env|
+          seen = [env[ActionDispatch::Http::Parameters::PARAMETERS_KEY], ActionDispatch::Request.new(env).path_parameters]
+          [200, {}, []]
+        }, defaults: { controller: 'pf_canary', action: 'show' }
+      end
+      env = Rack::MockRequest.env_for('/pf_canary/7')
+      before = env.key?(ActionDispatch::Http::Parameters::PARAMETERS_KEY)
+      routes.call(env)
+
+      expected = { controller: 'pf_canary', action: 'show', id: '7' }
+      assert !before && seen&.first == expected && seen.last == expected, canary(
+        :path_parameters_key, "the router left #{seen.inspect} under the key",
+        'WebRequest.endpoint reads the matched controller and action from env[PARAMETERS_KEY] (Request#path_parameters ' \
+        'would write {} into a request not routed yet): read them where this Rails keeps them'
+      )
     end
 
     # In a child process: loading the generate command here would make every

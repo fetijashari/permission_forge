@@ -27,7 +27,10 @@ module PermissionForge
     #
     # With no current user every value is returned as stored, unless
     # config.masked_attributes_nil_user_strategy = :hide, which hides every
-    # guarded attribute instead (the primary key and the raw paths excepted).
+    # guarded attribute instead (the primary key and the raw paths excepted),
+    # or :hide_in_requests, which does so inside a web request only
+    # (PermissionForge::WebRequest). Under :bypass a value returned as stored
+    # inside a web request is recorded (field.unmasked_without_user).
     #
     # @example Include in a model
     #   class Customer < ApplicationRecord
@@ -243,8 +246,7 @@ module PermissionForge
           masked_attributes_applied: applied_in_chain?(klass),
           primary_key: klass.primary_key,
           is_primary_key: klass.primary_key.to_s == attr_name.to_s,
-          current_user_present: !user.nil?,
-          masked_attributes_nil_user_strategy: config.masked_attributes_nil_user_strategy, user_model_exempt: config.user_model_class?(klass),
+          current_user_present: !user.nil?, **explain_without_user(config, klass),
           user_responds_to_field_permissions: user.respond_to?(:field_permissions),
           resource_in_permissions_hash: entries?(user, chain),
           field_configured: !field.nil?,
@@ -255,6 +257,13 @@ module PermissionForge
           returned_value: record.public_send(attr_name)
         }
       end
+
+      # What explain reports about reads with nobody signed in.
+      def self.explain_without_user(config, klass)
+        { masked_attributes_nil_user_strategy: config.masked_attributes_nil_user_strategy,
+          user_model_exempt: config.user_model_class?(klass), in_web_request: PermissionForge::WebRequest.active? }
+      end
+      private_class_method :explain_without_user
 
       # Whether the user's hash has a resource entry along the chain.
       def self.entries?(user, chain)
@@ -317,12 +326,13 @@ module PermissionForge
       private_class_method :decide
 
       # What the guard does with no user (config.masked_attributes_nil_user_strategy;
-      # the user model is exempt from :hide).
+      # the user model is exempt from :hide and :hide_in_requests).
       def self.without_user_decision(klass)
         config = PermissionForge.configuration
-        return :no_user_bypassed unless config.hide_masked_attributes_without_user?
+        return :no_user_hidden if config.hide_masked_attributes_without_user_for?(klass)
+        return :no_user_user_model_exempt if config.hide_masked_attributes_without_user_in_requests? && config.user_model_class?(klass)
 
-        config.user_model_class?(klass) ? :no_user_user_model_exempt : :no_user_hidden
+        :no_user_bypassed
       end
       private_class_method :without_user_decision
 
@@ -341,6 +351,13 @@ module PermissionForge
       end
       private_class_method :print_explain_table
 
+      # Forgets the attributes read as hidden with nobody signed in
+      # (pf_hidden_without_user_reads): the record holds fresh values.
+      def reload(*)
+        pf_forget_hidden_without_user_reads
+        super
+      end
+
       # Reads an attribute through the field permissions of the current user.
       # @param attr_name [String, Symbol]
       def read_attribute(attr_name, &)
@@ -352,8 +369,12 @@ module PermissionForge
         attr_name = name = pf_alias_end(target) if target
         return raw if pf_read_as_stored?(name)
 
-        include_field, value = pf_guard(attr_name, raw)
-        value = PermissionForge.configuration.hidden_attribute_value unless include_field
+        user = pf_guarded_user
+        include_field, value = pf_guard(attr_name, raw, user)
+        unless include_field
+          value = PermissionForge.configuration.hidden_attribute_value
+          pf_note_hidden_without_user(name, raw) unless user
+        end
         # A returned value that differs from the raw column value was masked or
         # hidden; remember the exact sentinel so a write-back of it can be refused.
         pf_record_masked_read(name, value) unless include_field && value == raw
@@ -362,13 +383,15 @@ module PermissionForge
 
       # The user is resolved once for the whole hash. With no user every
       # value is returned as stored (or hidden, under
-      # config.masked_attributes_nil_user_strategy = :hide); the decisions
-      # (bypassed) are still published, as for a getter or as_json, but only
-      # when someone listens.
+      # config.masked_attributes_nil_user_strategy = :hide, and :hide_in_requests
+      # inside a web request); the decisions (bypassed) are still published,
+      # as for a getter or as_json, but only when someone listens, and each
+      # attribute returned as stored inside a web request is recorded
+      # (field.unmasked_without_user).
       def attributes
         raw = super
         user = pf_guarded_user
-        return raw unless user || pf_hide_without_user? || PermissionForge::Audit::FieldAccess::GATE.open?
+        return raw unless user || pf_guard_without_user? || PermissionForge::Audit::FieldAccess::GATE.open?
 
         PermissionForge::Audit::FieldAccess.read(self, self.class.name, record: self) do
           pf_guard_attributes_hash(raw, user)
@@ -477,12 +500,23 @@ module PermissionForge
         name == self.class.primary_key || pf_raw_store_column?(name) || name == pf_validation_read
       end
 
-      # config.masked_attributes_nil_user_strategy = :hide — with no user
-      # every guarded attribute is hidden (AttributeAccessGuard#without_user),
-      # except on the user model, which sign-in reads before anyone is
-      # signed in.
+      # config.masked_attributes_nil_user_strategy = :hide (and
+      # :hide_in_requests inside a web request) — with no user every guarded
+      # attribute is hidden (AttributeAccessGuard#without_user), except on
+      # the user model, which sign-in reads before anyone is signed in.
       def pf_hide_without_user?
         PermissionForge.configuration.hide_masked_attributes_without_user_for?(self.class)
+      end
+
+      # Whether a read with no user goes through the guard attribute by
+      # attribute: it hides them, or records them (inside a web request
+      # under :bypass, while there is something left to record).
+      def pf_guard_without_user?
+        case PermissionForge.configuration.masked_attributes_without_user_for(self.class)
+        when :hide then true
+        when :record then PermissionForge::Audit::UnmaskedWithoutUser.pending?(self.class)
+        else false
+        end
       end
 
       # Every guarded read of this record is one field.access read
@@ -528,12 +562,45 @@ module PermissionForge
         pf_masked_reads[attr_name.to_s] = sentinel
       end
 
+      # The attributes this instance read as hidden because nobody was signed
+      # in (masked_attributes_nil_user_strategy :hide, or :hide_in_requests in a
+      # web request) while they held a value. Whatever is written to one of
+      # them afterwards was worked out from the hidden value, or replaces a
+      # value nobody could see: pf_skip_masked_write? treats it as a
+      # write-back. Only something real counts: a value the record holds in
+      # memory, stored or assigned (an empty column, or an attribute of a new
+      # record nobody filled, hides nothing: a default or a fill-if-blank is
+      # written; a value submitted on a new record is kept from a normalizer
+      # that reads it). The value is the one just read, not
+      # attribute_in_database, which would build the record's mutation
+      # tracker on every hidden read. A debugging read (inspect) does not
+      # count. Forgotten on reload only: a save does not make the hidden read
+      # visible, so a value derived from it before the save is still refused
+      # after it.
+      def pf_hidden_without_user_reads
+        @pf_hidden_without_user_reads ||= Set.new
+      end
+
+      def pf_note_hidden_without_user(attr_name, value)
+        return if value.nil? || PermissionForge::ExecutionState[INSPECT_KEY]
+
+        pf_hidden_without_user_reads << attr_name.to_s
+      end
+
+      def pf_forget_hidden_without_user_reads
+        @pf_hidden_without_user_reads = nil
+      end
+
       # True when the guard should suppress this write because `value` is a masked/
       # hidden sentinel being written back over real data. Honors
       # config.masked_write_protection. Two detections:
       #   1. Ledger — this instance handed out that exact sentinel earlier (covers
       #      same-instance read-modify-write, e.g. a before_save callback).
-      #   2. Stateless — `value` equals what the mask would produce for the value
+      #   2. Hidden without a user — this instance read the attribute as hidden
+      #      because nobody was signed in: any value written to it was derived
+      #      from the hidden one (`self.name = name.to_s.strip` stores "") or
+      #      replaces a value nobody could see.
+      #   3. Stateless — `value` equals what the mask would produce for the value
       #      CURRENTLY persisted in the DB. This survives a request boundary: a form
       #      rendered "********" and submitted back onto a freshly-loaded record has
       #      no ledger entry, but still matches the persisted value's mask.
@@ -541,19 +608,29 @@ module PermissionForge
         protection = PermissionForge.configuration.masked_write_protection
         return false if protection == :off
 
-        ledger_hit = pf_masked_reads.key?(attr_name.to_s) && pf_masked_reads[attr_name.to_s] == value
-        return false unless ledger_hit || pf_matches_persisted_sentinel?(attr_name, value)
+        detected_by = pf_masked_write_detection(attr_name.to_s, value)
+        return false unless detected_by
 
-        pf_masked_write_refused(attr_name, protection, ledger_hit)
+        pf_masked_write_refused(attr_name, protection, detected_by)
+        PermissionForge::Audit::UnmaskedWithoutUser.write_refused(self.class, attr_name, protection) if detected_by == 'hidden_without_user'
         raise MaskedWriteError, attr_name if protection == :raise
 
         true # :skip — preserve the stored value by not calling super
       end
 
+      # How a write was recognised as a write-back (write.masked_skipped
+      # `detected_by`), nil for a write that is not one.
+      def pf_masked_write_detection(name, value)
+        return 'ledger' if pf_masked_reads.key?(name) && pf_masked_reads[name] == value
+        return 'hidden_without_user' if pf_hidden_without_user_reads.include?(name)
+
+        'persisted_value' if pf_matches_persisted_sentinel?(name, value)
+      end
+
       # write.masked_skipped: which attribute, how it was refused (:skip
       # keeps the stored value, :raise raised) and how the sentinel was
       # recognised. Never the value.
-      def pf_masked_write_refused(attr_name, protection, ledger_hit)
+      def pf_masked_write_refused(attr_name, protection, detected_by)
         event = 'write.masked_skipped'
         return unless PermissionForge::Audit.instrument?(event)
 
@@ -561,7 +638,7 @@ module PermissionForge
         PermissionForge::Audit.instrument(event) do
           { record: self, subject_user_id: PermissionForge::Audit::Runtime.user_id(user),
             data: { 'model' => self.class.name, 'attribute' => attr_name.to_s, 'protection' => protection.to_s,
-                    'detected_by' => ledger_hit ? 'ledger' : 'persisted_value' },
+                    'detected_by' => detected_by },
             objects: { user: user, record: self } }
         end
       end
@@ -599,6 +676,8 @@ module PermissionForge
 
           include_field, masked = pf_guard(key, value, user)
           next [key, masked] if include_field
+
+          pf_note_hidden_without_user(key, value) unless user
           next if omit_hidden
 
           [key, hidden_value]

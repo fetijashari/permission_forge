@@ -28,7 +28,8 @@ module PermissionForge
     class AttentionParityTest < ActionDispatch::IntegrationTest
       include RuleProblemFixtures
 
-      CHECKS = Dir[File.expand_path('../../../lib/permission_forge/services/security_audit/*_check.rb', __dir__)].freeze
+      # Every file of the audit, the modules a check includes (MaskingWithoutUser) with the checks.
+      CHECKS = Dir[File.expand_path('../../../lib/permission_forge/services/security_audit/*.rb', __dir__)].freeze
       # The severity argument may be a call of its own (`weight(findings, :high, :medium)`): one level of parentheses.
       FINDING_CALL = /\bfinding\(\s*((?:[^,()]|\([^()]*\))+?),\s*:(\w+)\s*,/
       AT_LEAST_MEDIUM = /:(?:critical|high|medium)\b/

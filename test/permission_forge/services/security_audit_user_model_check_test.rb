@@ -52,6 +52,14 @@ module PermissionForge
         assert_nil finding(:user_model_unmasked_without_user, masked_attributes_nil_user_strategy: :bypass)
       end
 
+      test 'under :hide_in_requests the user model is exempt too, and the finding names the setting' do
+        create_resource(permission_set: create_permission_set(name: 'Staff'), name: 'Customer')
+        found = finding(:user_model_unmasked_without_user, masked_attributes_nil_user_strategy: :hide_in_requests)
+
+        assert_equal :low, found.severity
+        assert_match 'masked_attributes_nil_user_strategy is :hide_in_requests', found.detail
+      end
+
       test 'a user_class that names no class reports nothing' do
         assert_empty findings(user_class: 'NoSuchUserModel', nil_user_strategy: :deny, masked_attributes_nil_user_strategy: :hide)
       end

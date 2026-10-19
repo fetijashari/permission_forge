@@ -164,6 +164,7 @@ module PermissionForge
         end
         Context.reset!
         Runtime.reset!
+        UnmaskedWithoutUser.reset!
       end
 
       # Installs the notification subscribers and the executor hook of the
