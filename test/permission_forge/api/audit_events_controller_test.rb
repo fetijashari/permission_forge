@@ -7,6 +7,7 @@ module PermissionForge
   module Api
     class AuditEventsControllerTest < ActionDispatch::IntegrationTest
       include PermissionForge::Tenancy::TenancyTestHelper
+      include HiddenAuditTable
 
       BASE = '/permission_forge/api/audit_events'
 
@@ -475,21 +476,6 @@ module PermissionForge
         get BASE
 
         assert_response :forbidden
-      end
-
-      def without_audit_table
-        connection = PermissionForge::AuditEvent.connection
-        table = PermissionForge::AuditEvent.table_name
-        connection.rename_table(table, 'audit_events_hidden')
-        connection.schema_cache.clear!
-        PermissionForge::AuditEvent.reset_column_information
-        PermissionForge::Audit.reset!
-        yield
-      ensure
-        connection.rename_table('audit_events_hidden', table)
-        connection.schema_cache.clear!
-        PermissionForge::AuditEvent.reset_column_information
-        PermissionForge::Audit.reset!
       end
 
       test 'without the audit table the endpoints answer 503 in the error envelope, never 500' do

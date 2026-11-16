@@ -6,26 +6,11 @@ module PermissionForge
     # the audit table is not there (an unrun upgrade migration, or
     # audit_events = false on an install that never had it), never a 500.
     class AuditScreensWithoutTableTest < AdminTestCase
+      include HiddenAuditTable
+
       setup do
         admin = create_user(name: 'Ada Admin')
         PermissionForge.configuration.current_user_resolver = -> { admin }
-        @table = PermissionForge::AuditEvent.table_name
-      end
-
-      def without_audit_table
-        connection = PermissionForge::AuditEvent.connection
-        connection.rename_table(@table, 'audit_events_hidden')
-        forget_table
-        yield
-      ensure
-        connection.rename_table('audit_events_hidden', @table)
-        forget_table
-      end
-
-      def forget_table
-        PermissionForge::AuditEvent.connection.schema_cache.clear!
-        PermissionForge::AuditEvent.reset_column_information
-        PermissionForge::Audit.reset!
       end
 
       def assert_missing_table_note
@@ -81,6 +66,31 @@ module PermissionForge
 
           get pf("/permission_sets/#{@set.id}")
           assert_response :success
+        end
+      end
+
+      # A view of the log that showed a notice is not recorded; what showed
+      # its data is, so audit_events = true refuses it without the table.
+      test 'with audit_events true an export or an effective access view is refused, never unrecorded' do
+        PermissionForge.configuration.audit_events = true
+        without_audit_table do
+          ['/audit/holdings.csv', "/people/#{@ana.id}.csv?tab=audit", "/permission_sets/#{@set.id}.csv?tab=audit",
+           "/people/#{@ana.id}?tab=effective"].each do |path|
+            assert_raises(PermissionForge::Audit::EventNotRecordedError, path) { get pf(path) }
+          end
+        end
+      end
+
+      test 'with the table present a view of the log, an export and an effective access view are recorded' do
+        assert_difference -> { PermissionForge::AuditEvent.unscoped.where(event: 'audit.viewed').count }, 2 do
+          get pf('/audit')
+          get pf("/permission_sets/#{@set.id}?tab=audit")
+        end
+        assert_difference -> { PermissionForge::AuditEvent.unscoped.where(event: 'audit.exported').count }, 1 do
+          get pf('/audit/holdings.csv')
+        end
+        assert_difference -> { PermissionForge::AuditEvent.unscoped.where(event: 'admin.effective_access_viewed').count }, 1 do
+          get pf("/people/#{@ana.id}?tab=effective")
         end
       end
 

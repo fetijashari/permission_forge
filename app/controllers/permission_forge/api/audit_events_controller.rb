@@ -28,8 +28,7 @@ module PermissionForge
         return if PermissionForge::Admin::AuditLog.table?
 
         key = PermissionForge::Admin::AuditLog.recording_problem == :off ? 'audit_unavailable_off' : 'audit_unavailable_missing'
-        render json: { error: { status: 503, messages: I18n.t("permission_forge.api.errors.#{key}") } },
-               status: :service_unavailable
+        render_unavailable(I18n.t("permission_forge.api.errors.#{key}"))
       end
 
       def authorize_audit_log!

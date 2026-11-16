@@ -16,6 +16,7 @@ module PermissionForge
     # editing this file; the fixtures at the end prove each check bites.
     class EnvelopeSchemaTest < ActionDispatch::IntegrationTest
       include PermissionForge::Tenancy::TenancyTestHelper
+      include HiddenAuditTable
 
       ROOT = '/permission_forge'
       UNKNOWN = '00000000-0000-4000-8000-000000000000'
@@ -91,7 +92,8 @@ module PermissionForge
         ['400 malformed multipart body', 400, :takes_a_body?, :malformed_multipart_body!],
         ['422 unreadable input', 422, :reads_input?, :unreadable_input!],
         ['403 refused by the authorization lambdas', 403, :authorized?, :refuse_everything!],
-        ['403 locked', 403, :locked_out?, :lock!]
+        ['403 locked', 403, :locked_out?, :lock!],
+        ['503 no audit table', 503, :reads_audit_log?, :no_audit_table!]
       ].freeze
 
       # [verb, path spec, "controller#action"] for every API route, one entry per verb.
@@ -239,7 +241,7 @@ module PermissionForge
                      Schema.error_problems(403, Schema.error_body(403, { 'a' => ['b'] }))
         assert_equal ['$.error.status: expected 404, got 403'], Schema.error_problems(404, Schema.error_body(403, 'x'))
         assert_equal ['400: no body, and BODILESS does not declare one'], Schema.error_problems(400, nil)
-        assert_equal ['500: not an error status of the schema (400, 401, 403, 404, 422)'], Schema.error_problems(500, {})
+        assert_equal ['500: not an error status of the schema (400, 401, 403, 404, 422, 503)'], Schema.error_problems(500, {})
         assert_empty Schema.error_problems(401, nil)
       end
 
@@ -259,6 +261,7 @@ module PermissionForge
       end
 
       def reset_scenario!
+        restore_audit_table!
         [@set, @group].each { |record| record.update!(is_editable: true) if record.class.exists?(record.id) && !record.reload.is_editable }
         ConfigurationSnapshot.restore!
         base_configuration!
@@ -297,6 +300,7 @@ module PermissionForge
       def mutating?(verb, key) = MUTATING.include?(verb) && key != 'unmatched_routes#show'
       def authorized?(verb, _spec, key) = mutating?(verb, key) || %w[dashboard#show audit_events#index audit_events#show].include?(key)
       def locked_out?(verb, _spec, key) = mutating?(verb, key) && !LOCK_ALLOWS.key?(key)
+      def reads_audit_log?(_verb, _spec, key) = key.start_with?('audit_events#')
 
       def refuse_authentication!(*) = PermissionForge.configuration.api_auth = ->(_) { false }
       def unset_authentication!(*) = PermissionForge.configuration.api_auth = nil
@@ -325,6 +329,8 @@ module PermissionForge
         config.api_stats_authorization = ->(_) { false }
         config.audit_log_authorization = ->(_) { false }
       end
+
+      def no_audit_table!(*) = hide_audit_table!
 
       def lock!(*)
         [@set, @group].each { |record| record.update!(is_editable: false) }

@@ -97,12 +97,9 @@ module PermissionForge
       end
 
       # Templates (relative to app/views/permission_forge, layouts by their
-      # path under app/views) the walk does not render, and why. Every other
-      # template is on a walked screen.
-      NOT_WALKED = {
-        'audit_events/unavailable.html.erb' => 'shown only while the audit table does not exist (audit_screens_without_table_test)',
-        'shared/_audit_unavailable.html.erb' => 'shown only while the audit table does not exist (audit_screens_without_table_test)'
-      }.freeze
+      # path under app/views) the walk does not render, and why. None today:
+      # every template is on a walked screen.
+      NOT_WALKED = {}.freeze
       VIEWS_ROOT = File.join(ROOT_DIR, 'app/views').freeze
       RENDER_EVENTS = /\Arender_(template|partial|collection|layout)\.action_view\z/
 

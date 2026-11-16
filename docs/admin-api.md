@@ -756,6 +756,8 @@ DELETE /permissions/api/permission_set_groups/:group_uuid/users/:uuid
 
 The [audit log](audit-log.md) over the API. `GET` only: no route writes, updates or deletes an event. It needs `api_enabled`, passes `api_auth`, and then `config.audit_log_authorization`: when it is set, only an exact `true` allows (anything else, or an error, is **403** and an `api.auth_failed` event with reason `audit_log_not_authorized`); when it is not set (the default), anyone who passes `api_auth` can read the whole log. Each call that returns 2xx is recorded as `audit.viewed` (`scope: api`).
 
+While the audit table does not exist (the upgrade migration has not run), both endpoints answer **503** in the error envelope, and `messages` says why: the table is missing (run `bin/rails generate permission_forge:upgrade` and migrate), or audit events are turned off and there is no table. The check is made on every request.
+
 ```bash fragment
 # A page of events, newest first
 GET /permissions/api/audit_events?event=assignment.revoked&from=2026-07-01&to=2026-09-30&page=1&per_page=100
