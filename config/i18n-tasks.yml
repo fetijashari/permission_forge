@@ -10,6 +10,10 @@ data:
 
 # All keys must be under the permission_forge namespace
 search:
+  # Count a key built at runtime as used: t(".filters.#{filter}") uses every
+  # key under filters. i18n-tasks 1.2 reads this for `unused` (it defaults to
+  # true); 1.1 always matched such keys there.
+  strict: false
   paths:
     - app/
     - lib/
