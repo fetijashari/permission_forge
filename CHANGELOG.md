@@ -6,6 +6,26 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-16
+
+A patch release with no upgrade step. Installs that have not run the audit events migration (`audit_events = :auto`,
+or `false`) no longer get a 500 from the admin's audit screens.
+
+### Fixed
+
+- **The audit screens no longer fail with a 500 while the audit table does not exist.** `config.audit_events = :auto`
+  promises that an unrun migration breaks nothing, but the Audit log page, an event page, the log's CSV and JSON exports,
+  the audit tabs of a person and of a Permission Set and `GET /api/audit_events` queried the table anyway
+  (`PG::UndefinedTable`). They now check `Admin::AuditLog.table?`, the check the Home card and the security audit already
+  use, on every request, so they recover as soon as the migration has run. The pages render a notice (run
+  `bin/rails generate permission_forge:upgrade` and migrate, or "audit events are turned off" for `false`); the exports
+  answer 503, and the API answers 503 in its usual error envelope. With `audit_events = true` the screens explain too
+  rather than raise: that setting makes a missing table fail changes loudly, and a screen that only reads has nothing to
+  fail, so a notice is more useful than a 500 (a view of the log is not recorded while there is no table).
+  <!-- pin: test/permission_forge/html/audit_screens_without_table_test.rb#the log page and one event show the upgrade notice instead of failing -->
+  <!-- pin: test/permission_forge/html/audit_screens_without_table_test.rb#with audit_events true the screens still render with the failing notice -->
+  <!-- pin: test/permission_forge/api/audit_events_controller_test.rb#without the audit table the endpoints answer 503 in the error envelope, never 500 -->
+
 ## [0.15.0] - 2026-10-19
 
 Upgrading from 0.14 is the three steps of the
