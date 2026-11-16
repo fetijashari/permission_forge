@@ -453,8 +453,59 @@
 .pf-root .pf-table__row--link a.pf-cell-person, .pf-root .pf-table__row--link a.pf-table__link { color: inherit; text-decoration: none; }
 .pf-table__row--link a.pf-cell-person::after, .pf-table__row--link a.pf-table__link::after { content: ''; position: absolute; inset: 0; }
 .pf-table--people .pf-table__head, .pf-table--people .pf-table__row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) minmax(110px, .8fr); }
-.pf-table--sets { min-width: 560px; }
-.pf-table--sets .pf-table__head, .pf-table--sets .pf-table__row { grid-template-columns: minmax(0, 2fr) 56px 76px minmax(0, .8fr) auto; }
+.pf-table--sets { min-width: 980px; }
+.pf-table--sets .pf-table__row { align-items: start; }
+.pf-table--sets .pf-table__head, .pf-table--sets .pf-table__row { grid-template-columns: minmax(0, 2fr) 96px 172px minmax(0, 1fr) 72px 76px minmax(0, .8fr) auto; }
+/* The Permission Sets list: each set's counts (Admin::SetSummaries) and the
+   overview a row opens in place (Admin::SetOverview, data-pf-expand). A bar is
+   drawn in tenths: the admin's CSP allows no inline style. */
+.pf-set-count { font-size: 18px; font-weight: 600; line-height: 1.1; }
+.pf-bar { display: block; height: 4px; border-radius: 2px; background: var(--pf-surface-2); overflow: hidden; }
+.pf-bar__fill { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--pf-accent); }
+.pf-access-count .pf-bar__fill { background: var(--pf-grant); }
+.pf-bar__fill.pf-bar__fill--muting { background: var(--pf-block); }
+.pf-bar__fill--1 { width: 10%; } .pf-bar__fill--2 { width: 20%; } .pf-bar__fill--3 { width: 30%; }
+.pf-bar__fill--4 { width: 40%; } .pf-bar__fill--5 { width: 50%; } .pf-bar__fill--6 { width: 60%; }
+.pf-bar__fill--7 { width: 70%; } .pf-bar__fill--8 { width: 80%; } .pf-bar__fill--9 { width: 90%; }
+.pf-bar__fill--10 { width: 100%; }
+.pf-access-profile { font-size: 13px; font-weight: 600; }
+.pf-access-profile b { font-weight: 400; }
+.pf-access-profile--full b, .pf-access-profile--read_only b, .pf-access-profile--mixed b { color: var(--pf-grant); }
+.pf-access-profile--takes_away b { color: var(--pf-block); }
+.pf-access-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pf-access-count { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--pf-text-3); white-space: nowrap; }
+.pf-access-count b { color: var(--pf-text-2); }
+.pf-narrow-link { display: flex; flex-direction: column; }
+.pf-overview-links { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.pf-table__detail { border-top: 1px dashed var(--pf-border); padding: 12px 18px 16px; min-width: 0; }
+.pf-overview { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pf-overview__families { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pf-family { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--pf-border); border-radius: var(--pf-radius-sm); background: var(--pf-surface-2); color: var(--pf-text) !important; text-decoration: none !important; font-size: 12px; }
+.pf-family:hover, .pf-family:focus-visible { border-color: var(--pf-border-strong); }
+.pf-family__name { font-family: var(--pf-mono); font-size: 12px; }
+.pf-family__count { color: var(--pf-text-3); font-variant-numeric: tabular-nums; }
+.pf-marks { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.pf-mark { font-size: 10.5px; font-weight: 600; line-height: 16px; padding: 0 5px; border-radius: var(--pf-radius-xs); white-space: nowrap; }
+.pf-mark--view-all { background: var(--pf-grant-soft); color: var(--pf-grant); }
+.pf-mark--rules { background: var(--pf-warn-soft); color: var(--pf-warn); }
+.pf-mark--ignored { border: 1px dashed var(--pf-warn-border); color: var(--pf-text-3); text-decoration: line-through; }
+.pf-mark--masked { background: var(--pf-mask-soft); color: var(--pf-mask); }
+.pf-mark--hidden { background: var(--pf-block-soft); color: var(--pf-block); }
+.pf-overview__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; }
+.pf-overview__cols { columns: 4 240px; column-gap: 24px; }
+.pf-overview__family { break-inside: avoid; margin-bottom: 14px; min-width: 0; }
+.pf-overview__family .pf-h3 { margin: 0 0 4px; font-size: 12px; }
+.pf-overview__list { margin: 0; padding: 0; list-style: none; }
+.pf-overview__res { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 1px 0; font-size: 12px; }
+.pf-overview__name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.pf-overview__name code { font-family: var(--pf-mono); font-size: 11.5px; color: var(--pf-text-2); }
+.pf-overview__res--narrowed .pf-overview__name code { color: var(--pf-text); }
+.pf-flags { display: inline-flex; gap: 2px; flex: none; }
+.pf-flag { min-width: 15px; padding: 0 2px; text-align: center; border-radius: 3px; font-family: var(--pf-mono); font-size: 10.5px; line-height: 15px; }
+.pf-flag:nth-child(5) { margin-left: 5px; }
+.pf-flag--on { background: var(--pf-grant-soft); color: var(--pf-grant); font-weight: 600; }
+.pf-flag--on.pf-flag--muting { background: var(--pf-block-soft); color: var(--pf-block); }
+.pf-flag--off { color: var(--pf-text-3); }
 .pf-table--assignments { min-width: 640px; }
 .pf-table--assignments .pf-table__head, .pf-table--assignments .pf-table__row { grid-template-columns: auto minmax(0, 1.5fr) minmax(0, 1.2fr) minmax(0, 1fr) auto; }
 .pf-table--audit { min-width: 640px; }
@@ -465,8 +516,9 @@
    `auto` or `fr` (never a fixed width): a subgrid adds its padding to them. */
 @supports (grid-template-columns: subgrid) {
   .pf-table--sets, .pf-table--assignments { display: grid; column-gap: 12px; }
-  .pf-table--sets { grid-template-columns: minmax(0, 2fr) 56px 76px minmax(0, .8fr) auto; }
+  .pf-table--sets { grid-template-columns: minmax(0, 2fr) 96px 172px minmax(0, 1fr) 72px 76px minmax(0, .8fr) auto; }
   .pf-table--assignments { grid-template-columns: auto minmax(0, 1.5fr) minmax(0, 1.2fr) minmax(0, 1fr) fit-content(40%); }
+  .pf-table--sets > .pf-table__detail { grid-column: 1 / -1; }
   .pf-table--sets > .pf-table__head, .pf-table--sets > .pf-table__row,
   .pf-table--assignments > .pf-table__head, .pf-table--assignments > .pf-table__row { grid-column: 1 / -1; grid-template-columns: subgrid; }
 }
@@ -846,3 +898,4 @@
    people <select> with long labels shrinks with it instead of pushing the form past the page. */
 .pf-reason-form { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
 .pf-reason-form .pf-reason--compact[open] { flex-basis: 100%; }
+.pf-root a[data-pf-expand][aria-busy="true"]::after { content: " …"; }

@@ -45,10 +45,10 @@ module PermissionForge
         subgrid = CSS[/@supports \(grid-template-columns: subgrid\) \{(.*?)\n\}/m, 1]
         assert subgrid, 'pf_admin.css has a subgrid block'
 
-        %w[sets assignments].each do |table|
+        { 'sets' => 8, 'assignments' => 5 }.each do |table, columns|
           template = grid_template(".pf-table--#{table}")
           assert template, ".pf-table--#{table} declares its columns on the table"
-          assert_equal 5, template.scan(/minmax\([^)]*\)|fit-content\([^)]*\)|\S+/).size
+          assert_equal columns, template.scan(/minmax\([^)]*\)|fit-content\([^)]*\)|\S+/).size
           # A subgrid adds its padding to the edge tracks: a fixed width there would squeeze them.
           edges = template.scan(/minmax\([^)]*\)|fit-content\([^)]*\)|\S+/).values_at(0, -1)
           edges.each { |track| assert_no_match(/\A\d+px\z/, track, "#{table}: edge track #{track} is fixed") }

@@ -179,9 +179,10 @@ module PermissionForge
 
     # A section heading inside a drawer or confirmation page. The page's own title is the h1 when
     # the page stands alone and an h2 inside the dialog (the page behind has the h1), so a section
-    # is one level below that.
-    def pf_section_heading(text, id: nil)
-      content_tag(pf_fragment? ? :h3 : :h2, text, class: 'pf-h3', id: id)
+    # is one level below that. A fragment loaded into the page itself (`in_page: true`: the
+    # Permission Sets list opens a set's Resources under its row) is under the page's h1: an h2.
+    def pf_section_heading(text, id: nil, in_page: false)
+      content_tag(pf_fragment? && !in_page ? :h3 : :h2, text, class: 'pf-h3', id: id)
     end
 
     # A frame that scrolls sideways when its content (a wide grid) is wider than the page: a

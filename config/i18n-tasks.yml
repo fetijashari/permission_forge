@@ -40,6 +40,7 @@ ignore_unused:
   - 'permission_forge.home.tidy_card.*'
   - 'permission_forge.people.audit_tab.kind_*'
   - 'permission_forge.permission_sets.assignments_tab.selected.*'
+  - 'permission_forge.permission_sets.summary.mark_titles.*'
   - 'permission_forge.resources.fields_tab.selected.*'
   - 'permission_forge.resources.rules_tab.filter_rule'
   - 'permission_forge.shared.savebar.*'

@@ -53,6 +53,7 @@ PermissionForge::Engine.routes.draw do
       get :switch_mode, action: :confirm_switch_mode
       patch :switch_mode
       patch :conditions
+      get :overview
     end
 
     resource :bulk_assignment, only: %i[new create] do

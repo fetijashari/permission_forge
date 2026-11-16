@@ -68,6 +68,7 @@ detectors:
       - PermissionForge::SentencesHelper
       - PermissionForge::ConditionsHelper
       - PermissionForge::SettingsHelper
+      - PermissionForge::SetSummariesHelper
       - PermissionForge::UiHelper
       - PermissionForge::Api::Pagination
       - PermissionForge::Api::ResponseRenderer
@@ -156,6 +157,7 @@ detectors:
       - PermissionForge::SentencesHelper
       - PermissionForge::ConditionsHelper
       - PermissionForge::SettingsHelper
+      - PermissionForge::SetSummariesHelper
       - PermissionForge::UiHelper
       # Sentence helpers: format a passed event, no state (same as the other helpers)
       - PermissionForge::AuditSentencesHelper
@@ -234,6 +236,7 @@ detectors:
       - PermissionForge::UiHelper#pf_modal_link
       - PermissionForge::UiHelper#pf_state_cell
       - PermissionForge::UiHelper#pf_tab
+      - PermissionForge::SetSummariesHelper#pf_overview_link
       # Row builder for the DEFINITIONS lookup table: d(key, section, type, **options)
       - PermissionForge::Admin::SettingsCatalog#self.d
       # Finding builder: severity, code, title, detail, items: — one per report field

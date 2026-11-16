@@ -10,16 +10,7 @@ module PermissionForge
     include PermissionForge::CopyRefusal
     include PermissionForge::CacheConfirmation
 
-    FILTERS = %w[all granting muting conditional off].freeze
     TABS = %w[resources assignments conditions audit].freeze
-
-    # List filter => predicate on a set ('all' and unknown filters match everything).
-    FILTER_MATCHERS = {
-      'granting' => ->(set) { !set.is_muting },
-      'muting' => lambda(&:is_muting),
-      'conditional' => lambda(&:conditional?),
-      'off' => ->(set) { !set.is_active }
-    }.freeze
 
     pf_exports %i[csv], only: :show # the audit tab
     before_action :set_permission_set, except: %i[index new create]
@@ -27,13 +18,14 @@ module PermissionForge
     before_action :reject_locked_group_move, only: %i[create review apply]
 
     def index
-      @query = params[:q].to_s.strip
-      @filter = filter_param
-      all = PermissionForge::PermissionSet.includes(:permission_set_group, :resources).order(:name).to_a
-      @total = all.size
-      @counts = filter_counts(all)
-      @permission_sets = all.select { |ps| filter_match?(ps, @filter) && query_match?(ps) }
-      @people_counts = people_counts
+      @list = PermissionForge::Admin::PermissionSetList.new(query: pf_text_param(:q), filter: pf_text_param(:filter))
+    end
+
+    # One set's Resources by model family or one by one: a page of its own,
+    # and the fragment the list opens in place under the set's row.
+    def overview
+      @overview = PermissionForge::Admin::SetOverview.new(@permission_set, view: pf_text_param(:view),
+                                                                           only: pf_text_param(:only))
     end
 
     def new
@@ -171,33 +163,6 @@ module PermissionForge
 
     def change_set
       PermissionForge::Admin::ChangeSet.new(permission_set: @permission_set, params: pf_hash_param(:pf))
-    end
-
-    # --- list -----------------------------------------------------------------
-
-    def filter_param
-      filter = params[:filter]
-      FILTERS.include?(filter) ? filter : 'all'
-    end
-
-    def filter_counts(sets)
-      FILTERS.index_with { |filter| sets.count { |ps| filter_match?(ps, filter) } }
-    end
-
-    def filter_match?(set, filter)
-      matcher = FILTER_MATCHERS[filter]
-      matcher ? matcher.call(set) : true
-    end
-
-    def query_match?(set)
-      return true if @query.empty?
-
-      needle = @query.downcase
-      [set.name, set.description].compact.any? { |v| v.downcase.include?(needle) }
-    end
-
-    def people_counts
-      PermissionForge::PermissionSetUser.active_assignments.group(:permission_set_id).count
     end
 
     # --- create / duplicate -----------------------------------------------------

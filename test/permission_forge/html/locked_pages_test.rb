@@ -50,8 +50,8 @@ module PermissionForge
         'permission_set_group_users#create' => %i[group edit], 'permission_set_group_users#destroy' => %i[group edit]
       }.freeze
       # GET pages that change nothing: not classified, never an offence.
-      READ_ONLY = %w[home#index people#index people#show permission_sets#index permission_sets#show resources#show
-                     resource_fields#show resource_actions#show permission_set_groups#index permission_set_groups#show
+      READ_ONLY = %w[home#index people#index people#show permission_sets#index permission_sets#show permission_sets#overview
+                     resources#show resource_fields#show resource_actions#show permission_set_groups#index permission_set_groups#show
                      audit_events#index audit_events#show audit_events#holdings settings#show field_lookups#show assets#show].freeze
 
       # A control the person can use: not disabled (also not inside a disabled

@@ -1,0 +1,53 @@
+<%# A set's row on the list: its Resources, what they allow, and what narrows them (Admin::SetSummaries). %>
+<span role="cell" class="pf-stack pf-stack--tight">
+  <span class="pf-set-count pf-tabular"><%= summary.resources %></span>
+  <% if model_count >= summary.resources && model_count.positive? %>
+    <span class="pf-fs-12 pf-text-3"><%= t('.of_models', count: model_count) %></span>
+    <%= pf_bar(summary.resources, model_count) %>
+  <% end %>
+  <% if summary.inactive.positive? %>
+    <span class="pf-fs-12 pf-text-3"><%= t('.inactive', count: summary.inactive) %></span>
+  <% end %>
+</span>
+<span role="cell" class="pf-stack pf-stack--tight">
+  <%= pf_access_profile(summary) %>
+  <% if summary.resources.positive? %>
+    <%= pf_access_counts(summary) %>
+    <% if !summary.muting && summary.flags[:view_all].positive? %>
+      <% lines = if summary.every_row? && summary.flags[:modify_all] == summary.resources
+                   [t('.view_modify_all_every')]
+                 else
+                   [t('.view_all', count: summary.flags[:view_all]),
+                    (t('.modify_all', count: summary.flags[:modify_all]) if summary.flags[:modify_all].positive?)].compact
+                 end %>
+      <%= pf_overview_link set, safe_join(lines.map { |line| content_tag(:span, "+ #{line}") }),
+                           { view: 'resources', only: PermissionForge::Admin::SetOverview::VIEW_ALL },
+                           class: 'pf-narrow-link pf-fs-12 pf-text-grant', described: true %>
+    <% end %>
+  <% end %>
+</span>
+<span role="cell" class="pf-stack pf-stack--tight pf-fs-13">
+  <% narrowed = PermissionForge::Admin::SetOverview::NARROWED %>
+  <% if summary.muting %>
+    <% if summary.hidden.positive? %>
+      <%= pf_overview_link set, pf_narrow_text(t('.hidden', count: summary.hidden), summary.hidden_resources), { view: 'resources', only: narrowed }, class: 'pf-narrow-link', described: true %>
+    <% end %>
+    <% if summary.masked.positive? %>
+      <%= pf_overview_link set, pf_narrow_text(t('.force_masked', count: summary.masked), summary.masked_resources), { view: 'resources', only: narrowed }, class: 'pf-narrow-link', described: true %>
+    <% end %>
+    <% if summary.hidden.zero? && summary.masked.zero? %><span class="pf-text-3">—</span><% end %>
+  <% else %>
+    <% if summary.rules.positive? %>
+      <%= pf_overview_link set, pf_narrow_text(t('.rules', count: summary.rules), summary.rule_resources), { view: 'resources', only: narrowed }, class: 'pf-narrow-link', described: true %>
+    <% end %>
+    <% if summary.ignored_rules.positive? %>
+      <span class="pf-fs-12 pf-text-warn"><%= t('.ignored', count: summary.ignored_rules) %></span>
+    <% end %>
+    <% if summary.masked.positive? %>
+      <%= pf_overview_link set, pf_narrow_text(t('.masked', count: summary.masked), summary.masked_resources), { view: 'resources', only: narrowed }, class: 'pf-narrow-link pf-text-mask', described: true %>
+    <% end %>
+    <% if summary.rules.zero? && summary.masked.zero? %>
+      <span class="pf-text-3"><%= summary.every_row? ? t('.every_row') : '—' %></span>
+    <% end %>
+  <% end %>
+</span>
