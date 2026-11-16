@@ -57,6 +57,8 @@ module PermissionForge
 
     # The set's events, newest first (the log filtered by this set).
     def load_audit_timeline
+      return unless PermissionForge::Admin::AuditLog.table? # the tab says the log is not available
+
       @timeline_log = PermissionForge::Admin::AuditLog.new({ views: @views },
                                                            scope: PermissionForge::Admin::AuditLog.for_permission_set(@permission_set))
       @timeline = @timeline_log.page(params[:page], per_page: AUDIT_TIMELINE_PER_PAGE)

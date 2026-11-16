@@ -72,11 +72,14 @@ module PermissionForge
         end
 
         # Records the view when the response succeeded and an entry applies.
-        # A HEAD request shows nothing and is not recorded.
+        # A HEAD request shows nothing and is not recorded, nor is any view
+        # while the audit table does not exist (a view is not a change: with
+        # audit_events = true it must not turn a screen that says so into a 500).
         #
         # @return [AuditEvent, nil]
         def record(controller)
           return if controller.request.head? || !controller.response.successful?
+          return unless PermissionForge::DatabaseReach.table_exists?(PermissionForge::AuditEvent)
 
           view = match(controller)
           Audit.record(view.event, **view.payload_for(controller)) if view

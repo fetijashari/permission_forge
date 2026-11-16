@@ -13,6 +13,7 @@ module PermissionForge
 
     pf_exports EXPORT_FORMATS.map(&:to_sym), only: %i[index holdings]
     before_action :pf_require_audit_log!
+    before_action :pf_require_audit_store!, except: :holdings
 
     def index
       @log = PermissionForge::Admin::AuditLog.new(params, include_views: export?)
@@ -38,6 +39,16 @@ module PermissionForge
     end
 
     private
+
+    # Without the audit table there is nothing to read: the page says why
+    # (Admin::AuditLog.recording_problem), a file or a JSON read is a 503.
+    def pf_require_audit_store!
+      return if PermissionForge::Admin::AuditLog.table?
+      return head(:service_unavailable) unless request.format.html?
+
+      @problem = PermissionForge::Admin::AuditLog.recording_problem
+      render :unavailable
+    end
 
     def export?
       EXPORT_FORMATS.include?(request.format.symbol.to_s)

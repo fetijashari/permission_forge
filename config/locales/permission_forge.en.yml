@@ -11,6 +11,10 @@ en:
           they are refused while it is unset and config.api_require_authorization
           is on
         assignment_not_authorized: Assignment not authorized
+        audit_unavailable_missing: The audit log is not set up because its table does
+          not exist. Run bin/rails generate permission_forge:upgrade and migrate.
+        audit_unavailable_off: The audit log is not available because audit events
+          are turned off (audit_events = false) and there is no audit table.
         body_unreadable: The request body could not be read. Send valid JSON with
           Content-Type application/json.
         boolean_invalid: must be true or false

@@ -477,6 +477,41 @@ module PermissionForge
         assert_response :forbidden
       end
 
+      def without_audit_table
+        connection = PermissionForge::AuditEvent.connection
+        table = PermissionForge::AuditEvent.table_name
+        connection.rename_table(table, 'audit_events_hidden')
+        connection.schema_cache.clear!
+        PermissionForge::AuditEvent.reset_column_information
+        PermissionForge::Audit.reset!
+        yield
+      ensure
+        connection.rename_table('audit_events_hidden', table)
+        connection.schema_cache.clear!
+        PermissionForge::AuditEvent.reset_column_information
+        PermissionForge::Audit.reset!
+      end
+
+      test 'without the audit table the endpoints answer 503 in the error envelope, never 500' do
+        without_audit_table do
+          [BASE, "#{BASE}/abc"].each do |path|
+            get path
+            assert_response :service_unavailable
+            assert_equal 503, body.dig('error', 'status')
+            assert_equal I18n.t('permission_forge.api.errors.audit_unavailable_missing'), body.dig('error', 'messages')
+          end
+        end
+      end
+
+      test 'with audit_events false and no table the 503 says audit events are turned off' do
+        @config.audit_events = false
+        without_audit_table do
+          get BASE
+          assert_response :service_unavailable
+          assert_equal I18n.t('permission_forge.api.errors.audit_unavailable_off'), body.dig('error', 'messages')
+        end
+      end
+
       test 'a raising audit_log_authorization denies' do
         @config.audit_log_authorization = ->(_controller) { raise 'boom' }
         errors_seen = []

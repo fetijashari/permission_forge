@@ -75,7 +75,7 @@ module PermissionForge
       end
 
       def available?
-        @records.any? && PermissionForge::Audit.enabled?
+        @records.any? && PermissionForge::Audit.enabled? && PermissionForge::Admin::AuditLog.table?
       rescue StandardError
         false
       end
