@@ -168,6 +168,61 @@ module PermissionForge
         end
       end
 
+      # Rails 8.2's LocalCache strategy overrides write_multi_entries only to
+      # forget the request's copies, and the memory and null stores have it.
+      test 'a layer that only hands a batch on does not make a store a batching one' do
+        handing_on = Module.new do
+          define_singleton_method(:name) { 'PfHandsBatchOn' }
+
+          private
+
+          def write_multi_entries(entries, **) = super
+        end
+        layered = Class.new(ActiveSupport::Cache::MemoryStore) { prepend handing_on }
+        batching = Class.new(layered) do
+          private
+
+          def write_multi_entries(entries, **) = super
+        end
+
+        named = ['PfHandsBatchOn', *RailsCache::UNJUDGED_BATCHES]
+
+        assert RailsCache.multi_write?(layered.new, unjudged: []), 'unnamed, the layer reads as a batch'
+        assert_not RailsCache.multi_write?(layered.new, unjudged: named)
+        assert RailsCache.multi_write?(batching.new, unjudged: named), 'a batch of the store\'s own past the layer'
+        assert_includes RailsCache::UNJUDGED_BATCHES, 'ActiveSupport::Cache::Strategy::LocalCache'
+      end
+
+      # Rails 8.2's Memcached store sends one batch but answers nil either way.
+      test 'a store whose batch answers nothing is written key by key' do
+        memcached = Class.new(ActiveSupport::Cache::MemoryStore) do
+          define_singleton_method(:name) { 'ActiveSupport::Cache::MemCacheStore' }
+          attr_reader :batches
+
+          private
+
+          def write_multi_entries(entries, **)
+            (@batches ||= []) << entries.keys
+            nil
+          end
+        end
+        store = memcached.new
+        cache = RailsCache.new(store: store)
+
+        assert_not RailsCache.multi_write?(store)
+        assert_equal({ 'a' => true, 'b' => true }, cache.write_many({ 'a' => 1, 'b' => 2 }, ttl: 60))
+        assert_nil store.batches, 'no batch was sent'
+        assert_equal 2, cache.read('b')
+      end
+
+      test 'the stores Rails ships without a batch of their own are written key by key' do
+        Dir.mktmpdir do |dir|
+          stores = [ActiveSupport::Cache::MemoryStore.new, ActiveSupport::Cache::NullStore.new, ActiveSupport::Cache::FileStore.new(dir)]
+
+          assert_equal([false, false, false], stores.map { |store| RailsCache.multi_write?(store) })
+        end
+      end
+
       test 'falls back to Rails.cache when no store is provided' do
         rails_backed = PermissionForge::Cache::RailsCache.new(prefix: 'rc')
         rails_backed.write('test', { hello: 'world' })

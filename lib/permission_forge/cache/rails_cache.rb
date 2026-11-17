@@ -22,13 +22,30 @@ module PermissionForge
         cache_store.read_multi(*keys.map { |key| prefixed_key(key) }).transform_values { |value| deep_symbolize(value) }
       end
 
+      # Classes and modules whose #write_multi_entries is no batch whose
+      # answer says the entries were written, by name (none is loaded for the
+      # asking). ActiveSupport's LocalCache strategy (Rails 8.2) only forgets
+      # the request's copies and hands the entries on. Rails 8.2's Memcached
+      # store does send one batch, but answers nil whether it was written or
+      # not and hands its errors to no handler: it is written key by key, as
+      # on earlier versions, where each #write answers.
+      UNJUDGED_BATCHES = %w[
+        ActiveSupport::Cache::Strategy::LocalCache
+        ActiveSupport::Cache::MemCacheStore
+      ].freeze
+
       # Whether the store writes many entries in one call of its own, rather
-      # than ActiveSupport's default loop (which ignores each write's answer).
-      # Anything that is not an ActiveSupport store (a wrapper) is written key
-      # by key through its #write.
-      def self.multi_write?(store)
-        store.is_a?(ActiveSupport::Cache::Store) &&
-          store.class.instance_method(:write_multi_entries).owner != ActiveSupport::Cache::Store
+      # than ActiveSupport's default loop (which ignores each write's answer):
+      # the first #write_multi_entries along its ancestors that is not one of
+      # `unjudged` is not ActiveSupport's own. Anything that is not an
+      # ActiveSupport store (a wrapper) is written key by key through its
+      # #write.
+      def self.multi_write?(store, unjudged: UNJUDGED_BATCHES)
+        return false unless store.is_a?(ActiveSupport::Cache::Store)
+
+        writer = store.class.instance_method(:write_multi_entries)
+        writer = writer.super_method while writer && unjudged.include?(writer.owner.name)
+        !writer.nil? && writer.owner != ActiveSupport::Cache::Store
       end
 
       def initialize(prefix: 'pf', store: nil)
