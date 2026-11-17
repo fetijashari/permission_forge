@@ -14,6 +14,7 @@ module PermissionForge
     # log off, the audit log refused).
     module AdminPagePaths
       extend ActiveSupport::Concern
+      include HiddenAuditTable
 
       # [label, setting, verb, path, status]: screens drawn only under a
       # setting (AdminPaths is the same for the browser probe, which cannot
@@ -23,7 +24,10 @@ module PermissionForge
         %w[audit_refused get /audit 403], %w[audit_refused get /people/:ana?tab=audit 403],
         %w[audit_refused get /permission_sets/:set?tab=audit 403],
         # Review of the round-7 fixes (P2-1): the record lists drawn only with audit_trail_enabled.
-        %w[audit_trail get /permission_sets/:set?tab=audit 200], %w[audit_trail get /people/:ana?tab=audit 200]
+        %w[audit_trail get /permission_sets/:set?tab=audit 200], %w[audit_trail get /people/:ana?tab=audit 200],
+        # The audit table missing (an unrun upgrade migration): the log's notice page and a tab's notice.
+        %w[no_audit_table get /audit 200], %w[no_audit_table get /people/:ana?tab=audit 200],
+        %w[no_audit_table get /permission_sets/:set?tab=audit 200]
       ].map { |setting, verb, path, status| [setting.to_sym, verb.to_sym, path, status.to_i] }.freeze
 
       included do
@@ -95,12 +99,14 @@ module PermissionForge
         assert_response status, "#{setting} #{verb.upcase} #{path}"
         ["#{setting} #{verb.upcase} #{path}", response.body]
       ensure
+        restore_audit_table!
         config.audit_events, config.audit_log_authorization, config.audit_trail_enabled = previous
       end
 
       def configure_audit_off = PermissionForge.configuration.audit_events = false
       def configure_audit_refused = PermissionForge.configuration.audit_log_authorization = ->(_controller) { false }
       def configure_audit_trail = PermissionForge.configuration.audit_trail_enabled = true
+      def configure_no_audit_table = hide_audit_table!
 
       # A record for every Home card (Admin::AttentionItems::CARDS) but the
       # audit log's, which a setting raises (STATE_SCREENS): an assignment

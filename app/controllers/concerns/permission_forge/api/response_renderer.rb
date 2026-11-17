@@ -93,6 +93,11 @@ module PermissionForge
         render json: { error: { status: 404, messages: msg } }, status: :not_found
       end
 
+      # 503: what the endpoint reads is not there (Api::Schema::ERRORS).
+      def render_unavailable(message)
+        render json: { error: { status: 503, messages: message } }, status: :service_unavailable
+      end
+
       def ams_serializer?(serializer_class)
         defined?(ActiveModel::Serializer) && serializer_class < ActiveModel::Serializer
       end

@@ -1,0 +1,2 @@
+<%# The audit log cannot be read (no audit table, or recording is off and there is none): the reason, in place of the timeline. %>
+<%= render 'permission_forge/shared/audit_off_note', problem: PermissionForge::Admin::AuditLog.recording_problem || :missing_table %>

@@ -2,12 +2,16 @@
   <%= render 'permission_forge/shared/audit_refused_note' %>
 <% else %>
 <div class="pf-stack pf-stack--loose">
+  <% if @timeline %>
   <%= render 'permission_forge/shared/audit_timeline',
              title: t('.timeline'), description: t('.timeline_desc'),
              page: @timeline, lookups: @timeline_lookups,
              path: ->(number) { permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: @views, page: number) },
              views_path: (permission_forge.permission_set_path(set, tab: 'audit', who: @who, type: @type, days: @days, sort: @sort, views: 1) unless @timeline_log.include_views?),
              links: [[t('.open_log'), pf_audit_log_path(permission_set: set.id)]] %>
+  <% else %>
+    <%= render 'permission_forge/shared/audit_unavailable' %>
+  <% end %>
 
   <h2 class="pf-h2"><%= t('.records') %></h2>
   <% if PermissionForge.configuration.audit_trail_enabled %>

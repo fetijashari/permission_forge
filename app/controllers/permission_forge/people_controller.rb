@@ -147,10 +147,12 @@ module PermissionForge
       @why = params[:why].to_s
     end
 
-    def load_audit_tab
+    def load_audit_tab # rubocop:disable Metrics/AbcSize -- the changes, then the timeline unless the table is missing
       @changes = audit.changes_by(@person.id, limit: CHANGES_SHOWN)
       @changes_capped = audit.capped?
       @views = pf_text_param(:views).presence # a Hash or a list is no toggle (it would reach url_for)
+      return unless PermissionForge::Admin::AuditLog.table? # no timeline without the table (the tab says so)
+
       @timeline_log = PermissionForge::Admin::AuditLog.new({ views: @views },
                                                            scope: PermissionForge::Admin::AuditLog.for_person(@person.id))
       @timeline = @timeline_log.page(params[:page], per_page: TIMELINE_PER_PAGE)

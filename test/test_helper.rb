@@ -95,6 +95,7 @@ SUITE_LOGGER = Rails.logger
 
 require_relative 'support/parallel_workers'
 require_relative 'support/committed_rows'
+require_relative 'support/hidden_audit_table'
 
 module ActiveSupport
   class TestCase

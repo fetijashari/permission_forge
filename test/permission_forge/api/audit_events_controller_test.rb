@@ -7,6 +7,7 @@ module PermissionForge
   module Api
     class AuditEventsControllerTest < ActionDispatch::IntegrationTest
       include PermissionForge::Tenancy::TenancyTestHelper
+      include HiddenAuditTable
 
       BASE = '/permission_forge/api/audit_events'
 
@@ -475,6 +476,26 @@ module PermissionForge
         get BASE
 
         assert_response :forbidden
+      end
+
+      test 'without the audit table the endpoints answer 503 in the error envelope, never 500' do
+        without_audit_table do
+          [BASE, "#{BASE}/abc"].each do |path|
+            get path
+            assert_response :service_unavailable
+            assert_equal 503, body.dig('error', 'status')
+            assert_equal I18n.t('permission_forge.api.errors.audit_unavailable_missing'), body.dig('error', 'messages')
+          end
+        end
+      end
+
+      test 'with audit_events false and no table the 503 says audit events are turned off' do
+        @config.audit_events = false
+        without_audit_table do
+          get BASE
+          assert_response :service_unavailable
+          assert_equal I18n.t('permission_forge.api.errors.audit_unavailable_off'), body.dig('error', 'messages')
+        end
       end
 
       test 'a raising audit_log_authorization denies' do

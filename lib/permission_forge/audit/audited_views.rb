@@ -31,6 +31,10 @@ module PermissionForge
         end
       end
 
+      # The event of a screen that shows events of the log; without the audit
+      # table such a screen shows a notice instead (AuditedViews.record).
+      LOG_VIEW = 'audit.viewed'
+
       @entries = {}
 
       class << self
@@ -72,14 +76,28 @@ module PermissionForge
         end
 
         # Records the view when the response succeeded and an entry applies.
-        # A HEAD request shows nothing and is not recorded.
+        # A HEAD request shows nothing and is not recorded, nor is a view of
+        # the log (LOG_VIEW) while the audit table does not exist: the screen
+        # showed a notice, no event, and with audit_events = true recording
+        # it would turn that notice into a 500. Everything else (an export,
+        # a view of someone's effective access) showed its data and is
+        # recorded as ever, so under audit_events = true it still fails
+        # rather than go through unrecorded.
         #
         # @return [AuditEvent, nil]
         def record(controller)
           return if controller.request.head? || !controller.response.successful?
 
           view = match(controller)
-          Audit.record(view.event, **view.payload_for(controller)) if view
+          return if view.nil? || log_unread?(view)
+
+          Audit.record(view.event, **view.payload_for(controller))
+        end
+
+        private
+
+        def log_unread?(view)
+          view.event == LOG_VIEW && !PermissionForge::DatabaseReach.table_exists?(PermissionForge::AuditEvent)
         end
       end
 
