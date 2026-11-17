@@ -85,6 +85,15 @@ module PermissionForge
         row(klass)
       end
 
+      # @return [String, nil] what Rails says as it defines the attribute
+      #   methods of a model with an alias of an alias; nil where it defines them
+      def chain_refusal(klass)
+        klass.new
+        nil
+      rescue ArgumentError => e
+        e.message
+      end
+
       MODELS.each_key do |klass|
         test "#{klass}: has the concern" do
           record_of(klass)
@@ -446,7 +455,18 @@ module PermissionForge
         assert_equal(ActiveRecord.version < Gem::Version.new('7.2') ? SystemStackError : 'a.example', written)
       end
 
+      # Rails 8.2 generates no methods for an alias of an alias: the model
+      # raises as its attribute methods are defined, with the concern or not.
+      test 'an alias of an alias is refused where plain Rails refuses it' do
+        refusal = chain_refusal(::PfPlainChain)
+        skip 'this Rails generates the methods of an alias of an alias' unless refusal
+
+        assert_equal refusal.sub('PfPlainChain', 'PfAliasChain'), chain_refusal(::PfAliasChain)
+      end
+
       test 'an alias of an alias is judged as the attribute at the end and reads what Rails reads' do
+        skip 'this Rails refuses an alias of an alias' if chain_refusal(::PfPlainChain)
+
         record = record_of(::PfAliasChain, [::PfAliasChain])
 
         %i[block warn pass_through].each do |strategy|
