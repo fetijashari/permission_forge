@@ -827,7 +827,7 @@ module PermissionForge
         alias_attribute :mail, :email
       end
       model = canary_model('PfCanaryConcrete', parent: abstract) { self.table_name = 'pf_canary_records' }
-      model.define_attribute_methods
+      model.new # Rails 7.1 generates alias methods when the first record is built, not with the attribute methods
       below = ActiveRecord::Base.respond_to?(:abstract_ancestors)
       home = below ? model : abstract
 
