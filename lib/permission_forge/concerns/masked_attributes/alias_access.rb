@@ -165,12 +165,32 @@ module PermissionForge
         end
 
         class << self
-          # Defines the reader and the writer of one alias `klass` declares.
+          # Defines the reader and the writer of one alias `klass` declares,
+          # in every class Rails generates the alias's methods in.
           def define_accessors(klass, name, target)
+            generated_in(klass).each { |home| define_in(home, klass, name, target) }
+          end
+
+          # Defines in `home` the reader and the writer of an alias `klass`
+          # declares.
+          def define_in(home, klass, name, target)
             target = target.to_s
             return if target == UNMASKED_TARGET
 
-            accessors.define(klass, accessor_module(klass), name.to_s, target)
+            accessors.define(klass, accessor_module(home), name.to_s, target)
+          end
+
+          # The classes Rails generates the methods of `klass`'s aliases in:
+          # `klass` itself — or, where Rails generates an abstract class's
+          # aliases in the models below it (Rails 8.2, which tells them by
+          # `abstract_ancestors`), each loaded model with the concern that
+          # counts `klass` among them. A model without the concern keeps
+          # Rails' own methods; one that gets the concern later asks again
+          # (ClassMethods#pf_mask_attribute_aliases).
+          def generated_in(klass)
+            return [klass] unless inherited_generation? && klass.abstract_class?
+
+            klass.descendants.select { |model| model < MaskedAttributes && model.abstract_ancestors.include?(klass) }
           end
 
           # Covers the aliases `klass` itself declared, where Rails generates
@@ -198,6 +218,12 @@ module PermissionForge
 
           def accessors
             @accessors ||= ActiveRecord.version < Gem::Version.new('7.2') ? TargetMethodAccessors : AttributeAccessors
+          end
+
+          # Whether this Rails generates an abstract class's aliases in the
+          # models below it rather than in the abstract class.
+          def inherited_generation?
+            ActiveRecord::Base.respond_to?(:abstract_ancestors)
           end
 
           # The class's own module, prepended to the module Rails generates

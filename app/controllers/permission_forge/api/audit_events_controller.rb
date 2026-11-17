@@ -7,6 +7,7 @@ module PermissionForge
     # (Audit::LogAccess). Rows are tenant-scoped by the model.
     class AuditEventsController < BaseController
       before_action :authorize_audit_log!
+      before_action :require_audit_store!
 
       rescue_from PermissionForge::Audit::EventQuery::Invalid do |error|
         render_unprocessable(error.errors)
@@ -21,6 +22,14 @@ module PermissionForge
       end
 
       private
+
+      # 503 in the usual error envelope while the audit table does not exist.
+      def require_audit_store!
+        return if PermissionForge::Admin::AuditLog.table?
+
+        key = PermissionForge::Admin::AuditLog.recording_problem == :off ? 'audit_unavailable_off' : 'audit_unavailable_missing'
+        render_unavailable(I18n.t("permission_forge.api.errors.#{key}"))
+      end
 
       def authorize_audit_log!
         return if PermissionForge::Audit::LogAccess.allowed?(self)

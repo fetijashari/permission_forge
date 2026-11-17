@@ -34,6 +34,37 @@ defaults, and every such change is listed under **Changed** with its opt-out.
   layout is not configurable; the set's Resources tab is unchanged.
   <!-- pin: test/permission_forge/html/permission_sets_index_summary_test.rb#a row summarises the set instead of listing its Resource names -->
 
+### Fixed
+
+- **The audit screens no longer fail with a 500 while the audit table does not exist.** `config.audit_events = :auto`
+  promises that an unrun migration breaks nothing, but the Audit log page, an event page, the log's CSV and JSON exports,
+  the audit tabs of a person and of a Permission Set and `GET /api/audit_events` queried the table anyway
+  (`PG::UndefinedTable`). They now check `Admin::AuditLog.table?`, the check the Home card and the security audit already
+  use, on every request, so they recover as soon as the migration has run. The pages render a notice (run
+  `bin/rails generate permission_forge:upgrade` and migrate, or "audit events are turned off" for `false`); the exports
+  answer 503, and the API answers 503 in its usual error envelope. With `audit_events = true` the screens explain too
+  rather than raise: that setting makes a missing table fail changes loudly, and a screen that only reads has nothing to
+  fail, so a notice is more useful than a 500 (a view of the log is not recorded while there is no table). Only that
+  view is left out: an export that still has data without the table (who holds what, the changes CSVs) and a view of
+  someone's effective access are recorded as ever, so with `true` they still fail rather than go through unrecorded.
+  The API's 503 is declared in `Api::Schema::ERRORS`.
+  <!-- pin: test/permission_forge/html/audit_screens_without_table_test.rb#the log page and one event show the upgrade notice instead of failing -->
+  <!-- pin: test/permission_forge/html/audit_screens_without_table_test.rb#with audit_events true the screens still render with the failing notice -->
+  <!-- pin: test/permission_forge/api/audit_events_controller_test.rb#without the audit table the endpoints answer 503 in the error envelope, never 500 -->
+  <!-- pin: test/permission_forge/html/audit_screens_without_table_test.rb#with audit_events true an export or an effective access view is refused, never unrecorded -->
+- **On Rails 8.2 (main), an alias an abstract class declares is guarded on the models below it.** Rails 8.2 generates
+  an abstract class's `alias_attribute` methods in each model below it, in front of the guarded reader and writer the
+  gem had placed on the abstract class: with `MaskedAttributes` on such a model, `record.mail` returned a hidden or
+  masked `email` as stored and a mask posted back through the alias was written. The accessors are now defined where
+  that Rails generates the methods (`AliasAccess.generated_in`; canary `inherited_alias_generation`). Rails 7.1 to 8.1
+  are not affected. <!-- pin: test/permission_forge/concerns/masked_attribute_aliases_test.rb#PfAliasConcrete: the alias reader returns what the column's getter returns -->
+- **On Rails 8.2 (main), the memory, null and Memcached stores are written key by key again.** Rails 8.2's local-cache
+  layer overrides `write_multi_entries` only to forget the request's copies, and the memory and null stores now have
+  that layer, so `RailsCache.multi_write?` took them for stores that send one batch and trusted one answer for all
+  keys; Rails 8.2's Memcached store does send one batch but answers nil either way, so every bulk invalidation there
+  was reported as not confirmed. The check now looks past the layers named in `RailsCache::UNJUDGED_BATCHES`.
+  <!-- pin: test/permission_forge/cache/rails_cache_test.rb#a layer that only hands a batch on does not make a store a batching one -->
+
 ## [0.15.0] - 2026-10-19
 
 Upgrading from 0.14 is the three steps of the

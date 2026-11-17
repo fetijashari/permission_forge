@@ -146,8 +146,10 @@ module PermissionForge
       }.freeze
 
       # What `messages` is under each error status. A 422 maps fields to
-      # their messages; the others carry one sentence.
-      ERRORS = { 400 => :string, 401 => :string, 403 => :string, 404 => :string, 422 => :field_messages }.freeze
+      # their messages; the others carry one sentence. 503 is the audit
+      # events endpoints while the audit table does not exist.
+      ERRORS = { 400 => :string, 401 => :string, 403 => :string, 404 => :string, 422 => :field_messages,
+                 503 => :string }.freeze
 
       # The answers without a body, and when: a delete (204), the 401 while
       # config.api_auth is not set, the 404 while config.api_enabled is off

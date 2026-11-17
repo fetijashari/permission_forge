@@ -13,6 +13,7 @@
     </div>
   <% end %>
 
+  <% if @timeline %>
   <%= render 'permission_forge/shared/audit_timeline',
              title: t('.timeline', name: first_name), description: t('.timeline_desc', name: first_name),
              page: @timeline, lookups: @timeline_lookups,
@@ -20,6 +21,9 @@
              views_path: (permission_forge.person_path(@person, tab: 'audit', views: 1) unless @timeline_log.include_views?),
              links: [[t('.events_about', name: first_name), pf_audit_log_path(subject_user_id: @person.id)],
                      [t('.events_by', name: first_name), pf_audit_log_path(actor_type: 'user', actor_id: @person.id)]] %>
+  <% else %>
+    <%= render 'permission_forge/shared/audit_unavailable' %>
+  <% end %>
 
   <section class="pf-card" aria-labelledby="pf-received">
     <div class="pf-card__header"><h2 class="pf-h2" id="pf-received"><%= t('.received') %></h2></div>

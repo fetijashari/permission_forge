@@ -9,6 +9,11 @@ mk:
         assignment_authorization_missing: Доделувањата преку API бараат config.api_assignment_authorization;
           се одбиваат додека не е поставено и config.api_require_authorization е вклучено
         assignment_not_authorized: Доделувањето не е авторизирано
+        audit_unavailable_missing: Ревизиската евиденција не е поставена бидејќи нејзината
+          табела не постои. Извршете bin/rails generate permission_forge:upgrade и
+          миграциите.
+        audit_unavailable_off: Ревизиската евиденција не е достапна бидејќи ревизиските
+          настани се исклучени (audit_events = false) и нема ревизиска табела.
         body_unreadable: Содржината на барањето не може да се прочита. Испратете валиден
           JSON со Content-Type application/json.
         boolean_invalid: мора да биде true или false
