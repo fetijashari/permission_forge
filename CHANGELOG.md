@@ -6,6 +6,8 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-17
+
 ### Added
 
 - **The Permission Sets list summarises each set.** New columns give the number of Resources (and the share of the
