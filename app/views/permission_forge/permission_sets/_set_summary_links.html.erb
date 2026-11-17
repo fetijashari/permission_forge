@@ -1,0 +1,14 @@
+<%# Under a set's name on the list: the Resources the search matched, and the links that open the set's Resources in place. %>
+<% if matches.any? %>
+  <% names = matches.first(3).map { |entry| content_tag(:code, pf_resource_label(entry.name), class: 'pf-mono-key') } %>
+  <% names << t('.more', count: matches.size - 3) if matches.size > 3 %>
+  <span class="pf-fs-12 pf-text-2"><%= pf_t_markup(resources: pf_markup_sentence(names)) { |held| t('.includes', **held) } %></span>
+<% end %>
+<% if summary.entries.any? %>
+  <span class="pf-overview-links pf-fs-13">
+    <%= pf_overview_link set, t('.show_groups', count: summary.groups), { view: 'groups' }, hide: t('.hide_groups'), described: true %>
+    <%= pf_overview_link set, t('.show_resources', count: summary.entries.size), { view: 'resources' }, hide: t('.hide_resources'), described: true %>
+  </span>
+<% else %>
+  <span class="pf-fs-12 pf-text-3"><%= t('.no_resources') %></span>
+<% end %>

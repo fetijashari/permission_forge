@@ -496,6 +496,78 @@
     });
   });
 
+  /* ------------------------------------------- open a row in place */
+  // A link marked data-pf-expand="<slot id>" (the Permission Sets list) opens
+  // its page, the no-JS path, in place: the page's fragment fills a slot
+  // inserted after the row named by data-pf-expand-row, and a link that
+  // carries data-pf-expand-hide closes the slot it opened. Only the latest
+  // request fills a slot; an answer that is no fragment (a redirect, a whole
+  // document) or an error follows the link instead. On the page itself the
+  // row is not there and the link is a plain link. Each slot has one request
+  // at a time: a newer click on the same row, or closing it, aborts the one
+  // before; an answer for a row the live search has replaced is dropped.
+  const expandRequests = new Map();
+  function syncExpandToggles(rowId, slot) {
+    $$('a[data-pf-expand-hide]').forEach(function (a) {
+      if (a.getAttribute('data-pf-expand-row') !== rowId) return;
+      if (!a.hasAttribute('data-pf-expand-show')) a.setAttribute('data-pf-expand-show', a.textContent);
+      const open = !!slot && slot.getAttribute('data-pf-expanded') === a.getAttribute('href');
+      a.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) a.setAttribute('aria-controls', slot.id); else a.removeAttribute('aria-controls');
+      a.textContent = open ? a.getAttribute('data-pf-expand-hide') : a.getAttribute('data-pf-expand-show');
+    });
+  }
+
+  function expandSlot(id, row) {
+    let slot = document.getElementById(id);
+    if (slot) return slot;
+    slot = document.createElement('div');
+    slot.id = id;
+    slot.className = 'pf-table__detail';
+    slot.setAttribute('role', 'row');
+    const cell = document.createElement('div');
+    cell.setAttribute('role', 'cell');
+    slot.appendChild(cell);
+    row.after(slot);
+    return slot;
+  }
+
+  on('click', 'a[data-pf-expand]', function (e, a) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    const row = document.getElementById(a.getAttribute('data-pf-expand-row'));
+    if (!row) return;
+    e.preventDefault();
+    const id = a.getAttribute('data-pf-expand');
+    const href = a.getAttribute('href');
+    const current = document.getElementById(id);
+    const pending = expandRequests.get(id);
+    if (pending) pending.abort();
+    if (current && a.hasAttribute('data-pf-expand-hide') && current.getAttribute('data-pf-expanded') === href) {
+      current.replaceWith();
+      syncExpandToggles(row.id, null);
+      return;
+    }
+    const request = new AbortController();
+    expandRequests.set(id, request);
+    a.setAttribute('aria-busy', 'true');
+    fetch(href, { headers: { [FRAGMENT_HEADER]: '1' }, credentials: 'same-origin', signal: request.signal })
+      .then(function (res) { return res.ok && !res.redirected ? res.text() : Promise.reject(res.status); })
+      .then(function (html) {
+        if (request !== expandRequests.get(id) || !row.isConnected) return;
+        if (/<html[\s>]/i.test(html)) { window.location.href = href; return; }
+        const slot = expandSlot(id, row);
+        setContent(slot.firstElementChild, html);
+        slot.setAttribute('data-pf-expanded', href);
+        enhance(slot);
+        syncExpandToggles(row.id, slot);
+      })
+      .catch(function (err) { if (!(err && err.name === 'AbortError')) window.location.href = href; })
+      .then(function () {
+        a.removeAttribute('aria-busy');
+        if (expandRequests.get(id) === request) expandRequests.delete(id);
+      });
+  });
+
   /* ------------------------------------------------------- enhance */
   function enhance(ctx) {
     armToasts(ctx);
@@ -509,6 +581,7 @@
       if (btn) btn.disabled = input.value.trim() !== input.getAttribute('data-pf-confirm-match');
     });
     syncShowWhen(ctx);
+    $$('a[data-pf-expand-hide]:not([aria-expanded])', ctx).forEach(function (a) { a.setAttribute('aria-expanded', 'false'); });
     const focus = $('[data-pf-focus="true"]', ctx);
     if (focus && ctx === document) focus.scrollIntoView({ block: 'center' });
   }

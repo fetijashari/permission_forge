@@ -1195,9 +1195,12 @@ mk:
         name: Име
       index:
         columns:
+          access: Пристап
           actions: Акции
           group: Група
+          narrowed: Ограничено со
           people: Корисници
+          resources: Ресурси
           set: Сет на дозволи
           status: Статус
         duplicate_aria: Дуплирај %{name}
@@ -1243,6 +1246,31 @@ mk:
         start_from_muting: Почни од
         title: Нов сет на дозволи
         type: Што треба да прави овој сет?
+      overview:
+        no_family: Други модели
+        subtitle: Што дозволува овој сет на секој ресурс, по група модели.
+        title:
+          groups: Групи модели во %{name}
+          resources: Ресурси во %{name}
+        views:
+          groups: Групи модели
+          resources: Ресурси
+        views_label: Прикажи
+      overview_body:
+        empty: Овој сет сè уште нема ресурси.
+        groups_hint: Групите модели во овој сет, по именски простор. Изберете една
+          за да ги видите нејзините ресурси.
+        legend: Точка (·) значи дека дозволата не е дадена.
+        legend_muting: Истакната буква е пристап што овој сет го одзема.
+        none_match: Ниеден ресурс од овој сет не одговара на овој приказ.
+        only_family: Се прикажува само %{family}.
+        only_narrowed: Се прикажуваат ресурсите со правила за записи или маскирани
+          полиња.
+        only_view_all: 'Се прикажуваат ресурсите со „Прикажи ги сите“: нивните правила
+          за записи се прескокнуваат.'
+        show_all:
+          one: Прикажи го %{count} ресурс
+          other: Прикажи ги сите %{count} ресурси
       records_summary:
         ignored:
           one: "%{count} правило се игнорира"
@@ -1279,6 +1307,50 @@ mk:
         title:
           one: Прегледај %{count} промена
           other: Прегледај %{count} промени
+      set_summary_cells:
+        every_row: Ги гледа сите записи
+        force_masked:
+          one: "•• %{count} присилно маскирано поле"
+          other: "•• %{count} присилно маскирани полиња"
+        hidden:
+          one: "⊘ %{count} скриено поле"
+          other: "⊘ %{count} скриени полиња"
+        ignored:
+          one: "⚠ %{count} правило се игнорира поради „Прикажи ги сите“"
+          other: "⚠ %{count} правила се игнорираат поради „Прикажи ги сите“"
+        inactive:
+          one: "+ %{count} исклучен"
+          other: "+ %{count} исклучени"
+        masked:
+          one: "•• %{count} маскирано поле"
+          other: "•• %{count} маскирани полиња"
+        modify_all:
+          one: Уреди ги сите на %{count} ресурс
+          other: Уреди ги сите на %{count} ресурси
+        of_models:
+          one: од %{count} модел
+          other: од %{count} модели
+        rules:
+          one: "⛉ %{count} правило за записи"
+          other: "⛉ %{count} правила за записи"
+        view_all:
+          one: Прикажи ги сите на %{count} ресурс
+          other: Прикажи ги сите на %{count} ресурси
+        view_modify_all_every: Прикажи ги сите и Уреди ги сите на секој ресурс
+      set_summary_links:
+        hide_groups: Скриј ги групите модели
+        hide_resources: Скриј ги ресурсите
+        includes: Вклучува %{resources}
+        more:
+          one: уште %{count}
+          other: уште %{count}
+        no_resources: Сè уште нема ресурси
+        show_groups:
+          one: Прикажи %{count} група модели
+          other: Прикажи %{count} групи модели
+        show_resources:
+          one: Прикажи %{count} ресурс
+          other: Прикажи %{count} ресурси
       show:
         and_more:
           one: уште %{count}
@@ -1295,6 +1367,41 @@ mk:
           conditions: Услови
           resources: Ресурси
         tabs_label: Делови на сетот на дозволи
+      summary:
+        flag_count: "%{flag}: %{count} од %{total}"
+        initials:
+          create_access: К
+          delete_access: Б
+          edit_access: У
+          modify_all: УС
+          read_access: Ч
+          view_all: ПС
+        mark_titles:
+          hidden:
+            one: "%{count} скриено поле"
+            other: "%{count} скриени полиња"
+          ignored:
+            one: "%{count} правило што „Прикажи ги сите“ го прескокнува"
+            other: "%{count} правила што „Прикажи ги сите“ ги прескокнува"
+          masked:
+            one: "%{count} маскирано поле"
+            other: "%{count} маскирани полиња"
+          rules:
+            one: "%{count} правило за записи"
+            other: "%{count} правила за записи"
+          view_all:
+            one: Прикажи ги сите на %{count} ресурс
+            other: Прикажи ги сите на %{count} ресурси
+        marks:
+          hidden: "⊘ %{count}"
+          ignored: "⛉ %{count} игнорирани"
+          masked: "•• %{count}"
+          rules: "⛉ %{count}"
+          view_all: ПС %{count}
+        no_flags: Ништо
+        on_resources:
+          one: на %{count} ресурс
+          other: на %{count} ресурси
     resource_actions:
       add_select:
         block: Додади и блокирај
@@ -2454,6 +2561,11 @@ mk:
       search_people: Име или е-пошта
       setting: Поставка
       states:
+        access_profile:
+          full: Целосен пристап
+          mixed: Некои промени
+          none: Без пристап
+          takes_away: Одзема пристап
         actor:
           api: API клиент
           basic_auth: Прозорец за лозинка

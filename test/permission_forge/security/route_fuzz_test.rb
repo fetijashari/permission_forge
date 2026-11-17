@@ -59,7 +59,7 @@ module PermissionForge
                   allowed_hours_start allowed_hours_end hours_enabled grant_all is_editable views open why who days
                   permission_set_group_id model_name op rule_id cleanup privacy new v focus changed level
                   requires_session_flag_custom sync actor_id actor_type category correlation_id subject_user_id
-                  record_id record_uuid views].freeze
+                  record_id record_uuid views view only].freeze
       # Parameters that are path segments (a query value of the same name is
       # overridden by the path).
       PATH_PARAMS = %w[id permission_set_id resource_model model key group_id file identifier permission_set_identifier

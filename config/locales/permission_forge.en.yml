@@ -1177,9 +1177,12 @@ en:
         name: Name
       index:
         columns:
+          access: Access
           actions: Actions
           group: Group
+          narrowed: Narrowed by
           people: People
+          resources: Resources
           set: Permission Set
           status: Status
         duplicate_aria: Duplicate %{name}
@@ -1224,6 +1227,29 @@ en:
         start_from_muting: Start from
         title: New Permission Set
         type: What should this set do?
+      overview:
+        no_family: Other models
+        subtitle: What this set allows on each Resource, by model family.
+        title:
+          groups: Model groups in %{name}
+          resources: Resources in %{name}
+        views:
+          groups: Model groups
+          resources: Resources
+        views_label: Show
+      overview_body:
+        empty: This set has no Resources yet.
+        groups_hint: The model groups in this set, by namespace. Pick one to see its
+          Resources.
+        legend: A dot (·) is a flag not granted.
+        legend_muting: A lit letter is access this set takes away.
+        none_match: No Resource of this set matches this view.
+        only_family: Showing %{family} only.
+        only_narrowed: Showing the Resources with row rules or masked fields.
+        only_view_all: 'Showing the Resources with View All: their row rules are skipped.'
+        show_all:
+          one: Show the %{count} Resource
+          other: Show all %{count} Resources
       records_summary:
         ignored:
           one: "%{count} rule ignored"
@@ -1260,6 +1286,50 @@ en:
         title:
           one: Review %{count} change
           other: Review %{count} changes
+      set_summary_cells:
+        every_row: Sees every row
+        force_masked:
+          one: "•• %{count} force-masked field"
+          other: "•• %{count} force-masked fields"
+        hidden:
+          one: "⊘ %{count} hidden field"
+          other: "⊘ %{count} hidden fields"
+        ignored:
+          one: "⚠ %{count} rule ignored under View All"
+          other: "⚠ %{count} rules ignored under View All"
+        inactive:
+          one: "+ %{count} turned off"
+          other: "+ %{count} turned off"
+        masked:
+          one: "•• %{count} masked field"
+          other: "•• %{count} masked fields"
+        modify_all:
+          one: Modify All on %{count} Resource
+          other: Modify All on %{count} Resources
+        of_models:
+          one: of %{count} model
+          other: of %{count} models
+        rules:
+          one: "⛉ %{count} row rule"
+          other: "⛉ %{count} row rules"
+        view_all:
+          one: View All on %{count} Resource
+          other: View All on %{count} Resources
+        view_modify_all_every: View All and Modify All on every Resource
+      set_summary_links:
+        hide_groups: Hide model groups
+        hide_resources: Hide Resources
+        includes: Includes %{resources}
+        more:
+          one: "%{count} more"
+          other: "%{count} more"
+        no_resources: No Resources yet
+        show_groups:
+          one: Show %{count} model group
+          other: Show %{count} model groups
+        show_resources:
+          one: Show %{count} Resource
+          other: Show %{count} Resources
       show:
         and_more:
           one: "%{count} more"
@@ -1276,6 +1346,41 @@ en:
           conditions: Conditions
           resources: Resources
         tabs_label: Permission Set sections
+      summary:
+        flag_count: "%{flag}: %{count} of %{total}"
+        initials:
+          create_access: C
+          delete_access: D
+          edit_access: E
+          modify_all: M
+          read_access: R
+          view_all: V
+        mark_titles:
+          hidden:
+            one: "%{count} hidden field"
+            other: "%{count} hidden fields"
+          ignored:
+            one: "%{count} row rule View All bypasses"
+            other: "%{count} row rules View All bypasses"
+          masked:
+            one: "%{count} masked field"
+            other: "%{count} masked fields"
+          rules:
+            one: "%{count} row rule"
+            other: "%{count} row rules"
+          view_all:
+            one: View All on %{count} Resource
+            other: View All on %{count} Resources
+        marks:
+          hidden: "⊘ %{count}"
+          ignored: "⛉ %{count} ignored"
+          masked: "•• %{count}"
+          rules: "⛉ %{count}"
+          view_all: V %{count}
+        no_flags: Nothing
+        on_resources:
+          one: on %{count} Resource
+          other: on %{count} Resources
     resource_actions:
       add_select:
         block: Add and block
@@ -2394,6 +2499,11 @@ en:
       search_people: Name or email
       setting: Setting
       states:
+        access_profile:
+          full: Full access
+          mixed: Some changes
+          none: No access
+          takes_away: Takes access away
         actor:
           api: API client
           basic_auth: Password prompt

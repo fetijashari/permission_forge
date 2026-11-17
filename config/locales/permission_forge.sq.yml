@@ -1197,9 +1197,12 @@ sq:
         name: Emri
       index:
         columns:
+          access: Qasja
           actions: Veprimet
           group: Grupimi
+          narrowed: Kufizohet nga
           people: Personat
+          resources: Burimet
           set: Grup lejesh
           status: Statusi
         duplicate_aria: Dublikoje %{name}
@@ -1246,6 +1249,30 @@ sq:
         start_from_muting: Fillo nga
         title: Grup i ri lejesh
         type: Çfarë duhet të bëjë ky grup?
+      overview:
+        no_family: Modele të tjera
+        subtitle: Çfarë lejon ky grup për çdo burim, sipas familjes së modelit.
+        title:
+          groups: Familjet në %{name}
+          resources: Burimet në %{name}
+        views:
+          groups: Familjet
+          resources: Burimet
+        views_label: Shfaq
+      overview_body:
+        empty: Ky grup nuk ka ende burime.
+        groups_hint: Familjet e modeleve në këtë grup. Zgjidh njërën për të parë burimet
+          e saj.
+        legend: Një pikë (·) është një leje që nuk jepet.
+        legend_muting: Një shkronjë e theksuar është qasje që ky grup e heq.
+        none_match: Asnjë burim i këtij grupi nuk përputhet me këtë pamje.
+        only_family: Po shfaqet vetëm %{family}.
+        only_narrowed: Po shfaqen burimet me rregulla regjistrimesh ose fusha të maskuara.
+        only_view_all: 'Po shfaqen burimet me “Shiko të gjitha”: rregullat e tyre
+          të regjistrimeve anashkalohen.'
+        show_all:
+          one: Shfaq %{count} burimin
+          other: Shfaq të %{count} burimet
       records_summary:
         ignored:
           one: "%{count} rregull i injoruar"
@@ -1282,6 +1309,50 @@ sq:
         title:
           one: Rishiko %{count} ndryshim
           other: Rishiko %{count} ndryshime
+      set_summary_cells:
+        every_row: Sheh çdo regjistrim
+        force_masked:
+          one: "•• %{count} fushë e maskuar me detyrim"
+          other: "•• %{count} fusha të maskuara me detyrim"
+        hidden:
+          one: "⊘ %{count} fushë e fshehur"
+          other: "⊘ %{count} fusha të fshehura"
+        ignored:
+          one: "⚠ %{count} rregull i injoruar nga “Shiko të gjitha”"
+          other: "⚠ %{count} rregulla të injoruara nga “Shiko të gjitha”"
+        inactive:
+          one: "+ %{count} i çaktivizuar"
+          other: "+ %{count} të çaktivizuar"
+        masked:
+          one: "•• %{count} fushë e maskuar"
+          other: "•• %{count} fusha të maskuara"
+        modify_all:
+          one: Ndrysho të gjitha në %{count} burim
+          other: Ndrysho të gjitha në %{count} burime
+        of_models:
+          one: nga %{count} model
+          other: nga %{count} modele
+        rules:
+          one: "⛉ %{count} rregull regjistrimesh"
+          other: "⛉ %{count} rregulla regjistrimesh"
+        view_all:
+          one: Shiko të gjitha në %{count} burim
+          other: Shiko të gjitha në %{count} burime
+        view_modify_all_every: Shiko të gjitha dhe Ndrysho të gjitha në çdo burim
+      set_summary_links:
+        hide_groups: Fshih familjet
+        hide_resources: Fshih burimet
+        includes: Përfshin %{resources}
+        more:
+          one: "%{count} tjetër"
+          other: "%{count} të tjera"
+        no_resources: Ende pa burime
+        show_groups:
+          one: Shfaq %{count} familje
+          other: Shfaq %{count} familje
+        show_resources:
+          one: Shfaq %{count} burim
+          other: Shfaq %{count} burime
       show:
         and_more:
           one: "%{count} tjetër"
@@ -1298,6 +1369,41 @@ sq:
           conditions: Kushtet
           resources: Burimet
         tabs_label: Seksionet e Grupit të lejeve
+      summary:
+        flag_count: "%{flag}: %{count} nga %{total}"
+        initials:
+          create_access: K
+          delete_access: F
+          edit_access: "N"
+          modify_all: NT
+          read_access: L
+          view_all: ShT
+        mark_titles:
+          hidden:
+            one: "%{count} fushë e fshehur"
+            other: "%{count} fusha të fshehura"
+          ignored:
+            one: "%{count} rregull që “Shiko të gjitha” e anashkalon"
+            other: "%{count} rregulla që “Shiko të gjitha” i anashkalon"
+          masked:
+            one: "%{count} fushë e maskuar"
+            other: "%{count} fusha të maskuara"
+          rules:
+            one: "%{count} rregull regjistrimesh"
+            other: "%{count} rregulla regjistrimesh"
+          view_all:
+            one: Shiko të gjitha në %{count} burim
+            other: Shiko të gjitha në %{count} burime
+        marks:
+          hidden: "⊘ %{count}"
+          ignored: "⛉ %{count} të injoruara"
+          masked: "•• %{count}"
+          rules: "⛉ %{count}"
+          view_all: ShT %{count}
+        no_flags: Asgjë
+        on_resources:
+          one: në %{count} burim
+          other: në %{count} burime
     resource_actions:
       add_select:
         block: Shto dhe blloko
@@ -2459,6 +2565,11 @@ sq:
       search_people: Emër ose email
       setting: Cilësimi
       states:
+        access_profile:
+          full: Qasje e plotë
+          mixed: Disa ndryshime
+          none: Pa qasje
+          takes_away: Heq qasje
         actor:
           api: Klient API
           basic_auth: Dritarja e fjalëkalimit

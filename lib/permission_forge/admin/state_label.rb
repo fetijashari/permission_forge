@@ -33,6 +33,7 @@ module PermissionForge
         crud: { 'allowed' => '✓', 'no' => '–', 'muted' => '⊘', 'unchanged' => '–', 'needs_read' => '–' },
         action: { 'permitted' => '✓', 'not_permitted' => '–', 'blocked' => '⊘', 'unchanged' => '–', 'none' => '–' },
         lock: { 'locked' => nil },
+        access_profile: { 'full' => '●', 'read_only' => '◉', 'mixed' => '◐', 'none' => '–', 'takes_away' => '⊘' },
         actor: { 'api' => nil, 'basic_auth' => nil, 'system' => nil, 'unknown' => nil, 'user' => nil }
       }.freeze
 
@@ -43,7 +44,8 @@ module PermissionForge
       KEY_NAMES = { [:crud, 'needs_read'] => 'needs_read_short' }.freeze
       # A state worded by another kind's key: an action no set configures is
       # "Not configured", the field level's word.
-      SHARED = { [:action, 'none'] => [:field_level, 'none'] }.freeze
+      # A set that allows only Read is "Read-only", the field level's word.
+      SHARED = { [:action, 'none'] => [:field_level, 'none'], [:access_profile, 'read_only'] => [:field_level, 'read'] }.freeze
 
       # One state: its glyph (nil when the kind has none) and its word.
       Label = Data.define(:kind, :state, :glyph, :word) do

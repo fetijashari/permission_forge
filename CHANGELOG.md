@@ -6,6 +6,34 @@ defaults, and every such change is listed under **Changed** with its opt-out.
 
 ## [Unreleased]
 
+### Added
+
+- **The Permission Sets list summarises each set.** New columns give the number of Resources (and the share of the
+  app's models), what they allow (Full access, Read-only, Some changes, or Takes access away for a muting set, with
+  the Read, Create, Edit and Delete counts and how many Resources have View All and Modify All) and what narrows them
+  (active row rules and masked fields, each with the number of Resources it is on; rules that View All bypasses are
+  counted as ignored). The counts read `PermissionHashBuilder.granted_flags` and `FieldLevel`, so a row written past
+  the validations counts for what it grants, and the list reads the same number of queries whatever the number of
+  sets and Resources (#24).
+  <!-- pin: test/permission_forge/html/permission_sets_index_summary_test.rb#a row summarises the set instead of listing its Resource names -->
+  <!-- pin: test/permission_forge/admin/set_summaries_test.rb#every granting flag combination is counted as PermissionHashBuilder.granted_flags grants it -->
+  <!-- pin: test/permission_forge/html/permission_sets_index_summary_test.rb#the list reads a constant number of queries, however many sets and Resources -->
+- **A set's Resources open in place, by model group or one by one.** "Show model groups" and "Show Resources" on each row
+  load the new page `/permission_sets/:id/overview` under the row (without JavaScript it opens as a page): model groups by
+  namespace, then every Resource with its flags (`R C E D │ V M`) and its marks for row rules, rules View All bypasses
+  and masked fields. The counts in the Narrowed by column open the Resources they count.
+  <!-- pin: test/permission_forge/html/permission_sets_index_summary_test.rb#the overview page: groups, then one family, then the narrowed Resources -->
+  <!-- pin: test/permission_forge/html/permission_sets_index_summary_test.rb#with X-PF-Fragment the overview is the bare body the list loads in place -->
+- **The Permission Sets search also finds a set by the name of one of its Resources**, and the row says which ones.
+  <!-- pin: test/permission_forge/html/permission_sets_index_summary_test.rb#a search finds a set by the name of one of its Resources and says which -->
+
+### Changed
+
+- **The Permission Sets list no longer prints every Resource name under each set** (a set with a hundred Resources
+  made a row taller than the screen); the names are one click away in the overview above. **No opt-out:** the list's
+  layout is not configurable; the set's Resources tab is unchanged.
+  <!-- pin: test/permission_forge/html/permission_sets_index_summary_test.rb#a row summarises the set instead of listing its Resource names -->
+
 ### Fixed
 
 - **The audit screens no longer fail with a 500 while the audit table does not exist.** `config.audit_events = :auto`

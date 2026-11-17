@@ -72,12 +72,23 @@ module PermissionForge
 
       def permission_set_paths
         [
-          '/permission_sets', '/permission_sets?filter=muting', '/permission_sets/new', set_path,
-          "#{set_path}?tab=assignments", "#{set_path}?tab=conditions", "#{set_path}?tab=audit",
-          "#{set_path}/delete", "#{set_path}/switch_mode", "/permission_sets/#{id(:muting)}",
+          '/permission_sets/new', set_path, "#{set_path}?tab=assignments", "#{set_path}?tab=conditions",
+          "#{set_path}?tab=audit", "#{set_path}/delete", "#{set_path}/switch_mode", "/permission_sets/#{id(:muting)}",
           "#{set_path}/bulk_assignment/new", "#{set_path}/bulk_assignment/revoke?user_ids[]=#{id(:ana)}",
-          "#{set_path}/resources/new", *("/permission_sets/#{ids[:conditions]}?tab=conditions" if ids[:conditions])
-        ]
+          "#{set_path}/resources/new"
+        ] + list_paths + overview_paths
+      end
+
+      # The list, filtered and searched by a Resource name, and a conditional set's tab when there is one.
+      def list_paths
+        ['/permission_sets', '/permission_sets?filter=muting', '/permission_sets?q=customer',
+         *("/permission_sets/#{ids[:conditions]}?tab=conditions" if ids[:conditions])]
+      end
+
+      # A set's Resources opened by family, narrowed, with View All, of no family, and a muting set's.
+      def overview_paths
+        ["#{set_path}/overview", "#{set_path}/overview?view=groups", "#{set_path}/overview?only=narrowed",
+         "#{set_path}/overview?only=view_all", "#{set_path}/overview?only=-", "/permission_sets/#{id(:muting)}/overview"]
       end
 
       # A locked set (read-only inputs, no savebar) down to its field and rules,

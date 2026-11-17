@@ -1,0 +1,24 @@
+<%# One set's Resources by model family or one by one (Admin::SetOverview): a page, and the fragment the list opens in place. %>
+<% set = @permission_set %>
+<% title = t(".title.#{@overview.view}", name: pf_record_name(set)) %>
+<% content_for :pf_title, title %>
+<% if pf_fragment? %>
+  <%= render 'overview_body', set: set, overview: @overview %>
+<% else %>
+  <%= pf_breadcrumb([t('permission_forge.nav.permission_sets'), permission_forge.permission_sets_path],
+                    [pf_record_name(set), permission_forge.permission_set_path(set)], title) %>
+  <div class="pf-page-header">
+    <div class="pf-page-header__text">
+      <h1 class="pf-h1"><%= title %></h1>
+      <p class="pf-subtitle"><%= t('.subtitle') %></p>
+    </div>
+  </div>
+  <div class="pf-filters" role="group" aria-label="<%= t('.views_label') %>">
+    <% PermissionForge::Admin::SetOverview::VIEWS.each do |view| %>
+      <%= pf_filter_chip t(".views.#{view}"), permission_forge.overview_permission_set_path(set, view: view), selected: @overview.view == view %>
+    <% end %>
+  </div>
+  <div class="pf-card"><div class="pf-card__body">
+    <%= render 'overview_body', set: set, overview: @overview %>
+  </div></div>
+<% end %>

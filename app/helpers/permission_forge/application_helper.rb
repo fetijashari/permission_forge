@@ -14,6 +14,7 @@ module PermissionForge
     include PermissionForge::AuditRecordsHelper
     include PermissionForge::AuditAttributionHelper
     include PermissionForge::SettingsHelper
+    include PermissionForge::SetSummariesHelper
 
     # Sidebar link; the current section gets aria-current="page".
     def pf_nav_link(label, path, badge: nil, badge_label: nil, exact: false)
