@@ -85,7 +85,7 @@ module PermissionForge
       dangerous_attribute_methods: 'AttributeMethods.dangerous_attribute_methods',
       alias_attribute_semantics: "ActiveRecord.version < Gem::Version.new('7.2')",
       alias_methods_module: 'generated_attribute_methods).prepend(accessors)',
-      aliases_by_attribute_name: 'klass.aliases_by_attribute_name',
+      aliases_by_attribute_name: 'klass.aliases_by_attribute_name', inherited_alias_generation: 'model.abstract_ancestors',
       format_for_inspect: Regexp.union('format_for_inspect(name, read_attribute(name))', 'def attribute_for_inspect'),
       pretty_print: Regexp.union("ActiveRecord.gem_version < Gem::Version.new('7.2')", 'custom_inspect_method_defined?', '_has_attribute?(name)'),
       store_accessor_hooks: /def (read|write)_store_attribute\(/,
@@ -98,7 +98,7 @@ module PermissionForge
       isolated_execution_state: 'ActiveSupport::IsolatedExecutionState',
       isolated_execution_state_context: 'ActiveSupport::IsolatedExecutionState.context',
       executor_register_hook: 'app.executor.register_hook(RunHook)',
-      write_multi_entries: 'instance_method(:write_multi_entries).owner',
+      write_multi_entries: 'instance_method(:write_multi_entries)',
       redis_write_multi_answer: Regexp.union('instance_variable_get(:@error_handler)', 'HandledErrors.written('),
       counter_updates: 'def update_counters(*, **)',
       local_cache: 'store.with_local_cache',
@@ -188,7 +188,7 @@ module PermissionForge
                                'Associations::JoinDependency#build checks before it joins and the scopes a :through ' \
                                'evaluates along its chain (a path it raises for must stay broken, one it joins followed)',
       preloader: 'adapt PermissionHashBuilder#preload',
-      sandbox: 'adapt OpenTransaction.sandbox?',
+      sandbox: 'adapt OpenTransaction.sandbox?', inherited_alias_generation: 'adapt AliasAccess.generated_in',
       generator_commands: 'adapt BootChecks.generator_running? (GENERATOR_COMMANDS: what `bin/rails generate` loads before it boots)',
       journey_route: 'adapt Admin::ControllerCatalog::RoutedAction', path_parameters_key: 'adapt WebRequest.endpoint',
       association_target: 'adapt PermissionHashBuilder.sorted (and PermissionSetUser#assigned_users, RecordsAuditEvents#audit_associated)',
@@ -817,6 +817,32 @@ module PermissionForge
       )
     end
 
+    # Up to Rails 8.1 an abstract class's alias methods are generated in the
+    # abstract class; Rails 8.2 generates them in each model below it (their
+    # readers name the model's own attribute slots).
+    canary_test :inherited_alias_generation,
+                'inherited aliases: an abstract class\'s alias methods are generated in it, or (abstract_ancestors) in the models below it' do
+      abstract = canary_model('PfCanaryAbstract') do
+        self.abstract_class = true
+        alias_attribute :mail, :email
+      end
+      model = canary_model('PfCanaryConcrete', parent: abstract) { self.table_name = 'pf_canary_records' }
+      model.new # Rails 7.1 generates alias methods when the first record is built, not with the attribute methods
+      below = ActiveRecord::Base.respond_to?(:abstract_ancestors)
+      home = below ? model : abstract
+
+      assert home.send(:generated_attribute_methods).method_defined?(:mail, false), canary(
+        :inherited_alias_generation, "an abstract class's alias reader is not generated in #{below ? 'the model below it' : 'the abstract class'}",
+        'AliasAccess.generated_in names the classes that get the guarded accessors: find where these methods live now'
+      )
+      next unless below
+
+      assert_equal [abstract, ApplicationRecord], model.abstract_ancestors, canary(
+        :inherited_alias_generation, 'abstract_ancestors is not the abstract classes above a model, closest first',
+        'AliasAccess.generated_in reads it to find the models that generate an abstract class\'s aliases'
+      )
+    end
+
     canary_test :aliases_by_attribute_name, 'aliases_by_attribute_name: each class\'s own registry of the aliases it declares, by target' do
       model = canary_model { alias_attribute :mail, :email }
       child = canary_model('PfCanaryAliasChild', parent: model) { alias_attribute :title, :name }
@@ -1140,16 +1166,17 @@ module PermissionForge
 
       assert ActiveSupport::Cache::Store.private_method_defined?(:write_multi_entries), canary(
         :write_multi_entries, 'Store#write_multi_entries is gone or public',
-        'RailsCache.multi_write? (instance_method(:write_multi_entries).owner) raises NameError on every write_many: adapt it'
+        'RailsCache.multi_write? (instance_method(:write_multi_entries)) raises NameError on every write_many: adapt it'
       )
       assert_equal %w[a b], store.batch&.keys&.sort, canary(
         :write_multi_entries, 'write_multi no longer writes through write_multi_entries',
         'RailsCache.multi_write? decides from it whether a store batches its writes'
       )
-      assert_equal [false, true, true], [ActiveSupport::Cache::MemoryStore.new, store, redis_store]
+      assert_equal [false, false, true, true], [ActiveSupport::Cache::MemoryStore.new, ActiveSupport::Cache::NullStore.new, store, redis_store]
         .map { |candidate| PermissionForge::Cache::RailsCache.multi_write?(candidate) }, canary(
           :write_multi_entries, 'the stores that override write_multi_entries changed',
-          'RailsCache#write_many trusts one answer for a batch only where the store sends it in one call'
+          'RailsCache#write_many trusts one answer for a batch only where the store sends it in one call: ' \
+          'a new layer that only hands the batch on goes into RailsCache::UNJUDGED_BATCHES'
         )
     end
 
